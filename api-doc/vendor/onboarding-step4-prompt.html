@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vendor Onboarding — Step 4: Policy Setup (Frontend Brief)</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f5f6fa;
+      color: #1a1d23;
+      line-height: 1.65;
+      padding: 2rem 1rem 4rem;
+    }
+
+    .page {
+      max-width: 860px;
+      margin: 0 auto;
+    }
+
+    /* ── Header ── */
+    .header {
+      background: linear-gradient(135deg, #1e1b4b 0%, #3730a3 100%);
+      color: #fff;
+      border-radius: 12px;
+      padding: 2rem 2.5rem;
+      margin-bottom: 2rem;
+    }
+    .header .tag {
+      display: inline-block;
+      background: rgba(255,255,255,0.15);
+      color: #c7d2fe;
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 0.25rem 0.75rem;
+      border-radius: 999px;
+      margin-bottom: 0.75rem;
+    }
+    .header h1 {
+      font-size: 1.6rem;
+      font-weight: 700;
+      margin-bottom: 0.4rem;
+    }
+    .header p {
+      color: #c7d2fe;
+      font-size: 0.95rem;
+    }
+
+    /* ── Section card ── */
+    .card {
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      padding: 1.75rem 2rem;
+      margin-bottom: 1.5rem;
+    }
+    .card h2 {
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: #111827;
+      margin-bottom: 1rem;
+      padding-bottom: 0.6rem;
+      border-bottom: 2px solid #e0e7ff;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .card h2 .icon {
+      font-style: normal;
+      font-size: 1.1rem;
+    }
+    .card h3 {
+      font-size: 0.92rem;
+      font-weight: 700;
+      color: #374151;
+      margin: 1.25rem 0 0.6rem;
+    }
+    .card h3:first-of-type { margin-top: 0; }
+    .card p { font-size: 0.9rem; color: #4b5563; margin-bottom: 0.75rem; }
+    .card p:last-child { margin-bottom: 0; }
+
+    /* ── Tables ── */
+    .table-wrap { overflow-x: auto; margin-bottom: 1rem; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+    }
+    th {
+      background: #f0f0ff;
+      color: #3730a3;
+      font-weight: 700;
+      text-align: left;
+      padding: 0.55rem 0.9rem;
+      border: 1px solid #ddd6fe;
+      white-space: nowrap;
+    }
+    td {
+      padding: 0.5rem 0.9rem;
+      border: 1px solid #e5e7eb;
+      vertical-align: top;
+      color: #374151;
+    }
+    tr:nth-child(even) td { background: #fafafa; }
+
+    /* ── Code blocks ── */
+    pre {
+      background: #1e1b4b;
+      color: #c7d2fe;
+      border-radius: 8px;
+      padding: 1.1rem 1.25rem;
+      font-size: 0.82rem;
+      line-height: 1.7;
+      overflow-x: auto;
+      margin: 0.75rem 0 1rem;
+    }
+    code {
+      font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
+    }
+    p code, li code, td code {
+      background: #ede9fe;
+      color: #4f46e5;
+      padding: 0.1em 0.4em;
+      border-radius: 4px;
+      font-size: 0.82em;
+    }
+
+    /* ── Route table ── */
+    .route-table td:first-child code { background: #ecfdf5; color: #065f46; }
+    .route-table tr.highlight td { background: #f0fdf4; font-weight: 600; }
+    .new-badge {
+      display: inline-block;
+      background: #dcfce7;
+      color: #166534;
+      font-size: 0.7rem;
+      font-weight: 700;
+      padding: 0.1rem 0.45rem;
+      border-radius: 999px;
+      margin-left: 0.4rem;
+      vertical-align: middle;
+      letter-spacing: 0.04em;
+    }
+
+    /* ── Callout box ── */
+    .callout {
+      border-left: 4px solid #6366f1;
+      background: #eef2ff;
+      border-radius: 0 8px 8px 0;
+      padding: 0.85rem 1.1rem;
+      font-size: 0.875rem;
+      color: #3730a3;
+      margin: 0.75rem 0 1rem;
+    }
+    .callout.warn {
+      border-color: #f59e0b;
+      background: #fffbeb;
+      color: #92400e;
+    }
+
+    /* ── Error table ── */
+    .error-table td:nth-child(1) { font-weight: 700; color: #b91c1c; text-align: center; }
+    .error-table td:nth-child(2) code { background: #fee2e2; color: #991b1b; }
+
+    /* ── Progress bar illustration ── */
+    .progress-row {
+      display: flex;
+      gap: 0.4rem;
+      margin: 0.75rem 0 1rem;
+    }
+    .step-pill {
+      flex: 1;
+      text-align: center;
+      padding: 0.45rem 0.25rem;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .step-pill.done  { background: #6366f1; color: #fff; }
+    .step-pill.new   { background: #dcfce7; color: #166534; border: 2px solid #16a34a; }
+    .step-pill.empty { background: #f3f4f6; color: #9ca3af; }
+    .step-pct {
+      text-align: center;
+      font-size: 0.78rem;
+      color: #6b7280;
+      margin-bottom: 0.25rem;
+    }
+  </style>
+</head>
+<body>
+<div class="page">
+
+  <!-- ── Header ── -->
+  <div class="header">
+    <div class="tag">Frontend Brief</div>
+    <h1>Vendor Onboarding — Add Step 4: Policy Setup</h1>
+    <p>The backend has been updated. This document covers all the UI changes needed to match the new 4-step onboarding flow.</p>
+  </div>
+
+  <!-- ── 1. What changed ── -->
+  <div class="card">
+    <h2><i class="icon">🔄</i> What Changed on the Backend</h2>
+    <p>The vendor onboarding flow has been extended from <strong>3 steps to 4</strong>.</p>
+    <ul style="font-size:0.9rem; color:#4b5563; padding-left:1.25rem; margin-top:0.5rem; line-height:2;">
+      <li>Step 3 (Branding) no longer completes onboarding — it now advances to <code>onboarding_step: 4</code>.</li>
+      <li>Step 4 (Policy Setup) is the new final step. Completing or skipping it sets <code>onboarding_step: 0</code>.</li>
+      <li>Progress percent is now calculated over 4 steps (<strong>25% per step</strong>).</li>
+      <li><code>GET /onboarding/status</code> now returns 4 entries in <code>steps[]</code>.</li>
+      <li><code>policies</code> is now a field on the vendor profile response object.</li>
+    </ul>
+  </div>
+
+  <!-- ── 2. Routing ── -->
+  <div class="card">
+    <h2><i class="icon">🗺️</i> Routing Update</h2>
+    <p>Add the new route to your onboarding router / guard:</p>
+    <div class="table-wrap">
+      <table class="route-table">
+        <thead><tr><th>onboarding_step</th><th>Route</th></tr></thead>
+        <tbody>
+          <tr><td><code>1</code></td><td><code>/onboarding/basic-setup</code></td></tr>
+          <tr><td><code>2</code></td><td><code>/onboarding/delivery-linking</code></td></tr>
+          <tr><td><code>3</code></td><td><code>/onboarding/branding</code></td></tr>
+          <tr class="highlight"><td><code>4</code></td><td><code>/onboarding/policy-setup</code> <span class="new-badge">NEW</span></td></tr>
+          <tr><td><code>0</code></td><td><code>/dashboard</code> — onboarding complete</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── 3. Step Indicator ── -->
+  <div class="card">
+    <h2><i class="icon">📊</i> Step Indicator / Progress Bar</h2>
+    <p>Update your step indicator component to render 4 steps:</p>
+    <div class="progress-row">
+      <div class="step-pill done">1<br/>Basic Setup</div>
+      <div class="step-pill done">2<br/>Delivery</div>
+      <div class="step-pill done">3<br/>Branding</div>
+      <div class="step-pill new">4<br/>Policies ✦</div>
+    </div>
+    <p class="step-pct">Progress percents: 0% → 25% → 50% → 75% → 100%</p>
+    <p>The <code>/onboarding/status</code> response now includes a 4th step object:</p>
+    <pre><code>{
+  "step": 4,
+  "label": "Policy Setup (Optional)",
+  "required": false,
+  "status": "current" | "completed" | "pending"
+}</code></pre>
+  </div>
+
+  <!-- ── 4. New Endpoint ── -->
+  <div class="card">
+    <h2><i class="icon">🔌</i> New Endpoint</h2>
+    <pre><code>PUT /api/vendor/onboarding/policy-setup
+Authorization: Bearer &lt;token&gt;   (vendor role required)
+Prerequisite: step 3 completed or skipped</code></pre>
+
+    <h3>Skip (no policies to set)</h3>
+    <pre><code>{ "skip": true }</code></pre>
+
+    <h3>Submit with data — full example</h3>
+    <p>All three sub-policies are independently optional. Send any combination.</p>
+    <pre><code>{
+  "return_policy": {
+    "return_eligible": true,
+    "return_window_days": 14,
+    "refund_type": "full",
+    "return_shipping_payer": "customer",
+    "refund_processing_days": 7,
+    "return_condition_notes": "Item must be unused and in original packaging."
+  },
+  "cancellation_policy": {
+    "cancellable": true,
+    "cancellation_deadline": "within_24_hours",
+    "cancellation_fee_type": "none"
+  },
+  "support_policy": {
+    "channels": [
+      { "type": "email",    "contact": "support@mybrand.com" },
+      { "type": "whatsapp", "contact": "+237670000000" }
+    ],
+    "eligibility_notes": "Only customers with a valid order.",
+    "required_info": ["order_number", "product_photo_video"],
+    "availability": "business_hours",
+    "languages": ["English", "French"]
+  },
+  "version": 3
+}</code></pre>
+
+    <h3>Success Response</h3>
+    <pre><code>{
+  "success": true,
+  "message": "Policy setup completed",
+  "data": {
+    "profile": { "..." },
+    "completionStatus": {
+      "onboardingStep": 0,
+      "isComplete": true,
+      "missingFields": [],
+      "stepLabel": "Onboarding Complete"
+    }
+  }
+}</code></pre>
+    <p>When <code>onboardingStep === 0</code> → redirect to dashboard.</p>
+  </div>
+
+  <!-- ── 5. Return Policy Fields ── -->
+  <div class="card">
+    <h2><i class="icon">↩️</i> Field Specs — Return Policy</h2>
+    <div class="callout warn">
+      <strong>Admin-only field:</strong> <code>inspector</code> is always <code>"admin"</code> in the API response. Do <em>not</em> render it as an editable input — it is a platform rule set by admins.
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Field</th><th>Type</th><th>Options / Validation</th><th>Default</th></tr></thead>
+        <tbody>
+          <tr><td><code>return_eligible</code></td><td>boolean</td><td>Toggle Yes / No</td><td><code>true</code></td></tr>
+          <tr><td><code>return_window_days</code></td><td>integer</td><td>0 – 180</td><td><code>14</code></td></tr>
+          <tr><td><code>refund_type</code></td><td>string</td><td><code>"full"</code> / <code>"partial"</code> / <code>"none"</code></td><td><code>"full"</code></td></tr>
+          <tr><td><code>refund_percentage</code></td><td>number | null</td><td>0–100. <strong>Required when <code>refund_type === "partial"</code></strong></td><td>—</td></tr>
+          <tr><td><code>return_shipping_payer</code></td><td>string</td><td><code>"vendor"</code> / <code>"customer"</code> / <code>"customer_reimbursed_if_defect"</code></td><td><code>"customer"</code></td></tr>
+          <tr><td><code>refund_processing_days</code></td><td>integer</td><td>1 – 30</td><td><code>7</code></td></tr>
+          <tr><td><code>return_condition_notes</code></td><td>string | null</td><td>Free text, max 500 chars</td><td>—</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── 6. Cancellation Policy Fields ── -->
+  <div class="card">
+    <h2><i class="icon">🚫</i> Field Specs — Cancellation Policy</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Field</th><th>Type</th><th>Options / Validation</th></tr></thead>
+        <tbody>
+          <tr><td><code>cancellable</code></td><td>boolean</td><td>Toggle Yes / No</td></tr>
+          <tr><td><code>cancellation_deadline</code></td><td>string | null</td><td>See enum below</td></tr>
+          <tr><td><code>cancellation_deadline_days</code></td><td>integer | null</td><td>min 0. <strong>Required when deadline is <code>"anytime_until_days_before_delivery"</code></strong></td></tr>
+          <tr><td><code>cancellation_fee_type</code></td><td>string | null</td><td><code>"none"</code> / <code>"fixed"</code> / <code>"percentage"</code> / <code>"full_non_refundable"</code></td></tr>
+          <tr><td><code>cancellation_fee_value</code></td><td>number | null</td><td>min 0. <strong>Required when fee type is <code>"fixed"</code> or <code>"percentage"</code></strong></td></tr>
+          <tr><td><code>late_cancellation_refund_type</code></td><td>string | null</td><td><code>"fixed"</code> / <code>"percentage"</code> / <code>"full_non_refundable"</code></td></tr>
+          <tr><td><code>late_cancellation_refund_value</code></td><td>number | null</td><td>min 0. <strong>Required when refund type is <code>"fixed"</code> or <code>"percentage"</code></strong></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3><code>cancellation_deadline</code> enum values</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Value</th><th>Label to show user</th></tr></thead>
+        <tbody>
+          <tr><td><code>"within_1_hour"</code></td><td>Within 1 hour of order</td></tr>
+          <tr><td><code>"within_24_hours"</code></td><td>Within 24 hours of order</td></tr>
+          <tr><td><code>"before_vendor_confirmation"</code></td><td>Before vendor confirms the order</td></tr>
+          <tr><td><code>"before_service_start"</code></td><td>Before service start date/time</td></tr>
+          <tr><td><code>"anytime_until_days_before_delivery"</code></td><td>Anytime until X days before delivery <em>(show day input)</em></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── 7. Support Policy Fields ── -->
+  <div class="card">
+    <h2><i class="icon">💬</i> Field Specs — Support Policy</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Field</th><th>Type</th><th>Options / Validation</th></tr></thead>
+        <tbody>
+          <tr><td><code>channels</code></td><td>object[]</td><td>Max 4. Each: <code>{ type, contact }</code> — see sub-fields below</td></tr>
+          <tr><td><code>channels[].type</code></td><td>string</td><td><code>"email"</code> / <code>"phone"</code> / <code>"whatsapp"</code> / <code>"telegram"</code></td></tr>
+          <tr><td><code>channels[].contact</code></td><td>string</td><td>Email address, phone number, or username. Max 200 chars.</td></tr>
+          <tr><td><code>eligibility_notes</code></td><td>string | null</td><td>Free text, max 500 chars</td></tr>
+          <tr><td><code>required_info</code></td><td>string[]</td><td><code>"order_number"</code> / <code>"product_photo_video"</code> / <code>"tracking_number"</code> (checkboxes)</td></tr>
+          <tr><td><code>availability</code></td><td>string | null</td><td><code>"24_7"</code> / <code>"business_hours"</code> / <code>"limited"</code></td></tr>
+          <tr><td><code>availability_description</code></td><td>string | null</td><td>Max 200 chars. Show input when <code>availability === "limited"</code></td></tr>
+          <tr><td><code>languages</code></td><td>string[]</td><td>Max 20 entries, each max 50 chars. Free-text tags or multi-select.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout">
+      <strong>UX note for channels:</strong> When a user selects a channel type (e.g. WhatsApp), show a text input for the contact value inline. Each channel type should only appear once.
+    </div>
+    <div class="callout">
+      <strong>UX note for availability:</strong> When the user selects <code>"limited"</code>, reveal the <code>availability_description</code> input so they can specify hours (e.g. "Mon–Fri, 10–18").
+    </div>
+  </div>
+
+  <!-- ── 8. Error Handling ── -->
+  <div class="card">
+    <h2><i class="icon">⚠️</i> Error Handling</h2>
+    <p>No new error codes. The same codes used by every other onboarding step apply here:</p>
+    <div class="table-wrap">
+      <table class="error-table">
+        <thead><tr><th>HTTP</th><th>Code</th><th>When</th><th>Action</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>400</td>
+            <td><code>VENDOR_ONBOARDING_STEP_INCOMPLETE</code></td>
+            <td>Step 4 submitted before step 3 was done</td>
+            <td>Redirect to earliest incomplete step</td>
+          </tr>
+          <tr>
+            <td>409</td>
+            <td><code>VENDOR_ONBOARDING_ALREADY_COMPLETED</code></td>
+            <td>Onboarding is already complete</td>
+            <td>Redirect to dashboard</td>
+          </tr>
+          <tr>
+            <td>409</td>
+            <td><code>VENDOR_ONBOARDING_CONCURRENT_MODIFICATION</code></td>
+            <td>Version mismatch — another session wrote first</td>
+            <td>Re-fetch profile, store new <code>version</code>, let user re-submit</td>
+          </tr>
+          <tr>
+            <td>400</td>
+            <td><code>VALIDATION_ERROR</code></td>
+            <td>Missing conditional field (e.g. <code>refund_percentage</code> when type is <code>"partial"</code>)</td>
+            <td>Show inline field error from <code>details[].message</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── 9. Optimistic Concurrency ── -->
+  <div class="card">
+    <h2><i class="icon">🔒</i> Optimistic Concurrency (same as other steps)</h2>
+    <p>Pass <code>version</code> from the last profile response you stored. On success, the response contains an incremented <code>version</code> — store it for the next write. If the versions don't match you'll get a <code>409 VENDOR_ONBOARDING_CONCURRENT_MODIFICATION</code>.</p>
+    <pre><code>// Good practice
+const body = {
+  return_policy: { ... },
+  version: storedProfile.version   // always include this
+};</code></pre>
+  </div>
+
+</div>
+</body>
+</html>
