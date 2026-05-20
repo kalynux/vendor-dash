@@ -1,7 +1,7 @@
 // ─── Variant Table ────────────────────────────────────────────────────────────
 // Matrix table with dynamic option columns, inline editing, bulk edit, and row status.
 
-import { useState, useCallback, type ChangeEvent } from 'react';
+import { useState, useCallback, useEffect, useRef, type ChangeEvent } from 'react';
 import {
   ChevronDown,
   ChevronRight,
@@ -183,7 +183,7 @@ export function VariantTable({
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b bg-muted/50">
-              <th className="w-8 p-2" />
+              {/* <th className="w-8 p-2" /> */}
               {sortedOptions.map((opt) => (
                 <th
                   key={opt.localId}
@@ -207,6 +207,7 @@ export function VariantTable({
               <th className="text-center p-2 font-medium text-muted-foreground w-[70px]">
                 Status
               </th>
+              <th className="w-[85px] p-2 text-right" />
             </tr>
           </thead>
           <tbody>
@@ -274,20 +275,6 @@ function VariantRowComponent({
         row.status === 'new' && 'bg-blue-50/30 dark:bg-blue-950/10',
         row.status === 'modified' && 'bg-amber-50/30 dark:bg-amber-950/10',
       )}>
-        {/* Expand toggle */}
-        <td className="p-2">
-          <button
-            onClick={onToggleExpand}
-            className="p-0.5 hover:bg-muted rounded"
-          >
-            {isExpanded ? (
-              <ChevronDown className="h-4 w-4 text-muted-foreground" />
-            ) : (
-              <ChevronRight className="h-4 w-4 text-muted-foreground" />
-            )}
-          </button>
-        </td>
-
         {/* Option value columns */}
         {sortedOptions.map((opt) => {
           const comboVal = row.combo.comboValues.find(
@@ -357,6 +344,22 @@ function VariantRowComponent({
           <Badge variant="outline" className={cn('text-xs', statusBadge.className)}>
             {statusBadge.label}
           </Badge>
+        </td>
+
+        {/* Expand toggle */}
+        <td className="p-2 text-right">
+          <button
+            onClick={onToggleExpand}
+            className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring rounded px-1.5 py-1 hover:bg-muted"
+          >
+            <span>{isExpanded ? 'Less' : 'More'}</span>
+            <ChevronDown
+              className={cn(
+                'h-3.5 w-3.5 text-muted-foreground transition-transform duration-200',
+                isExpanded && 'rotate-180',
+              )}
+            />
+          </button>
         </td>
       </tr>
 
@@ -504,11 +507,16 @@ function CellInput({
   step,
 }: CellInputProps) {
   const [localValue, setLocalValue] = useState(value);
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  // Sync from parent when value changes externally
-  if (value !== localValue && document.activeElement !== document.querySelector(`[data-cell-id]`)) {
-    // We don't directly set here because React batching handles this
-  }
+  // Sync from parent when `value` changes externally (bulk edit, auto-SKU,
+  // server sync, …). Skip while the user is actively editing this cell so we
+  // don't clobber their typing.
+  useEffect(() => {
+    if (document.activeElement !== inputRef.current) {
+      setLocalValue(value);
+    }
+  }, [value]);
 
   const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
     setLocalValue(e.target.value);
@@ -523,11 +531,11 @@ function CellInput({
   return (
     <div className="relative">
       <Input
+        ref={inputRef}
         type={type}
         value={localValue}
         onChange={handleChange}
         onBlur={handleBlur}
-        onFocus={() => setLocalValue(value)} // sync on focus
         min={min}
         step={step}
         className={cn(
