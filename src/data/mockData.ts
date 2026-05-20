@@ -1,7 +1,7 @@
-import type { 
-  User, Store, Product, Order, Vendor, 
-  AnalyticsMetrics, SalesDataPoint, CategoryBreakdown, 
-  Notification, Customer, MediaFile, MediaFolder 
+import type {
+  User, Store, Product, Order, Vendor,
+  AnalyticsMetrics, SalesDataPoint, CategoryBreakdown,
+  Notification, Customer, MediaFile, MediaFolder, Entitlement
 } from '@/types';
 
 // Mock Users
@@ -285,13 +285,15 @@ export const mockCustomers: Customer[] = [
       zip: '10001'
     },
     orderCount: 5,
-    totalSpent: 724.95
+    totalSpent: 724.95,
+    whatsapp: '+1 (555) 123-4567'
   },
   {
     id: '2',
     email: 'bob.smith@email.com',
     name: 'Bob Smith',
     phone: '+1 (555) 987-6543',
+    whatsapp: '+1 (555) 987-6543',
     avatar: 'https://i.pravatar.cc/150?u=bob',
     addresses: [
       {
@@ -399,7 +401,10 @@ export const mockOrders: Order[] = [
       { id: 't4', type: 'shipped', message: 'Order shipped via FedEx (Tracking: 1234567890)', createdAt: '2024-03-11T09:15:00Z', actor: 'Warehouse' },
       { id: 't5', type: 'delivered', message: 'Order delivered successfully', createdAt: '2024-03-14T16:45:00Z', actor: 'FedEx' }
     ],
-    riskLevel: 'low'
+    riskLevel: 'low',
+    notes: 'Please leave at the front door if no one is home. Ring the bell twice.',
+    deliveryAgency: { name: 'FedEx Express', address: '1 FedEx Way, Memphis, TN 38116' },
+    assignedAgent: { name: 'James Carter' }
   },
   {
     id: '2',
@@ -552,6 +557,83 @@ export const mockOrders: Order[] = [
       { id: 't15', type: 'refund_processed', message: 'Full refund of $161.99 processed', createdAt: '2024-03-11T14:05:00Z', actor: 'System' }
     ],
     riskLevel: 'low'
+  },
+  {
+    id: '6',
+    orderNumber: '#1006',
+    customer: mockCustomers[2],
+    items: [
+      {
+        id: 'oi8',
+        productId: '6',
+        name: 'UI Design Masterclass - Full Course',
+        sku: 'DIG-COURSE-001',
+        quantity: 1,
+        price: 79.99,
+        total: 79.99,
+        image: 'https://placehold.co/100x100/8b5cf6/ffffff?text=Course',
+        productType: 'digital'
+      },
+      {
+        id: 'oi9',
+        productId: '7',
+        name: 'Premium Design Assets Bundle',
+        sku: 'DIG-ASSETS-002',
+        quantity: 1,
+        price: 39.99,
+        total: 39.99,
+        image: 'https://placehold.co/100x100/6366f1/ffffff?text=Assets',
+        productType: 'digital'
+      }
+    ],
+    status: 'fulfilled',
+    paymentStatus: 'paid',
+    fulfillmentStatus: 'fulfilled',
+    subtotal: 119.98,
+    tax: 9.60,
+    shipping: 0,
+    discount: 0,
+    total: 129.58,
+    currency: 'USD',
+    createdAt: '2024-03-15T08:00:00Z',
+    updatedAt: '2024-03-15T08:01:00Z',
+    tags: ['digital', 'course'],
+    timeline: [
+      { id: 't16', type: 'order_placed', message: 'Order placed by customer', createdAt: '2024-03-15T08:00:00Z', actor: 'Carol White' },
+      { id: 't17', type: 'payment_processed', message: 'Payment of $129.58 processed successfully', createdAt: '2024-03-15T08:00:30Z', actor: 'System' },
+      { id: 't18', type: 'delivered', message: 'Digital products delivered — download links sent to customer', createdAt: '2024-03-15T08:01:00Z', actor: 'System' }
+    ],
+    riskLevel: 'low',
+    entitlements: [
+      {
+        id: 'ent1',
+        orderId: '6',
+        productId: '6',
+        productName: 'UI Design Masterclass - Full Course',
+        customerId: '3',
+        status: 'active',
+        downloadCount: 2,
+        maxDownloads: 5,
+        expiresAt: '2025-03-15T08:01:00Z',
+        revokedAt: null,
+        revokeReason: null,
+        createdAt: '2024-03-15T08:01:00Z'
+      },
+      {
+        id: 'ent2',
+        orderId: '6',
+        productId: '7',
+        productName: 'Premium Design Assets Bundle',
+        customerId: '3',
+        status: 'revoked',
+        downloadCount: 1,
+        maxDownloads: 3,
+        expiresAt: '2025-03-15T08:01:00Z',
+        revokedAt: '2024-03-16T10:00:00Z',
+        revokeReason: 'Customer requested refund for this item',
+        createdAt: '2024-03-15T08:01:00Z'
+      }
+    ] as Entitlement[]
   }
 ];
 

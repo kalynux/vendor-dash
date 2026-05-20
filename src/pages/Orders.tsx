@@ -13,6 +13,11 @@ import {
   Eye,
   Calendar,
   CreditCard,
+  Plus,
+  Loader2,
+  ArrowLeftCircle,
+  ArrowUpCircle,
+  PackageSearch,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -40,6 +45,9 @@ import {
 } from '@/components/ui/dialog';
 import { useOrderStore } from '@/store';
 import { OrderDetails } from '@/components/features/OrderDetails';
+import { OrderStatusBadge } from '@/components/orders/OrderStatusBadge';
+import { MobileOrderDetailSheet } from '@/components/orders/MobileOrderDetailSheet';
+import { useIsMobile } from '@/hooks/use-mobile';
 import type { Order } from '@/types';
 import { cn } from '@/lib/utils';
 
@@ -53,15 +61,48 @@ const statusOptions = [
   { value: 'refunded', label: 'Refunded', color: 'bg-gray-500' },
 ];
 
+// Valid next statuses based on current status and order type
+export function getNextStatuses(status: string, orderType: 'physical' | 'digital'): string[] {
+  switch (status) {
+    case 'pending': return ['processing', 'cancelled'];
+    case 'processing': return orderType === 'digital' ? ['fulfilled', 'cancelled'] : ['shipped', 'cancelled'];
+    case 'shipped': return ['delivered', 'cancelled'];
+    default: return []; // delivered, fulfilled, cancelled are terminal
+  }
+}
+
+export const STATUS_LABELS: Record<string, string> = {
+  processing: 'Mark as Processing',
+  shipped: 'Mark as Shipped',
+  delivered: 'Mark as Delivered',
+  fulfilled: 'Mark as Fulfilled',
+  cancelled: 'Cancel Order',
+};
+
+const STATUS_ICONS: Record<string, React.ReactNode> = {
+  processing: <PackageSearch className="w-4 h-4" />,
+  shipped:  <Truck className="w-4 h-4" />,
+  delivered: <CheckCircle className="w-4 h-4" />,
+  fulfilled: <CheckCircle className="w-4 h-4" />,
+  cancelled: <XCircle className="w-4 h-4 text-destructive" />,
+};
+
+const mobileFilterPills = ['All', 'Pending', 'Shipped', 'Delivered'];
+
 export function Orders() {
-  const { orders, selectedOrders, isLoading, fetchOrders, toggleOrderSelection, selectAllOrders } = useOrderStore();
+  const { orders, selectedOrders, isLoading, pagination, fetchOrders, fetchOrderById, toggleOrderSelection, selectAllOrders, updateOrderStatus } = useOrderStore();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
+  const [isDetailLoading, setIsDetailLoading] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
+  const [mobilePillFilter, setMobilePillFilter] = useState('All');
+  const isMobile = useIsMobile();
+
+  const [statusLoading, setStatusLoading] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchOrders();
+    fetchOrders({ page: 1 });
   }, [fetchOrders]);
 
   const filteredOrders = orders.filter((order: Order) => {
@@ -69,11 +110,27 @@ export function Orders() {
       order.orderNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
       order.customer.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       order.customer.email.toLowerCase().includes(searchQuery.toLowerCase());
-    
+
     const matchesStatus = statusFilter.length === 0 || statusFilter.includes(order.status);
-    
-    return matchesSearch && matchesStatus;
+
+    const matchesMobilePill =
+      mobilePillFilter === 'All' ||
+      order.status.toLowerCase() === mobilePillFilter.toLowerCase();
+
+    return matchesSearch && matchesStatus && (isMobile ? matchesMobilePill : true);
   });
+
+    const handleStatusUpdate = async (order: Order, status: string) => {
+    setStatusLoading(status);
+    try {
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      await updateOrderStatus(order.id, status);
+      // const next = { ...order, status: status as Order['status'] };
+      // setSelectedOrder(next);
+    } finally {
+      setStatusLoading(null);
+    }
+  };
 
   const toggleStatusFilter = (status: string) => {
     setStatusFilter((prev) =>
@@ -83,33 +140,11 @@ export function Orders() {
     );
   };
 
-  const getStatusBadge = (status: string) => {
-    return (
-      <Badge
-        variant="outline"
-        className={cn(
-          'capitalize',
-          status === 'delivered' && 'border-green-500 text-green-600 bg-green-50',
-          status === 'pending' && 'border-yellow-500 text-yellow-600 bg-yellow-50',
-          status === 'processing' && 'border-purple-500 text-purple-600 bg-purple-50',
-          status === 'shipped' && 'border-indigo-500 text-indigo-600 bg-indigo-50',
-          status === 'cancelled' && 'border-red-500 text-red-600 bg-red-50',
-          status === 'refunded' && 'border-gray-500 text-gray-600 bg-gray-50'
-        )}
-      >
-        <span className={cn('w-2 h-2 rounded-full mr-1.5', 
-          statusOptions.find(s => s.value === status)?.color
-        )} />
-        {status}
-      </Badge>
-    );
-  };
-
   const getPaymentBadge = (status: string) => {
     return (
       <Badge
         variant={status === 'paid' ? 'default' : 'secondary'}
-        className="capitalize"
+        className={cn('capitalize', status === 'paid' && 'bg-black text-white hover:bg-black/90')}
       >
         {status}
       </Badge>
@@ -131,22 +166,167 @@ export function Orders() {
     });
   };
 
-  const handleViewDetails = (order: Order) => {
+  const timeAgo = (dateStr: string) => {
+    const diff = Date.now() - new Date(dateStr).getTime();
+    const minutes = Math.floor(diff / 60000);
+    const hours = Math.floor(minutes / 60);
+    const days = Math.floor(hours / 24);
+    if (days > 0) return `${days}d`;
+    if (hours > 0) return `${hours}h`;
+    return `${minutes}m`;
+  };
+
+  const handleViewDetails = async (order: Order) => {
     setSelectedOrder(order);
     setIsDetailsOpen(true);
+    setIsDetailLoading(true);
+    try {
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      const full = await fetchOrderById(order.id);
+      setSelectedOrder(full);
+    } finally {
+      setIsDetailLoading(false);
+    }
   };
 
   const allSelected = filteredOrders.length > 0 && selectedOrders.length === filteredOrders.length;
 
+  // ─── Mobile Layout ────────────────────────────────────────────────────────
+  if (isMobile) {
+    return (
+      <div className="-mx-6 -mt-6">
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 pt-4 pb-3">
+          <h1 className="text-xl font-bold">Orders</h1>
+          <div className="flex items-center gap-1">
+            <Button variant="ghost" size="icon" onClick={() => {/* create order */ }}>
+              <Plus className="w-5 h-5" />
+            </Button>
+            <Sheet>
+              <SheetTrigger asChild>
+                <Button variant="ghost" size="icon">
+                  <Filter className="w-5 h-5" />
+                </Button>
+              </SheetTrigger>
+              <SheetContent>
+                <SheetHeader>
+                  <SheetTitle>Filter Orders</SheetTitle>
+                </SheetHeader>
+                <div className="mt-6 space-y-6">
+                  <div>
+                    <h4 className="text-sm font-medium mb-3">Order Status</h4>
+                    <div className="space-y-2">
+                      {statusOptions.map((status) => (
+                        <label key={status.value} className="flex items-center gap-2 cursor-pointer">
+                          <Checkbox
+                            checked={statusFilter.includes(status.value)}
+                            onCheckedChange={() => toggleStatusFilter(status.value)}
+                          />
+                          <span className="capitalize">{status.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </SheetContent>
+            </Sheet>
+          </div>
+        </div>
+
+        {/* Search */}
+        <div className="px-4 mb-3">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              placeholder="Search orders"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10"
+            />
+          </div>
+        </div>
+
+        {/* Filter pills */}
+        <div className="flex gap-2 px-4 mb-4 overflow-x-auto scrollbar-none">
+          {mobileFilterPills.map((pill) => (
+            <button
+              key={pill}
+              onClick={() => setMobilePillFilter(pill)}
+              className={cn(
+                'flex-shrink-0 px-4 py-1.5 rounded-full text-sm font-medium transition-colors border',
+                mobilePillFilter === pill
+                  ? 'bg-black text-white border-black'
+                  : 'bg-background border-border'
+              )}
+            >
+              {pill}
+            </button>
+          ))}
+        </div>
+
+        {/* Order cards */}
+        <div>
+          {filteredOrders.map((order: Order) => (
+            <button
+              key={order.id}
+              onClick={() => handleViewDetails(order)}
+              className="w-full px-4 py-3 border-b hover:bg-muted/30 transition-colors text-left"
+            >
+              <div className="flex items-start gap-3">
+                <img
+                  src={order.customer.avatar || `https://i.pravatar.cc/150?u=${order.customer.id}`}
+                  alt={order.customer.name}
+                  className="w-10 h-10 rounded-full flex-shrink-0 object-cover"
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="flex justify-between">
+                    <p className="font-semibold text-sm">{order.orderNumber}</p>
+                    <p className="font-semibold text-sm">{formatCurrency(order.total)}</p>
+                  </div>
+                  <div className="flex justify-between mt-0.5">
+                    <p className="text-xs text-muted-foreground">{order.customer.name}</p>
+                    <p className="text-xs text-muted-foreground">{timeAgo(order.createdAt)}</p>
+                  </div>
+                  <div className="flex items-center justify-between mt-2">
+                    <div className="flex items-center gap-1.5">
+                      <OrderStatusBadge status={order.status} />
+                      {order.orderType === 'digital' ? (
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-violet-300 text-violet-700 bg-violet-50 gap-1">
+                          <Download className="w-2.5 h-2.5" />Digital
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-blue-300 text-blue-700 bg-blue-50 gap-1">
+                          <Package className="w-2.5 h-2.5" />Physical
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground">{order.items.length} items</p>
+                  </div>
+                </div>
+              </div>
+            </button>
+          ))}
+        </div>
+
+        {/* Order Details Sheet */}
+        <MobileOrderDetailSheet
+          order={selectedOrder}
+          open={isDetailsOpen}
+          isDetailLoading={isDetailLoading}
+          onOpenChange={setIsDetailsOpen}
+        />
+      </div>
+    );
+  }
+
+  // ─── Desktop Layout ───────────────────────────────────────────────────────
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">Orders</h1>
-          <p className="text-muted-foreground">
-            Manage and track customer orders
-          </p>
+          <p className="text-muted-foreground">Manage and track customer orders</p>
         </div>
         <div className="flex items-center gap-3">
           <Button variant="outline" className="gap-2">
@@ -160,9 +340,9 @@ export function Orders() {
         </div>
       </div>
 
-      {/* Filters & Search */}
-      <Card>
-        <CardContent className="p-4">
+      {/* Search + Filters */}
+      <Card className="border-none shadow-none">
+        <CardContent className="border-none p-0">
           <div className="flex flex-col sm:flex-row gap-4">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -186,18 +366,15 @@ export function Orders() {
                 </Button>
               </SheetTrigger>
               <SheetContent>
-                <SheetHeader>
+                <SheetHeader className="border-b-2">
                   <SheetTitle>Filter Orders</SheetTitle>
                 </SheetHeader>
-                <div className="mt-6 space-y-6">
+                <div className="space-y-6 p-4">
                   <div>
                     <h4 className="text-sm font-medium mb-3">Order Status</h4>
                     <div className="space-y-2">
                       {statusOptions.map((status) => (
-                        <label
-                          key={status.value}
-                          className="flex items-center gap-2 cursor-pointer"
-                        >
+                        <label key={status.value} className="flex items-center gap-2 cursor-pointer">
                           <Checkbox
                             checked={statusFilter.includes(status.value)}
                             onCheckedChange={() => toggleStatusFilter(status.value)}
@@ -237,7 +414,7 @@ export function Orders() {
               </Button>
             </div>
           )}
-          
+
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
@@ -297,8 +474,19 @@ export function Orders() {
                         />
                       </td>
                       <td className="p-4">
-                        <div className="font-medium">{order.orderNumber}</div>
-                        <div className="text-sm text-muted-foreground">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">{order.orderNumber}</span>
+                          {order.orderType === 'digital' ? (
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-violet-300 text-violet-700 bg-violet-50 gap-1">
+                              <Download className="w-2.5 h-2.5" />Digital
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-blue-300 text-blue-700 bg-blue-50 gap-1">
+                              <Package className="w-2.5 h-2.5" />Physical
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="text-sm text-muted-foreground mt-0.5">
                           {order.items.length} items
                         </div>
                       </td>
@@ -318,12 +506,14 @@ export function Orders() {
                         </div>
                       </td>
                       <td className="p-4">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 text-sm">
                           <Calendar className="w-4 h-4 text-muted-foreground" />
                           {formatDate(order.createdAt)}
                         </div>
                       </td>
-                      <td className="p-4">{getStatusBadge(order.status)}</td>
+                      <td className="p-4">
+                        <OrderStatusBadge status={order.status} />
+                      </td>
                       <td className="p-4">
                         <div className="flex items-center gap-2">
                           <CreditCard className="w-4 h-4 text-muted-foreground" />
@@ -342,18 +532,29 @@ export function Orders() {
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem onClick={() => handleViewDetails(order)}>
-                              <Eye className="w-4 h-4 mr-2" />
+                              <Eye className="w-4 h-4" />
                               View Details
                             </DropdownMenuItem>
-                            <DropdownMenuItem>
+                            {/* <DropdownMenuItem>
                               <Truck className="w-4 h-4 mr-2" />
                               Mark as Shipped
                             </DropdownMenuItem>
                             <DropdownMenuItem className="text-destructive">
                               <XCircle className="w-4 h-4 mr-2" />
                               Cancel Order
-                            </DropdownMenuItem>
+                            </DropdownMenuItem> */}
+                            {getNextStatuses(order.status, order.orderType).map((s) => (
+                              <DropdownMenuItem
+                                key={s}
+                                onClick={() => handleStatusUpdate(order, s)}
+                                className={s === 'cancelled' ? 'text-destructive' : ''}
+                              >
+                                {STATUS_ICONS[s]}
+                                {statusLoading == order.status ? <Loader2 className="w-4 h-4 animate-spin" /> : STATUS_LABELS[s] ?? s}
+                              </DropdownMenuItem>
+                            ))}
                           </DropdownMenuContent>
+
                         </DropdownMenu>
                       </td>
                     </tr>
@@ -366,19 +567,42 @@ export function Orders() {
           {/* Pagination */}
           <div className="flex items-center justify-between p-4 border-t">
             <p className="text-sm text-muted-foreground">
-              Showing {filteredOrders.length} of {orders.length} orders
+              {pagination
+                ? `Showing ${orders.length} of ${pagination.total} orders`
+                : `Showing ${filteredOrders.length} orders`}
             </p>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" disabled>
-                <ChevronLeft className="w-4 h-4" />
-              </Button>
-              <Button variant="outline" size="sm" className="bg-primary text-primary-foreground">
-                1
-              </Button>
-              <Button variant="outline" size="sm">
-                <ChevronRight className="w-4 h-4" />
-              </Button>
-            </div>
+            {pagination && pagination.pages > 1 && (
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={pagination.page <= 1 || isLoading}
+                  onClick={() => fetchOrders({ page: pagination.page - 1 })}
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </Button>
+                {Array.from({ length: pagination.pages }, (_, i) => i + 1).map((p) => (
+                  <Button
+                    key={p}
+                    variant="outline"
+                    size="sm"
+                    disabled={isLoading}
+                    className={p === pagination.page ? 'bg-primary text-primary-foreground' : ''}
+                    onClick={() => fetchOrders({ page: p })}
+                  >
+                    {p}
+                  </Button>
+                ))}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={pagination.page >= pagination.pages || isLoading}
+                  onClick={() => fetchOrders({ page: pagination.page + 1 })}
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </Button>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -389,7 +613,13 @@ export function Orders() {
           <DialogHeader>
             <DialogTitle>Order Details</DialogTitle>
           </DialogHeader>
-          {selectedOrder && <OrderDetails order={selectedOrder} />}
+          {isDetailLoading ? (
+            <div className="flex items-center justify-center h-40">
+              <Loader2 className="w-10 h-10 animate-spin text-primary" />
+            </div>
+          ) : (
+            selectedOrder && <OrderDetails order={selectedOrder} />
+          )}
         </DialogContent>
       </Dialog>
     </div>

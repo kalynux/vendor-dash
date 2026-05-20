@@ -120,6 +120,7 @@ export interface DigitalAsset {
 export interface Order {
   id: string;
   orderNumber: string;
+  orderType: 'physical' | 'digital';
   customer: Customer;
   items: OrderItem[];
   status: OrderStatus;
@@ -137,9 +138,12 @@ export interface Order {
   tags: string[];
   timeline: OrderTimelineEvent[];
   riskLevel: 'low' | 'medium' | 'high';
+  deliveryAgency?: { name: string; address: string };
+  assignedAgent?: { name: string };
+  entitlements?: Entitlement[];
 }
 
-export type OrderStatus = 'pending' | 'confirmed' | 'processing' | 'shipped' | 'delivered' | 'cancelled' | 'refunded';
+export type OrderStatus = 'pending' | 'confirmed' | 'processing' | 'shipped' | 'delivered' | 'fulfilled' | 'cancelled' | 'refunded';
 export type PaymentStatus = 'pending' | 'authorized' | 'paid' | 'partially_refunded' | 'refunded' | 'failed';
 export type FulfillmentStatus = 'unfulfilled' | 'partial' | 'fulfilled' | 'restocked';
 
@@ -153,6 +157,30 @@ export interface OrderItem {
   price: number;
   total: number;
   image?: string;
+  productType?: ProductType;
+}
+
+export interface Entitlement {
+  id: string;
+  orderItemId: string;
+  productId: string;
+  productTitle: string;
+  assetId: string;
+  assetName: string;
+  customerId: string;
+  downloadsUsed: number;
+  maxDownloads: number | null;
+  downloadsRemaining: number | 'unlimited';
+  grantedAt: string;
+  expiresAt: string;
+  revokedAt: string | null;
+  lastDownloadAt: string | null;
+  isActive: boolean;
+  isRevoked: boolean;
+  isExpired: boolean;
+  // NOTE: revokeReason is not returned by the entitlements list endpoint.
+  // Request backend to add revokeReason: string | null to the list response.
+  revokeReason?: string | null;
 }
 
 export interface Customer {
@@ -160,6 +188,7 @@ export interface Customer {
   email: string;
   name: string;
   phone?: string;
+  whatsapp?: string;
   avatar?: string;
   addresses: Address[];
   defaultAddress?: Address;
@@ -181,13 +210,26 @@ export interface Address {
   phone?: string;
 }
 
+export type TimelineEventType =
+    | 'order.created'
+    | 'payment.updated'
+    | 'fulfillment.updated'
+    | 'delivery.agency_updated'      // NEW: Phase 1 - Delivery agency assignment
+    | 'note.added'
+    | 'entitlement.revoked'          // NEW: Phase 2 - Digital entitlement revoked
+    | 'entitlement.restored'         // NEW: Phase 2 - Digital entitlement restored
+    | 'system.action';
+
 export interface OrderTimelineEvent {
   id: string;
-  type: 'order_placed' | 'payment_processed' | 'fulfillment_started' | 'shipped' | 'delivered' | 'note_added' | 'refund_processed';
+  type: TimelineEventType;
   message: string;
+  description: string | null;
   createdAt: string;
   actor: string;
+  noteId?: string | null;
 }
+
 
 // Vendor Types
 export interface Vendor {

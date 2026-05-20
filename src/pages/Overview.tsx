@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import {
   TrendingUp,
   TrendingDown,
@@ -11,15 +11,26 @@ import {
   Package,
   RefreshCw,
   AlertCircle,
+  ExternalLink,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useAnalyticsStore, useOrderStore, useProductStore } from '@/store';
+import { useAnalyticsStore, useOrderStore, useProductStore, useStoreStore } from '@/store';
 import { SalesChart } from '@/components/features/SalesChart';
 import { CategoryChart } from '@/components/features/CategoryChart';
+import { OrderStatusBadge } from '@/components/orders/OrderStatusBadge';
+import { MobileOrderDetailSheet } from '@/components/orders/MobileOrderDetailSheet';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { useRouter } from '@/App';
 import { cn } from '@/lib/utils';
+import {
+  AreaChart,
+  Area,
+  ResponsiveContainer,
+} from 'recharts';
+import type { Order } from '@/types';
 
 const dateRanges = [
   { label: 'Today', value: 'today' },
@@ -78,8 +89,8 @@ function MetricCard({ title, value, change, changeType, icon: Icon, isLoading }:
                 <span className="text-sm text-muted-foreground">vs last period</span>
               </div>
             </div>
-            <div className="p-3 bg-primary/10 rounded-lg">
-              <Icon className="w-5 h-5 text-primary" />
+            <div className="p-3 bg-muted rounded-lg">
+              <Icon className="w-5 h-5 text-muted-foreground" />
             </div>
           </div>
         </CardContent>
@@ -88,16 +99,36 @@ function MetricCard({ title, value, change, changeType, icon: Icon, isLoading }:
   );
 }
 
-export function Overview () {
-  const { metrics, dateRange, setDateRange, fetchAnalytics, isLoading } = useAnalyticsStore();
-  const { orders, fetchOrders } = useOrderStore();
+export function Overview() {
+  const { metrics, salesData, dateRange, setDateRange, fetchAnalytics, isLoading } = useAnalyticsStore();
+  const { orders, fetchOrders, isLoading: isOrderLoading, fetchOrderById } = useOrderStore();
   const { products, fetchProducts } = useProductStore();
+  const { currentStore } = useStoreStore();
+  const { navigate } = useRouter();
+  const isMobile = useIsMobile();
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [orderSheetOpen, setOrderSheetOpen] = useState(false);
+  const [isDetailLoading, setIsDetailLoading] = useState(isOrderLoading);
 
   useEffect(() => {
     fetchAnalytics();
-    fetchOrders();
+    fetchOrders({ limit: 5 });
     fetchProducts();
   }, [fetchAnalytics, fetchOrders, fetchProducts]);
+
+
+  const handleViewDetails = async (order: Order) => {
+    setIsDetailLoading(true);
+    setSelectedOrder(order);
+    setOrderSheetOpen(true);
+    try {
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      const full = await fetchOrderById(order.id);
+      setSelectedOrder(full);
+    } finally {
+      setIsDetailLoading(false);
+    }
+  };
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('en-US', {
@@ -108,14 +139,151 @@ export function Overview () {
     }).format(value);
   };
 
-  const recentOrders = orders.slice(0, 5);
-  const lowStockProducts = products.filter(
-    (p: Product) => p.inventory.tracked && p.inventory.quantity <= p.inventory.lowStockThreshold
-  );
+  // ─── Mobile Layout ─────────────────────────────────────────────────────────
+  if (isMobile) {
+    return (
+      <div className="space-y-4 pt-2">
+        {/* Greeting */}
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            {currentStore?.logo ? (
+              <img
+                src={currentStore.logo}
+                alt={currentStore.name}
+                className="w-10 h-10 rounded-full object-cover flex-shrink-0 border"
+              />
+            ) : null}
+            <div className="min-w-0">
+              <p className="text-sm text-muted-foreground">Welcome back</p>
+              <h1 className="text-xl font-bold truncate">{currentStore?.name ?? "Lena's Store"}</h1>
+            </div>
+          </div>
+          {currentStore?.domain && (
+            <a
+              href={`https://${currentStore.domain}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex-shrink-0 flex items-center gap-1.5 text-xs font-medium border rounded-full px-3 py-1.5 bg-background hover:bg-accent transition-colors"
+            >
+              <ExternalLink className="w-3 h-3" />
+              My Store
+            </a>
+          )}
+        </div>
 
+        {/* Total sales card with sparkline */}
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex justify-between items-start mb-3">
+              <div>
+                <p className="text-xs text-muted-foreground">Total sales · Last 7 days</p>
+                <p className="text-3xl font-bold mt-1">
+                  {formatCurrency(metrics.totalSales.value)}
+                </p>
+              </div>
+              <span className="text-xs text-green-600 font-medium">
+                ↗ +{metrics.totalSales.change}%
+              </span>
+            </div>
+            {salesData.length > 0 && (
+              <div className="h-16">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={salesData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="mobileSparkline" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#000" stopOpacity={0.1} />
+                        <stop offset="95%" stopColor="#000" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <Area
+                      type="monotone"
+                      dataKey="sales"
+                      stroke="#000"
+                      strokeWidth={1.5}
+                      fill="url(#mobileSparkline)"
+                      dot={false}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* 2-col stat cards */}
+        <div className="grid grid-cols-2 gap-3">
+          <Card>
+            <CardContent className="p-4">
+              <p className="text-xs text-muted-foreground">Orders</p>
+              <p className="text-2xl font-bold mt-1">{metrics.totalOrders.value}</p>
+              <p className="text-xs text-green-600 mt-1">↗ +{metrics.totalOrders.change}%</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4">
+              <p className="text-xs text-muted-foreground">Avg. order</p>
+              <p className="text-2xl font-bold mt-1">
+                {formatCurrency(metrics.averageOrderValue.value)}
+              </p>
+              <p className="text-xs text-green-600 mt-1">
+                ↗ +{metrics.averageOrderValue.change}%
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Recent orders */}
+        <div className="flex justify-between items-center">
+          <h2 className="font-semibold">Recent orders</h2>
+          <Button variant="ghost" size="sm" className="gap-1" onClick={() => navigate('orders')}>
+            View all
+            <ArrowRight className="w-3 h-3" />
+          </Button>
+        </div>
+
+        <div>
+          {orders.map((order: Order) => (
+            <button
+              key={order.id}
+              onClick={() => { handleViewDetails(order) }}
+              // onClick={() => { setSelectedOrder(order); setOrderSheetOpen(true); }}
+              className="w-full flex items-center gap-3 py-3 border-b hover:bg-muted/30 transition-colors text-left"
+            >
+              <div className="w-10 h-10 bg-muted rounded-lg flex-shrink-0 flex items-center justify-center">
+                <ShoppingCart className="w-5 h-5 text-muted-foreground" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex justify-between">
+                  <p className="font-medium text-sm">{order.orderNumber}</p>
+                  <p className="font-semibold text-sm">{formatCurrency(order.total)}</p>
+                </div>
+                <div className="flex justify-between mt-0.5">
+                  <p className="text-xs text-muted-foreground">
+                    {order.customer.name} · {order.items.length} items
+                  </p>
+                  <OrderStatusBadge status={order.status} size="xs" />
+                </div>
+              </div>
+            </button>
+          ))}
+        </div>
+
+        {/* Low Stock Alert */}
+
+        <MobileOrderDetailSheet
+          order={selectedOrder}
+          open={orderSheetOpen}
+          isDetailLoading={isDetailLoading}
+          onOpenChange={setOrderSheetOpen}
+        />
+      </div>
+    );
+  }
+
+  // ─── Desktop Layout ─────────────────────────────────────────────────────────
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Header */}
+      {/* Header row */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">Overview</h1>
@@ -123,30 +291,28 @@ export function Overview () {
             Welcome back! Here&apos;s what&apos;s happening with your store.
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="flex items-center bg-muted rounded-lg p-1">
-            {dateRanges.map((range) => (
-              <button
-                key={range.value}
-                onClick={() => setDateRange({ ...dateRange, label: range.label })}
-                className={cn(
-                  'px-3 py-1.5 text-sm font-medium rounded-md transition-colors',
-                  dateRange.label === range.label
-                    ? 'bg-card text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground'
-                )}
-              >
-                {range.label}
-              </button>
-            ))}
-          </div>
+        <div className="flex items-center gap-2">
+          {dateRanges.map((range) => (
+            <button
+              key={range.value}
+              onClick={() => setDateRange({ ...dateRange, label: range.label })}
+              className={cn(
+                'px-3 py-1.5 text-sm font-medium rounded-full border transition-colors',
+                dateRange.label === range.label
+                  ? 'bg-black text-white border-black'
+                  : 'bg-background text-foreground border-border hover:bg-muted'
+              )}
+            >
+              {range.label}
+            </button>
+          ))}
           <Button variant="outline" size="icon">
             <Calendar className="w-4 h-4" />
           </Button>
         </div>
       </div>
 
-      {/* Metrics Grid */}
+      {/* KPI cards — 4 columns */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <MetricCard
           title="Total Sales"
@@ -182,7 +348,7 @@ export function Overview () {
         />
       </div>
 
-      {/* Charts Row */}
+      {/* Charts Row — 65% / 35% split */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Card className="lg:col-span-2">
           <CardHeader className="flex flex-row items-center justify-between">
@@ -192,7 +358,7 @@ export function Overview () {
             </div>
             <div className="flex items-center gap-2">
               <Badge variant="secondary" className="gap-1">
-                <div className="w-2 h-2 rounded-full bg-primary" />
+                <div className="w-2 h-2 rounded-full bg-foreground" />
                 Sales
               </Badge>
               <Badge variant="outline" className="gap-1">
@@ -217,10 +383,10 @@ export function Overview () {
         </Card>
       </div>
 
-      {/* Bottom Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Recent Orders */}
-        <Card>
+      {/* Bottom Row — 60% / 40% split (3 + 2 columns) */}
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+        {/* Recent Orders — col-span-3 */}
+        <Card className="lg:col-span-3">
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
               <CardTitle>Recent Orders</CardTitle>
@@ -232,37 +398,26 @@ export function Overview () {
             </Button>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {recentOrders.map((order: Order) => (
+            <div className="space-y-0">
+              {orders.map((order: Order) => (
                 <div
                   key={order.id}
-                  className="flex items-center justify-between p-3 rounded-lg hover:bg-muted transition-colors cursor-pointer"
+                  className="flex items-center justify-between py-3 border-b last:border-0 cursor-pointer hover:bg-muted/30 transition-colors rounded"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
-                      <ShoppingCart className="w-5 h-5 text-primary" />
+                    <div className="w-10 h-10 bg-muted rounded-lg flex items-center justify-center">
+                      <ShoppingCart className="w-5 h-5 text-muted-foreground" />
                     </div>
                     <div>
-                      <p className="font-medium">{order.orderNumber}</p>
-                      <p className="text-sm text-muted-foreground">{order.customer.name}</p>
+                      <p className="font-medium text-sm">{order.orderNumber}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {order.customer.name} · {order.items.length} items
+                      </p>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className="font-medium">{formatCurrency(order.total)}</p>
-                    <Badge
-                      variant={
-                        order.status === 'delivered'
-                          ? 'default'
-                          : order.status === 'pending'
-                          ? 'secondary'
-                          : order.status === 'cancelled'
-                          ? 'destructive'
-                          : 'outline'
-                      }
-                      className="text-xs"
-                    >
-                      {order.status}
-                    </Badge>
+                  <div className="flex items-center gap-3">
+                    <span className="font-medium text-sm">{formatCurrency(order.total)}</span>
+                    <OrderStatusBadge status={order.status} />
                   </div>
                 </div>
               ))}
@@ -270,8 +425,8 @@ export function Overview () {
           </CardContent>
         </Card>
 
-        {/* Quick Actions & Alerts */}
-        <div className="space-y-6">
+        {/* Right column — Quick Actions + Low Stock */}
+        <div className="lg:col-span-2 space-y-6">
           {/* Quick Actions */}
           <Card>
             <CardHeader>
@@ -280,79 +435,40 @@ export function Overview () {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 gap-3">
-                <Button variant="outline" className="justify-start gap-2 h-auto py-3">
-                  <Package className="w-4 h-4" />
-                  <div className="text-left">
-                    <p className="font-medium">Add Product</p>
+                <button className="flex items-center gap-3 p-3 rounded-lg border hover:bg-accent transition-colors text-left">
+                  <Package className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium">Add Product</p>
                     <p className="text-xs text-muted-foreground">Create new listing</p>
                   </div>
-                </Button>
-                <Button variant="outline" className="justify-start gap-2 h-auto py-3">
-                  <RefreshCw className="w-4 h-4" />
-                  <div className="text-left">
-                    <p className="font-medium">Process Refund</p>
+                </button>
+                <button className="flex items-center gap-3 p-3 rounded-lg border hover:bg-accent transition-colors text-left">
+                  <RefreshCw className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium">Process Refund</p>
                     <p className="text-xs text-muted-foreground">Handle returns</p>
                   </div>
-                </Button>
-                <Button variant="outline" className="justify-start gap-2 h-auto py-3">
-                  <AlertCircle className="w-4 h-4" />
-                  <div className="text-left">
-                    <p className="font-medium">Abandoned Carts</p>
+                </button>
+                <button className="flex items-center gap-3 p-3 rounded-lg border hover:bg-accent transition-colors text-left">
+                  <AlertCircle className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium">Abandoned Carts</p>
                     <p className="text-xs text-muted-foreground">12 need attention</p>
                   </div>
-                </Button>
-                <Button variant="outline" className="justify-start gap-2 h-auto py-3">
-                  <TrendingUp className="w-4 h-4" />
-                  <div className="text-left">
-                    <p className="font-medium">View Reports</p>
+                </button>
+                <button className="flex items-center gap-3 p-3 rounded-lg border hover:bg-accent transition-colors text-left">
+                  <TrendingUp className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium">View Reports</p>
                     <p className="text-xs text-muted-foreground">Analytics & insights</p>
                   </div>
-                </Button>
+                </button>
               </div>
             </CardContent>
           </Card>
 
-          {/* Low Stock Alert */}
-          {lowStockProducts.length > 0 && (
-            <Card className="border-amber-200 bg-amber-50/50">
-              <CardHeader className="pb-3">
-                <CardTitle className="flex items-center gap-2 text-amber-800">
-                  <AlertCircle className="w-5 h-5" />
-                  Low Stock Alert
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  {lowStockProducts.slice(0, 3).map((product: Product) => (
-                    <div
-                      key={product.id}
-                      className="flex items-center justify-between p-2 rounded bg-white/50"
-                    >
-                      <div className="flex items-center gap-2">
-                        <img
-                          src={product.images[0]}
-                          alt={product.name}
-                          className="w-8 h-8 rounded object-cover"
-                        />
-                        <span className="text-sm font-medium text-amber-900">{product.name}</span>
-                      </div>
-                      <Badge variant="outline" className="text-amber-700 border-amber-300">
-                        {product.inventory.quantity} left
-                      </Badge>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
         </div>
       </div>
     </div>
   );
 }
-
-//  functionOverview
-
-// Import types
-import type { Product, Order } from '@/types';import { de } from "date-fns/locale";
-

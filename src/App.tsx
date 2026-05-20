@@ -13,11 +13,15 @@ import { Notifications } from '@/pages/Notifications';
 import { Settings } from '@/pages/Settings';
 import { MediaGallery } from '@/pages/MediaGallery';
 import { ProductUpload } from '@/pages/ProductUpload';
+import { ProductEdit } from '@/pages/ProductEdit';
 import { Support } from '@/pages/Support';
 
 // Layout
 import { Sidebar } from '@/components/layout/Sidebar';
 import { Header } from '@/components/layout/Header';
+import { MobileTabBar } from '@/components/layout/MobileTabBar';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { cn } from '@/lib/utils';
 
 // Onboarding system
 import { OnboardingProvider } from '@/onboarding/store/onboarding.store';
@@ -103,21 +107,25 @@ export const useRouter = () => useContext(LegacyRouterContext);
 
 function DashboardShell() {
   const { sidebarCollapsed } = useUI();
+  const isMobile = useIsMobile();
 
   return (
     <div className="min-h-screen bg-background">
-      <Sidebar />
+      {!isMobile && <Sidebar />}
       <div
-        className="transition-all duration-300 ease-in-out"
-        style={{ marginLeft: sidebarCollapsed ? '80px' : '256px' }}
+        className={cn(
+          'transition-all duration-300 ease-in-out',
+          isMobile ? 'ml-0' : sidebarCollapsed ? 'ml-20' : 'ml-64',
+        )}
       >
-        <Header />
-        <main className="p-6">
+        {!isMobile && <Header />}
+        <main className={cn('p-6', isMobile && 'pb-24')}>
           <Routes>
             <Route index element={<Overview />} />
             <Route path="orders" element={<Orders />} />
             <Route path="products" element={<Products />} />
             <Route path="product-upload" element={<ProductUpload />} />
+            <Route path="product-edit/:id" element={<ProductEdit />} />
             <Route path="customers" element={<Customers />} />
             <Route path="analytics" element={<Analytics />} />
             <Route path="vendors" element={<Vendors />} />
@@ -129,6 +137,7 @@ function DashboardShell() {
           </Routes>
         </main>
       </div>
+      {isMobile && <MobileTabBar />}
     </div>
   );
 }

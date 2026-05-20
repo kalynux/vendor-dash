@@ -34,8 +34,7 @@ const navigation = [
 ];
 
 const adminNavigation = [
-  { name: 'Vendors', route: 'vendors' as const, icon: Store },
-  { name: 'Admin Settings', route: 'settings' as const, icon: Shield },
+  { name: 'Tickets', route: 'support' as const, icon: Shield },
 ];
 
 const bottomNavigation = [
@@ -50,8 +49,6 @@ export function Sidebar() {
   const { unreadCount } = useNotificationStore();
   const { route, navigate } = useRouter();
   const [settingsExpanded, setSettingsExpanded] = useState(false);
-
-  const isAdmin = user?.role === 'admin';
 
   const isActive = (itemRoute: string) => {
     return route === itemRoute;
@@ -80,15 +77,15 @@ export function Sidebar() {
       <div className="h-16 flex items-center justify-between px-4 border-b">
         {!sidebarCollapsed ? (
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-              <Store className="w-5 h-5 text-primary-foreground" />
+            <div className="w-8 h-8 bg-[#22C55E] rounded-lg flex items-center justify-center">
+              <Store className="w-5 h-5 text-white" />
             </div>
-            <span className="font-bold text-lg">MarketHub</span>
+            <span className="font-bold text-lg">Jovi-Mall</span>
           </div>
         ) : (
           <div className="mx-auto">
-            <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-              <Store className="w-5 h-5 text-primary-foreground" />
+            <div className="w-8 h-8 bg-[#22C55E] rounded-lg flex items-center justify-center">
+              <Store className="w-5 h-5 text-white" />
             </div>
           </div>
         )}
@@ -120,7 +117,7 @@ export function Sidebar() {
                 className={cn(
                   'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
                   'hover:bg-accent hover:text-accent-foreground',
-                  active && 'bg-primary/10 text-primary',
+                  active && 'bg-accent text-accent-foreground',
                   sidebarCollapsed && 'justify-center'
                 )}
               >
@@ -143,8 +140,7 @@ export function Sidebar() {
         </nav>
 
         {/* Admin Section */}
-        {isAdmin && (
-          <div className="mt-6">
+        <div className="mt-6">
             {!sidebarCollapsed && (
               <div className="px-4 mb-2">
                 <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
@@ -164,7 +160,7 @@ export function Sidebar() {
                     className={cn(
                       'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
                       'hover:bg-accent hover:text-accent-foreground',
-                      active && 'bg-primary/10 text-primary',
+                      active && 'bg-accent text-accent-foreground',
                       sidebarCollapsed && 'justify-center'
                     )}
                   >
@@ -179,7 +175,6 @@ export function Sidebar() {
               })}
             </nav>
           </div>
-        )}
       </ScrollArea>
 
       {/* Bottom Navigation */}
@@ -196,7 +191,7 @@ export function Sidebar() {
                 className={cn(
                   'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
                   'hover:bg-accent hover:text-accent-foreground',
-                  active && 'bg-primary/10 text-primary',
+                  active && 'bg-accent text-accent-foreground',
                   sidebarCollapsed && 'justify-center'
                 )}
               >
@@ -224,7 +219,7 @@ export function Sidebar() {
               className={cn(
                 'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
                 'hover:bg-accent hover:text-accent-foreground',
-                isActive('settings') && 'bg-primary/10 text-primary',
+                isActive('settings') && 'bg-accent text-accent-foreground',
                 sidebarCollapsed && 'justify-center'
               )}
             >

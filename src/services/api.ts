@@ -1,4 +1,4 @@
-import { ApiError } from '@/types/api';
+import { ApiError, type ApiErrorDetail } from '@/types/api';
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8022/api';
 
@@ -62,7 +62,7 @@ async function buildApiError(res: Response): Promise<ApiError> {
         (body.message as string) ??
         `Request failed with status ${res.status}`;
     const code = (error.code as string) ?? String(res.status);
-    const details = (error.details as Record<string, string[]>) ?? undefined;
+    const details = (error.details as ApiErrorDetail[]) ?? undefined;
     const requestId = (body.requestId as string) ?? undefined;
 
     return new ApiError(res.status, code, message, details, requestId);
@@ -126,6 +126,62 @@ async function request<T>(
     return res.json() as Promise<T>;
 }
 
+// ─── Multipart request function ──────────────────────────────────────────────
+// Used for file uploads. Does NOT set Content-Type — the browser sets it
+// automatically with the correct multipart/form-data boundary.
+
+async function requestFormData<T>(
+    path: string,
+    method: 'POST' | 'PUT',
+    body: FormData,
+    isRetry = false,
+): Promise<T> {
+    const url = `${BASE_URL}${path}`;
+
+    const res = await fetch(url, {
+        method,
+        credentials: 'include',
+        body,
+        // No Content-Type header — browser sets multipart/form-data with boundary
+    });
+
+    if (res.status === 401 && !isRetry) {
+        if (isRefreshing) {
+            return new Promise<T>((resolve, reject) => {
+                pendingQueue.push({
+                    resolve: () => requestFormData<T>(path, method, body, true).then(resolve).catch(reject),
+                    reject,
+                });
+            });
+        }
+
+        isRefreshing = true;
+        try {
+            await refreshTokens();
+            isRefreshing = false;
+            flushQueue();
+            return requestFormData<T>(path, method, body, true);
+        } catch (refreshErr) {
+            isRefreshing = false;
+            const apiErr =
+                refreshErr instanceof ApiError
+                    ? refreshErr
+                    : new ApiError(401, 'REFRESH_FAILED', 'Session expired');
+            flushQueue(apiErr);
+            await hardLogout();
+            throw apiErr;
+        }
+    }
+
+    if (!res.ok) {
+        throw await buildApiError(res);
+    }
+
+    if (res.status === 204) return undefined as T;
+
+    return res.json() as Promise<T>;
+}
+
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 export const api = {
@@ -156,5 +212,13 @@ export const api = {
 
     delete<T>(path: string): Promise<T> {
         return request<T>(path, { method: 'DELETE' });
+    },
+
+    postFormData<T>(path: string, body: FormData): Promise<T> {
+        return requestFormData<T>(path, 'POST', body);
+    },
+
+    putFormData<T>(path: string, body: FormData): Promise<T> {
+        return requestFormData<T>(path, 'PUT', body);
     },
 };

@@ -1,15 +1,26 @@
 import { createContext, useContext, useState, useCallback } from 'react';
-import type { 
-  User, Store, Product, Order, Vendor, 
-  Notification, AnalyticsMetrics, DateRange, 
-  MediaFile, MediaFolder, MediaSortField 
+import type {
+  User, Store, Product, Order, Vendor,
+  Notification, AnalyticsMetrics, DateRange,
+  MediaFile, MediaFolder, MediaSortField
 } from '@/types';
-import { 
-  mockUsers, mockStores, mockProducts, 
-  mockOrders, mockVendors, mockNotifications,
+import {
+  mockUsers, mockStores,
+  mockVendors, mockNotifications,
   mockAnalytics, mockSalesData, mockCategoryBreakdown,
   mockMediaFiles, mockMediaFolders
 } from '@/data/mockData';
+import {
+  fetchOrders as apiFetchOrders,
+  fetchOrderById as apiFetchOrderById,
+  updateOrderStatus as apiUpdateOrderStatus,
+  type PaginationMeta,
+} from '@/services/orders.service';
+import {
+  fetchProducts as apiFetchProducts,
+  updateProductStatus as apiUpdateProductStatus,
+} from '@/services/products.service';
+import type { ProductListItem, ProductListMeta, ProductsQueryParams } from '@/types/product.types';
 
 // Auth Store Context
 interface AuthState {
@@ -47,10 +58,12 @@ const StoreStoreContext = createContext<StoreState | null>(null);
 
 // Product Store Context
 interface ProductState {
-  products: Product[];
+  products: ProductListItem[];
   selectedProducts: string[];
   isLoading: boolean;
-  fetchProducts: () => Promise<void>;
+  pagination: ProductListMeta | null;
+  fetchProducts: (params?: ProductsQueryParams) => Promise<void>;
+  // createProduct / updateProduct are no-ops — the wizard pages handle their own saves
   createProduct: (product: Partial<Product>) => Promise<void>;
   updateProduct: (id: string, updates: Partial<Product>) => Promise<void>;
   deleteProduct: (id: string) => Promise<void>;
@@ -66,12 +79,14 @@ interface OrderState {
   orders: Order[];
   selectedOrders: string[];
   isLoading: boolean;
+  pagination: PaginationMeta | null;
   filters: {
     status?: string[];
     dateRange?: DateRange;
     search?: string;
   };
-  fetchOrders: () => Promise<void>;
+  fetchOrders: ({ page, limit }: { page?: number, limit?: number }) => Promise<void>;
+  fetchOrderById: (id: string) => Promise<Order>;
   updateOrderStatus: (id: string, status: string) => Promise<void>;
   toggleOrderSelection: (id: string) => void;
   selectAllOrders: (ids: string[]) => void;
@@ -159,7 +174,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const login = useCallback(async (email: string, password: string): Promise<boolean> => {
     setAuthLoading(true);
     await new Promise(resolve => setTimeout(resolve, 1000));
-    
+
     const user = mockUsers.find(u => u.email === email);
     if (user && password === 'password') {
       setAuthUser(user);
@@ -192,49 +207,39 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // Product State
-  const [products, setProducts] = useState<Product[]>(mockProducts);
+  const [products, setProducts] = useState<ProductListItem[]>([]);
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
   const [productLoading, setProductLoading] = useState(false);
+  const [productPagination, setProductPagination] = useState<ProductListMeta | null>(null);
 
-  const fetchProducts = useCallback(async () => {
+  const fetchProducts = useCallback(async (params?: ProductsQueryParams) => {
     setProductLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 500));
-    setProductLoading(false);
+    try {
+      const result = await apiFetchProducts(params ?? {});
+      setProducts(result.data);
+      setProductPagination(result.meta);
+    } finally {
+      setProductLoading(false);
+    }
   }, []);
 
-  const createProduct = useCallback(async (product: Partial<Product>) => {
-    setProductLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 800));
-    const newProduct: Product = {
-      ...mockProducts[0],
-      ...(product as Product),
-      id: String(Date.now()),
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    setProducts(prev => [newProduct, ...prev]);
-    setProductLoading(false);
-  }, []);
-
-  const updateProduct = useCallback(async (id: string, updates: Partial<Product>) => {
-    setProductLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 500));
-    setProducts(prev => prev.map(p => 
-      p.id === id ? { ...p, ...updates, updatedAt: new Date().toISOString() } : p
-    ));
-    setProductLoading(false);
-  }, []);
+  // No-op — the product wizard pages handle their own saves directly via the service
+  const createProduct = useCallback(async (_product: Partial<Product>) => {}, []);
+  const updateProduct = useCallback(async (_id: string, _updates: Partial<Product>) => {}, []);
 
   const deleteProduct = useCallback(async (id: string) => {
     setProductLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 500));
-    setProducts(prev => prev.filter(p => p.id !== id));
-    setSelectedProducts(prev => prev.filter(pid => pid !== id));
-    setProductLoading(false);
+    try {
+      await apiUpdateProductStatus(id, 'archived');
+      setProducts(prev => prev.filter(p => p.id !== id));
+      setSelectedProducts(prev => prev.filter(pid => pid !== id));
+    } finally {
+      setProductLoading(false);
+    }
   }, []);
 
   const toggleProductSelection = useCallback((id: string) => {
-    setSelectedProducts(prev => 
+    setSelectedProducts(prev =>
       prev.includes(id) ? prev.filter(pid => pid !== id) : [...prev, id]
     );
   }, []);
@@ -248,28 +253,34 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // Order State
-  const [orders, setOrders] = useState<Order[]>(mockOrders);
+  const [orders, setOrders] = useState<Order[]>([]);
   const [selectedOrders, setSelectedOrders] = useState<string[]>([]);
   const [orderLoading, setOrderLoading] = useState(false);
+  const [orderPagination, setOrderPagination] = useState<PaginationMeta | null>(null);
   const [orderFilters, setOrderFilters] = useState<OrderState['filters']>({});
 
-  const fetchOrders = useCallback(async () => {
+  const fetchOrders = useCallback(async ({ page = 1, limit = 20 }) => {
     setOrderLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 500));
-    setOrderLoading(false);
+    try {
+      const result = await apiFetchOrders({ page, limit });
+      setOrders(result.data);
+      setOrderPagination(result.meta);
+    } finally {
+      setOrderLoading(false);
+    }
+  }, []);
+
+  const fetchOrderById = useCallback(async (id: string): Promise<Order> => {
+    return apiFetchOrderById(id);
   }, []);
 
   const updateOrderStatus = useCallback(async (id: string, status: string) => {
-    setOrderLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 500));
-    setOrders(prev => prev.map(o => 
-      o.id === id ? { ...o, status: status as Order['status'] } : o
-    ));
-    setOrderLoading(false);
+    const updated = await apiUpdateOrderStatus(id, status);
+    setOrders(prev => prev.map(o => o.id === id ? updated : o));
   }, []);
 
   const toggleOrderSelection = useCallback((id: string) => {
-    setSelectedOrders(prev => 
+    setSelectedOrders(prev =>
       prev.includes(id) ? prev.filter(oid => oid !== id) : [...prev, id]
     );
   }, []);
@@ -299,7 +310,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const approveVendor = useCallback(async (id: string) => {
     setVendorLoading(true);
     await new Promise(resolve => setTimeout(resolve, 500));
-    setVendors(prev => prev.map(v => 
+    setVendors(prev => prev.map(v =>
       v.id === id ? { ...v, status: 'active' as const } : v
     ));
     setVendorLoading(false);
@@ -308,7 +319,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const suspendVendor = useCallback(async (id: string) => {
     setVendorLoading(true);
     await new Promise(resolve => setTimeout(resolve, 500));
-    setVendors(prev => prev.map(v => 
+    setVendors(prev => prev.map(v =>
       v.id === id ? { ...v, status: 'suspended' as const } : v
     ));
     setVendorLoading(false);
@@ -317,7 +328,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const updateCommission = useCallback(async (id: string, rate: number) => {
     setVendorLoading(true);
     await new Promise(resolve => setTimeout(resolve, 500));
-    setVendors(prev => prev.map(v => 
+    setVendors(prev => prev.map(v =>
       v.id === id ? { ...v, commissionRate: rate } : v
     ));
     setVendorLoading(false);
@@ -332,7 +343,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   const markAsRead = useCallback(async (id: string) => {
     await new Promise(resolve => setTimeout(resolve, 200));
-    setNotifications(prev => prev.map(n => 
+    setNotifications(prev => prev.map(n =>
       n.id === id ? { ...n, read: true } : n
     ));
   }, []);
@@ -387,13 +398,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const uploadMediaFile = useCallback(async (file: File, metadata?: Partial<MediaFile['metadata']>) => {
     const fileId = String(Date.now());
     setUploadProgress(prev => ({ ...prev, [fileId]: 0 }));
-    
+
     // Simulate upload progress
     for (let i = 0; i <= 100; i += 10) {
       await new Promise(resolve => setTimeout(resolve, 100));
       setUploadProgress(prev => ({ ...prev, [fileId]: i }));
     }
-    
+
     const newFile: MediaFile = {
       id: fileId,
       name: file.name,
@@ -416,7 +427,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       usageCount: 0,
       usedIn: [],
     };
-    
+
     setMediaFiles(prev => [newFile, ...prev]);
     setUploadProgress(prev => {
       const newProgress = { ...prev };
@@ -442,7 +453,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const toggleMediaFileSelection = useCallback((id: string) => {
-    setSelectedMediaFiles(prev => 
+    setSelectedMediaFiles(prev =>
       prev.includes(id) ? prev.filter(fid => fid !== id) : [...prev, id]
     );
   }, []);
@@ -468,81 +479,84 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   const updateFileMetadata = useCallback(async (id: string, metadata: Partial<MediaFile['metadata']>) => {
     await new Promise(resolve => setTimeout(resolve, 300));
-    setMediaFiles(prev => prev.map(f => 
+    setMediaFiles(prev => prev.map(f =>
       f.id === id ? { ...f, metadata: { ...f.metadata, ...metadata }, updatedAt: new Date().toISOString() } : f
     ));
   }, []);
 
   return (
-    <AuthStoreContext.Provider value={{ 
-      user: authUser, 
-      isAuthenticated: !!authUser, 
-      isLoading: authLoading, 
-      login, 
-      logout, 
-      setUser: setAuthUser 
+    <AuthStoreContext.Provider value={{
+      user: authUser,
+      isAuthenticated: !!authUser,
+      isLoading: authLoading,
+      login,
+      logout,
+      setUser: setAuthUser
     }}>
-      <UIStoreContext.Provider value={{ 
-        sidebarCollapsed, 
-        theme, 
+      <UIStoreContext.Provider value={{
+        sidebarCollapsed,
+        theme,
         settingsTab,
-        toggleSidebar, 
+        toggleSidebar,
         setTheme,
         setSettingsTab
       }}>
-        <StoreStoreContext.Provider value={{ 
-          stores, 
-          currentStore, 
-          setCurrentStore, 
-          fetchStores 
+        <StoreStoreContext.Provider value={{
+          stores,
+          currentStore,
+          setCurrentStore,
+          fetchStores
         }}>
-          <ProductStoreContext.Provider value={{ 
-            products, 
-            selectedProducts, 
-            isLoading: productLoading, 
-            fetchProducts, 
-            createProduct, 
-            updateProduct, 
-            deleteProduct, 
-            toggleProductSelection, 
-            selectAllProducts, 
-            clearSelection: clearProductSelection 
+          <ProductStoreContext.Provider value={{
+            products,
+            selectedProducts,
+            isLoading: productLoading,
+            pagination: productPagination,
+            fetchProducts,
+            createProduct,
+            updateProduct,
+            deleteProduct,
+            toggleProductSelection,
+            selectAllProducts,
+            clearSelection: clearProductSelection
           }}>
-            <OrderStoreContext.Provider value={{ 
-              orders, 
-              selectedOrders, 
-              isLoading: orderLoading, 
-              filters: orderFilters, 
-              fetchOrders, 
-              updateOrderStatus, 
-              toggleOrderSelection, 
-              selectAllOrders, 
-              clearSelection: clearOrderSelection, 
-              setFilters 
+            <OrderStoreContext.Provider value={{
+              orders,
+              selectedOrders,
+              isLoading: orderLoading,
+              pagination: orderPagination,
+              filters: orderFilters,
+              fetchOrders,
+              fetchOrderById,
+              updateOrderStatus,
+              toggleOrderSelection,
+              selectAllOrders,
+              clearSelection: clearOrderSelection,
+              setFilters,
             }}>
-              <VendorStoreContext.Provider value={{ 
-                vendors, 
-                isLoading: vendorLoading, 
-                fetchVendors, 
-                approveVendor, 
-                suspendVendor, 
-                updateCommission 
+              <VendorStoreContext.Provider value={{
+                vendors,
+                isLoading: vendorLoading,
+                fetchVendors,
+                approveVendor,
+                suspendVendor,
+                updateCommission
               }}>
-                <NotificationStoreContext.Provider value={{ 
-                  notifications, 
-                  unreadCount, 
-                  fetchNotifications, 
-                  markAsRead, 
-                  markAllAsRead 
+                <NotificationStoreContext.Provider value={{
+                  notifications,
+                  unreadCount,
+                  fetchNotifications,
+                  markAsRead,
+                  markAllAsRead
                 }}>
-                  <AnalyticsStoreContext.Provider value={{ 
-                    metrics: analyticsMetrics, 
-                    salesData, 
-                    categoryBreakdown, 
-                    dateRange: analyticsDateRange, 
-                    isLoading: analyticsLoading, 
-                    fetchAnalytics, 
-                    setDateRange: setAnalyticsDateRange 
+                  <AnalyticsStoreContext.Provider value={{
+                    metrics: analyticsMetrics,
+                    salesData,
+                    categoryBreakdown,
+                    dateRange: analyticsDateRange,
+                    isLoading: analyticsLoading,
+                    fetchAnalytics,
+                    setDateRange: setAnalyticsDateRange
                   }}>
                     <MediaStoreContext.Provider value={{
                       files: mediaFiles,

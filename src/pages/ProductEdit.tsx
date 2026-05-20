@@ -1,8 +1,9 @@
-import { useReducer, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useReducer, useCallback, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Box, Package, ImageIcon, Tag, FileDigit, DollarSign, CheckSquare } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import { ProductStepIndicator } from '@/components/products/ProductStepIndicator';
 import { StepTypeSelect } from '@/components/products/steps/StepTypeSelect';
 import { StepBasicInfo } from '@/components/products/steps/StepBasicInfo';
@@ -13,13 +14,12 @@ import { StepPricing } from '@/components/products/steps/StepPricing';
 import { StepReview } from '@/components/products/steps/StepReview';
 import {
   fetchProductById,
-  createProduct,
+  fetchVariants,
+  fetchOptions,
   updateProduct,
   uploadFiles,
   createOption,
   bulkAddOptionValues,
-  fetchOptions,
-  fetchVariants,
   createVariant,
   updateVariant,
   archiveVariant,
@@ -42,6 +42,7 @@ import type {
   ApiProductType,
   LicenseTierRow,
 } from '@/types/product.types';
+import { getProductFileCount } from '@/types/product.types';
 import type { BasicInfoFormValues } from '@/components/products/schemas/product.schemas';
 import type { MediaOrderItem } from '@/components/products/ProductMediaUpload';
 import type { VariantPhase1Payload, VariantPhase2Payload } from '@/components/products/variants';
@@ -73,8 +74,8 @@ const INITIAL_STATE: WizardState = {
   serverProduct: null,
   serverVariants: [],
   serverOptions: [],
-  currentStep: 'type',
-  completedSteps: [],
+  currentStep: 'basic-info',
+  completedSteps: ['type'],
   isSaving: false,
   stepError: null,
   pendingMediaFiles: [],
@@ -110,6 +111,7 @@ function wizardReducer(state: WizardState, action: WizardAction): WizardState {
         productId: action.product.id,
         productType: action.product.type,
         variantMode: action.options.length > 0 ? 'matrix' : 'options',
+        completedSteps: buildCompletedSteps(action.product.type, action.variants, action.options, action.product),
         isSaving: false,
       };
     default:
@@ -117,10 +119,34 @@ function wizardReducer(state: WizardState, action: WizardAction): WizardState {
   }
 }
 
+function buildCompletedSteps(
+  type: ApiProductType,
+  variants: WizardState['serverVariants'],
+  _options: WizardState['serverOptions'],
+  product: NonNullable<WizardState['serverProduct']>,
+): WizardStep[] {
+  const steps: WizardStep[] = ['type', 'basic-info'];
+  if (getProductFileCount(product) > 0) steps.push('media');
+  if (type === 'physical') {
+    if (variants.length > 0) steps.push('options-variants');
+  } else {
+    if (product.digitalConfig?.assetId) steps.push('digital-asset');
+    if (variants.length > 0) steps.push('pricing');
+  }
+  return steps;
+}
+
 function getSteps(productType: ApiProductType | null) {
   if (productType === 'digital') return DIGITAL_STEPS;
   if (productType === 'physical') return PHYSICAL_STEPS;
-  return [PHYSICAL_STEPS[0]];
+  return PHYSICAL_STEPS;
+}
+
+function prevStep(current: WizardStep, productType: ApiProductType | null): WizardStep | null {
+  const steps = getSteps(productType);
+  const idx = steps.findIndex((s) => s.id === current);
+  if (idx <= 1) return null;
+  return steps[idx - 1].id;
 }
 
 function nextStep(current: WizardStep, productType: ApiProductType | null): WizardStep | null {
@@ -130,21 +156,40 @@ function nextStep(current: WizardStep, productType: ApiProductType | null): Wiza
   return steps[idx + 1].id;
 }
 
-function prevStep(current: WizardStep, productType: ApiProductType | null): WizardStep | null {
-  const steps = getSteps(productType);
-  const idx = steps.findIndex((s) => s.id === current);
-  if (idx <= 0) return null;
-  return steps[idx - 1].id;
-}
-
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function ProductUpload() {
-  const [state, dispatch] = useReducer(wizardReducer, INITIAL_STATE);
+export function ProductEdit() {
+  const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [state, dispatch] = useReducer(wizardReducer, INITIAL_STATE);
+
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+
+    async function load() {
+      try {
+        const [product, variants, options] = await Promise.all([
+          fetchProductById(id!),
+          fetchVariants(id!),
+          fetchOptions(id!),
+        ]);
+        if (!cancelled) {
+          dispatch({ type: 'LOAD_COMPLETE', product, variants, options });
+        }
+      } catch (err: unknown) {
+        if (!cancelled) {
+          const msg = err instanceof Error ? err.message : 'Failed to load product.';
+          dispatch({ type: 'SET_STEP_ERROR', error: msg });
+        }
+      }
+    }
+
+    load();
+    return () => { cancelled = true; };
+  }, [id]);
 
   const steps = getSteps(state.productType);
-  const visibleSteps = state.productType ? steps : [];
 
   function advance(updates: Partial<WizardState> = {}) {
     const next = nextStep(state.currentStep, state.productType);
@@ -160,26 +205,17 @@ export function ProductUpload() {
     });
   }
 
-  // ─── Type select ─────────────────────────────────────────────────────────────
-
-  const handleTypeSelect = useCallback((productType: ApiProductType) => {
-    dispatch({
-      type: 'SAVE_COMPLETE',
-      updates: { productType, currentStep: 'basic-info', completedSteps: ['type'] },
-    });
-  }, []);
-
   // ─── Basic info ──────────────────────────────────────────────────────────────
 
   const handleBasicInfoSave = useCallback(
     async (updates: Partial<WizardState> & { _basicInfoValues?: BasicInfoFormValues }) => {
       const values = updates._basicInfoValues;
-      if (!values || !state.productType) return;
+      const productId = state.productId;
+      if (!values || !productId) return;
 
       dispatch({ type: 'SET_SAVING', value: true });
       try {
-        const product = await createProduct({
-          type: state.productType,
+        const updated = await updateProduct(productId, {
           title: values.title,
           category: values.category,
           description: values.description || undefined,
@@ -187,13 +223,14 @@ export function ProductUpload() {
           seoTitle: values.seoTitle || undefined,
           seoDescription: values.seoDescription || undefined,
         });
-        advance({ serverProduct: product, productId: product.id });
+        toast.success('Product info saved.');
+        advance({ serverProduct: updated });
       } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : 'Failed to save. Please try again.';
+        const msg = err instanceof Error ? err.message : 'Failed to save.';
         dispatch({ type: 'SET_STEP_ERROR', error: msg });
       }
     },
-    [state.productType, state.currentStep, state.completedSteps],
+    [state.productId, state.currentStep, state.completedSteps],
   );
 
   // ─── Media ───────────────────────────────────────────────────────────────────
@@ -206,19 +243,30 @@ export function ProductUpload() {
       const order = updates._mediaOrder ?? [];
       const newItems = order.filter((i): i is { kind: 'new'; file: File } => i.kind === 'new');
 
-      if (newItems.length === 0) {
-        advance();
-        return;
-      }
-
       dispatch({ type: 'SET_SAVING', value: true });
       try {
-        const uploaded = await uploadFiles(newItems.map((i) => i.file));
-        const uploadedIds = uploaded.map((f) => f.id);
-        const updated = await updateProduct(productId, { fileIds: uploadedIds });
+        let uploadedIds: string[] = [];
+        if (newItems.length > 0) {
+          const uploaded = await uploadFiles(newItems.map((i) => i.file));
+          uploadedIds = uploaded.map((f) => f.id);
+        }
+
+        let newIdx = 0;
+        const fileIds = order.map((item) => {
+          if (item.kind === 'saved') return item.id;
+          return uploadedIds[newIdx++];
+        });
+
+        const updated = await updateProduct(productId, { fileIds });
+
+        if (newItems.length > 0) {
+          toast.success(`${newItems.length} image${newItems.length !== 1 ? 's' : ''} uploaded.`);
+        } else {
+          toast.success('Media saved.');
+        }
         advance({ serverProduct: updated });
       } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : 'Failed to upload images. Please try again.';
+        const msg = err instanceof Error ? err.message : 'Failed to save images.';
         dispatch({ type: 'SET_STEP_ERROR', error: msg });
       }
     },
@@ -238,13 +286,12 @@ export function ProductUpload() {
       const productId = state.productId;
       if (!productId) return;
 
-      // Go back to options editor — no server calls
       if (updates._resetToOptions) {
         dispatch({ type: 'SET_VARIANT_MODE', mode: 'options' });
         return;
       }
 
-      // ── Phase 1: process option changes server-side ───────────────────────
+      // ── Phase 1: apply option structure changes ────────────────────────
       if (updates._phase1) {
         const {
           variantsToArchive,
@@ -259,17 +306,17 @@ export function ProductUpload() {
 
         dispatch({ type: 'SET_SAVING', value: true });
         try {
-          // 1. DESTRUCTIVE — archive variants first (before any option/value deletion)
+          // 1. DESTRUCTIVE — archive variants before deletion
           for (const variantId of variantsToArchive) {
             await archiveVariant(productId, variantId);
           }
 
-          // 2. DESTRUCTIVE — delete removed option values (for retained options)
+          // 2. DESTRUCTIVE — delete removed option values
           for (const { optionServerId, valueServerId } of valuesToDelete) {
             await deleteOptionValue(productId, optionServerId, valueServerId);
           }
 
-          // 3. DESTRUCTIVE — delete removed options (cascades their values)
+          // 3. DESTRUCTIVE — delete removed options (cascades values)
           for (const optionServerId of optionsToDelete) {
             await deleteOption(productId, optionServerId);
           }
@@ -310,6 +357,7 @@ export function ProductUpload() {
             fetchVariants(productId),
           ]);
 
+          toast.success('Options saved.');
           dispatch({
             type: 'SAVE_COMPLETE',
             updates: {
@@ -325,7 +373,7 @@ export function ProductUpload() {
         return;
       }
 
-      // ── Phase 2: save variant rows ───────────────────────────────────────
+      // ── Phase 2: persist variant details ──────────────────────────────────
       if (updates._phase2) {
         const { toCreate, toUpdate } = updates._phase2;
         dispatch({ type: 'SET_SAVING', value: true });
@@ -365,7 +413,6 @@ export function ProductUpload() {
 
           const freshVariants = await fetchVariants(productId);
 
-          // Auto-assign default variant on first creation
           if (freshVariants.length > 0 && !state.serverProduct?.defaultVariantId) {
             await setDefaultVariant(productId, freshVariants[0].id);
           }
@@ -382,7 +429,6 @@ export function ProductUpload() {
         return;
       }
 
-      // No payload: just advance to next step
       advance();
     },
     [state.productId, state.serverProduct, state.currentStep, state.completedSteps],
@@ -396,7 +442,6 @@ export function ProductUpload() {
       if (!productId) return;
 
       const file = updates._pendingAssetFile;
-
       if (file === undefined) {
         advance();
         return;
@@ -406,17 +451,16 @@ export function ProductUpload() {
       try {
         if (file === null) {
           await deleteDigitalAsset(productId);
-          const updated = await updateProduct(productId, {});
-          advance({ serverProduct: updated });
         } else {
           const hasExistingAsset = !!state.serverProduct?.digitalConfig?.asset?.id;
           const uploadFn = hasExistingAsset ? replaceDigitalAsset : uploadDigitalAsset;
           await uploadFn(productId, file);
-          const updated = await fetchProductById(productId);
-          advance({ serverProduct: updated });
         }
+        const updated = await fetchProductById(productId);
+        toast.success(file === null ? 'Asset removed.' : 'Asset uploaded.');
+        advance({ serverProduct: updated });
       } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : 'Failed to upload asset.';
+        const msg = err instanceof Error ? err.message : 'Failed to update asset.';
         dispatch({ type: 'SET_STEP_ERROR', error: msg });
       }
     },
@@ -443,25 +487,31 @@ export function ProductUpload() {
       const tiers = updates._pendingTiers;
       dispatch({ type: 'SET_SAVING', value: true });
       try {
-        const existingSkus = new Set(state.serverVariants.map((v) => v.sku));
-        const toCreate = tiers.filter((t) => !t.serverId && !existingSkus.has(t.sku));
-
-        const created = await Promise.all(
-          toCreate.map((tier) =>
-            createVariant(productId, {
+        const results = await Promise.all(
+          tiers.map((tier) => {
+            if (tier.serverId) {
+              return updateVariant(productId, tier.serverId, {
+                sku: tier.sku,
+                name: tier.name,
+                price: tier.price,
+                compareAtPrice: tier.compareAtPrice,
+              });
+            }
+            const existingSkus = new Set(state.serverVariants.map((v) => v.sku));
+            if (existingSkus.has(tier.sku)) return Promise.resolve(null);
+            return createVariant(productId, {
               sku: tier.sku,
               name: tier.name,
               price: tier.price,
               compareAtPrice: tier.compareAtPrice,
               isInfiniteStock: true,
-            }),
-          ),
+            });
+          }),
         );
 
-        const allVariants = [...state.serverVariants, ...created];
-
-        if (allVariants.length > 0 && !state.serverProduct?.defaultVariantId) {
-          await setDefaultVariant(productId, allVariants[0].id);
+        const validResults = results.filter(Boolean);
+        if (validResults.length > 0 && !state.serverProduct?.defaultVariantId) {
+          await setDefaultVariant(productId, validResults[0]!.id);
         }
 
         if (updates._digitalConfig) {
@@ -474,16 +524,22 @@ export function ProductUpload() {
         }
 
         const updatedProduct = await fetchProductById(productId);
-        advance({ serverVariants: allVariants, serverProduct: updatedProduct });
+        toast.success('Pricing tiers saved.');
+        advance({
+          serverVariants: tiers.map(
+            (t, i) => results[i] ?? state.serverVariants.find((v) => v.id === t.serverId)!,
+          ),
+          serverProduct: updatedProduct,
+        });
       } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : 'Failed to save pricing tiers.';
+        const msg = err instanceof Error ? err.message : 'Failed to save pricing.';
         dispatch({ type: 'SET_STEP_ERROR', error: msg });
       }
     },
     [state.productId, state.serverVariants, state.serverProduct, state.currentStep, state.completedSteps],
   );
 
-  // ─── Review / publish ─────────────────────────────────────────────────────────
+  // ─── Publish ──────────────────────────────────────────────────────────────────
 
   const handlePublish = useCallback(async () => {
     const productId = state.productId;
@@ -492,7 +548,7 @@ export function ProductUpload() {
     dispatch({ type: 'SET_SAVING', value: true });
     try {
       await updateProductStatus(productId, 'active');
-      toast.success('Product published successfully!');
+      toast.success('Product published!');
       navigate('/dashboard/products');
     } catch (err: unknown) {
       if (err && typeof err === 'object' && 'code' in err) {
@@ -500,14 +556,13 @@ export function ProductUpload() {
         const human = ACTIVATION_ERROR_MAP[code];
         dispatch({ type: 'SET_STEP_ERROR', error: human ?? 'Could not publish product.' });
       } else {
-        const msg = err instanceof Error ? err.message : 'Failed to publish product.';
+        const msg = err instanceof Error ? err.message : 'Failed to publish.';
         dispatch({ type: 'SET_STEP_ERROR', error: msg });
       }
     }
   }, [state.productId, navigate]);
 
   const handleSaveDraft = useCallback(() => {
-    toast.success('Product saved as draft.');
     navigate('/dashboard/products');
   }, [navigate]);
 
@@ -519,7 +574,7 @@ export function ProductUpload() {
   // ─── Render ───────────────────────────────────────────────────────────────────
 
   const sharedStepProps = {
-    mode: 'create' as const,
+    mode: 'edit' as const,
     productId: state.productId,
     serverData: state,
     isSaving: state.isSaving,
@@ -527,10 +582,21 @@ export function ProductUpload() {
     onBack: handleBack,
   };
 
+  if (!state.serverProduct && !state.stepError) {
+    return (
+      <div className="space-y-6 max-w-3xl mx-auto">
+        <Skeleton className="h-8 w-48" />
+        <Skeleton className="h-12 w-full" />
+        <Skeleton className="h-64 w-full" />
+      </div>
+    );
+  }
+
   function renderStep() {
+    console.log("state.currentStep: ", state.currentStep)
     switch (state.currentStep) {
       case 'type':
-        return <StepTypeSelect selectedType={state.productType} onSelect={handleTypeSelect} />;
+        return <StepTypeSelect selectedType={state.productType} onSelect={() => { }} disabled />;
       case 'basic-info':
         return <StepBasicInfo {...sharedStepProps} onSaveComplete={handleBasicInfoSave} />;
       case 'media':
@@ -569,21 +635,23 @@ export function ProductUpload() {
   return (
     <div className="space-y-6 animate-fade-in max-w-3xl mx-auto">
       <div>
-        <h1 className="text-2xl font-bold">Create Product</h1>
-        <p className="text-muted-foreground text-sm mt-1">Add a new product to your store</p>
+        <h1 className="text-2xl font-bold">Edit Product</h1>
+        {state.serverProduct && (
+          <p className="text-muted-foreground text-sm mt-1 truncate">
+            {state.serverProduct.title}
+          </p>
+        )}
       </div>
 
-      {state.productType && visibleSteps.length > 0 && (
+      {state.productType && (
         <Card>
           <CardContent className="p-4">
             <ProductStepIndicator
-              steps={visibleSteps}
+              steps={steps}
               currentStep={state.currentStep}
               completedSteps={state.completedSteps}
               onStepClick={(stepId) => {
-                if (state.completedSteps.includes(stepId as WizardStep)) {
-                  dispatch({ type: 'SET_STEP', step: stepId as WizardStep });
-                }
+                dispatch({ type: 'SET_STEP', step: stepId as WizardStep });
               }}
             />
           </CardContent>
