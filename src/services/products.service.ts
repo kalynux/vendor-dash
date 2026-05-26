@@ -28,7 +28,10 @@ import type {
   CreateVariantPayload,
   UpdateVariantPayload,
   CreateOptionPayload,
+  VectorisationStatusDto,
+  VectorisationActionResponse,
 } from '@/types/product.types';
+import { ApiError } from '@/types/api';
 
 // ─── Adapters ─────────────────────────────────────────────────────────────────
 
@@ -40,12 +43,14 @@ function adaptToListItem(p: ApiProduct): ProductListItem {
     status: p.status,
     category: p.category,
     tags: p.tags,
-    firstFileId: p.fileIds.length > 0 ? p.fileIds[0] : null,
+    firstFileUrl: p.fileIds[0]?.url ?? null,
     hasVariants: p.hasVariants,
     defaultVariantId: p.defaultVariantId,
     createdAt: p.createdAt,
     updatedAt: p.updatedAt,
     digitalConfig: p.digitalConfig,
+    vectorisationEnabled: p.vectorisationEnabled ?? false,
+    vectorisationStatus: p.vectorisationStatus ?? 'not_started',
   };
 }
 
@@ -275,12 +280,62 @@ export async function toggleDigitalAsset(productId: string): Promise<{ isActive:
   return res.data;
 }
 
+// ─── Vectorisation ────────────────────────────────────────────────────────────
+
+export async function getVectorisationStatus(productId: string): Promise<VectorisationStatusDto> {
+  const res = await api.get<VectorisationActionResponse>(
+    `/vendor/products/${productId}/vectorisation/status`,
+  );
+  return res.data;
+}
+
+// Consolidated toggle — replaces the previous POST /vectorisation/enable and
+// POST /vectorisation/disable routes (both removed). Pass `enabled: true|false`.
+// The backend may return success: true with the action silently rejected
+// (e.g. eligibility check failed) — detect that and surface the message.
+export async function setVectorisationEnabled(
+  productId: string,
+  enabled: boolean,
+): Promise<VectorisationStatusDto> {
+  const res = await api.patch<VectorisationActionResponse>(
+    `/vendor/products/${productId}/vectorisation`,
+    { enabled },
+  );
+  if (res.data.vectorisationEnabled !== enabled) {
+    throw new ApiError(
+      200,
+      'CATALOG_PRODUCT_VECTORISATION_NOT_APPLIED',
+      res.message ?? 'AI search could not be updated.',
+    );
+  }
+  return res.data;
+}
+
+export async function retryVectorisation(productId: string): Promise<VectorisationStatusDto> {
+  const res = await api.post<VectorisationActionResponse>(
+    `/vendor/products/${productId}/vectorisation/retry`,
+  );
+  if (!res.data.vectorisationEnabled) {
+    throw new ApiError(
+      200,
+      'CATALOG_PRODUCT_VECTORISATION_NOT_APPLIED',
+      res.message ?? 'AI search retry could not be queued.',
+    );
+  }
+  return res.data;
+}
+
 // ─── Activation pre-flight ────────────────────────────────────────────────────
 // Map 422 error codes from the status endpoint to human-readable messages.
 
 export const ACTIVATION_ERROR_MAP: Record<string, string> = {
+  CATALOG_PRODUCT_NO_DESCRIPTION: 'A product description is required',
   CATALOG_PRODUCT_NO_VARIANTS: 'At least one variant with a price is required',
   CATALOG_PRODUCT_VARIANT_ZERO_PRICE: 'All active variants must have a price greater than 0',
   CATALOG_PRODUCT_NO_DEFAULT_VARIANT: 'A default variant must be set',
   CATALOG_PRODUCT_DIGITAL_NO_ASSET: 'A digital asset file must be uploaded before publishing',
+  CATALOG_PRODUCT_NO_DELIVERY_AGENCY:
+    'A delivery agency must be assigned to this product or set as your default',
+  CATALOG_PRODUCT_VECTORISATION_NOT_ELIGIBLE:
+    'Product is not eligible for vectorisation. It must be active, vectorisation enabled, and have a title, description, and category.',
 };

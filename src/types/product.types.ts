@@ -9,6 +9,12 @@ export type ApiProductStatus =
   | 'pending_review'
   | 'suspended';
 
+export type ApiVectorisationStatus = 'not_started' | 'pending' | 'completed' | 'failed';
+
+export interface ApiProductDelivery {
+  agencyId: string | null;
+}
+
 // ─── API Response Shapes ──────────────────────────────────────────────────────
 
 export interface ApiProductSeo {
@@ -47,13 +53,32 @@ export interface ApiProduct {
   category: string;
   tags: string[];
   seo: ApiProductSeo;
-  fileIds: string[];
+  fileIds: ApiFileDetail[];
   hasVariants: boolean;
   defaultVariantId: string | null;
   createdAt: string;
   updatedAt: string;
   // Digital products only
   digitalConfig?: ApiDigitalConfig;
+  // Vectorisation (AI search) — present on all product types
+  vectorisationEnabled?: boolean;
+  vectorisationStatus?: ApiVectorisationStatus;
+  vectorisedDataId?: string | null;
+  // Physical products only — nested delivery config (agency assignment)
+  delivery?: ApiProductDelivery;
+}
+
+export interface VectorisationStatusDto {
+  productId: string;
+  vectorisationEnabled: boolean;
+  vectorisationStatus: ApiVectorisationStatus;
+  vectorisedDataId: string | null;
+}
+
+export interface VectorisationActionResponse {
+  success: true;
+  data: VectorisationStatusDto;
+  message?: string;
 }
 
 // Shape returned by GET /api/vendor/products/:id — files are fully populated
@@ -64,7 +89,7 @@ export type ApiProductDetail = Omit<ApiProduct, 'fileIds'> & {
 // Helper — extract file IDs regardless of which shape is in state
 export function getProductFileIds(product: ApiProduct | ApiProductDetail): string[] {
   if ('files' in product) return product.files.map((f) => f.id);
-  return product.fileIds;
+  return product.fileIds.map((f) => f.id);
 }
 
 // Helper — get image count regardless of shape
@@ -126,12 +151,14 @@ export interface ProductListItem {
   status: ApiProductStatus;
   category: string;
   tags: string[];
-  firstFileId: string | null; // first of fileIds, used to build thumbnail URL
+  firstFileUrl: string | null; // URL of the first file, used for the thumbnail
   hasVariants: boolean;
   defaultVariantId: string | null;
   createdAt: string;
   updatedAt: string;
   digitalConfig?: ApiDigitalConfig;
+  vectorisationEnabled: boolean;
+  vectorisationStatus: ApiVectorisationStatus;
 }
 
 export interface ProductListMeta {
@@ -160,7 +187,7 @@ export interface CreateProductPayload {
   type: ApiProductType;
   title: string;
   category: string;
-  description?: string;
+  description: string;
   tags?: string[];
   seoTitle?: string;
   seoDescription?: string;
@@ -178,6 +205,10 @@ export interface UpdateProductPayload {
     maxDownloads?: number | null;
     expiresAfterDays?: number | null;
     isActive?: boolean;
+  };
+  vectorisationEnabled?: boolean;
+  delivery?: {
+    agencyId?: string | null;
   };
 }
 
@@ -380,4 +411,67 @@ export interface LicenseTierRow {
   compareAtPrice?: number;
   // Set after saved to server
   serverId?: string;
+}
+
+// ─── Delivery Agencies ────────────────────────────────────────────────────────
+
+export interface VendorAgencyHQAddressDto {
+  region: string;
+  city: string;
+  address_description: string;
+}
+
+export interface VendorAgencyPolicySummaryDto {
+  pricing: {
+    storage_based_enabled: boolean;
+    pickup_based_enabled: boolean;
+    notes: string | null;
+  };
+  returns: {
+    payer: 'vendor' | 'agency' | 'customer';
+    return_window_days: number;
+    notes: string | null;
+  };
+  damage: {
+    claim_deadline_days: number;
+    max_refund_per_item: number;
+    notes: string | null;
+  };
+}
+
+export interface VendorAgencyListItemDto {
+  id: string;
+  agencyName: string;
+  logoUrl: string | null;
+  kycVerified: boolean;
+  headquartersAddress: VendorAgencyHQAddressDto | null;
+  coverageAreas: string[];
+  rating: number | null;
+  policies: VendorAgencyPolicySummaryDto | null;
+}
+
+export interface AgencyListMeta {
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export interface GetDeliveryAgenciesResponse {
+  success: true;
+  data: VendorAgencyListItemDto[];
+  meta: AgencyListMeta;
+}
+
+export interface GetDefaultAgencyResponse {
+  success: true;
+  data: VendorAgencyListItemDto | null;
+}
+
+export interface DeliveryAgenciesQueryParams {
+  page?: number;
+  limit?: number;
+  search?: string;
+  region?: string;
+  hq_city?: string;
 }

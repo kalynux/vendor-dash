@@ -1,9 +1,12 @@
-import { AlertCircle, CheckCircle2, ChevronLeft, Globe, Package, FileDigit } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { AlertCircle, CheckCircle2, ChevronLeft, Globe, Package, FileDigit, Sparkles } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
 import { validateActivation } from '@/components/products/schemas/product.schemas';
-import type { WizardState } from '@/types/product.types';
+import { AgencySelector } from '@/components/products/review/AgencySelector';
+import type { WizardState, VendorAgencyListItemDto } from '@/types/product.types';
 import { getProductFileCount } from '@/types/product.types';
 
 interface StepReviewProps {
@@ -11,34 +14,58 @@ interface StepReviewProps {
   serverData: Partial<WizardState>;
   isSaving: boolean;
   stepError: string | null;
-  onPublish: () => void;
-  onSaveDraft: () => void;
+  onPublish: (values: { vectorisationEnabled: boolean }) => void;
+  onSaveDraft: (values: { vectorisationEnabled: boolean }) => void;
   onBack: () => void;
+  onAgencyChange: (agencyId: string | null) => Promise<void> | void;
 }
 
 export function StepReview({
-  mode,
   serverData,
   isSaving,
   stepError,
   onPublish,
   onSaveDraft,
   onBack,
+  onAgencyChange,
 }: StepReviewProps) {
   const product = serverData.serverProduct;
   const variants = serverData.serverVariants ?? [];
   const isDigital = product?.type === 'digital';
+  const isPhysical = product?.type === 'physical';
+
+  const [defaultAgency, setDefaultAgency] =
+    useState<VendorAgencyListItemDto | null>(null);
+  const [vectorisationEnabled, setVectorisationEnabled] = useState<boolean>(
+    product?.vectorisationEnabled ?? false,
+  );
+
+  // Sync local form value when the underlying product changes (load, save, refresh)
+  useEffect(() => {
+    setVectorisationEnabled(product?.vectorisationEnabled ?? false);
+  }, [product?.vectorisationEnabled, product?.id]);
 
   const activationErrors = product
     ? validateActivation({
       productType: product.type,
+      description: product.description,
       variants: variants.map((v) => ({ price: v.price, status: v.status })),
       defaultVariantId: product.defaultVariantId,
       digitalAssetId: product.digitalConfig?.asset?.id,
     })
     : ['Product has not been created yet'];
 
+  const productAgencyId = product?.delivery?.agencyId ?? null;
+  const effectiveAgencyId = productAgencyId ?? defaultAgency?.id ?? null;
+  const physicalNeedsAgency = isPhysical && !effectiveAgencyId;
+  if (physicalNeedsAgency) {
+    activationErrors.push('A delivery agency must be assigned before publishing');
+  }
+
   const canPublish = activationErrors.length === 0;
+
+  const vectorisationStatus = product?.vectorisationStatus ?? 'not_started';
+  const isLockedForVectorisation = vectorisationStatus === 'pending';
 
   const statusColors: Record<string, string> = {
     draft: 'bg-muted text-muted-foreground',
@@ -61,6 +88,15 @@ export function StepReview({
         <Alert variant="destructive">
           <AlertCircle className="w-4 h-4" />
           <AlertDescription>{stepError}</AlertDescription>
+        </Alert>
+      )}
+
+      {isLockedForVectorisation && (
+        <Alert>
+          <AlertCircle className="w-4 h-4" />
+          <AlertDescription>
+            This product is being indexed for AI search. Editing is temporarily disabled.
+          </AlertDescription>
         </Alert>
       )}
 
@@ -124,6 +160,42 @@ export function StepReview({
         </div>
       )}
 
+      {/* Delivery agency (physical products only) */}
+      {isPhysical && (
+        <AgencySelector
+          productId={product?.id ?? null}
+          productAgencyId={productAgencyId}
+          isSaving={isSaving || isLockedForVectorisation}
+          onAgencyChange={onAgencyChange}
+          onAvailabilityResolved={({ defaultAgency: d }) => setDefaultAgency(d)}
+        />
+      )}
+
+      {/* Vectorisation toggle — pure form field, saved on publish/draft */}
+      <div className="rounded-xl border border-border p-5">
+        <div className="flex items-start gap-3">
+          <Sparkles className="w-5 h-5 text-muted-foreground mt-0.5 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="font-medium text-sm">Enable AI vectorisation</p>
+                <p className="text-xs text-muted-foreground mt-0.5 max-w-md">
+                  When enabled and the product is complete and active, product data
+                  is sent for vectorisation so customers can find it via AI search.
+                  Status and retry options are available from the product card.
+                </p>
+              </div>
+              <Switch
+                checked={vectorisationEnabled}
+                onCheckedChange={setVectorisationEnabled}
+                disabled={isSaving || isLockedForVectorisation}
+                aria-label="Enable AI vectorisation"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Activation checklist */}
       <div className="space-y-2">
         <p className="text-sm font-medium">Publishing requirements</p>
@@ -155,16 +227,16 @@ export function StepReview({
             <Button
               type="button"
               variant="outline"
-              onClick={onSaveDraft}
-              disabled={isSaving}
+              onClick={() => onSaveDraft({ vectorisationEnabled })}
+              disabled={isSaving || isLockedForVectorisation}
             >
               Keep as draft
             </Button>
           )}
           <Button
             type="button"
-            onClick={onPublish}
-            disabled={isSaving || !canPublish}
+            onClick={() => onPublish({ vectorisationEnabled })}
+            disabled={isSaving || !canPublish || isLockedForVectorisation}
             className="gap-1.5"
           >
             {isSaving ? (

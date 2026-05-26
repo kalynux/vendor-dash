@@ -56,14 +56,11 @@ export function StepVariants({
 
   // ── Phase 1: Propose → Confirm → Save option structure ──────────────────
 
-  async function handleConfirmRegenerate() {
-    console.log("STATES: ", state)
-    console.log('in handleConfirmRegenerate: ', !state.pendingReconciliation, state.pendingReconciliation)
+  function handleConfirmRegenerate() {
     if (!state.pendingReconciliation) return;
-    console.log('continuing...')
 
     // Build the Phase 1 payload from current draft vs. server snapshot
-    const phase1 = await buildPhase1Payload(
+    const phase1 = buildPhase1Payload(
       state.options,
       state.serverSnapshot,
       state.pendingReconciliation.toArchive,
@@ -71,7 +68,7 @@ export function StepVariants({
 
     // Emit Phase 1 payload to the orchestrator (parent wizard page).
     // The orchestrator will execute the API calls in the correct order.
-    await onSaveComplete({ _phase1: phase1 });
+    onSaveComplete({ _phase1: phase1 });
 
     // Optimistically apply the reconciliation locally so the UI shows the matrix
     // immediately while the orchestrator saves in the background.
@@ -100,11 +97,9 @@ export function StepVariants({
 
   // ── Continue (advance to next wizard step) ──────────────────────────────
 
-  function handleContinue() {
+  async function handleContinue() {
     onSaveComplete({});
   }
-
-  console.log("GENERAL STATE: ", state)
 
   // ── Render ──────────────────────────────────────────────────────────────
 

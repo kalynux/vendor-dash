@@ -16,6 +16,7 @@ import {
   Shield,
   ChevronDown,
   Loader2,
+  AlertTriangle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -24,10 +25,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import {
   Dialog,
+  DialogClose,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
 } from '@/components/ui/dialog';
 import {
   DropdownMenu,
@@ -35,6 +38,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Input } from '@/components/ui/input';
 import { useOrderStore } from '@/store';
 import { addNote, fetchNote, revokeEntitlement, restoreEntitlement } from '@/services/orders.service';
 import type { Order, Entitlement, OrderTimelineEvent } from '@/types';
@@ -64,13 +68,13 @@ interface OrderDetailsProps {
 // };
 
 const timelineIcons: Record<string, React.ElementType> = {
-  'order.created':          Clock,
-  'payment.updated':        CreditCard,
-  'fulfillment.updated':    Package,
+  'order.created': Clock,
+  'payment.updated': CreditCard,
+  'fulfillment.updated': Package,
   'delivery.agency_updated': Truck,
-  'note.added':             MessageSquare,
-  'entitlement.revoked':    Ban,
-  'entitlement.restored':   RotateCcw,
+  'note.added': MessageSquare,
+  'entitlement.revoked': Ban,
+  'entitlement.restored': RotateCcw,
 };
 
 export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
@@ -84,6 +88,8 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
   const [fetchingNoteId, setFetchingNoteId] = useState<string | null>(null);
 
   const [statusLoading, setStatusLoading] = useState(false);
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [cancelConfirmationText, setCancelConfirmationText] = useState('');
 
   // Entitlement action dialog
   const [actionDialog, setActionDialog] = useState<{
@@ -94,7 +100,7 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
   const [actionLoading, setActionLoading] = useState(false);
 
   const isPhysical = currentOrder.orderType === 'physical';
-  const isDigital  = currentOrder.orderType === 'digital';
+  const isDigital = currentOrder.orderType === 'digital';
   const hasEntitlements = (currentOrder.entitlements?.length ?? 0) > 0;
   const nextStatuses = getNextStatuses(currentOrder.status, currentOrder.orderType);
 
@@ -109,10 +115,29 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
   // ─── Handlers ───────────────────────────────────────────────────────────────
 
   const handleStatusUpdate = async (status: string) => {
+    if (status === 'cancelled') {
+      setCancelConfirmationText('');
+      setShowCancelConfirm(true);
+      return;
+    }
     setStatusLoading(true);
     try {
       await updateOrderStatus(currentOrder.id, status);
       const next = { ...currentOrder, status: status as Order['status'] };
+      setCurrentOrder(next);
+      onOrderUpdated?.(next);
+    } finally {
+      setStatusLoading(false);
+    }
+  };
+
+  const confirmCancelOrder = async () => {
+    setShowCancelConfirm(false);
+    setCancelConfirmationText('');
+    setStatusLoading(true);
+    try {
+      await updateOrderStatus(currentOrder.id, 'cancelled');
+      const next = { ...currentOrder, status: 'cancelled' as Order['status'] };
       setCurrentOrder(next);
       onOrderUpdated?.(next);
     } finally {
@@ -186,12 +211,12 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
         entitlements: prev.entitlements?.map(e =>
           e.id === entitlement.id
             ? {
-                ...e,
-                isRevoked: type === 'revoke',
-                isActive: type === 'restore',
-                revokedAt: type === 'revoke' ? new Date().toISOString() : null,
-                revokeReason: type === 'revoke' ? actionReason.trim() : null,
-              }
+              ...e,
+              isRevoked: type === 'revoke',
+              isActive: type === 'restore',
+              revokedAt: type === 'revoke' ? new Date().toISOString() : null,
+              revokeReason: type === 'revoke' ? actionReason.trim() : null,
+            }
             : e,
         ),
       }));
@@ -204,9 +229,9 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
   // ─── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 flex flex-col h-full min-h-0">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 flex-shrink-0">
         <div>
           <div className="flex items-center gap-2 flex-wrap">
             <h2 className="text-xl font-bold">{currentOrder.orderNumber}</h2>
@@ -214,8 +239,8 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
               variant={
                 currentOrder.status === 'delivered' || currentOrder.status === 'fulfilled' ? 'default'
                   : currentOrder.status === 'pending' ? 'secondary'
-                  : currentOrder.status === 'cancelled' ? 'destructive'
-                  : 'outline'
+                    : currentOrder.status === 'cancelled' ? 'destructive'
+                      : 'outline'
               }
               className="capitalize"
             >
@@ -267,8 +292,8 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
         </div>
       </div>
 
-      <Tabs defaultValue="details" className="w-full">
-        <TabsList className={`grid w-full ${hasEntitlements ? 'grid-cols-5' : 'grid-cols-4'}`}>
+      <Tabs defaultValue="details" className="w-full flex flex-col flex-1 min-h-0">
+        <TabsList className={`grid w-full flex-shrink-0 ${hasEntitlements ? 'grid-cols-5' : 'grid-cols-4'}`}>
           <TabsTrigger value="details">Details</TabsTrigger>
           <TabsTrigger value="items">Items ({currentOrder.items.length})</TabsTrigger>
           <TabsTrigger value="timeline">Timeline</TabsTrigger>
@@ -281,38 +306,38 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
         </TabsList>
 
         {/* ── Details tab ── */}
-        <TabsContent value="details" className="space-y-4 mt-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <TabsContent value="details" className="space-y-4 mt-4 flex-1 overflow-y-auto min-h-0 pr-2">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch">
             {/* Customer */}
-            <Card>
+            <Card className="h-full flex flex-col">
               <CardHeader>
                 <CardTitle className="text-sm font-medium flex items-center gap-2">
-                  <User className="w-4 h-4" /> Customer
+                  <User className="w-4 h-4 text-muted-foreground" /> Customer
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-4 flex-1 flex flex-col justify-between">
                 <div className="flex items-center gap-3">
                   <img
                     src={currentOrder.customer.avatar || `https://i.pravatar.cc/150?u=${currentOrder.customer.id}`}
                     alt={currentOrder.customer.name}
-                    className="w-12 h-12 rounded-full"
+                    className="w-10 h-10 rounded-full object-cover"
                   />
                   <div>
-                    <p className="font-medium">{currentOrder.customer.name}</p>
-                    <p className="text-sm text-muted-foreground">{currentOrder.customer.email}</p>
+                    <p className="font-semibold text-sm">{currentOrder.customer.name}</p>
+                    <p className="text-xs text-muted-foreground">{currentOrder.customer.email}</p>
                     {currentOrder.customer.phone && (
-                      <p className="text-sm text-muted-foreground">{currentOrder.customer.phone}</p>
+                      <p className="text-xs text-muted-foreground">{currentOrder.customer.phone}</p>
                     )}
                   </div>
                 </div>
-                <div className="pt-4 border-t grid grid-cols-2 gap-4">
+                <div className="pt-3 border-t grid grid-cols-2 gap-4">
                   <div>
-                    <p className="text-lg font-semibold">{currentOrder.customer.orderCount}</p>
-                    <p className="text-xs text-muted-foreground">Orders (this vendor)</p>
+                    <p className="text-base font-bold">{currentOrder.customer.orderCount}</p>
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Orders (this vendor)</p>
                   </div>
                   <div>
-                    <p className="text-lg font-semibold">{formatCurrency(currentOrder.customer.totalSpent)}</p>
-                    <p className="text-xs text-muted-foreground">Spent (this vendor)</p>
+                    <p className="text-base font-bold">{formatCurrency(currentOrder.customer.totalSpent)}</p>
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Spent (this vendor)</p>
                   </div>
                 </div>
               </CardContent>
@@ -320,35 +345,37 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
 
             {/* Shipping / Delivery method */}
             {isDigital ? (
-              <Card>
+              <Card className="h-full flex flex-col">
                 <CardHeader>
                   <CardTitle className="text-sm font-medium flex items-center gap-2">
-                    <Download className="w-4 h-4" /> Delivery Method
+                    <Download className="w-4 h-4 text-muted-foreground" /> Delivery Method
                   </CardTitle>
                 </CardHeader>
-                <CardContent>
-                  <div className="flex items-center gap-3 p-3 rounded-lg bg-violet-50 border border-violet-200">
-                    <div className="w-9 h-9 rounded-full bg-violet-100 flex items-center justify-center flex-shrink-0">
-                      <Download className="w-4 h-4 text-violet-700" />
+                <CardContent className="flex-1 flex flex-col justify-center">
+                  <div className="flex items-start gap-3 p-3 rounded-lg bg-violet-50/70 border border-violet-100/80">
+                    <div className="w-8 h-8 rounded-full bg-violet-100 flex items-center justify-center flex-shrink-0 text-violet-700">
+                      <Download className="w-4 h-4" />
                     </div>
                     <div>
-                      <p className="font-medium text-violet-900">Digital Delivery</p>
-                      <p className="text-sm text-violet-700">Download links sent to customer's email</p>
+                      <p className="font-semibold text-xs text-violet-900">Digital Delivery</p>
+                      <p className="text-[11px] text-violet-700/80 mt-0.5 leading-relaxed">
+                        Download links and credentials will be sent to the customer's registered email.
+                      </p>
                     </div>
                   </div>
                 </CardContent>
               </Card>
             ) : (
-              <Card>
+              <Card className="h-full flex flex-col">
                 <CardHeader>
                   <CardTitle className="text-sm font-medium flex items-center gap-2">
-                    <MapPin className="w-4 h-4" /> Shipping Address
+                    <MapPin className="w-4 h-4 text-muted-foreground" /> Shipping Address
                   </CardTitle>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="flex-1 flex flex-col justify-start">
                   {currentOrder.customer.defaultAddress ? (
-                    <div className="space-y-1 text-sm">
-                      <p className="font-medium">
+                    <div className="space-y-1 text-xs leading-relaxed text-muted-foreground">
+                      <p className="font-semibold text-foreground text-sm">
                         {currentOrder.customer.defaultAddress.firstName}{' '}
                         {currentOrder.customer.defaultAddress.lastName}
                       </p>
@@ -357,10 +384,12 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
                         {currentOrder.customer.defaultAddress.city},{' '}
                         {currentOrder.customer.defaultAddress.province}
                       </p>
-                      <p>{currentOrder.customer.defaultAddress.country}</p>
+                      <p className="font-medium text-foreground/80">{currentOrder.customer.defaultAddress.country}</p>
                     </div>
                   ) : (
-                    <p className="text-sm text-muted-foreground">No address on file</p>
+                    <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground py-2">
+                      <p className="text-xs">No address on file</p>
+                    </div>
                   )}
                 </CardContent>
               </Card>
@@ -370,25 +399,25 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
           {/* Delivery agency (physical only) */}
           {isPhysical && (currentOrder.deliveryAgency || currentOrder.assignedAgent) && (
             <Card>
-              <CardHeader>
+              <CardHeader className="pb-3">
                 <CardTitle className="text-sm font-medium flex items-center gap-2">
-                  <Truck className="w-4 h-4" /> Delivery
+                  <Truck className="w-4 h-4 text-muted-foreground" /> Delivery
                 </CardTitle>
               </CardHeader>
-              <CardContent className="grid grid-cols-2 gap-4 text-sm">
+              <CardContent className="grid grid-cols-2 gap-4 text-xs">
                 {currentOrder.deliveryAgency && (
                   <div>
-                    <p className="text-muted-foreground text-xs mb-1">Agency</p>
-                    <p className="font-medium">{currentOrder.deliveryAgency.name}</p>
+                    <p className="text-muted-foreground text-[10px] uppercase tracking-wider font-semibold mb-1">Agency</p>
+                    <p className="font-semibold text-sm text-foreground">{currentOrder.deliveryAgency.name}</p>
                     {currentOrder.deliveryAgency.address && (
-                      <p className="text-muted-foreground">{currentOrder.deliveryAgency.address}</p>
+                      <p className="text-muted-foreground mt-0.5">{currentOrder.deliveryAgency.address}</p>
                     )}
                   </div>
                 )}
                 {currentOrder.assignedAgent && (
                   <div>
-                    <p className="text-muted-foreground text-xs mb-1">Assigned Agent</p>
-                    <p className="font-medium">{currentOrder.assignedAgent.name}</p>
+                    <p className="text-muted-foreground text-[10px] uppercase tracking-wider font-semibold mb-1">Assigned Agent</p>
+                    <p className="font-semibold text-sm text-foreground">{currentOrder.assignedAgent.name}</p>
                   </div>
                 )}
               </CardContent>
@@ -397,34 +426,36 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
 
           {/* Order Summary */}
           <Card>
-            <CardHeader>
-              <CardTitle className="text-sm font-medium">Order Summary</CardTitle>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <Package className="w-4 h-4 text-muted-foreground" /> Order Summary
+              </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-2 text-sm">
+              <div className="space-y-2 text-xs">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Subtotal</span>
-                  <span>{formatCurrency(currentOrder.subtotal)}</span>
+                  <span className="font-medium text-foreground">{formatCurrency(currentOrder.subtotal)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Tax</span>
-                  <span>{formatCurrency(currentOrder.tax)}</span>
+                  <span className="font-medium text-foreground">{formatCurrency(currentOrder.tax)}</span>
                 </div>
                 {isPhysical && (
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Shipping</span>
-                    <span>{currentOrder.shipping === 0 ? 'Free' : formatCurrency(currentOrder.shipping)}</span>
+                    <span className="font-medium text-foreground">{currentOrder.shipping === 0 ? 'Free' : formatCurrency(currentOrder.shipping)}</span>
                   </div>
                 )}
                 {currentOrder.discount > 0 && (
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Discount</span>
-                    <span className="text-green-600">-{formatCurrency(currentOrder.discount)}</span>
+                    <span className="font-semibold text-green-600">-{formatCurrency(currentOrder.discount)}</span>
                   </div>
                 )}
-                <div className="pt-2 border-t flex justify-between">
-                  <span className="font-medium">Total</span>
-                  <span className="font-bold text-lg">{formatCurrency(currentOrder.total)}</span>
+                <div className="pt-2 border-t flex justify-between items-center">
+                  <span className="font-semibold text-sm text-foreground">Total</span>
+                  <span className="font-bold text-base text-primary">{formatCurrency(currentOrder.total)}</span>
                 </div>
               </div>
             </CardContent>
@@ -432,51 +463,48 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
         </TabsContent>
 
         {/* ── Items tab ── */}
-        <TabsContent value="items" className="mt-4">
-          <Card>
-            <CardContent className="p-0">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b bg-muted/50">
-                    <th className="text-left p-4 text-sm font-medium">Product</th>
-                    <th className="text-left p-4 text-sm font-medium">SKU</th>
-                    <th className="text-center p-4 text-sm font-medium">Qty</th>
-                    <th className="text-right p-4 text-sm font-medium">Price</th>
-                    <th className="text-right p-4 text-sm font-medium">Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {currentOrder.items.map((item) => (
-                    <tr key={item.id} className="border-b">
-                      <td className="p-4">
-                        <div className="flex items-center gap-3">
-                          {item.image && (
-                            <img src={item.image} alt={item.name} className="w-12 h-12 rounded object-cover" />
-                          )}
-                          <div>
-                            <p className="font-medium">{item.name}</p>
-                            {isDigital && (
-                              <Badge variant="outline" className="mt-1 text-xs gap-1 border-violet-300 text-violet-700 bg-violet-50">
-                                <Download className="w-2.5 h-2.5" />Digital
-                              </Badge>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="p-4 text-sm text-muted-foreground">{item.sku || '—'}</td>
-                      <td className="p-4 text-center">{item.quantity}</td>
-                      <td className="p-4 text-right">{formatCurrency(item.price)}</td>
-                      <td className="p-4 text-right font-medium">{formatCurrency(item.total)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </CardContent>
-          </Card>
+        <TabsContent value="items" className="mt-4 flex-1 overflow-y-auto min-h-0 pr-2">
+          <div className="space-y-3">
+            {currentOrder.items.map((item) => (
+              <Card key={item.id} className="hover:shadow-sm transition-shadow">
+                <CardContent className="p-4 flex items-center justify-between gap-4">
+                  {/* Product Details (Left) */}
+                  <div className="flex items-center gap-4 min-w-0">
+                    {item.image ? (
+                      <img src={item.image} alt={item.name} className="w-14 h-14 rounded-lg object-cover flex-shrink-0 border" />
+                    ) : (
+                      <div className="w-14 h-14 rounded-lg bg-primary/10 text-primary flex items-center justify-center flex-shrink-0 font-bold border">
+                        {item.name.charAt(0)}
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <p className="font-semibold text-sm text-foreground truncate">{item.name}</p>
+                      <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground flex-wrap">
+                        {item.sku && <span>SKU: <span className="font-medium text-foreground">{item.sku}</span></span>}
+                        {item.sku && <span>•</span>}
+                        <span>Qty: <span className="font-semibold text-foreground">{item.quantity}</span></span>
+                      </div>
+                      {isDigital && (
+                        <Badge variant="outline" className="mt-1.5 text-[10px] px-1.5 py-0 h-4 border-violet-300 text-violet-700 bg-violet-50 gap-1 font-semibold">
+                          <Download className="w-2.5 h-2.5" />Digital
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Pricing (Right) */}
+                  <div className="text-right flex-shrink-0">
+                    <p className="font-bold text-sm text-foreground">{formatCurrency(item.total)}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{formatCurrency(item.price)} each</p>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         </TabsContent>
 
         {/* ── Timeline tab ── */}
-        <TabsContent value="timeline" className="space-y-4 mt-4">
+        <TabsContent value="timeline" className="space-y-4 mt-4 flex-1 overflow-y-auto min-h-0 pr-2">
           <Card>
             <CardContent className="p-6">
               {currentOrder.timeline.length === 0 ? (
@@ -538,7 +566,7 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
         </TabsContent>
 
         {/* ── Payment tab ── */}
-        <TabsContent value="payment" className="space-y-4 mt-4">
+        <TabsContent value="payment" className="space-y-4 mt-4 flex-1 overflow-y-auto min-h-0 pr-2">
           <Card>
             <CardHeader>
               <CardTitle className="text-sm font-medium flex items-center gap-2">
@@ -575,7 +603,7 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
 
         {/* ── Entitlements tab (digital only) ── */}
         {hasEntitlements && (
-          <TabsContent value="entitlements" className="space-y-4 mt-4">
+          <TabsContent value="entitlements" className="space-y-4 mt-4 flex-1 overflow-y-auto min-h-0 pr-2">
             <div className="flex items-start gap-2 p-3 rounded-lg bg-violet-50 border border-violet-200 text-sm text-violet-800">
               <Shield className="w-4 h-4 mt-0.5 flex-shrink-0 text-violet-600" />
               <p>
@@ -682,7 +710,7 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
         )}
       </Tabs>
 
-      {/* ── Revoke / Restore dialog ── */}
+      {/* Revoke / Restore dialog ── */}
       <Dialog open={!!actionDialog} onOpenChange={(open) => !open && setActionDialog(null)}>
         <DialogContent>
           <DialogHeader>
@@ -719,6 +747,57 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
             >
               {actionLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               {actionDialog?.type === 'revoke' ? 'Revoke Access' : 'Restore Access'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Order Cancellation Warning Dialog */}
+      <Dialog open={showCancelConfirm} onOpenChange={(open) => {
+        if (!open) {
+          setShowCancelConfirm(false);
+          setCancelConfirmationText('');
+        }
+      }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center text-red-600 flex-shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <DialogTitle>Cancel Order?</DialogTitle>
+            </div>
+            <DialogDescription className="pt-3 space-y-3" asChild>
+              <div>
+                <p className="text-foreground">
+                  Are you sure you want to cancel order <span className="font-semibold text-foreground">{currentOrder.orderNumber}</span>? This action cannot be undone and will notify the customer.
+                </p>
+                <div className="space-y-2 pt-2">
+                  <label htmlFor="details-cancel-confirm-input" className="text-xs font-semibold text-muted-foreground block">
+                    Please type <span className="font-bold text-destructive">cancel</span> to confirm:
+                  </label>
+                  <Input
+                    id="details-cancel-confirm-input"
+                    placeholder='Type "cancel"'
+                    value={cancelConfirmationText}
+                    onChange={(e) => setCancelConfirmationText(e.target.value)}
+                    className="h-9 border-red-200 focus-visible:ring-red-500"
+                    autoComplete="off"
+                  />
+                </div>
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex sm:justify-end gap-2 pt-2">
+            <DialogClose asChild>
+              <Button variant="outline">Keep Order</Button>
+            </DialogClose>
+            <Button
+              className="bg-red-600 hover:bg-red-700 text-white font-medium focus:ring-red-500"
+              disabled={cancelConfirmationText.trim().toLowerCase() !== 'cancel'}
+              onClick={confirmCancelOrder}
+            >
+              Yes, Cancel Order
             </Button>
           </DialogFooter>
         </DialogContent>

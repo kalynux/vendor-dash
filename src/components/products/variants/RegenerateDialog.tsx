@@ -37,7 +37,6 @@ export function RegenerateDialog({
   onConfirm,
   onCancel,
 }: RegenerateDialogProps) {
-  console.log("Result IN R: ", result)
   if (!result) return null;
 
   const { kept, toArchive, toCreate, totalExpected } = result;

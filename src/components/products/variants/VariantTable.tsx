@@ -136,7 +136,7 @@ export function VariantTable({
               placeholder="0.00"
             />
             <Button
-              variant="secondary"
+              variant={bulkPrice ? "default" : "secondary"}
               size="sm"
               className="h-7 text-xs"
               onClick={() => {
@@ -161,7 +161,7 @@ export function VariantTable({
               placeholder="0"
             />
             <Button
-              variant="secondary"
+              variant={bulkStock ? "default" : "secondary"}
               size="sm"
               className="h-7 text-xs"
               onClick={() => {
@@ -369,23 +369,6 @@ function VariantRowComponent({
           <td colSpan={sortedOptions.length + 6} className="p-4">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-3xl">
               <div className="space-y-1">
-                <Label className="text-xs">Compare at Price</Label>
-                <Input
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  value={row.compareAtPrice ?? ''}
-                  onChange={(e) =>
-                    handleFieldChange(
-                      'compareAtPrice',
-                      e.target.value ? parseFloat(e.target.value) : 0,
-                    )
-                  }
-                  className="h-8 text-sm"
-                  placeholder="0.00"
-                />
-              </div>
-              <div className="space-y-1">
                 <Label className="text-xs">Weight (g)</Label>
                 <Input
                   type="number"
@@ -435,6 +418,23 @@ function VariantRowComponent({
                   }
                   className="h-8 text-sm"
                   placeholder="0"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Compare at Price</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={row.compareAtPrice ?? ''}
+                  onChange={(e) =>
+                    handleFieldChange(
+                      'compareAtPrice',
+                      e.target.value ? parseFloat(e.target.value) : 0,
+                    )
+                  }
+                  className="h-8 text-sm"
+                  placeholder="0.00"
                 />
               </div>
               <div className="flex items-center gap-2">

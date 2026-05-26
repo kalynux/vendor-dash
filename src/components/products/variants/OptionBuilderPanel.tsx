@@ -3,6 +3,7 @@
 
 import { useState, useRef, useCallback, type KeyboardEvent } from 'react';
 import { Plus, X, GripVertical, Pencil, Check, AlertTriangle } from 'lucide-react';
+import { Reorder, useDragControls } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -215,8 +216,8 @@ function OptionCard({
   };
 
   return (
-    <Card className="relative">
-      <CardHeader className="pb-3">
+    <Card className="relative gap-2">
+      <CardHeader className="">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <GripVertical className="h-4 w-4 text-muted-foreground cursor-grab" />
@@ -254,7 +255,7 @@ function OptionCard({
                 }}
               >
                 {option.name}
-                <Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                <Pencil className="h-3 w-3 text-muted-foreground group-hover:opacity-100 transition-opacity" />
                 {isSaved && (
                   <span
                     className={cn(
@@ -280,14 +281,17 @@ function OptionCard({
       <CardContent className="pt-0 space-y-3">
         {/* Value Tags */}
         <div className="flex flex-wrap gap-1.5">
-          {option.values.map((val) => (
-            <ValueBadge
-              key={val.localId}
-              value={val}
-              onRemove={() => onRemoveValue(val.localId)}
-              onRename={(newValue) => onRenameValue(val.localId, newValue)}
-            />
-          ))}
+          {option.values && option.values.length > 0 ? (
+            option.values.map((val) => (
+              <ValueBadge
+                key={val.localId}
+                value={val}
+                onRemove={() => onRemoveValue(val.localId)}
+                onRename={(newValue) => onRenameValue(val.localId, newValue)}
+              />
+            ))) : (
+            <p className="text-xs text-red-500">No values added yet</p>
+          )}
         </div>
 
         {/* Add Value Input */}

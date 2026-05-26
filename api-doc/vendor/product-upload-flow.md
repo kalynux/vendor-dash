@@ -95,12 +95,12 @@ Phase 5: VALIDATION & PUBLISHING
 | `type` | string | `physical`, `digital`, or `service` |
 | `title` | string | 3–200 characters |
 | `category` | string | Non-empty string |
+| `description` | string | Non-empty string |
 
 #### Optional Fields
 
 | Field | Type | Notes |
 |-------|------|-------|
-| `description` | string | Product description |
 | `tags` | string[] | Unique, non-empty strings |
 | `seoTitle` | string | Max 60 chars |
 | `seoDescription` | string | Max 160 chars |
@@ -115,7 +115,8 @@ Content-Type: application/json
 {
   "type": "physical",
   "title": "Premium Cotton T-Shirt",
-  "category": "Apparel"
+  "category": "Apparel",
+  "description": "A comfortable premium cotton t-shirt with a modern fit."
 }
 ```
 
@@ -151,7 +152,7 @@ Content-Type: application/json
 
 ### Step 2: Update Product Details
 
-**Purpose**: Add description, SEO, tags — anything not required for creation.
+**Purpose**: Add SEO, tags, and any fields not provided at creation.
 **Blocking**: No — update incrementally, auto-save on field blur.
 
 **Endpoint**: `PATCH /api/vendor/products/:id`
@@ -169,6 +170,7 @@ Content-Type: application/json
 | `fileIds` | string[] | **Full replacement** — see [Media Handling](#media-handling) |
 | `digitalConfig` | object | Digital products only — merged with existing |
 | `serviceConfig` | object | Service products only — merged with existing |
+| `delivery` | object | Physical products only — configure default delivery agency (contains `agencyId`) |
 
 > [!WARNING]
 > **`fileIds` is a full replacement, not an append.** To add an image: fetch current `fileIds`, append new id, send merged array. To remove: exclude the id from the array.
@@ -402,14 +404,34 @@ PATCH /api/vendor/products/:productId/variants/:variantId
 
 ### Step 3.5: Delivery Configuration
 
-Each variant can have its own delivery agency or fall back to the vendor default.
+Physical products require a delivery agency to be fulfilled. This can be configured at the product level (`product.delivery.agencyId`) or fall back to the vendor's default configuration.
 
 **Resolution logic (backend):**
-1. `variant.deliveryAgencyId` is set → use it
+1. `product.delivery.agencyId` is set → use it
 2. `vendor.default_delivery_agency_id` is set → use vendor default
-3. Neither set → order cannot be fulfilled
+3. Neither set → product activation will be blocked with a `CATALOG_PRODUCT_NO_DELIVERY_AGENCY` error.
 
-**Frontend responsibility**: Show fallback indicator when `variant.deliveryAgencyId` is not set. Warn if vendor has no default delivery agency configured.
+**Configure Product-Level Delivery Agency:**
+Set the agency ID via `PATCH /api/vendor/products/:id`:
+```json
+PATCH /api/vendor/products/507f1f77bcf86cd799439011
+{
+  "delivery": {
+    "agencyId": "683abc1234567890abcdef01"
+  }
+}
+```
+To clear the product-level override and fall back to the vendor's default, send `null`:
+```json
+PATCH /api/vendor/products/507f1f77bcf86cd799439011
+{
+  "delivery": {
+    "agencyId": null
+  }
+}
+```
+
+**Frontend responsibility**: Warn the user if they try to activate a physical product without a product-level delivery agency set AND no default delivery agency configured on their vendor profile.
 
 ---
 
@@ -420,13 +442,15 @@ PATCH /api/vendor/products/:id/status
 { "status": "active" }
 ```
 
-**Backend enforces ALL of the following:**
+**Backend enforces ALL of the following (in this order):**
 
 | Check | Error Code | Resolution |
 |-------|------------|------------|
+| `description` is non-empty | `CATALOG_PRODUCT_NO_DESCRIPTION` | Add a description via Step 2 |
 | At least one active variant exists | `CATALOG_PRODUCT_NO_VARIANTS` | Create a variant |
 | Every active variant has `price > 0` | `CATALOG_PRODUCT_VARIANT_ZERO_PRICE` | Update variant price |
 | `defaultVariantId` points to an active variant | `CATALOG_PRODUCT_NO_DEFAULT_VARIANT` | First variant is auto-set; use `/default-variant` if it was lost |
+| Delivery agency is resolvable | `CATALOG_PRODUCT_NO_DELIVERY_AGENCY` | Set `delivery.agencyId` on the product (Step 3.5) or configure a default on the vendor profile |
 
 ---
 
@@ -667,10 +691,11 @@ PATCH /api/vendor/products/:id/status
 { "status": "active" }
 ```
 
-**Backend enforces ALL of the following:**
+**Backend enforces ALL of the following (in this order):**
 
 | Check | Error Code | Resolution |
 |-------|------------|------------|
+| `description` is non-empty | `CATALOG_PRODUCT_NO_DESCRIPTION` | Add a description via Step 2 |
 | At least one active variant exists | `CATALOG_PRODUCT_NO_VARIANTS` | Create a pricing variant |
 | Every active variant has `price > 0` | `CATALOG_PRODUCT_VARIANT_ZERO_PRICE` | Update variant price |
 | `defaultVariantId` points to an active variant | `CATALOG_PRODUCT_NO_DEFAULT_VARIANT` | Auto-set on first variant; use `/default-variant` if cleared |

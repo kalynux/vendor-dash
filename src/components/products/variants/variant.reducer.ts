@@ -219,11 +219,8 @@ export function variantBuilderReducer(
     }
 
     case 'CONFIRM_REGENERATION': {
-      console.log("confirm regen")
       const recon = state.pendingReconciliation;
-      console.log("recon", recon)
       if (!recon) return state;
-      console.log("state", state);
 
       const defaultPrice = inferDefaultPrice(state.matrix);
 
@@ -240,9 +237,6 @@ export function variantBuilderReducer(
         isInfiniteStock: false,
         dirtyFields: new Set<string>(),
       }));
-
-      console.log("new rows", newRows);
-      console.log("kept rows", keptRows);
 
       return {
         ...state,

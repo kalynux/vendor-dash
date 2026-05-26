@@ -15,9 +15,8 @@ import {
   CreditCard,
   Plus,
   Loader2,
-  ArrowLeftCircle,
-  ArrowUpCircle,
   PackageSearch,
+  AlertTriangle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -39,7 +38,10 @@ import {
 } from '@/components/ui/sheet';
 import {
   Dialog,
+  DialogClose,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
@@ -81,7 +83,7 @@ export const STATUS_LABELS: Record<string, string> = {
 
 const STATUS_ICONS: Record<string, React.ReactNode> = {
   processing: <PackageSearch className="w-4 h-4" />,
-  shipped:  <Truck className="w-4 h-4" />,
+  shipped: <Truck className="w-4 h-4" />,
   delivered: <CheckCircle className="w-4 h-4" />,
   fulfilled: <CheckCircle className="w-4 h-4" />,
   cancelled: <XCircle className="w-4 h-4 text-destructive" />,
@@ -100,6 +102,8 @@ export function Orders() {
   const isMobile = useIsMobile();
 
   const [statusLoading, setStatusLoading] = useState<string | null>(null);
+  const [orderToCancel, setOrderToCancel] = useState<Order | null>(null);
+  const [cancelConfirmationText, setCancelConfirmationText] = useState('');
 
   useEffect(() => {
     fetchOrders({ page: 1 });
@@ -120,13 +124,35 @@ export function Orders() {
     return matchesSearch && matchesStatus && (isMobile ? matchesMobilePill : true);
   });
 
-    const handleStatusUpdate = async (order: Order, status: string) => {
+  const handleStatusUpdate = async (order: Order, status: string) => {
+    if (status === 'cancelled') {
+      setCancelConfirmationText('');
+      setOrderToCancel(order);
+      return;
+    }
     setStatusLoading(status);
     try {
       await new Promise(resolve => setTimeout(resolve, 2000));
       await updateOrderStatus(order.id, status);
       // const next = { ...order, status: status as Order['status'] };
       // setSelectedOrder(next);
+    } finally {
+      setStatusLoading(null);
+    }
+  };
+
+  const confirmCancelOrder = async () => {
+    if (!orderToCancel) return;
+    const order = orderToCancel;
+    setOrderToCancel(null);
+    setCancelConfirmationText('');
+    setStatusLoading('cancelled');
+    try {
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      await updateOrderStatus(order.id, 'cancelled');
+      if (selectedOrder?.id === order.id) {
+        setSelectedOrder(prev => prev ? { ...prev, status: 'cancelled' } : null);
+      }
     } finally {
       setStatusLoading(null);
     }
@@ -436,8 +462,8 @@ export function Orders() {
                   <th className="text-left p-4 text-sm font-medium">Date</th>
                   <th className="text-left p-4 text-sm font-medium">Status</th>
                   <th className="text-left p-4 text-sm font-medium">Payment</th>
-                  <th className="text-right p-4 text-sm font-medium">Total</th>
-                  <th className="w-12 p-4"></th>
+                  <th className="text-left p-4 text-sm font-medium">Total</th>
+                  <th className="text-left p-4 text-sm font-medium">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -609,8 +635,8 @@ export function Orders() {
 
       {/* Order Details Dialog */}
       <Dialog open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-auto">
-          <DialogHeader>
+        <DialogContent className="sm:max-w-3xl w-full h-[80vh] flex flex-col overflow-hidden">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle>Order Details</DialogTitle>
           </DialogHeader>
           {isDetailLoading ? (
@@ -618,8 +644,59 @@ export function Orders() {
               <Loader2 className="w-10 h-10 animate-spin text-primary" />
             </div>
           ) : (
-            selectedOrder && <OrderDetails order={selectedOrder} />
+            selectedOrder && <OrderDetails order={selectedOrder} onOrderUpdated={(updated) => setSelectedOrder(updated)} />
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Order Cancellation Warning Dialog */}
+      <Dialog open={!!orderToCancel} onOpenChange={(open) => {
+        if (!open) {
+          setOrderToCancel(null);
+          setCancelConfirmationText('');
+        }
+      }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center text-red-600 flex-shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <DialogTitle>Cancel Order?</DialogTitle>
+            </div>
+            <DialogDescription className="pt-3 space-y-3" asChild>
+              <div>
+                <p className="text-foreground">
+                  Are you sure you want to cancel order <span className="font-semibold text-foreground">{orderToCancel?.orderNumber}</span>? This action cannot be undone and will notify the customer.
+                </p>
+                <div className="space-y-2 pt-2">
+                  <label htmlFor="cancel-confirm-input" className="text-xs font-semibold text-muted-foreground block">
+                    Please type <span className="font-bold text-destructive">cancel</span> to confirm:
+                  </label>
+                  <Input
+                    id="cancel-confirm-input"
+                    placeholder='Type "cancel"'
+                    value={cancelConfirmationText}
+                    onChange={(e) => setCancelConfirmationText(e.target.value)}
+                    className="h-9 border-red-200 focus-visible:ring-red-500"
+                    autoComplete="off"
+                  />
+                </div>
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex sm:justify-end gap-2 pt-2">
+            <DialogClose asChild>
+              <Button variant="outline">Keep Order</Button>
+            </DialogClose>
+            <Button
+              className="bg-red-600 hover:bg-red-700 text-white font-medium focus:ring-red-500"
+              disabled={cancelConfirmationText.trim().toLowerCase() !== 'cancel'}
+              onClick={confirmCancelOrder}
+            >
+              Yes, Cancel Order
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

@@ -19,6 +19,7 @@ Complete API reference for managing products in the Jovi Mall multi-vendor platf
 - [Bulk Operations](#bulk-operations)
 - [Digital Product Asset Management](#digital-product-asset-management)
 - [Product Options](#product-options)
+- [Vectorisation](#vectorisation)
 - [Activation Requirements](#activation-requirements)
 - [Error Codes](#error-codes)
 
@@ -55,12 +56,25 @@ This is the full shape of a product object returned by all read endpoints.
   ],
   "hasVariants": true,
   "defaultVariantId": "507f1f77bcf86cd799439015",
+  "vectorisationEnabled": false,
+  "vectorisationStatus": "not_started",
+  "vectorisedDataId": null,
   "createdAt": "2026-01-29T10:00:00.000Z",
   "updatedAt": "2026-01-29T10:00:00.000Z"
 }
 ```
 
-> **Note:** The `GET /api/vendor/products/:id` endpoint returns fully populated `files` objects (id, key, url, mimeType, size, originalName) instead of bare `fileIds`. The list endpoint (`GET /api/vendor/products`) does not populate file details for performance — use the single GET to get enriched data.
+> **Note:** The `GET /api/vendor/products/:id` endpoint returns fully populated `files` objects (id, key, url, mimeType, size, originalName) instead of bare `fileIds`. The list endpoint (`GET /api/vendor/products`) also returns populated file objects, but under the field name `fileIds` and with a **trimmed payload shape tailored to the products grid/list UI** — see [List Products](#list-products) for the exact response.
+
+**Vectorisation fields:**
+
+| Field | Type | Values | Description |
+|-------|------|--------|-------------|
+| `vectorisationEnabled` | boolean | `true` / `false` | Opt-in flag. Vendor must set this to `true` for vectorisation to run. Defaults to `false`. |
+| `vectorisationStatus` | string | `not_started` / `pending` / `completed` / `failed` | Current pipeline state. Read-only from the frontend — managed by the backend. |
+| `vectorisedDataId` | string \| null | — | External ID returned by the vectoriser service once `vectorisationStatus` is `completed`. `null` until then. |
+
+> **Note on async behaviour:** Vectorisation never blocks the API response. After a create or update call, the product is saved first and the response is returned immediately. The vectorisation pipeline runs in the background. Poll `GET /api/vendor/products/:id` to check `vectorisationStatus` if you need to know when it completes.
 
 **Digital product — additional fields:**
 ```json
@@ -115,6 +129,26 @@ GET /api/vendor/products
 | `page` | number | No | `1` | Page number (1-indexed) |
 | `limit` | number | No | `20` | Items per page (max: 100) |
 
+> [!IMPORTANT]
+> **The list endpoint returns a trimmed payload tailored to the products grid/list UI.**
+> Only the fields the grid/list view and row actions consume are included. To get the full product object — `vendorId`, `slug`, `description`, `tags`, `seo`, `defaultVariantId`, `digitalConfig`, `serviceConfig`, `delivery`, `vectorisedDataId`, `createdAt`, `updatedAt`, etc. — call `GET /api/vendor/products/:id`.
+>
+> File performance: `fileIds` is populated with full `FileDetail` objects (id, key, url, mimeType, size, originalName), resolved in a **single batched query** across the whole page — no N+1 lookups.
+
+**Response item shape:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | Product ObjectId. Used as React key, for selection, delete actions, and the edit route. |
+| `title` | string | Product display name. |
+| `type` | `"physical" \| "digital" \| "service"` | Drives placeholder icon choice and type label. |
+| `status` | `"draft" \| "active" \| "archived" \| "pending_review" \| "suspended"` | Passed to `StatusBadge`; used for client-side filtering. |
+| `category` | string | Category label/badge text. |
+| `fileIds` | `FileDetail[]` | Populated product images. Empty array when none. Each entry: `{ id, key, url, mimeType, size, originalName? }`. The frontend's `ProductThumbnail` shows the first entry. |
+| `hasVariants` | boolean | Drives the "Has variants" / "Variants" badge. |
+| `vectorisationEnabled` | boolean | Vendor opt-in flag. Passed to `VectorisationBadge`. |
+| `vectorisationStatus` | `"not_started" \| "pending" \| "completed" \| "failed"` | Indexing state. Passed to `VectorisationBadge`; row edit menu is locked while `pending`. |
+
 **Response `200`:**
 
 ```json
@@ -123,29 +157,35 @@ GET /api/vendor/products
   "data": [
     {
       "id": "507f1f77bcf86cd799439011",
-      "vendorId": "507f1f77bcf86cd799439012",
-      "type": "physical",
-      "status": "draft",
       "title": "Blue T-Shirt",
-      "slug": "blue-t-shirt",
+      "type": "physical",
+      "status": "active",
       "category": "Apparel",
-      "tags": ["cotton", "summer"],
-      "seo": { "title": "...", "description": "..." },
-      "fileIds": [],
-      "hasVariants": false,
-      "defaultVariantId": null,
-      "createdAt": "2026-01-29T10:00:00.000Z",
-      "updatedAt": "2026-01-29T10:00:00.000Z"
+      "fileIds": [
+        {
+          "id": "507f1f77bcf86cd799439030",
+          "key": "products/abc123.jpg",
+          "url": "https://storage.example.com/products/abc123.jpg",
+          "mimeType": "image/jpeg",
+          "size": 245678,
+          "originalName": "cover.jpg"
+        }
+      ],
+      "hasVariants": true,
+      "vectorisationEnabled": true,
+      "vectorisationStatus": "completed"
     }
   ],
   "meta": {
     "total": 120,
     "page": 1,
     "limit": 20,
-    "totalPages": 6
+    "pages": 6
   }
 }
 ```
+
+> **`meta.pages`** is the total number of pages (renamed from `totalPages` in earlier docs to match the actual response field).
 
 ---
 
@@ -193,11 +233,11 @@ All products start in `draft` status. The `type` cannot be changed after creatio
 **Fields:**
 
 | Field | Type | Required | Validation |
-|-------|------|----------|------------|
+|-------|------|----------|-----------|
 | `type` | string | ✅ | `physical`, `digital`, or `service` |
 | `title` | string | ✅ | 3–200 characters |
 | `category` | string | ✅ | Non-empty string |
-| `description` | string | No | — |
+| `description` | string | ✅ | Non-empty string |
 | `tags` | string[] | No | Array of unique, non-empty strings |
 | `seoTitle` | string | No | Max 60 characters |
 | `seoDescription` | string | No | Max 160 characters |
@@ -222,12 +262,17 @@ All products start in `draft` status. The `type` cannot be changed after creatio
     "fileIds": [],
     "hasVariants": false,
     "defaultVariantId": null,
+    "vectorisationEnabled": false,
+    "vectorisationStatus": "not_started",
+    "vectorisedDataId": null,
     "createdAt": "2026-01-29T10:00:00.000Z",
     "updatedAt": "2026-01-29T10:00:00.000Z"
   },
   "message": "Product created successfully"
 }
 ```
+
+> **Vectorisation on create:** The product is saved first and the `201` response is returned immediately. Vectorisation then runs asynchronously in the background — no action required from the frontend. `vectorisationStatus` will be `not_started` on fresh drafts (vectorisation only triggers once the product is active and `vectorisationEnabled` is `true`).
 
 **Error Responses:**
 - `400 VALIDATION_ERROR` — Request body failed schema validation
@@ -256,7 +301,8 @@ Partial update — only provided fields are changed. Allowed on `draft` and `act
   "digitalConfig": {
     "maxDownloads": 10,
     "expiresAfterDays": 60
-  }
+  },
+  "vectorisationEnabled": true
 }
 ```
 
@@ -273,6 +319,7 @@ Partial update — only provided fields are changed. Allowed on `draft` and `act
 | `fileIds` | string[] | No | **Full replacement** — send complete desired array of file ObjectIds |
 | `digitalConfig` | object | No | Digital products only — merged with existing config |
 | `serviceConfig` | object | No | Service products only — merged with existing config |
+| `vectorisationEnabled` | boolean | No | Toggle vectorisation opt-in. When provided, the backend runs the enable or disable flow after the content update — see [Vectorisation](#vectorisation). For quick toggles only, use `PATCH /:id/vectorisation`. |
 
 > [!WARNING]
 > **`fileIds` is a full array replacement, not an append operation.**
@@ -309,6 +356,12 @@ Partial update — only provided fields are changed. Allowed on `draft` and `act
 }
 ```
 
+> **Vectorisation on update:**
+> - If the body **omits** `vectorisationEnabled`, the product is saved and the response returns immediately; the backend automatically re-vectorises in the background if the product is `active` and `vectorisationEnabled` is currently `true`. `vectorisationStatus` may briefly be `pending` before returning to `completed`.
+> - If the body **includes** `vectorisationEnabled: true`, the backend runs the enable flow after the content update (eligibility check + vectorise), exactly as if `PATCH /:id/vectorisation` had been called.
+> - If the body **includes** `vectorisationEnabled: false`, the backend runs the disable flow after the content update (clear flag + upstream delete).
+> - The HTTP response always returns immediately; the vectorisation side-effect runs in the background.
+
 **Error Responses:**
 - `404 CATALOG_PRODUCT_NOT_FOUND` — Product not found
 - `422 CATALOG_PRODUCT_INVALID_STATE` — Product is `archived` or `suspended`; update not allowed
@@ -341,13 +394,15 @@ PATCH /api/vendor/products/:id/status
 > [!WARNING]
 > **Activation Requirements (status → `active`)**
 >
-> The backend enforces ALL of the following before allowing activation for **every product type**:
+> The backend enforces ALL of the following before allowing activation for **every product type** (checked in this order):
 >
-> 1. **At least one variant must exist** — all product types require at least one variant for pricing
-> 2. **Every active variant must have `price > 0`** — zero-priced variants block activation
-> 3. **`defaultVariantId` must point to an active variant** — the referenced variant must exist and be active; a dangling or archived reference fails validation
+> 1. **`description` must be non-empty** — enforced as a schema-level requirement at creation and update, and double-checked by the activation gate
+> 2. **At least one variant must exist** — all product types require at least one variant for pricing
+> 3. **Every active variant must have `price > 0`** — zero-priced variants block activation
+> 4. **`defaultVariantId` must point to an active variant** — the referenced variant must exist and be active; a dangling or archived reference fails validation
 >
 > Additionally, per product type:
+> - **Physical**: a delivery agency must be resolvable — either set directly on the product (`delivery.agencyId`) or configured as the vendor's default (`vendor.default_delivery_agency_id`). Without one of these, the backend will reject activation.
 > - **Digital**: `digitalConfig.assetId` must be set (file must be uploaded)
 > - **Service**: `serviceConfig.durationMinutes` must be set (min: 1)
 
@@ -361,13 +416,17 @@ PATCH /api/vendor/products/:id/status
 }
 ```
 
+> **Vectorisation on status change:** The status is saved first and the response returned immediately. A lightweight status-only notification is then sent asynchronously to the vectoriser. This does **not** re-vectorise the product's data — it only updates the searchability metadata on the vectoriser side. If the product was never vectorised (e.g., `vectorisationEnabled` was `false` when it was first activated), no notification is sent.
+
 **Error Responses `422`:**
 
 | Code | Meaning |
 |------|---------|
+| `CATALOG_PRODUCT_NO_DESCRIPTION` | `description` is missing or blank |
 | `CATALOG_PRODUCT_NO_VARIANTS` | No variants exist |
 | `CATALOG_PRODUCT_VARIANT_ZERO_PRICE` | An active variant has price = 0 |
 | `CATALOG_PRODUCT_NO_DEFAULT_VARIANT` | `defaultVariantId` missing or points to archived/nonexistent variant |
+| `CATALOG_PRODUCT_NO_DELIVERY_AGENCY` | Physical product has no delivery agency on the product or vendor profile |
 | `CATALOG_PRODUCT_DIGITAL_NO_ASSET` | Digital product has no uploaded asset |
 | `CATALOG_PRODUCT_SERVICE_NO_DURATION` | Service product has no `durationMinutes` |
 
@@ -413,6 +472,9 @@ Creates an independent copy of the product in `draft` status.
 | Digital: `maxDownloads`, `expiresAfterDays` | Copied |
 | Digital: `isActive` | Always `false` |
 | Service: `serviceConfig` | Copied as-is |
+| `vectorisationEnabled` | Always `false` — must be explicitly re-enabled on the clone |
+| `vectorisationStatus` | Always `not_started` |
+| `vectorisedDataId` | Always `null` |
 
 > After duplication, the vendor must create at least one variant and upload a new digital asset (for digital products) before the clone can be activated.
 
@@ -964,6 +1026,233 @@ DELETE /api/vendor/products/:productId/options/:optionId/values/:valueId
 
 > [!WARNING]
 > Deleting a value invalidates any variant whose `optionValueIds` array includes this value. Those variants will have an inconsistent `optionSignature` and should be archived or updated.
+
+---
+
+---
+
+## Vectorisation
+
+Vectorisation is the process of sending a fully-populated product payload to the external AI search service so it can be indexed for hybrid (semantic + keyword) search on the customer-facing storefront.
+
+> [!NOTE]
+> **Vectorisation is always asynchronous.** The API never blocks on it. The product is saved first, the HTTP response is returned to the frontend, and then vectorisation runs in the background.
+
+### Eligibility
+
+A product is automatically vectorised (or re-vectorised) when **all three** conditions are met:
+
+| Condition | How to satisfy |
+|-----------|----------------|
+| `status === "active"` | Activate the product via `PATCH /:id/status` |
+| `vectorisationEnabled === true` | Set via `PATCH /:id` — update the `vectorisationEnabled` field |
+| Product is complete | `title`, `description`, and `category` must all be present |
+
+### Enabling / Disabling Vectorisation
+
+Vectorisation is **opt-in** — it defaults to `false` on all new and duplicated products. There are two ways to toggle it:
+
+**1. As part of a product update** — pass `vectorisationEnabled` in the body of `PATCH /api/vendor/products/:id`:
+
+```http
+PATCH /api/vendor/products/:id
+```
+
+```json
+{
+  "title": "New title",
+  "vectorisationEnabled": true
+}
+```
+
+Use this when you're already editing other fields and want to flip the opt-in flag in the same request.
+
+**2. Dedicated quick-toggle endpoint** — `PATCH /api/vendor/products/:id/vectorisation` with `{ "enabled": true | false }`:
+
+```http
+PATCH /api/vendor/products/:id/vectorisation
+```
+
+```json
+{ "enabled": true }
+```
+
+Use this when you only need to flip the flag and aren't changing anything else. See [Vectorisation Endpoints](#vectorisation-endpoints) below for the full contract.
+
+Both routes share the same backend logic — they run the same eligibility check, mark `pending`, call the vectoriser, and write the result. The dedicated endpoint just lets you skip the rest of the update payload.
+
+### Status Lifecycle
+
+| `vectorisationStatus` | Meaning |
+|-----------------------|---------|
+| `not_started` | Vectorisation has never run (new product, or `vectorisationEnabled` was `false`) |
+| `pending` | The backend has accepted the job and is calling the vectoriser |
+| `completed` | Successfully vectorised. `vectorisedDataId` is populated. |
+| `failed` | All retry attempts failed. An admin can trigger re-vectorisation via the reconciliation script or the admin bulk endpoint. |
+
+### Polling for Completion
+
+If the frontend needs to show vectorisation state, poll `GET /api/vendor/products/:id` and read `vectorisationStatus`:
+
+```js
+// Example: poll every 5 seconds until completed or failed
+async function waitForVectorisation(productId) {
+  for (let i = 0; i < 12; i++) {
+    const res = await fetch(`/api/vendor/products/${productId}`, { headers });
+    const { data } = await res.json();
+    if (data.vectorisationStatus === 'completed') return data.vectorisedDataId;
+    if (data.vectorisationStatus === 'failed') throw new Error('Vectorisation failed');
+    await new Promise(r => setTimeout(r, 5000));
+  }
+  throw new Error('Vectorisation timed out');
+}
+```
+
+> In most flows the frontend does **not** need to wait — vectorisation is a background concern. Only surfaces like a "Search Indexing" status indicator need to poll.
+
+### Re-vectorisation
+
+The backend automatically re-vectorises on:
+- Product `PATCH` (data update) without `vectorisationEnabled` in the body — re-vectorises if product is currently active and `vectorisationEnabled` is `true`
+- `vectorisationEnabled` flipped from `false` to `true` (via either `PATCH /:id` or `PATCH /:id/vectorisation`) — runs the enable flow immediately
+
+It does **not** automatically retry a `failed` product. Vendors can manually trigger a retry via the dedicated retry endpoint (`POST /:id/vectorisation/retry`), or admins can use the bulk-vectorise endpoint.
+
+### Vectorisation Endpoints
+
+In addition to managing vectorisation via the standard product `PATCH` endpoint, vendors can use these dedicated endpoints:
+
+#### GET /api/vendor/products/:id/vectorisation/status
+
+Read the current vectorisation tracking details for a specific product.
+
+**Response `200 OK`:**
+```json
+{
+  "success": true,
+  "data": {
+    "productId": "507f1f77bcf86cd799439011",
+    "vectorisationEnabled": true,
+    "vectorisationStatus": "completed",
+    "vectorisedDataId": "ext-vec-98765"
+  }
+}
+```
+
+#### PATCH /api/vendor/products/:id/vectorisation
+
+Set the vectorisation opt-in state for a product. **This is the consolidated toggle endpoint that replaces the previous `POST .../enable` and `POST .../disable` routes — both have been removed.**
+
+**Request Body:**
+
+```json
+{ "enabled": true }
+```
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `enabled` | boolean | Yes | Desired vectorisation opt-in state. `true` runs the enable flow, `false` runs the disable flow. |
+
+**Behaviour**
+
+The endpoint is idempotent — sending the current state returns a `200` no-op. Otherwise it routes to the appropriate flow and returns `202` while the upstream call runs in the background.
+
+| Request | Current state | Response | What happens |
+|---------|---------------|----------|--------------|
+| `{ "enabled": true }` | Already `enabled` + status `pending`/`completed` | `200 OK` | No-op. Returns current state with message `Vectorisation is already enabled.` |
+| `{ "enabled": true }` | Disabled, product eligible (active + title + description + category) | `202 Accepted` | Flag set to `true`, status set to `pending`, vectoriser called in the background. |
+| `{ "enabled": true }` | Disabled, product **ineligible** (draft, missing description, etc.) | `200 OK` | Flag stays `false`. The backend explains why in the message — caller should fix the product and retry. |
+| `{ "enabled": false }` | Already disabled | `200 OK` | No-op. Returns current state with message `Vectorisation is already disabled.` |
+| `{ "enabled": false }` | Enabled | `202 Accepted` | Flag set to `false`, upstream `/delete` called and local `vectorisedDataId` cleared in the background. |
+
+**Response `202 Accepted` (enable):**
+```json
+{
+  "success": true,
+  "data": {
+    "productId": "507f1f77bcf86cd799439011",
+    "vectorisationEnabled": true,
+    "vectorisationStatus": "pending",
+    "vectorisedDataId": null
+  },
+  "message": "Vectorisation enabled. The vectoriser is being called in the background."
+}
+```
+
+**Response `202 Accepted` (disable):**
+```json
+{
+  "success": true,
+  "data": {
+    "productId": "507f1f77bcf86cd799439011",
+    "vectorisationEnabled": false,
+    "vectorisationStatus": "completed",
+    "vectorisedDataId": "ext-vec-98765"
+  },
+  "message": "Vectorisation disabled. External cleanup is running in the background."
+}
+```
+
+**Response `200 OK` (ineligible enable):**
+```json
+{
+  "success": true,
+  "data": {
+    "productId": "507f1f77bcf86cd799439011",
+    "vectorisationEnabled": false,
+    "vectorisationStatus": "not_started",
+    "vectorisedDataId": null
+  },
+  "message": "Product is not eligible for vectorisation. Vectorisation has been disabled — make the product active and ensure it has a title, description, and category, then re-enable."
+}
+```
+
+**Error Responses:**
+- `404 CATALOG_PRODUCT_NOT_FOUND` — Product not found or not owned by this vendor
+- `409 CATALOG_PRODUCT_VECTORISATION_PENDING` — A vectorisation job is currently in flight; wait for it to finish (or fail) before toggling
+- `400 VALIDATION_ERROR` — Body missing `enabled` or not a boolean
+
+> [!IMPORTANT]
+> **Migration from the old endpoints**
+> - `POST /api/vendor/products/:id/vectorisation/enable` → `PATCH /api/vendor/products/:id/vectorisation` body `{ "enabled": true }`
+> - `POST /api/vendor/products/:id/vectorisation/disable` → `PATCH /api/vendor/products/:id/vectorisation` body `{ "enabled": false }`
+>
+> The old routes are removed and now return `404`. Update any clients before deploy.
+
+#### POST /api/vendor/products/:id/vectorisation/retry
+
+Manually resubmit the product payload to the vectoriser. This is useful when the status has become `failed`.
+
+**Business Rules:**
+- The product must be `active`.
+- `vectorisationEnabled` must be `true`.
+- The product must be complete (having `title`, `description`, and `category` set).
+- Cannot retry while a job is currently `pending` (returns a `409` conflict error).
+
+**Response `202 Accepted`:**
+```json
+{
+  "success": true,
+  "data": {
+    "productId": "507f1f77bcf86cd799439011",
+    "vectorisationEnabled": true,
+    "vectorisationStatus": "pending",
+    "vectorisedDataId": null
+  },
+  "message": "Retry scheduled. The vectoriser will be called in the background."
+}
+```
+
+**Error Responses `422` (`CATALOG_PRODUCT_VECTORISATION_NOT_ELIGIBLE`):**
+```json
+{
+  "success": false,
+  "error": {
+    "code": "CATALOG_PRODUCT_VECTORISATION_NOT_ELIGIBLE",
+    "message": "Product is not eligible for vectorisation. Ensure it is active, vectorisation is enabled, and the title/description/category are set."
+  }
+}
+```
 
 ---
 

@@ -125,13 +125,19 @@ export function StepBasicInfo({
 
       {/* Description */}
       <div className="space-y-1.5">
-        <Label htmlFor="description">Description</Label>
+        <Label htmlFor="description">
+          Description <span className="text-destructive">*</span>
+        </Label>
         <Textarea
           id="description"
           placeholder="Describe your product — materials, features, use cases…"
           rows={4}
           {...register('description')}
+          aria-invalid={!!errors.description}
         />
+        {errors.description && (
+          <p className="text-xs text-destructive">{errors.description.message}</p>
+        )}
       </div>
 
       {/* Tags */}

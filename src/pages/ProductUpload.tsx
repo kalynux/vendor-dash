@@ -1,8 +1,9 @@
 import { useReducer, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { Box, Package, ImageIcon, Tag, FileDigit, DollarSign, CheckSquare } from 'lucide-react';
+import { AlertCircle, Box, Package, ImageIcon, Tag, FileDigit, DollarSign, CheckSquare } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ProductStepIndicator } from '@/components/products/ProductStepIndicator';
 import { StepTypeSelect } from '@/components/products/steps/StepTypeSelect';
 import { StepBasicInfo } from '@/components/products/steps/StepBasicInfo';
@@ -145,6 +146,8 @@ export function ProductUpload() {
 
   const steps = getSteps(state.productType);
   const visibleSteps = state.productType ? steps : [];
+  const isLockedForVectorisation =
+    state.serverProduct?.vectorisationStatus === 'pending';
 
   function advance(updates: Partial<WizardState> = {}) {
     const next = nextStep(state.currentStep, state.productType);
@@ -182,7 +185,7 @@ export function ProductUpload() {
           type: state.productType,
           title: values.title,
           category: values.category,
-          description: values.description || undefined,
+          description: values.description,
           tags: values.tags,
           seoTitle: values.seoTitle || undefined,
           seoDescription: values.seoDescription || undefined,
@@ -365,15 +368,28 @@ export function ProductUpload() {
 
           const freshVariants = await fetchVariants(productId);
 
-          // Auto-assign default variant on first creation
-          if (freshVariants.length > 0 && !state.serverProduct?.defaultVariantId) {
+          // The backend auto-sets the first variant as default when none is set
+          // yet. Mirror that locally to keep `serverProduct.defaultVariantId` in
+          // sync without an extra fetch — otherwise the Review step would
+          // falsely report "A default variant must be set" until reload.
+          const needsDefaultVariant =
+            freshVariants.length > 0 && !state.serverProduct?.defaultVariantId;
+          if (needsDefaultVariant) {
             await setDefaultVariant(productId, freshVariants[0].id);
           }
+
+          const patchedProduct =
+            needsDefaultVariant && state.serverProduct
+              ? { ...state.serverProduct, defaultVariantId: freshVariants[0].id }
+              : null;
 
           toast.success('Variants saved.');
           dispatch({
             type: 'SAVE_COMPLETE',
-            updates: { serverVariants: freshVariants },
+            updates: {
+              serverVariants: freshVariants,
+              ...(patchedProduct ? { serverProduct: patchedProduct } : {}),
+            },
           });
         } catch (err: unknown) {
           const msg = err instanceof Error ? err.message : 'Failed to save variants.';
@@ -485,31 +501,75 @@ export function ProductUpload() {
 
   // ─── Review / publish ─────────────────────────────────────────────────────────
 
-  const handlePublish = useCallback(async () => {
-    const productId = state.productId;
-    if (!productId) return;
+  // ─── Agency ──────────────────────────────────────────────────────────────────
 
-    dispatch({ type: 'SET_SAVING', value: true });
-    try {
-      await updateProductStatus(productId, 'active');
-      toast.success('Product published successfully!');
-      navigate('/dashboard/products');
-    } catch (err: unknown) {
-      if (err && typeof err === 'object' && 'code' in err) {
-        const code = (err as { code: string }).code;
-        const human = ACTIVATION_ERROR_MAP[code];
-        dispatch({ type: 'SET_STEP_ERROR', error: human ?? 'Could not publish product.' });
-      } else {
-        const msg = err instanceof Error ? err.message : 'Failed to publish product.';
+  const handleAgencyChange = useCallback(
+    async (agencyId: string | null) => {
+      const productId = state.productId;
+      if (!productId) return;
+      dispatch({ type: 'SET_SAVING', value: true });
+      try {
+        await updateProduct(productId, { delivery: { agencyId } });
+        const updated = await fetchProductById(productId);
+        dispatch({ type: 'SAVE_COMPLETE', updates: { serverProduct: updated } });
+        toast.success(
+          agencyId ? 'Delivery agency updated.' : 'Using your default delivery agency.',
+        );
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'Could not update delivery agency.';
         dispatch({ type: 'SET_STEP_ERROR', error: msg });
+        toast.error(msg);
       }
-    }
-  }, [state.productId, navigate]);
+    },
+    [state.productId],
+  );
 
-  const handleSaveDraft = useCallback(() => {
-    toast.success('Product saved as draft.');
-    navigate('/dashboard/products');
-  }, [navigate]);
+  const handlePublish = useCallback(
+    async ({ vectorisationEnabled }: { vectorisationEnabled: boolean }) => {
+      const productId = state.productId;
+      if (!productId) return;
+
+      dispatch({ type: 'SET_SAVING', value: true });
+      try {
+        // Always send vectorisationEnabled in the general PATCH so the body is
+        // never empty and the backend persists the toggle on publish.
+        await updateProductStatus(productId, 'active');
+        await updateProduct(productId, { vectorisationEnabled });
+        toast.success('Product published successfully!');
+        navigate('/dashboard/products');
+      } catch (err: unknown) {
+        if (err && typeof err === 'object' && 'code' in err) {
+          const code = (err as { code: string }).code;
+          const human = ACTIVATION_ERROR_MAP[code];
+          dispatch({ type: 'SET_STEP_ERROR', error: human ?? 'Could not publish product.' });
+        } else {
+          const msg = err instanceof Error ? err.message : 'Failed to publish product.';
+          dispatch({ type: 'SET_STEP_ERROR', error: msg });
+        }
+      }
+    },
+    [state.productId, navigate],
+  );
+
+  const handleSaveDraft = useCallback(
+    async ({ vectorisationEnabled }: { vectorisationEnabled: boolean }) => {
+      const productId = state.productId;
+      if (!productId) {
+        navigate('/dashboard/products');
+        return;
+      }
+      try {
+        await updateProduct(productId, { vectorisationEnabled });
+        toast.success('Product saved as draft.');
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'Could not save draft.';
+        toast.error(msg);
+      } finally {
+        navigate('/dashboard/products');
+      }
+    },
+    [state.productId, navigate],
+  );
 
   const handleBack = useCallback(() => {
     const prev = prevStep(state.currentStep, state.productType);
@@ -559,6 +619,7 @@ export function ProductUpload() {
             {...sharedStepProps}
             onPublish={handlePublish}
             onSaveDraft={handleSaveDraft}
+            onAgencyChange={handleAgencyChange}
           />
         );
       default:
@@ -590,8 +651,28 @@ export function ProductUpload() {
         </Card>
       )}
 
+      {isLockedForVectorisation && state.currentStep !== 'review' && (
+        <Alert>
+          <AlertCircle className="w-4 h-4" />
+          <AlertDescription>
+            Product is being indexed for AI search. Editing is temporarily disabled —
+            head to the Review step to refresh status.
+          </AlertDescription>
+        </Alert>
+      )}
+
       <Card>
-        <CardContent className="p-6">{renderStep()}</CardContent>
+        <CardContent className="p-6">
+          <div
+            className={
+              isLockedForVectorisation && state.currentStep !== 'review'
+                ? 'pointer-events-none opacity-60'
+                : ''
+            }
+          >
+            {renderStep()}
+          </div>
+        </CardContent>
       </Card>
     </div>
   );

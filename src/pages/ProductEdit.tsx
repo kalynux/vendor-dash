@@ -1,9 +1,10 @@
 import { useReducer, useCallback, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { Box, Package, ImageIcon, Tag, FileDigit, DollarSign, CheckSquare } from 'lucide-react';
+import { AlertCircle, Box, Package, ImageIcon, Tag, FileDigit, DollarSign, CheckSquare } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ProductStepIndicator } from '@/components/products/ProductStepIndicator';
 import { StepTypeSelect } from '@/components/products/steps/StepTypeSelect';
 import { StepBasicInfo } from '@/components/products/steps/StepBasicInfo';
@@ -190,6 +191,8 @@ export function ProductEdit() {
   }, [id]);
 
   const steps = getSteps(state.productType);
+  const isLockedForVectorisation =
+    state.serverProduct?.vectorisationStatus === 'pending';
 
   function advance(updates: Partial<WizardState> = {}) {
     const next = nextStep(state.currentStep, state.productType);
@@ -218,7 +221,7 @@ export function ProductEdit() {
         const updated = await updateProduct(productId, {
           title: values.title,
           category: values.category,
-          description: values.description || undefined,
+          description: values.description,
           tags: values.tags,
           seoTitle: values.seoTitle || undefined,
           seoDescription: values.seoDescription || undefined,
@@ -413,14 +416,28 @@ export function ProductEdit() {
 
           const freshVariants = await fetchVariants(productId);
 
-          if (freshVariants.length > 0 && !state.serverProduct?.defaultVariantId) {
+          // The backend auto-sets the first variant as default when none is set
+          // yet. Mirror that locally to keep `serverProduct.defaultVariantId` in
+          // sync without an extra fetch — otherwise the Review step would
+          // falsely report "A default variant must be set" until reload.
+          const needsDefaultVariant =
+            freshVariants.length > 0 && !state.serverProduct?.defaultVariantId;
+          if (needsDefaultVariant) {
             await setDefaultVariant(productId, freshVariants[0].id);
           }
+
+          const patchedProduct =
+            needsDefaultVariant && state.serverProduct
+              ? { ...state.serverProduct, defaultVariantId: freshVariants[0].id }
+              : null;
 
           toast.success('Variants saved.');
           dispatch({
             type: 'SAVE_COMPLETE',
-            updates: { serverVariants: freshVariants },
+            updates: {
+              serverVariants: freshVariants,
+              ...(patchedProduct ? { serverProduct: patchedProduct } : {}),
+            },
           });
         } catch (err: unknown) {
           const msg = err instanceof Error ? err.message : 'Failed to save variants.';
@@ -539,32 +556,78 @@ export function ProductEdit() {
     [state.productId, state.serverVariants, state.serverProduct, state.currentStep, state.completedSteps],
   );
 
+  // ─── Agency ──────────────────────────────────────────────────────────────────
+
+  const handleAgencyChange = useCallback(
+    async (agencyId: string | null) => {
+      const productId = state.productId;
+      if (!productId) return;
+      dispatch({ type: 'SET_SAVING', value: true });
+      try {
+        await updateProduct(productId, { delivery: { agencyId } });
+        const updated = await fetchProductById(productId);
+        dispatch({ type: 'SAVE_COMPLETE', updates: { serverProduct: updated } });
+        toast.success(
+          agencyId ? 'Delivery agency updated.' : 'Using your default delivery agency.',
+        );
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'Could not update delivery agency.';
+        dispatch({ type: 'SET_STEP_ERROR', error: msg });
+        toast.error(msg);
+      }
+    },
+    [state.productId],
+  );
+
   // ─── Publish ──────────────────────────────────────────────────────────────────
 
-  const handlePublish = useCallback(async () => {
-    const productId = state.productId;
-    if (!productId) return;
+  const handlePublish = useCallback(
+    async ({ vectorisationEnabled }: { vectorisationEnabled: boolean }) => {
+      const productId = state.productId;
+      if (!productId) return;
 
-    dispatch({ type: 'SET_SAVING', value: true });
-    try {
-      await updateProductStatus(productId, 'active');
-      toast.success('Product published!');
-      navigate('/dashboard/products');
-    } catch (err: unknown) {
-      if (err && typeof err === 'object' && 'code' in err) {
-        const code = (err as { code: string }).code;
-        const human = ACTIVATION_ERROR_MAP[code];
-        dispatch({ type: 'SET_STEP_ERROR', error: human ?? 'Could not publish product.' });
-      } else {
-        const msg = err instanceof Error ? err.message : 'Failed to publish.';
-        dispatch({ type: 'SET_STEP_ERROR', error: msg });
+      dispatch({ type: 'SET_SAVING', value: true });
+      try {
+        // Always send vectorisationEnabled in the general PATCH so the body is
+        // never empty and the backend persists the toggle on publish.
+        await updateProductStatus(productId, 'active');
+        await updateProduct(productId, { vectorisationEnabled });
+        toast.success('Product published!');
+        navigate('/dashboard/products');
+      } catch (err: unknown) {
+        console.log('err', err)
+        if (err && typeof err === 'object' && 'code' in err) {
+          const code = (err as { code: string }).code;
+          const human = ACTIVATION_ERROR_MAP[code];
+          dispatch({ type: 'SET_STEP_ERROR', error: human ?? 'Could not publish product.' });
+        } else {
+          const msg = err instanceof Error ? err.message : 'Failed to publish.';
+          dispatch({ type: 'SET_STEP_ERROR', error: msg });
+        }
       }
-    }
-  }, [state.productId, navigate]);
+    },
+    [state.productId, navigate],
+  );
 
-  const handleSaveDraft = useCallback(() => {
-    navigate('/dashboard/products');
-  }, [navigate]);
+  const handleSaveDraft = useCallback(
+    async ({ vectorisationEnabled }: { vectorisationEnabled: boolean }) => {
+      const productId = state.productId;
+      if (!productId) {
+        navigate('/dashboard/products');
+        return;
+      }
+      try {
+        await updateProduct(productId, { vectorisationEnabled });
+        toast.success('Changes saved.');
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'Could not save changes.';
+        toast.error(msg);
+      } finally {
+        navigate('/dashboard/products');
+      }
+    },
+    [state.productId, navigate],
+  );
 
   const handleBack = useCallback(() => {
     const prev = prevStep(state.currentStep, state.productType);
@@ -593,7 +656,6 @@ export function ProductEdit() {
   }
 
   function renderStep() {
-    console.log("state.currentStep: ", state.currentStep)
     switch (state.currentStep) {
       case 'type':
         return <StepTypeSelect selectedType={state.productType} onSelect={() => { }} disabled />;
@@ -625,6 +687,7 @@ export function ProductEdit() {
             {...sharedStepProps}
             onPublish={handlePublish}
             onSaveDraft={handleSaveDraft}
+            onAgencyChange={handleAgencyChange}
           />
         );
       default:
@@ -658,8 +721,28 @@ export function ProductEdit() {
         </Card>
       )}
 
+      {isLockedForVectorisation && state.currentStep !== 'review' && (
+        <Alert>
+          <AlertCircle className="w-4 h-4" />
+          <AlertDescription>
+            Product is being indexed for AI search. Editing is temporarily disabled —
+            head to the Review step to refresh status.
+          </AlertDescription>
+        </Alert>
+      )}
+
       <Card>
-        <CardContent className="p-6">{renderStep()}</CardContent>
+        <CardContent className="p-6">
+          <div
+            className={
+              isLockedForVectorisation && state.currentStep !== 'review'
+                ? 'pointer-events-none opacity-60'
+                : ''
+            }
+          >
+            {renderStep()}
+          </div>
+        </CardContent>
       </Card>
     </div>
   );

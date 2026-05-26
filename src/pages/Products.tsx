@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 import {
   Search,
   Filter,
@@ -11,10 +12,14 @@ import {
   Trash2,
   Eye,
   Package,
-  AlertCircle,
   Image as ImageIcon,
   ChevronRight,
   FileDigit,
+  Sparkles,
+  RotateCw,
+  Loader2,
+  CheckCircle2,
+  XCircle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -39,7 +44,12 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useProductStore } from '@/store';
 import { useRouter } from '@/App';
 import { useIsMobile } from '@/hooks/use-mobile';
-import type { ProductListItem } from '@/types/product.types';
+import {
+  setVectorisationEnabled,
+  retryVectorisation,
+} from '@/services/products.service';
+import { ApiError } from '@/types/api';
+import type { ProductListItem, ApiVectorisationStatus } from '@/types/product.types';
 
 const STATUS_OPTIONS: { value: string; label: string }[] = [
   { value: 'active', label: 'Active' },
@@ -63,6 +73,52 @@ function StatusBadge({ status }: { status: string }) {
       className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${STATUS_BADGE_CLASSES[status] ?? 'bg-muted text-muted-foreground'}`}
     >
       {status.replace('_', ' ')}
+    </span>
+  );
+}
+
+const VECTORISATION_META: Record<
+  ApiVectorisationStatus,
+  { label: string; className: string; Icon: React.ComponentType<{ className?: string }> }
+> = {
+  not_started: {
+    label: 'Not indexed',
+    className: 'bg-muted text-muted-foreground',
+    Icon: Sparkles,
+  },
+  pending: {
+    label: 'Indexing…',
+    className: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+    Icon: Loader2,
+  },
+  completed: {
+    label: 'AI search ready',
+    className: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+    Icon: CheckCircle2,
+  },
+  failed: {
+    label: 'Indexing failed',
+    className: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+    Icon: XCircle,
+  },
+};
+
+function VectorisationBadge({
+  enabled,
+  status,
+}: {
+  enabled: boolean;
+  status: ApiVectorisationStatus;
+}) {
+  if (!enabled) return null;
+  const meta = VECTORISATION_META[status];
+  const { Icon } = meta;
+  return (
+    <span
+      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium ${meta.className}`}
+    >
+      <Icon className={`w-3 h-3 ${status === 'pending' ? 'animate-spin' : ''}`} />
+      {meta.label}
     </span>
   );
 }
@@ -118,6 +174,29 @@ export function Products() {
       }
     },
     [deleteProduct],
+  );
+
+  const handleVectorisationAction = useCallback(
+    async (id: string, action: 'enable' | 'disable' | 'retry') => {
+      try {
+        if (action === 'enable') {
+          await setVectorisationEnabled(id, true);
+          toast.success('AI search enabled — indexing started.');
+        } else if (action === 'disable') {
+          await setVectorisationEnabled(id, false);
+          toast.success('AI search disabled.');
+        } else {
+          await retryVectorisation(id);
+          toast.success('Retry queued — indexing started.');
+        }
+        await fetchProducts();
+      } catch (err: unknown) {
+        const msg =
+          err instanceof ApiError ? err.message : 'Could not update AI search.';
+        toast.error(msg);
+      }
+    },
+    [fetchProducts],
   );
 
   const toggleStatusFilter = useCallback((status: string) => {
@@ -176,7 +255,13 @@ export function Products() {
             : filteredProducts.map((product) => (
                 <button
                   key={product.id}
-                  onClick={() => handleEdit(product)}
+                  onClick={() => {
+                    if (product.vectorisationStatus === 'pending') {
+                      toast.error('Editing is locked while AI indexing is in progress.');
+                      return;
+                    }
+                    handleEdit(product);
+                  }}
                   className="w-full flex items-center gap-3 px-4 py-3 border-b hover:bg-muted/30 transition-colors text-left"
                 >
                   <ProductThumbnail product={product} size="lg" />
@@ -186,7 +271,13 @@ export function Products() {
                     <p className="text-xs text-muted-foreground mt-0.5">{product.category}</p>
                   </div>
                   <div className="flex items-center gap-1.5 flex-shrink-0">
-                    <StatusBadge status={product.status} />
+                    <div className="flex flex-col items-end gap-1">
+                      <StatusBadge status={product.status} />
+                      <VectorisationBadge
+                        enabled={product.vectorisationEnabled}
+                        status={product.vectorisationStatus}
+                      />
+                    </div>
                     <ChevronRight className="w-4 h-4 text-muted-foreground" />
                   </div>
                 </button>
@@ -213,8 +304,8 @@ export function Products() {
       </div>
 
       {/* Search + Filters */}
-      <Card>
-        <CardContent className="p-4">
+      <Card className="border-none shadow-none">
+        <CardContent className="border-none p-0">
           <div className="flex flex-col sm:flex-row gap-4">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -337,6 +428,9 @@ export function Products() {
                 onToggleSelect={() => toggleProductSelection(product.id)}
                 onEdit={() => handleEdit(product)}
                 onDelete={() => handleDelete(product.id)}
+                onVectorisationAction={(action) =>
+                  handleVectorisationAction(product.id, action)
+                }
               />
             ))}
         </div>
@@ -358,7 +452,7 @@ export function Products() {
                   <th className="text-left p-4 text-sm font-medium">Product</th>
                   <th className="text-left p-4 text-sm font-medium">Status</th>
                   <th className="text-left p-4 text-sm font-medium">Type</th>
-                  <th className="text-left p-4 text-sm font-medium">Variants</th>
+                  {/* <th className="text-left p-4 text-sm font-medium">Variants</th> */}
                   <th className="w-12 p-4" />
                 </tr>
               </thead>
@@ -401,12 +495,18 @@ export function Products() {
                         </div>
                       </td>
                       <td className="p-4">
-                        <StatusBadge status={product.status} />
+                        <div className="flex flex-col gap-1 items-start">
+                          <StatusBadge status={product.status} />
+                          <VectorisationBadge
+                            enabled={product.vectorisationEnabled}
+                            status={product.vectorisationStatus}
+                          />
+                        </div>
                       </td>
                       <td className="p-4">
                         <span className="text-sm capitalize">{product.type}</span>
                       </td>
-                      <td className="p-4">
+                      {/* <td className="p-4">
                         {product.hasVariants ? (
                           <Badge variant="outline" className="text-xs">
                             Has variants
@@ -414,11 +514,15 @@ export function Products() {
                         ) : (
                           <span className="text-xs text-muted-foreground">—</span>
                         )}
-                      </td>
+                      </td> */}
                       <td className="p-4">
                         <ProductActionsMenu
+                          product={product}
                           onEdit={() => handleEdit(product)}
                           onDelete={() => handleDelete(product.id)}
+                          onVectorisationAction={(action) =>
+                            handleVectorisationAction(product.id, action)
+                          }
                         />
                       </td>
                     </tr>
@@ -468,13 +572,13 @@ function ProductThumbnail({ product, size }: { product: ProductListItem; size: '
   const dim = size === 'lg' ? 'w-16 h-16 rounded-xl' : 'w-12 h-12 rounded';
   return (
     <div className={`${dim} bg-muted flex-shrink-0 flex items-center justify-center overflow-hidden`}>
-      {product.firstFileId ? (
-        // File ID present but URL construction requires media endpoint — show placeholder
-        product.type === 'digital' ? (
-          <FileDigit className="w-5 h-5 text-muted-foreground" />
-        ) : (
-          <ImageIcon className="w-5 h-5 text-muted-foreground" />
-        )
+      {product.firstFileUrl ? (
+        <img
+          src={product.firstFileUrl}
+          alt={product.title}
+          className="w-full h-full object-cover"
+          crossOrigin="use-credentials"
+        />
       ) : product.type === 'digital' ? (
         <FileDigit className="w-5 h-5 text-muted-foreground" />
       ) : (
@@ -490,29 +594,50 @@ interface ProductGridCardProps {
   onToggleSelect: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  onVectorisationAction: (action: 'enable' | 'disable' | 'retry') => void;
 }
 
-function ProductGridCard({ product, selected, onToggleSelect, onEdit, onDelete }: ProductGridCardProps) {
+function ProductGridCard({
+  product,
+  selected,
+  onToggleSelect,
+  onEdit,
+  onDelete,
+  onVectorisationAction,
+}: ProductGridCardProps) {
   return (
     <div className="animate-fade-in">
-      <Card className="group hover:shadow-lg transition-all overflow-hidden">
+      <Card className="group hover:shadow-lg transition-all overflow-hidden gap-0">
         <div className="relative aspect-square bg-muted">
-          <div className="w-full h-full flex items-center justify-center">
-            {product.type === 'digital' ? (
-              <FileDigit className="w-12 h-12 text-muted-foreground" />
-            ) : (
-              <ImageIcon className="w-12 h-12 text-muted-foreground" />
-            )}
-          </div>
-          <div className="absolute top-3 left-3">
+          {product.firstFileUrl ? (
+            <img
+              src={product.firstFileUrl}
+              alt={product.title}
+              className="absolute inset-0 w-full h-full object-cover"
+              crossOrigin="use-credentials"
+            />
+          ) : (
+            <div className="absolute inset-0 flex items-center justify-center">
+              {product.type === 'digital' ? (
+                <FileDigit className="w-12 h-12 text-muted-foreground" />
+              ) : (
+                <ImageIcon className="w-12 h-12 text-muted-foreground" />
+              )}
+            </div>
+          )}
+          <div className="absolute top-3 left-3 z-10">
             <Checkbox
               checked={selected}
               onCheckedChange={onToggleSelect}
               className="bg-white/90"
             />
           </div>
-          <div className="absolute top-3 right-3">
+          <div className="absolute top-3 right-3 flex flex-col items-end gap-1 z-10">
             <StatusBadge status={product.status} />
+            <VectorisationBadge
+              enabled={product.vectorisationEnabled}
+              status={product.vectorisationStatus}
+            />
           </div>
         </div>
         <CardContent className="p-4">
@@ -521,17 +646,22 @@ function ProductGridCard({ product, selected, onToggleSelect, onEdit, onDelete }
               <h3 className="font-medium truncate text-sm">{product.title}</h3>
               <p className="text-xs text-muted-foreground capitalize">{product.type}</p>
             </div>
-            <ProductActionsMenu onEdit={onEdit} onDelete={onDelete} />
+            <ProductActionsMenu
+              product={product}
+              onEdit={onEdit}
+              onDelete={onDelete}
+              onVectorisationAction={onVectorisationAction}
+            />
           </div>
           <div className="mt-2 flex items-center gap-1.5 flex-wrap">
             <Badge variant="outline" className="text-xs">
               {product.category}
             </Badge>
-            {product.hasVariants && (
+            {/* {product.hasVariants && (
               <Badge variant="outline" className="text-xs">
                 Variants
               </Badge>
-            )}
+            )} */}
           </div>
         </CardContent>
       </Card>
@@ -539,7 +669,27 @@ function ProductGridCard({ product, selected, onToggleSelect, onEdit, onDelete }
   );
 }
 
-function ProductActionsMenu({ onEdit, onDelete }: { onEdit: () => void; onDelete: () => void }) {
+interface ProductActionsMenuProps {
+  product: ProductListItem;
+  onEdit: () => void;
+  onDelete: () => void;
+  onVectorisationAction: (action: 'enable' | 'disable' | 'retry') => void;
+}
+
+function ProductActionsMenu({
+  product,
+  onEdit,
+  onDelete,
+  onVectorisationAction,
+}: ProductActionsMenuProps) {
+  const editLocked = product.vectorisationStatus === 'pending';
+
+  const showEnable = !product.vectorisationEnabled;
+  const showDisable =
+    product.vectorisationEnabled && product.vectorisationStatus !== 'pending';
+  const showRetry =
+    product.vectorisationEnabled && product.vectorisationStatus === 'failed';
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -548,14 +698,37 @@ function ProductActionsMenu({ onEdit, onDelete }: { onEdit: () => void; onDelete
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuItem onClick={onEdit}>
+        <DropdownMenuItem
+          onClick={editLocked ? undefined : onEdit}
+          disabled={editLocked}
+        >
           <Edit className="w-4 h-4 mr-2" />
-          Edit
+          {editLocked ? 'Edit (locked — indexing)' : 'Edit'}
         </DropdownMenuItem>
         <DropdownMenuItem>
           <Eye className="w-4 h-4 mr-2" />
           Preview
         </DropdownMenuItem>
+
+        {showEnable && (
+          <DropdownMenuItem onClick={() => onVectorisationAction('enable')}>
+            <Sparkles className="w-4 h-4 mr-2" />
+            Enable AI search
+          </DropdownMenuItem>
+        )}
+        {showRetry && (
+          <DropdownMenuItem onClick={() => onVectorisationAction('retry')}>
+            <RotateCw className="w-4 h-4 mr-2" />
+            Retry AI search
+          </DropdownMenuItem>
+        )}
+        {showDisable && (
+          <DropdownMenuItem onClick={() => onVectorisationAction('disable')}>
+            <XCircle className="w-4 h-4 mr-2" />
+            Disable AI search
+          </DropdownMenuItem>
+        )}
+
         <DropdownMenuItem onClick={onDelete} className="text-destructive">
           <Trash2 className="w-4 h-4 mr-2" />
           Archive

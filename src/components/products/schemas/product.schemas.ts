@@ -10,7 +10,7 @@ export const basicInfoSchema = z.object({
     .min(3, 'Title must be at least 3 characters')
     .max(200, 'Title must be 200 characters or less'),
   category: z.string().min(1, 'Category is required'),
-  description: z.string().optional().default(''),
+  description: z.string().min(1, 'Description is required'),
   tags: z
     .array(z.string().min(1, 'Tag cannot be empty'))
     .refine(
@@ -122,11 +122,17 @@ export type DigitalConfigFormValues = z.infer<typeof digitalConfigSchema>;
 
 export function validateActivation(params: {
   productType: ApiProductType;
+  description: string;
   variants: Pick<ApiVariant, 'price' | 'status'>[];
   defaultVariantId: string | null;
   digitalAssetId: string | undefined;
 }): string[] {
   const errors: string[] = [];
+
+  if (!params.description.trim()) {
+    errors.push('A product description is required');
+  }
+
   const activeVariants = params.variants.filter((v) => v.status === 'active');
 
   if (activeVariants.length === 0) {

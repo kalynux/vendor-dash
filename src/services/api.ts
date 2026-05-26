@@ -23,8 +23,8 @@ function flushQueue(err?: ApiError) {
 }
 
 async function refreshTokens(): Promise<void> {
-    const res = await fetch(`${BASE_URL}/auth/refresh`, {
-        method: 'POST',
+    const res = await fetch(`${BASE_URL}/auth/me`, {
+        method: 'GET',
         credentials: 'include',
     });
     if (!res.ok) {
