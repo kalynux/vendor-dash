@@ -104,6 +104,7 @@ export function Orders() {
   const [statusLoading, setStatusLoading] = useState<string | null>(null);
   const [orderToCancel, setOrderToCancel] = useState<Order | null>(null);
   const [cancelConfirmationText, setCancelConfirmationText] = useState('');
+  const [actionsSheetOrder, setActionsSheetOrder] = useState<Order | null>(null);
 
   useEffect(() => {
     fetchOrders({ page: 1 });
@@ -217,6 +218,58 @@ export function Orders() {
 
   const allSelected = filteredOrders.length > 0 && selectedOrders.length === filteredOrders.length;
 
+  const cancelOrderDialog = (
+    <Dialog open={!!orderToCancel} onOpenChange={(open) => {
+      if (!open) {
+        setOrderToCancel(null);
+        setCancelConfirmationText('');
+      }
+    }}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center text-red-600 flex-shrink-0">
+              <AlertTriangle className="w-5 h-5" />
+            </div>
+            <DialogTitle>Cancel Order?</DialogTitle>
+          </div>
+          <DialogDescription className="pt-3 space-y-3" asChild>
+            <div>
+              <p className="text-foreground">
+                Are you sure you want to cancel order <span className="font-semibold text-foreground">{orderToCancel?.orderNumber}</span>? This action cannot be undone and will notify the customer.
+              </p>
+              <div className="space-y-2 pt-2">
+                <label htmlFor="cancel-confirm-input" className="text-xs font-semibold text-muted-foreground block">
+                  Please type <span className="font-bold text-destructive">cancel</span> to confirm:
+                </label>
+                <Input
+                  id="cancel-confirm-input"
+                  placeholder='Type "cancel"'
+                  value={cancelConfirmationText}
+                  onChange={(e) => setCancelConfirmationText(e.target.value)}
+                  className="h-9 border-red-200 focus-visible:ring-red-500"
+                  autoComplete="off"
+                />
+              </div>
+            </div>
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter className="flex sm:justify-end gap-2 pt-2">
+          <DialogClose asChild>
+            <Button variant="outline">Keep Order</Button>
+          </DialogClose>
+          <Button
+            className="bg-red-600 hover:bg-red-700 text-white font-medium focus:ring-red-500"
+            disabled={cancelConfirmationText.trim().toLowerCase() !== 'cancel'}
+            onClick={confirmCancelOrder}
+          >
+            Yes, Cancel Order
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+
   // ─── Mobile Layout ────────────────────────────────────────────────────────
   if (isMobile) {
     return (
@@ -293,10 +346,18 @@ export function Orders() {
         {/* Order cards */}
         <div>
           {filteredOrders.map((order: Order) => (
-            <button
+            <div
               key={order.id}
+              role="button"
+              tabIndex={0}
               onClick={() => handleViewDetails(order)}
-              className="w-full px-4 py-3 border-b hover:bg-muted/30 transition-colors text-left"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  handleViewDetails(order);
+                }
+              }}
+              className="w-full px-4 py-3 border-b hover:bg-muted/30 transition-colors text-left cursor-pointer"
             >
               <div className="flex items-start gap-3">
                 <img
@@ -329,8 +390,19 @@ export function Orders() {
                     <p className="text-xs text-muted-foreground">{order.items.length} items</p>
                   </div>
                 </div>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setActionsSheetOrder(order);
+                  }}
+                  className="w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-full hover:bg-accent transition-colors -mr-1 -mt-1"
+                  aria-label="Order actions"
+                >
+                  <MoreHorizontal className="w-5 h-5 text-muted-foreground" />
+                </button>
               </div>
-            </button>
+            </div>
           ))}
         </div>
 
@@ -341,6 +413,61 @@ export function Orders() {
           isDetailLoading={isDetailLoading}
           onOpenChange={setIsDetailsOpen}
         />
+
+        {/* Order Actions Bottom Sheet */}
+        <Sheet
+          open={!!actionsSheetOrder}
+          onOpenChange={(open) => {
+            if (!open) setActionsSheetOrder(null);
+          }}
+        >
+          <SheetContent side="bottom" className="p-0">
+            {actionsSheetOrder && (() => {
+              const o = actionsSheetOrder;
+              const nexts = getNextStatuses(o.status, o.orderType);
+              const close = () => setActionsSheetOrder(null);
+              return (
+                <>
+                  <SheetHeader className="border-b">
+                    <SheetTitle className="truncate pr-8 text-base">{o.orderNumber}</SheetTitle>
+                  </SheetHeader>
+                  <div className="flex flex-col py-2 pb-6">
+                    <SheetActionButton
+                      icon={<Eye className="w-5 h-5" />}
+                      label="View Details"
+                      onClick={() => { close(); handleViewDetails(o); }}
+                    />
+                    {nexts.map((s) => {
+                      const icons: Record<string, React.ReactNode> = {
+                        processing: <PackageSearch className="w-5 h-5" />,
+                        shipped: <Truck className="w-5 h-5" />,
+                        delivered: <CheckCircle className="w-5 h-5" />,
+                        fulfilled: <CheckCircle className="w-5 h-5" />,
+                        cancelled: <XCircle className="w-5 h-5" />,
+                      };
+                      return (
+                        <SheetActionButton
+                          key={s}
+                          icon={icons[s]}
+                          label={STATUS_LABELS[s] ?? s}
+                          destructive={s === 'cancelled'}
+                          onClick={() => { close(); handleStatusUpdate(o, s); }}
+                        />
+                      );
+                    })}
+                    {nexts.length === 0 && (
+                      <p className="px-5 py-3 text-sm text-muted-foreground">
+                        No further status changes available.
+                      </p>
+                    )}
+                  </div>
+                </>
+              );
+            })()}
+          </SheetContent>
+        </Sheet>
+
+        {cancelOrderDialog}
       </div>
     );
   }
@@ -650,55 +777,36 @@ export function Orders() {
       </Dialog>
 
       {/* Order Cancellation Warning Dialog */}
-      <Dialog open={!!orderToCancel} onOpenChange={(open) => {
-        if (!open) {
-          setOrderToCancel(null);
-          setCancelConfirmationText('');
-        }
-      }}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center text-red-600 flex-shrink-0">
-                <AlertTriangle className="w-5 h-5" />
-              </div>
-              <DialogTitle>Cancel Order?</DialogTitle>
-            </div>
-            <DialogDescription className="pt-3 space-y-3" asChild>
-              <div>
-                <p className="text-foreground">
-                  Are you sure you want to cancel order <span className="font-semibold text-foreground">{orderToCancel?.orderNumber}</span>? This action cannot be undone and will notify the customer.
-                </p>
-                <div className="space-y-2 pt-2">
-                  <label htmlFor="cancel-confirm-input" className="text-xs font-semibold text-muted-foreground block">
-                    Please type <span className="font-bold text-destructive">cancel</span> to confirm:
-                  </label>
-                  <Input
-                    id="cancel-confirm-input"
-                    placeholder='Type "cancel"'
-                    value={cancelConfirmationText}
-                    onChange={(e) => setCancelConfirmationText(e.target.value)}
-                    className="h-9 border-red-200 focus-visible:ring-red-500"
-                    autoComplete="off"
-                  />
-                </div>
-              </div>
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="flex sm:justify-end gap-2 pt-2">
-            <DialogClose asChild>
-              <Button variant="outline">Keep Order</Button>
-            </DialogClose>
-            <Button
-              className="bg-red-600 hover:bg-red-700 text-white font-medium focus:ring-red-500"
-              disabled={cancelConfirmationText.trim().toLowerCase() !== 'cancel'}
-              onClick={confirmCancelOrder}
-            >
-              Yes, Cancel Order
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {cancelOrderDialog}
     </div>
+  );
+}
+
+function SheetActionButton({
+  icon,
+  label,
+  onClick,
+  disabled,
+  destructive,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  onClick?: () => void;
+  disabled?: boolean;
+  destructive?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={cn(
+        'flex items-center gap-3 px-5 py-3.5 text-sm text-left hover:bg-muted active:bg-muted disabled:opacity-50 disabled:pointer-events-none',
+        destructive && 'text-destructive',
+      )}
+    >
+      <span className="flex-shrink-0">{icon}</span>
+      <span>{label}</span>
+    </button>
   );
 }

@@ -13,13 +13,19 @@ import {
   Eye,
   Package,
   Image as ImageIcon,
-  ChevronRight,
   FileDigit,
   Sparkles,
   RotateCw,
   Loader2,
   CheckCircle2,
   XCircle,
+  Send,
+  Pencil,
+  ArchiveRestore,
+  Undo2,
+  AlertTriangle,
+  Triangle,
+  TriangleAlert,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -39,6 +45,25 @@ import {
   SheetTitle,
   SheetTrigger,
 } from '@/components/ui/sheet';
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useProductStore } from '@/store';
@@ -47,9 +72,16 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import {
   setVectorisationEnabled,
   retryVectorisation,
+  updateProductStatus,
+  runActivationPreflight,
+  getAllowedStatusTransitions,
+  ACTIVATION_ERROR_MAP,
+  type StatusTransition,
+  type StatusTransitionIntent,
 } from '@/services/products.service';
 import { ApiError } from '@/types/api';
 import type { ProductListItem, ApiVectorisationStatus } from '@/types/product.types';
+import { cn } from '@/lib/utils';
 
 const STATUS_OPTIONS: { value: string; label: string }[] = [
   { value: 'active', label: 'Active' },
@@ -58,6 +90,46 @@ const STATUS_OPTIONS: { value: string; label: string }[] = [
   { value: 'pending_review', label: 'Pending Review' },
   { value: 'suspended', label: 'Suspended' },
 ];
+
+const STATUS_TRANSITION_META: Record<
+  StatusTransitionIntent,
+  {
+    Icon: React.ComponentType<{ className?: string }>;
+    defaultConfirm: string;
+    confirmCta: string;
+  }
+> = {
+  activate: {
+    Icon: Send,
+    defaultConfirm:
+      'Publish this product? It will become visible in your storefront immediately.',
+    confirmCta: 'Publish',
+  },
+  demote_to_draft: {
+    Icon: Pencil,
+    defaultConfirm:
+      'Move this product back to draft? It will be removed from your storefront until you republish.',
+    confirmCta: 'Demote to draft',
+  },
+  restore: {
+    Icon: ArchiveRestore,
+    defaultConfirm:
+      'Restore this product from archive? It will be set back to draft so you can edit it.',
+    confirmCta: 'Restore',
+  },
+  cancel_review: {
+    Icon: Undo2,
+    defaultConfirm:
+      'Cancel the pending review and move this product back to draft for editing?',
+    confirmCta: 'Cancel review',
+  },
+  archive: {
+    Icon: Trash2,
+    defaultConfirm:
+      'Archive this product? It will no longer appear in your store.',
+    confirmCta: 'Archive',
+  },
+};
 
 const STATUS_BADGE_CLASSES: Record<string, string> = {
   active: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
@@ -141,6 +213,14 @@ export function Products() {
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
+  const [actionsSheetProduct, setActionsSheetProduct] = useState<ProductListItem | null>(null);
+  const [productToDelete, setProductToDelete] = useState<ProductListItem | null>(null);
+  const [transitionState, setTransitionState] = useState<{
+    product: ProductListItem;
+    transition: StatusTransition;
+    preflightErrors?: string[];
+    loading?: boolean;
+  } | null>(null);
 
   // Debounced server-side search
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -167,14 +247,63 @@ export function Products() {
     [navigate],
   );
 
-  const handleDelete = useCallback(
-    async (id: string) => {
-      if (confirm('Archive this product? It will no longer appear in your store.')) {
-        await deleteProduct(id);
+  const confirmDelete = useCallback(async () => {
+    if (!productToDelete) return;
+    const id = productToDelete.id;
+    setProductToDelete(null);
+    await deleteProduct(id);
+  }, [productToDelete, deleteProduct]);
+
+  const requestStatusTransition = useCallback(
+    async (product: ProductListItem, transition: StatusTransition) => {
+      if (transition.intent === 'archive') {
+        setProductToDelete(product);
+        return;
       }
+      if (transition.needsPreflight) {
+        setTransitionState({ product, transition, loading: true });
+        try {
+          const errors = await runActivationPreflight(product.id);
+          if (errors.length > 0) {
+            setTransitionState({ product, transition, preflightErrors: errors });
+            return;
+          }
+          setTransitionState({ product, transition });
+        } catch (err: unknown) {
+          const msg =
+            err instanceof Error ? err.message : 'Could not validate product.';
+          toast.error(msg);
+          setTransitionState(null);
+        }
+        return;
+      }
+      setTransitionState({ product, transition });
     },
-    [deleteProduct],
+    [],
   );
+
+  const confirmStatusTransition = useCallback(async () => {
+    if (!transitionState || transitionState.preflightErrors) return;
+    const { product, transition } = transitionState;
+    setTransitionState({ ...transitionState, loading: true });
+    try {
+      await updateProductStatus(product.id, transition.target);
+      toast.success(
+        `"${product.title}" is now ${transition.target.replace('_', ' ')}.`,
+      );
+      setTransitionState(null);
+      await fetchProducts();
+    } catch (err: unknown) {
+      const mapped =
+        err instanceof ApiError && ACTIVATION_ERROR_MAP[err.code]
+          ? ACTIVATION_ERROR_MAP[err.code]
+          : err instanceof Error
+            ? err.message
+            : 'Could not change product status.';
+      toast.error(mapped);
+      setTransitionState(null);
+    }
+  }, [transitionState, fetchProducts]);
 
   const handleVectorisationAction = useCallback(
     async (id: string, action: 'enable' | 'disable' | 'retry') => {
@@ -215,6 +344,137 @@ export function Products() {
 
   // ─── Mobile ─────────────────────────────────────────────────────────────────
 
+  const transitionDialog = (() => {
+    if (!transitionState) return null;
+    const { product, transition, preflightErrors, loading } = transitionState;
+    const meta = STATUS_TRANSITION_META[transition.intent];
+    const isErrorState = !!preflightErrors && preflightErrors.length > 0;
+    return (
+      <Dialog
+        open
+        onOpenChange={(open) => {
+          if (!open && !loading) setTransitionState(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader className="text-left">
+            <div className="flex items-center gap-3">
+              <div
+                className={cn(
+                  'w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0',
+                  isErrorState
+                    ? 'bg-orange-100 text-orange-600'
+                    : transition.destructive
+                      ? 'bg-red-100 text-red-600'
+                      : 'bg-primary/10 text-primary',
+                )}
+              >
+                {isErrorState ? (
+                  <TriangleAlert className="w-5 h-5" />
+                ) : (
+                  <meta.Icon className="w-5 h-5" />
+                )}
+              </div>
+              <DialogTitle>
+                {isErrorState
+                  ? 'Cannot publish yet'
+                  : `${transition.label}?`}
+              </DialogTitle>
+            </div>
+            <DialogDescription className="pt-3 text-left">
+              {isErrorState ? (
+                <>
+                  Fix the following before publishing{' '}
+                  <span className="font-semibold text-foreground">
+                    {product.title}
+                  </span>
+                  :
+                </>
+              ) : (
+                <>
+                  <span className="font-semibold text-foreground">
+                    {product.title}
+                  </span>
+                  {' — '}
+                  {transition.confirmMessage ?? meta.defaultConfirm}
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          {isErrorState && (
+            <ul className="list-disc pl-5 space-y-1 text-sm text-muted-foreground">
+              {preflightErrors!.map((err, i) => (
+                <li key={i}>{err}</li>
+              ))}
+            </ul>
+          )}
+          <DialogFooter>
+            {isErrorState ? (
+              <DialogClose asChild onClick={() => setTransitionState(null)}>
+                <Button variant="outline">Got it</Button>
+              </DialogClose>
+            ) : (
+              <>
+                <DialogClose asChild disabled={loading}>
+                  <Button variant="outline">Cancel</Button>
+                </DialogClose>
+                <Button
+                  disabled={loading}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    confirmStatusTransition();
+                  }}
+                  variant={transition.destructive ? "destructive" : "default"}
+                >
+                  {loading ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    meta.confirmCta
+                  )}
+                </Button>
+              </>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    );
+  })();
+
+  const archiveDialog = (
+    <Dialog
+      open={!!productToDelete}
+      onOpenChange={(open) => {
+        if (!open) setProductToDelete(null);
+      }}
+    >
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader className="text-left">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center text-orange-600 flex-shrink-0">
+              <Trash2 className="w-5 h-5" />
+            </div>
+            <DialogTitle>Archive Product?</DialogTitle>
+          </div>
+          <DialogDescription className="pt-3 text-left">
+            Archive{' '}
+            <span className="font-semibold text-foreground">
+              {productToDelete?.title}
+            </span>
+            ? It will no longer appear in your store.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter className="flex sm:justify-end gap-2 pt-2">
+          <DialogClose asChild>
+            <Button variant="outline">Keep Product</Button>
+          </DialogClose>
+          <Button variant="destructive" onClick={confirmDelete}>
+            Yes, Archive
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+
   if (isMobile) {
     return (
       <div className="-mx-6 -mt-6">
@@ -243,26 +503,37 @@ export function Products() {
         <div>
           {isLoading
             ? Array.from({ length: 5 }).map((_, i) => (
-                <div key={i} className="flex items-center gap-3 px-4 py-3 border-b">
-                  <div className="w-16 h-16 rounded-xl bg-muted animate-pulse flex-shrink-0" />
-                  <div className="flex-1 space-y-2">
-                    <div className="h-3.5 bg-muted animate-pulse rounded w-3/4" />
-                    <div className="h-3 bg-muted animate-pulse rounded w-1/3" />
-                    <div className="h-3 bg-muted animate-pulse rounded w-1/2" />
-                  </div>
+              <div key={i} className="flex items-center gap-3 px-4 py-3 border-b">
+                <div className="w-16 h-16 rounded-xl bg-muted animate-pulse flex-shrink-0" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-3.5 bg-muted animate-pulse rounded w-3/4" />
+                  <div className="h-3 bg-muted animate-pulse rounded w-1/3" />
+                  <div className="h-3 bg-muted animate-pulse rounded w-1/2" />
                 </div>
-              ))
-            : filteredProducts.map((product) => (
-                <button
+              </div>
+            ))
+            : filteredProducts.map((product) => {
+              const editLocked = product.vectorisationStatus === 'pending';
+              const openEdit = () => {
+                if (editLocked) {
+                  toast.error('Editing is locked while AI indexing is in progress.');
+                  return;
+                }
+                handleEdit(product);
+              };
+              return (
+                <div
                   key={product.id}
-                  onClick={() => {
-                    if (product.vectorisationStatus === 'pending') {
-                      toast.error('Editing is locked while AI indexing is in progress.');
-                      return;
+                  role="button"
+                  tabIndex={0}
+                  onClick={openEdit}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      openEdit();
                     }
-                    handleEdit(product);
                   }}
-                  className="w-full flex items-center gap-3 px-4 py-3 border-b hover:bg-muted/30 transition-colors text-left"
+                  className="w-full flex items-center gap-3 px-4 py-3 border-b hover:bg-muted/30 transition-colors text-left cursor-pointer"
                 >
                   <ProductThumbnail product={product} size="lg" />
                   <div className="flex-1 min-w-0">
@@ -270,7 +541,7 @@ export function Products() {
                     <p className="text-xs text-muted-foreground mt-0.5 capitalize">{product.type}</p>
                     <p className="text-xs text-muted-foreground mt-0.5">{product.category}</p>
                   </div>
-                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                  <div className="flex items-center gap-1 flex-shrink-0">
                     <div className="flex flex-col items-end gap-1">
                       <StatusBadge status={product.status} />
                       <VectorisationBadge
@@ -278,11 +549,120 @@ export function Products() {
                         status={product.vectorisationStatus}
                       />
                     </div>
-                    <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setActionsSheetProduct(product);
+                      }}
+                      className="w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-full hover:bg-accent transition-colors -mr-1"
+                      aria-label="Product actions"
+                    >
+                      <MoreHorizontal className="w-5 h-5 text-muted-foreground" />
+                    </button>
                   </div>
-                </button>
-              ))}
+                </div>
+              );
+            })}
         </div>
+
+        {/* Mobile actions bottom sheet */}
+        <Sheet
+          open={!!actionsSheetProduct}
+          onOpenChange={(open) => {
+            if (!open) setActionsSheetProduct(null);
+          }}
+        >
+          <SheetContent side="bottom" className="p-0">
+            {actionsSheetProduct && (() => {
+              const p = actionsSheetProduct;
+              const close = () => setActionsSheetProduct(null);
+              const editLocked = p.vectorisationStatus === 'pending';
+              const showEnable = !p.vectorisationEnabled;
+              const showDisable =
+                p.vectorisationEnabled && p.vectorisationStatus !== 'pending';
+              const showRetry =
+                p.vectorisationEnabled && p.vectorisationStatus === 'failed';
+
+              const transitions = getAllowedStatusTransitions(p.status);
+              const nonArchiveTransitions = transitions.filter(
+                (t) => t.intent !== 'archive',
+              );
+              const archiveTransition = transitions.find((t) => t.intent === 'archive');
+
+              return (
+                <>
+                  <SheetHeader className="border-b">
+                    <SheetTitle className="truncate pr-8 text-base">{p.title}</SheetTitle>
+                  </SheetHeader>
+                  <div className="flex flex-col py-2 pb-6">
+                    <SheetActionButton
+                      icon={<Edit className="w-5 h-5" />}
+                      label={editLocked ? 'Edit (locked — indexing)' : 'Edit'}
+                      disabled={editLocked}
+                      onClick={() => { close(); handleEdit(p); }}
+                    />
+                    <SheetActionButton
+                      icon={<Eye className="w-5 h-5" />}
+                      label="Preview"
+                      onClick={close}
+                    />
+                    {nonArchiveTransitions.map((transition) => {
+                      const meta = STATUS_TRANSITION_META[transition.intent];
+                      const Icon = meta.Icon;
+                      return (
+                        <SheetActionButton
+                          key={transition.intent}
+                          icon={<Icon className="w-5 h-5" />}
+                          label={transition.label}
+                          onClick={() => {
+                            close();
+                            requestStatusTransition(p, transition);
+                          }}
+                        />
+                      );
+                    })}
+                    {showEnable && (
+                      <SheetActionButton
+                        icon={<Sparkles className="w-5 h-5" />}
+                        label="Enable AI search"
+                        onClick={() => { close(); handleVectorisationAction(p.id, 'enable'); }}
+                      />
+                    )}
+                    {showRetry && (
+                      <SheetActionButton
+                        icon={<RotateCw className="w-5 h-5" />}
+                        label="Retry AI search"
+                        onClick={() => { close(); handleVectorisationAction(p.id, 'retry'); }}
+                      />
+                    )}
+                    {showDisable && (
+                      <SheetActionButton
+                        icon={<XCircle className="w-5 h-5" />}
+                        label="Disable AI search"
+                        onClick={() => { close(); handleVectorisationAction(p.id, 'disable'); }}
+                      />
+                    )}
+                    {archiveTransition && (
+                      <SheetActionButton
+                        icon={<Trash2 className="w-5 h-5" />}
+                        label={archiveTransition.label}
+                        destructive
+                        onClick={() => {
+                          close();
+                          requestStatusTransition(p, archiveTransition);
+                        }}
+                      />
+                    )}
+                  </div>
+                </>
+              );
+            })()}
+          </SheetContent>
+        </Sheet>
+
+        {archiveDialog}
+        {transitionDialog}
       </div>
     );
   }
@@ -398,41 +778,43 @@ export function Products() {
         <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {isLoading
             ? Array.from({ length: 8 }).map((_, i) => (
-                <Card key={i} className="overflow-hidden">
-                  <Skeleton className="aspect-square" />
-                  <CardContent className="p-4 space-y-3">
-                    <Skeleton className="h-4 w-3/4" />
-                    <Skeleton className="h-4 w-1/2" />
-                    <Skeleton className="h-6 w-1/3" />
-                  </CardContent>
-                </Card>
-              ))
+              <Card key={i} className="overflow-hidden">
+                <Skeleton className="aspect-square" />
+                <CardContent className="p-4 space-y-3">
+                  <Skeleton className="h-4 w-3/4" />
+                  <Skeleton className="h-4 w-1/2" />
+                  <Skeleton className="h-6 w-1/3" />
+                </CardContent>
+              </Card>
+            ))
             : filteredProducts.length === 0
-            ? (
-              <div className="col-span-full py-12 text-center">
-                <Package className="w-16 h-16 mx-auto text-muted-foreground mb-4" />
-                <p className="text-muted-foreground mb-4">No products found</p>
-                <Button
-                  variant="outline"
-                  onClick={() => { setSearchQuery(''); setStatusFilter([]); }}
-                >
-                  Clear filters
-                </Button>
-              </div>
-            )
-            : filteredProducts.map((product) => (
-              <ProductGridCard
-                key={product.id}
-                product={product}
-                selected={selectedProducts.includes(product.id)}
-                onToggleSelect={() => toggleProductSelection(product.id)}
-                onEdit={() => handleEdit(product)}
-                onDelete={() => handleDelete(product.id)}
-                onVectorisationAction={(action) =>
-                  handleVectorisationAction(product.id, action)
-                }
-              />
-            ))}
+              ? (
+                <div className="col-span-full py-12 text-center">
+                  <Package className="w-16 h-16 mx-auto text-muted-foreground mb-4" />
+                  <p className="text-muted-foreground mb-4">No products found</p>
+                  <Button
+                    variant="outline"
+                    onClick={() => { setSearchQuery(''); setStatusFilter([]); }}
+                  >
+                    Clear filters
+                  </Button>
+                </div>
+              )
+              : filteredProducts.map((product) => (
+                <ProductGridCard
+                  key={product.id}
+                  product={product}
+                  selected={selectedProducts.includes(product.id)}
+                  onToggleSelect={() => toggleProductSelection(product.id)}
+                  onEdit={() => handleEdit(product)}
+                  onVectorisationAction={(action) =>
+                    handleVectorisationAction(product.id, action)
+                  }
+                  onStatusTransition={(transition) =>
+                    requestStatusTransition(product, transition)
+                  }
+                />
+              ))}
         </div>
       ) : (
         /* List view */
@@ -459,54 +841,54 @@ export function Products() {
               <tbody>
                 {isLoading
                   ? Array.from({ length: 5 }).map((_, i) => (
-                      <tr key={i} className="border-b">
-                        <td colSpan={6} className="p-4">
-                          <div className="h-12 bg-muted animate-pulse rounded" />
-                        </td>
-                      </tr>
-                    ))
-                  : filteredProducts.length === 0
-                  ? (
-                    <tr>
-                      <td colSpan={6} className="p-8 text-center">
-                        <Package className="w-12 h-12 mx-auto text-muted-foreground mb-3" />
-                        <p className="text-muted-foreground">No products found</p>
+                    <tr key={i} className="border-b">
+                      <td colSpan={6} className="p-4">
+                        <div className="h-12 bg-muted animate-pulse rounded" />
                       </td>
                     </tr>
-                  )
-                  : filteredProducts.map((product) => (
-                    <tr
-                      key={product.id}
-                      className="border-b hover:bg-muted/50 transition-colors"
-                    >
-                      <td className="p-4">
-                        <Checkbox
-                          checked={selectedProducts.includes(product.id)}
-                          onCheckedChange={() => toggleProductSelection(product.id)}
-                        />
-                      </td>
-                      <td className="p-4">
-                        <div className="flex items-center gap-3">
-                          <ProductThumbnail product={product} size="md" />
-                          <div>
-                            <p className="font-medium">{product.title}</p>
-                            <p className="text-xs text-muted-foreground">{product.category}</p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="p-4">
-                        <div className="flex flex-col gap-1 items-start">
-                          <StatusBadge status={product.status} />
-                          <VectorisationBadge
-                            enabled={product.vectorisationEnabled}
-                            status={product.vectorisationStatus}
+                  ))
+                  : filteredProducts.length === 0
+                    ? (
+                      <tr>
+                        <td colSpan={6} className="p-8 text-center">
+                          <Package className="w-12 h-12 mx-auto text-muted-foreground mb-3" />
+                          <p className="text-muted-foreground">No products found</p>
+                        </td>
+                      </tr>
+                    )
+                    : filteredProducts.map((product) => (
+                      <tr
+                        key={product.id}
+                        className="border-b hover:bg-muted/50 transition-colors"
+                      >
+                        <td className="p-4">
+                          <Checkbox
+                            checked={selectedProducts.includes(product.id)}
+                            onCheckedChange={() => toggleProductSelection(product.id)}
                           />
-                        </div>
-                      </td>
-                      <td className="p-4">
-                        <span className="text-sm capitalize">{product.type}</span>
-                      </td>
-                      {/* <td className="p-4">
+                        </td>
+                        <td className="p-4">
+                          <div className="flex items-center gap-3">
+                            <ProductThumbnail product={product} size="md" />
+                            <div>
+                              <p className="font-medium">{product.title}</p>
+                              <p className="text-xs text-muted-foreground">{product.category}</p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="p-4">
+                          <div className="flex flex-col gap-1 items-start">
+                            <StatusBadge status={product.status} />
+                            <VectorisationBadge
+                              enabled={product.vectorisationEnabled}
+                              status={product.vectorisationStatus}
+                            />
+                          </div>
+                        </td>
+                        <td className="p-4">
+                          <span className="text-sm capitalize">{product.type}</span>
+                        </td>
+                        {/* <td className="p-4">
                         {product.hasVariants ? (
                           <Badge variant="outline" className="text-xs">
                             Has variants
@@ -515,23 +897,28 @@ export function Products() {
                           <span className="text-xs text-muted-foreground">—</span>
                         )}
                       </td> */}
-                      <td className="p-4">
-                        <ProductActionsMenu
-                          product={product}
-                          onEdit={() => handleEdit(product)}
-                          onDelete={() => handleDelete(product.id)}
-                          onVectorisationAction={(action) =>
-                            handleVectorisationAction(product.id, action)
-                          }
-                        />
-                      </td>
-                    </tr>
-                  ))}
+                        <td className="p-4">
+                          <ProductActionsMenu
+                            product={product}
+                            onEdit={() => handleEdit(product)}
+                            onVectorisationAction={(action) =>
+                              handleVectorisationAction(product.id, action)
+                            }
+                            onStatusTransition={(transition) =>
+                              requestStatusTransition(product, transition)
+                            }
+                          />
+                        </td>
+                      </tr>
+                    ))}
               </tbody>
             </table>
           </CardContent>
         </Card>
       )}
+
+      {archiveDialog}
+      {transitionDialog}
 
       {/* Pagination */}
       {pagination && pagination.totalPages > 1 && (
@@ -593,8 +980,8 @@ interface ProductGridCardProps {
   selected: boolean;
   onToggleSelect: () => void;
   onEdit: () => void;
-  onDelete: () => void;
   onVectorisationAction: (action: 'enable' | 'disable' | 'retry') => void;
+  onStatusTransition: (transition: StatusTransition) => void;
 }
 
 function ProductGridCard({
@@ -602,8 +989,8 @@ function ProductGridCard({
   selected,
   onToggleSelect,
   onEdit,
-  onDelete,
   onVectorisationAction,
+  onStatusTransition,
 }: ProductGridCardProps) {
   return (
     <div className="animate-fade-in">
@@ -649,8 +1036,8 @@ function ProductGridCard({
             <ProductActionsMenu
               product={product}
               onEdit={onEdit}
-              onDelete={onDelete}
               onVectorisationAction={onVectorisationAction}
+              onStatusTransition={onStatusTransition}
             />
           </div>
           <div className="mt-2 flex items-center gap-1.5 flex-wrap">
@@ -672,15 +1059,15 @@ function ProductGridCard({
 interface ProductActionsMenuProps {
   product: ProductListItem;
   onEdit: () => void;
-  onDelete: () => void;
   onVectorisationAction: (action: 'enable' | 'disable' | 'retry') => void;
+  onStatusTransition: (transition: StatusTransition) => void;
 }
 
 function ProductActionsMenu({
   product,
   onEdit,
-  onDelete,
   onVectorisationAction,
+  onStatusTransition,
 }: ProductActionsMenuProps) {
   const editLocked = product.vectorisationStatus === 'pending';
 
@@ -689,6 +1076,10 @@ function ProductActionsMenu({
     product.vectorisationEnabled && product.vectorisationStatus !== 'pending';
   const showRetry =
     product.vectorisationEnabled && product.vectorisationStatus === 'failed';
+
+  const transitions = getAllowedStatusTransitions(product.status);
+  const nonArchiveTransitions = transitions.filter((t) => t.intent !== 'archive');
+  const archiveTransition = transitions.find((t) => t.intent === 'archive');
 
   return (
     <DropdownMenu>
@@ -710,6 +1101,20 @@ function ProductActionsMenu({
           Preview
         </DropdownMenuItem>
 
+        {nonArchiveTransitions.map((transition) => {
+          const meta = STATUS_TRANSITION_META[transition.intent];
+          const Icon = meta.Icon;
+          return (
+            <DropdownMenuItem
+              key={transition.intent}
+              onClick={() => onStatusTransition(transition)}
+            >
+              <Icon className="w-4 h-4 mr-2" />
+              {transition.label}
+            </DropdownMenuItem>
+          );
+        })}
+
         {showEnable && (
           <DropdownMenuItem onClick={() => onVectorisationAction('enable')}>
             <Sparkles className="w-4 h-4 mr-2" />
@@ -729,11 +1134,45 @@ function ProductActionsMenu({
           </DropdownMenuItem>
         )}
 
-        <DropdownMenuItem onClick={onDelete} className="text-destructive">
-          <Trash2 className="w-4 h-4 mr-2" />
-          Archive
-        </DropdownMenuItem>
+        {archiveTransition && (
+          <DropdownMenuItem
+            onClick={() => onStatusTransition(archiveTransition)}
+            className="text-destructive"
+          >
+            <Trash2 className="w-4 h-4 mr-2" />
+            {archiveTransition.label}
+          </DropdownMenuItem>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+function SheetActionButton({
+  icon,
+  label,
+  onClick,
+  disabled,
+  destructive,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  onClick?: () => void;
+  disabled?: boolean;
+  destructive?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={cn(
+        'flex items-center gap-3 px-5 py-3.5 text-sm text-left hover:bg-muted active:bg-muted disabled:opacity-50 disabled:pointer-events-none',
+        destructive && 'text-destructive',
+      )}
+    >
+      <span className="flex-shrink-0">{icon}</span>
+      <span>{label}</span>
+    </button>
   );
 }

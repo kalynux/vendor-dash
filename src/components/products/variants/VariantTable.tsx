@@ -261,12 +261,16 @@ function VariantRowComponent({
     removed: { label: 'Removed', className: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' },
   }[row.status];
 
-  const handleFieldChange = useCallback(
-    (field: keyof VariantRowPatch, value: string | number | boolean | null) => {
-      onUpdate({ [field]: value } as VariantRowPatch);
-    },
-    [onUpdate],
-  );
+  // const handleFieldChange = useCallback(
+  //   (field: keyof VariantRowPatch, value: string | number | boolean | null) => {
+  //     onUpdate({ [field]: value } as VariantRowPatch);
+  //   },
+  //   [onUpdate],
+  // );
+
+  const handleFieldChange = (field: keyof VariantRowPatch, value: string | number | boolean | null) => {
+    onUpdate({ [field]: value } as VariantRowPatch);
+  };
 
   return (
     <>
@@ -325,7 +329,7 @@ function VariantRowComponent({
         </td>
 
         {/* Stock */}
-        <td className="p-2">
+        <td className="p-2 text-center">
           {row.isInfiniteStock ? (
             <span className="text-xs text-muted-foreground">∞</span>
           ) : (
@@ -520,6 +524,7 @@ function CellInput({
 
   const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
     setLocalValue(e.target.value);
+    onChange(e.target.value);
   };
 
   const handleBlur = () => {

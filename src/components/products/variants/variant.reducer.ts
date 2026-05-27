@@ -265,15 +265,19 @@ export function variantBuilderReducer(
     // ── Row Mutations ─────────────────────────────────────────────────────
 
     case 'UPDATE_ROW': {
+      const patchedKeys = Object.keys(action.patch) as (keyof VariantRowPatch)[];
+      const nextErrors = clearErrorsForFields(state.rowErrors, action.localId, patchedKeys);
+
       return {
         ...state,
         isDirty: true,
+        rowErrors: nextErrors,
         matrix: state.matrix.map((r) => {
           if (r.localId !== action.localId) return r;
           const updated: VariantRow = { ...r, ...action.patch };
           // Track dirty fields
           const dirtyFields = new Set(r.dirtyFields);
-          for (const key of Object.keys(action.patch) as (keyof VariantRowPatch)[]) {
+          for (const key of patchedKeys) {
             dirtyFields.add(key);
           }
           updated.dirtyFields = dirtyFields;
@@ -287,9 +291,19 @@ export function variantBuilderReducer(
     }
 
     case 'BULK_UPDATE_ROWS': {
+      const affectedRowIds = state.matrix
+        .filter((r) => r.status !== 'removed')
+        .map((r) => r.localId);
+      const nextErrors = clearErrorsForFieldAcrossRows(
+        state.rowErrors,
+        affectedRowIds,
+        action.field,
+      );
+
       return {
         ...state,
         isDirty: true,
+        rowErrors: nextErrors,
         matrix: state.matrix.map((r) => {
           if (r.status === 'removed') return r;
           const updated: VariantRow = { ...r, [action.field]: action.value };
@@ -459,6 +473,42 @@ export function variantBuilderReducer(
       return _exhaustive;
     }
   }
+}
+
+// ─── Error Helpers ───────────────────────────────────────────────────────────
+
+function clearErrorsForFields(
+  errors: Record<string, string>,
+  rowLocalId: string,
+  fields: readonly (keyof VariantRowPatch)[],
+): Record<string, string> {
+  if (fields.length === 0) return errors;
+  let next: Record<string, string> | null = null;
+  for (const field of fields) {
+    const key = `${rowLocalId}.${String(field)}`;
+    if (key in errors) {
+      if (next === null) next = { ...errors };
+      delete next[key];
+    }
+  }
+  return next ?? errors;
+}
+
+function clearErrorsForFieldAcrossRows(
+  errors: Record<string, string>,
+  rowLocalIds: readonly string[],
+  field: string,
+): Record<string, string> {
+  if (rowLocalIds.length === 0) return errors;
+  let next: Record<string, string> | null = null;
+  for (const rowLocalId of rowLocalIds) {
+    const key = `${rowLocalId}.${field}`;
+    if (key in errors) {
+      if (next === null) next = { ...errors };
+      delete next[key];
+    }
+  }
+  return next ?? errors;
 }
 
 // ─── Derived State Helpers (used by useVariantBuilder selectors) ──────────────

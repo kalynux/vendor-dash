@@ -32,6 +32,8 @@ import type {
   VectorisationActionResponse,
 } from '@/types/product.types';
 import { ApiError } from '@/types/api';
+import { validateActivation } from '@/components/products/schemas/product.schemas';
+import { fetchDefaultDeliveryAgency } from '@/services/agencies.service';
 
 // ─── Adapters ─────────────────────────────────────────────────────────────────
 
@@ -336,6 +338,126 @@ export const ACTIVATION_ERROR_MAP: Record<string, string> = {
   CATALOG_PRODUCT_DIGITAL_NO_ASSET: 'A digital asset file must be uploaded before publishing',
   CATALOG_PRODUCT_NO_DELIVERY_AGENCY:
     'A delivery agency must be assigned to this product or set as your default',
+  CATALOG_PRODUCT_VECTORISATION_PENDING:
+    'This product is currently processing background operations. Please try again in a few seconds.',
   CATALOG_PRODUCT_VECTORISATION_NOT_ELIGIBLE:
     'Product is not eligible for vectorisation. It must be active, vectorisation enabled, and have a title, description, and category.',
 };
+
+// ─── Status Flow ──────────────────────────────────────────────────────────────
+// Allowed transitions per the vendor product status flow doc. Driving the UI
+// off this map keeps the dropdown contents consistent with backend rules.
+
+export type StatusTransitionIntent =
+  | 'activate'
+  | 'demote_to_draft'
+  | 'restore'
+  | 'cancel_review'
+  | 'archive';
+
+export interface StatusTransition {
+  intent: StatusTransitionIntent;
+  target: ApiProductStatus;
+  label: string;
+  destructive: boolean;
+  needsPreflight: boolean;
+  confirmMessage?: string;
+}
+
+export const STATUS_TRANSITIONS: Record<ApiProductStatus, StatusTransition[]> = {
+  draft: [
+    {
+      intent: 'activate',
+      target: 'active',
+      label: 'Publish Product',
+      destructive: false,
+      needsPreflight: true,
+    },
+    {
+      intent: 'archive',
+      target: 'archived',
+      label: 'Archive Product',
+      destructive: true,
+      needsPreflight: false,
+      confirmMessage: 'Archive this product? It will no longer appear in your store.',
+    },
+  ],
+  active: [
+    {
+      intent: 'demote_to_draft',
+      target: 'draft',
+      label: 'Demote to Draft',
+      destructive: false,
+      needsPreflight: false,
+      confirmMessage:
+        'Demote this product to draft? It will be removed from your storefront until you republish.',
+    },
+    {
+      intent: 'archive',
+      target: 'archived',
+      label: 'Archive Product',
+      destructive: true,
+      needsPreflight: false,
+      confirmMessage:
+        'Archive this live product? It will be removed from your storefront immediately.',
+    },
+  ],
+  archived: [
+    {
+      intent: 'restore',
+      target: 'draft',
+      label: 'Restore to Draft',
+      destructive: false,
+      needsPreflight: false,
+    },
+  ],
+  pending_review: [
+    {
+      intent: 'cancel_review',
+      target: 'draft',
+      label: 'Cancel Review & Edit',
+      destructive: false,
+      needsPreflight: false,
+    },
+    {
+      intent: 'archive',
+      target: 'archived',
+      label: 'Archive Product',
+      destructive: true,
+      needsPreflight: false,
+      confirmMessage: 'Archive this product? It will no longer appear in your store.',
+    },
+  ],
+  suspended: [],
+};
+
+export function getAllowedStatusTransitions(status: ApiProductStatus): StatusTransition[] {
+  return STATUS_TRANSITIONS[status] ?? [];
+}
+
+// Runs the client-side activation checklist from the status flow doc.
+// Returns the list of human-readable errors; empty array means the activation
+// request is safe to send.
+export async function runActivationPreflight(productId: string): Promise<string[]> {
+  const [product, variants] = await Promise.all([
+    fetchProductById(productId),
+    fetchVariants(productId),
+  ]);
+
+  const errors = validateActivation({
+    productType: product.type,
+    description: product.description,
+    variants: variants.map((v) => ({ price: v.price, status: v.status })),
+    defaultVariantId: product.defaultVariantId,
+    digitalAssetId: product.digitalConfig?.asset?.id,
+  });
+
+  if (product.type === 'physical' && !product.delivery?.agencyId) {
+    const defaultAgency = await fetchDefaultDeliveryAgency();
+    if (!defaultAgency) {
+      errors.push(ACTIVATION_ERROR_MAP.CATALOG_PRODUCT_NO_DELIVERY_AGENCY);
+    }
+  }
+
+  return errors;
+}
