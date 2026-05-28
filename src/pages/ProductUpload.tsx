@@ -628,15 +628,17 @@ export function ProductUpload() {
   }
 
   return (
-    <div className="space-y-6 animate-fade-in max-w-3xl mx-auto">
-      <div>
-        <h1 className="text-2xl font-bold">Create Product</h1>
-        <p className="text-muted-foreground text-sm mt-1">Add a new product to your store</p>
+    <div className="space-y-4 sm:space-y-6 animate-fade-in max-w-3xl mx-auto -mx-6 sm:mx-auto">
+      <div className="px-4 sm:px-0">
+        <h1 className="text-xl sm:text-2xl font-bold">Create Product</h1>
+        <p className="text-muted-foreground text-xs sm:text-sm mt-1">
+          Add a new product to your store
+        </p>
       </div>
 
       {state.productType && visibleSteps.length > 0 && (
-        <Card>
-          <CardContent className="p-4">
+        <Card className="rounded-none border-x-0 sm:rounded-xl sm:border">
+          <CardContent className="p-3 sm:p-4">
             <ProductStepIndicator
               steps={visibleSteps}
               currentStep={state.currentStep}
@@ -652,17 +654,19 @@ export function ProductUpload() {
       )}
 
       {isLockedForVectorisation && state.currentStep !== 'review' && (
-        <Alert>
-          <AlertCircle className="w-4 h-4" />
-          <AlertDescription>
-            Product is being indexed for AI search. Editing is temporarily disabled —
-            head to the Review step to refresh status.
-          </AlertDescription>
-        </Alert>
+        <div className="px-4 sm:px-0">
+          <Alert>
+            <AlertCircle className="w-4 h-4" />
+            <AlertDescription>
+              Product is being indexed for AI search. Editing is temporarily disabled —
+              head to the Review step to refresh status.
+            </AlertDescription>
+          </Alert>
+        </div>
       )}
 
-      <Card>
-        <CardContent className="p-6">
+      <Card className="rounded-none border-x-0 sm:rounded-xl sm:border">
+        <CardContent className="p-4 sm:p-6">
           <div
             className={
               isLockedForVectorisation && state.currentStep !== 'review'

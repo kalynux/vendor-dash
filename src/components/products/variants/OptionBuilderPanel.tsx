@@ -3,7 +3,6 @@
 
 import { useState, useRef, useCallback, type KeyboardEvent } from 'react';
 import { Plus, X, GripVertical, Pencil, Check, AlertTriangle } from 'lucide-react';
-import { Reorder, useDragControls } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -74,7 +73,7 @@ export function OptionBuilderPanel({
           placeholder="e.g. TSHIRT"
           value={skuPrefix}
           onChange={(e) => onSetSkuPrefix(e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, ''))}
-          className="max-w-[200px] font-mono text-sm"
+          className="w-full sm:max-w-[200px] font-mono text-sm"
         />
         <p className="text-xs text-muted-foreground">
           Auto-generated SKUs will start with this prefix
@@ -104,7 +103,7 @@ export function OptionBuilderPanel({
       {canAddOption && (
         <div className="flex items-center gap-2">
           <Input
-            placeholder="Option name (e.g. Color, Size, Material)"
+            placeholder="Option name (e.g. Color, Size)"
             value={newOptionName}
             onChange={(e) => setNewOptionName(e.target.value)}
             onKeyDown={(e) => {
@@ -113,16 +112,17 @@ export function OptionBuilderPanel({
                 handleAddOption();
               }
             }}
-            className="max-w-[300px]"
+            className="flex-1 sm:max-w-[300px]"
           />
           <Button
             variant="outline"
             size="sm"
             onClick={handleAddOption}
             disabled={!newOptionName.trim()}
+            className="shrink-0"
           >
-            <Plus className="h-4 w-4 mr-1" />
-            Add Option
+            <Plus className="h-4 w-4 sm:mr-1" />
+            <span className="hidden sm:inline">Add Option</span>
           </Button>
         </div>
       )}
@@ -136,15 +136,15 @@ export function OptionBuilderPanel({
       {/* Combination Preview & Generate Button */}
       {options.length > 0 && (
         <div className="pt-4 border-t space-y-3">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="space-y-1">
-              <p className="text-sm font-medium">
-                Variant Preview
-              </p>
-              <p className={cn(
-                'text-sm',
-                exceedsLimit ? 'text-destructive font-medium' : 'text-muted-foreground',
-              )}>
+              <p className="text-sm font-medium">Variant Preview</p>
+              <p
+                className={cn(
+                  'text-sm',
+                  exceedsLimit ? 'text-destructive font-medium' : 'text-muted-foreground',
+                )}
+              >
                 {combinationCount > 0
                   ? `${combinationCount} variant${combinationCount === 1 ? '' : 's'} will be generated`
                   : 'Add values to generate variants'}
@@ -159,8 +159,9 @@ export function OptionBuilderPanel({
             <Button
               onClick={onApplyAndGenerate}
               disabled={!hasValidOptions || exceedsLimit}
+              className="w-full sm:w-auto"
             >
-              Apply & Generate Variants
+              Apply &amp; Generate Variants
             </Button>
           </div>
         </div>
@@ -298,11 +299,11 @@ function OptionCard({
         <div className="flex items-center gap-2">
           <Input
             ref={valueInputRef}
-            placeholder="Type a value and press Enter"
+            placeholder="Add value, press Enter"
             value={valueInput}
             onChange={(e) => setValueInput(e.target.value)}
             onKeyDown={handleValueKeyDown}
-            className="text-sm"
+            className="text-sm flex-1 min-w-0"
           />
           <Button
             variant="outline"
@@ -316,6 +317,7 @@ function OptionCard({
               }
             }}
             disabled={!valueInput.trim()}
+            className="shrink-0"
           >
             <Plus className="h-3 w-3" />
           </Button>

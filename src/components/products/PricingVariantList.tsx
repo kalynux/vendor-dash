@@ -3,6 +3,7 @@ import { Plus, Trash2, Loader2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import type { LicenseTierRow } from '@/types/product.types';
 
@@ -36,8 +37,31 @@ export function PricingVariantList({
           </div>
         )}
 
-        {tiers.length > 0 ? (
-          <div className="rounded-lg border border-border overflow-x-auto">
+        {tiers.length === 0 && (
+          <p className="text-sm text-muted-foreground py-2">
+            No pricing tiers added. Add at least one tier (e.g. "Personal License") before publishing.
+          </p>
+        )}
+
+        {/* ── Mobile: stacked cards ─────────────────────────────────────── */}
+        {tiers.length > 0 && (
+          <div className="space-y-3 md:hidden">
+            {tiers.map((tier) => (
+              <TierCard
+                key={tier.tempId}
+                tier={tier}
+                errors={errors}
+                onTierChange={onTierChange}
+                onRemoveTier={onRemoveTier}
+                canRemove={tiers.length > 1}
+              />
+            ))}
+          </div>
+        )}
+
+        {/* ── Desktop: table ────────────────────────────────────────────── */}
+        {tiers.length > 0 && (
+          <div className="hidden md:block rounded-lg border border-border overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border bg-muted/40">
@@ -71,14 +95,16 @@ export function PricingVariantList({
               </tbody>
             </table>
           </div>
-        ) : (
-          <p className="text-sm text-muted-foreground py-2">
-            No pricing tiers added. Add at least one tier (e.g. "Personal License") before publishing.
-          </p>
         )}
       </div>
 
-      <Button type="button" variant="outline" size="sm" onClick={onAddTier} className="gap-2">
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={onAddTier}
+        className="gap-2 w-full sm:w-auto"
+      >
         <Plus className="w-3.5 h-3.5" />
         Add Tier
       </Button>
@@ -92,7 +118,136 @@ export function PricingVariantList({
   );
 }
 
-// ─── Individual row — uncontrolled inputs to avoid per-keystroke rerenders ────
+// ─── Mobile card row ─────────────────────────────────────────────────────────
+
+interface TierCardProps {
+  tier: LicenseTierRow;
+  errors: Record<string, string>;
+  onTierChange: (tempId: string, field: keyof LicenseTierRow, value: unknown) => void;
+  onRemoveTier: (tempId: string) => void;
+  canRemove: boolean;
+}
+
+function TierCard({ tier, errors, onTierChange, onRemoveTier, canRemove }: TierCardProps) {
+  const nameRef = useRef<HTMLInputElement>(null);
+  const skuRef = useRef<HTMLInputElement>(null);
+  const priceRef = useRef<HTMLInputElement>(null);
+  const compareAtRef = useRef<HTMLInputElement>(null);
+
+  function onBlurNumber(
+    ref: React.RefObject<HTMLInputElement | null>,
+    field: keyof LicenseTierRow,
+  ) {
+    const raw = ref.current?.value ?? '';
+    const num = parseFloat(raw);
+    onTierChange(tier.tempId, field, isNaN(num) ? undefined : num);
+  }
+
+  const nameError = errors[`${tier.tempId}.name`];
+  const skuError = errors[`${tier.tempId}.sku`];
+  const priceError = errors[`${tier.tempId}.price`];
+
+  return (
+    <div className="rounded-lg border border-border bg-card p-3 space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        {tier.serverId ? (
+          <Badge variant="outline" className="text-xs text-green-600 border-green-200">
+            Saved tier
+          </Badge>
+        ) : (
+          <Badge variant="outline" className="text-xs text-blue-600 border-blue-200">
+            New tier
+          </Badge>
+        )}
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={() => onRemoveTier(tier.tempId)}
+          disabled={!canRemove}
+          className="h-8 w-8 p-0 -mr-1 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+          aria-label="Remove tier"
+        >
+          <Trash2 className="w-4 h-4" />
+        </Button>
+      </div>
+
+      <div className="space-y-1">
+        <Label className="text-xs">
+          Tier name <span className="text-destructive">*</span>
+        </Label>
+        <Input
+          ref={nameRef}
+          defaultValue={tier.name}
+          placeholder="e.g. Personal License"
+          className={cn('h-9', nameError && 'border-destructive')}
+          onBlur={() => onTierChange(tier.tempId, 'name', nameRef.current?.value ?? '')}
+        />
+        {nameError && <p className="text-xs text-destructive">{nameError}</p>}
+      </div>
+
+      <div className="space-y-1">
+        <Label className="text-xs">
+          SKU <span className="text-destructive">*</span>
+        </Label>
+        <Input
+          ref={skuRef}
+          defaultValue={tier.sku}
+          placeholder="SKU-LIC-001"
+          className={cn('h-9 font-mono text-sm', skuError && 'border-destructive')}
+          onBlur={() => onTierChange(tier.tempId, 'sku', skuRef.current?.value ?? '')}
+        />
+        {skuError && <p className="text-xs text-destructive">{skuError}</p>}
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1">
+          <Label className="text-xs">
+            Price <span className="text-destructive">*</span>
+          </Label>
+          <div className="relative">
+            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+              $
+            </span>
+            <Input
+              ref={priceRef}
+              type="number"
+              min={0}
+              step={0.01}
+              inputMode="decimal"
+              defaultValue={tier.price || ''}
+              placeholder="0.00"
+              className={cn('h-9 pl-5', priceError && 'border-destructive')}
+              onBlur={() => onBlurNumber(priceRef, 'price')}
+            />
+          </div>
+          {priceError && <p className="text-xs text-destructive">{priceError}</p>}
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">Compare at</Label>
+          <div className="relative">
+            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+              $
+            </span>
+            <Input
+              ref={compareAtRef}
+              type="number"
+              min={0}
+              step={0.01}
+              inputMode="decimal"
+              defaultValue={tier.compareAtPrice ?? ''}
+              placeholder="—"
+              className="h-9 pl-5"
+              onBlur={() => onBlurNumber(compareAtRef, 'compareAtPrice')}
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Desktop table row — uncontrolled inputs to avoid per-keystroke rerenders ─
 
 interface TierRowProps {
   tier: LicenseTierRow;
