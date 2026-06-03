@@ -16,9 +16,6 @@ import type {
   OptionValueBulkResponse,
   DigitalAssetResponse,
   DigitalAssetUploadData,
-  DigitalToggleResponse,
-  FileUploadResponse,
-  FileUploadItem,
 
   ArchiveResponse,
   DefaultVariantResponse,
@@ -62,16 +59,6 @@ function buildQueryString(params: Record<string, unknown>): string {
   );
   if (entries.length === 0) return '';
   return '?' + entries.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`).join('&');
-}
-
-// ─── File Upload ──────────────────────────────────────────────────────────────
-
-export async function uploadFiles(files: File[]): Promise<FileUploadItem[]> {
-  const fd = new FormData();
-  // Field name per spec: `files` (1–10 files per request)
-  files.forEach((f) => fd.append('files', f));
-  const res = await api.postFormData<FileUploadResponse>('/files/upload', fd);
-  return res.data;
 }
 
 // ─── Products CRUD ────────────────────────────────────────────────────────────
@@ -163,6 +150,20 @@ export async function archiveVariant(productId: string, variantId: string): Prom
   await api.delete<ArchiveResponse>(`/vendor/products/${productId}/variants/${variantId}`);
 }
 
+// Toggle a variant between active/archived. For digital variants, activation
+// requires an uploaded asset — the backend returns 422 CATALOG_VARIANT_NO_DIGITAL_ASSET otherwise.
+export async function updateVariantStatus(
+  productId: string,
+  variantId: string,
+  status: 'active' | 'archived',
+): Promise<ApiVariant> {
+  const res = await api.patch<VariantDetailResponse>(
+    `/vendor/products/${productId}/variants/${variantId}/status`,
+    { status },
+  );
+  return res.data;
+}
+
 // ─── Options ──────────────────────────────────────────────────────────────────
 
 export async function fetchOptions(productId: string): Promise<ApiProductOption[]> {
@@ -242,44 +243,57 @@ export async function reorderOptions(
   );
 }
 
-// ─── Digital Asset ────────────────────────────────────────────────────────────
+// ─── Digital Variant Assets ─────────────────────────────────────────────────
+// Assets are per-variant: each digital "format" variant owns exactly one asset.
+// Uploading flips the variant to `active`; removing it returns it to `archived`.
 
-export async function uploadDigitalAsset(
+export async function uploadVariantAsset(
   productId: string,
+  variantId: string,
   file: File,
 ): Promise<DigitalAssetUploadData> {
   // Field name `file` (singular) per API spec
   const fd = new FormData();
   fd.append('file', file);
   const res = await api.postFormData<DigitalAssetResponse>(
-    `/vendor/products/${productId}/digital/asset`,
+    `/vendor/products/${productId}/variants/${variantId}/digital/asset`,
     fd,
   );
   return res.data;
 }
 
-export async function replaceDigitalAsset(
+export async function replaceVariantAsset(
   productId: string,
+  variantId: string,
   file: File,
 ): Promise<DigitalAssetUploadData> {
   const fd = new FormData();
   fd.append('file', file);
   const res = await api.putFormData<DigitalAssetResponse>(
-    `/vendor/products/${productId}/digital/asset`,
+    `/vendor/products/${productId}/variants/${variantId}/digital/asset`,
     fd,
   );
   return res.data;
 }
 
-export async function deleteDigitalAsset(productId: string): Promise<void> {
-  await api.delete<ArchiveResponse>(`/vendor/products/${productId}/digital/asset`);
+export async function removeVariantAsset(
+  productId: string,
+  variantId: string,
+): Promise<void> {
+  await api.delete<ArchiveResponse>(
+    `/vendor/products/${productId}/variants/${variantId}/digital/asset`,
+  );
 }
 
-export async function toggleDigitalAsset(productId: string): Promise<{ isActive: boolean }> {
-  const res = await api.patch<DigitalToggleResponse>(
-    `/vendor/products/${productId}/digital/toggle`,
+export async function updateVariantDigitalConfig(
+  productId: string,
+  variantId: string,
+  config: { maxDownloads?: number | null; expiresAfterDays?: number | null },
+): Promise<void> {
+  await api.patch<ArchiveResponse>(
+    `/vendor/products/${productId}/variants/${variantId}/digital/config`,
+    config,
   );
-  return res.data;
 }
 
 // ─── Vectorisation ────────────────────────────────────────────────────────────
@@ -335,7 +349,8 @@ export const ACTIVATION_ERROR_MAP: Record<string, string> = {
   CATALOG_PRODUCT_NO_VARIANTS: 'At least one variant with a price is required',
   CATALOG_PRODUCT_VARIANT_ZERO_PRICE: 'All active variants must have a price greater than 0',
   CATALOG_PRODUCT_NO_DEFAULT_VARIANT: 'A default variant must be set',
-  CATALOG_PRODUCT_DIGITAL_NO_ASSET: 'A digital asset file must be uploaded before publishing',
+  CATALOG_VARIANT_NO_DIGITAL_ASSET: 'Upload a file for each format before publishing',
+  CATALOG_DIGITAL_VARIANT_LIMIT_EXCEEDED: 'A digital product can have at most 5 formats',
   CATALOG_PRODUCT_NO_DELIVERY_AGENCY:
     'A delivery agency must be assigned to this product or set as your default',
   CATALOG_PRODUCT_VECTORISATION_PENDING:
@@ -449,7 +464,6 @@ export async function runActivationPreflight(productId: string): Promise<string[
     description: product.description,
     variants: variants.map((v) => ({ price: v.price, status: v.status })),
     defaultVariantId: product.defaultVariantId,
-    digitalAssetId: product.digitalConfig?.asset?.id,
   });
 
   if (product.type === 'physical' && !product.delivery?.agencyId) {

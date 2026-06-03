@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { ProductMediaUpload, type MediaOrderItem } from '@/components/products/ProductMediaUpload';
+import { ProductMediaUpload } from '@/components/products/ProductMediaUpload';
+import { PRODUCT_IMAGE_LIMIT } from '@/components/products/media.constants';
 import type { WizardState } from '@/types/product.types';
 
 interface StepMediaProps {
@@ -10,7 +11,7 @@ interface StepMediaProps {
   serverData: Partial<WizardState>;
   isSaving: boolean;
   stepError: string | null;
-  onSaveComplete: (updates: Partial<WizardState> & { _mediaOrder?: MediaOrderItem[] }) => void;
+  onSaveComplete: (updates: Partial<WizardState> & { _mediaFileIds?: string[] }) => void;
   onBack: () => void;
 }
 
@@ -27,12 +28,12 @@ export function StepMedia({
       ? serverData.serverProduct.files
       : [];
 
-  const [orderedItems, setOrderedItems] = useState<MediaOrderItem[]>([]);
+  const maxFiles = PRODUCT_IMAGE_LIMIT[serverData.productType ?? 'physical'];
 
-  const newFileCount = orderedItems.filter((i) => i.kind === 'new').length;
+  const [orderedIds, setOrderedIds] = useState<string[]>([]);
 
   function handleContinue() {
-    onSaveComplete({ _mediaOrder: orderedItems });
+    onSaveComplete({ _mediaFileIds: orderedIds });
   }
 
   return (
@@ -40,8 +41,10 @@ export function StepMedia({
       <div>
         <h2 className="text-lg font-semibold">Product images</h2>
         <p className="text-sm text-muted-foreground mt-1">
-          Add up to 10 images. The first image will be used as the product thumbnail.
-          Drag cards to reorder. Saved images can be removed or repositioned.
+          {maxFiles === 1
+            ? 'Add a cover image for this product.'
+            : `Add up to ${maxFiles} images. The first image will be used as the product thumbnail. Drag cards to reorder.`}{' '}
+          Images come from your media library — upload new ones right inside the picker.
         </p>
       </div>
 
@@ -54,9 +57,9 @@ export function StepMedia({
 
       <ProductMediaUpload
         existingFiles={existingFiles}
-        onMediaChange={setOrderedItems}
+        onMediaChange={setOrderedIds}
         isUploading={isSaving}
-        maxFiles={10}
+        maxFiles={maxFiles}
       />
 
       {/* Navigation */}
@@ -68,8 +71,8 @@ export function StepMedia({
         <Button onClick={handleContinue} disabled={isSaving} className="gap-1.5">
           {isSaving
             ? 'Saving…'
-            : newFileCount > 0
-              ? `Upload ${newFileCount} image${newFileCount !== 1 ? 's' : ''} & Continue`
+            : orderedIds.length > 0
+              ? 'Save & Continue'
               : mode === 'create'
                 ? 'Skip for now'
                 : 'Continue'}

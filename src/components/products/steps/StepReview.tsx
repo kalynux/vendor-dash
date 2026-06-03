@@ -51,9 +51,10 @@ export function StepReview({
       description: product.description,
       variants: variants.map((v) => ({ price: v.price, status: v.status })),
       defaultVariantId: product.defaultVariantId,
-      digitalAssetId: product.digitalConfig?.asset?.id,
     })
     : ['Product has not been created yet'];
+
+  const liveFormatCount = variants.filter((v) => v.status === 'active').length;
 
   const productAgencyId = product?.delivery?.agencyId ?? null;
   const effectiveAgencyId = productAgencyId ?? defaultAgency?.id ?? null;
@@ -129,8 +130,12 @@ export function StepReview({
           {/* Details grid */}
           <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
             <div>
-              <span className="text-muted-foreground text-xs">Variants</span>
-              <p className="font-medium">{variants.length}</p>
+              <span className="text-muted-foreground text-xs">
+                {isDigital ? 'Formats' : 'Variants'}
+              </span>
+              <p className="font-medium">
+                {isDigital ? `${variants.length} · ${liveFormatCount} live` : variants.length}
+              </p>
             </div>
             <div>
               <span className="text-muted-foreground text-xs">Images</span>
@@ -138,9 +143,9 @@ export function StepReview({
             </div>
             {isDigital && (
               <div>
-                <span className="text-muted-foreground text-xs">Digital asset</span>
+                <span className="text-muted-foreground text-xs">Downloads</span>
                 <p className="font-medium">
-                  {product.digitalConfig?.asset?.id ? 'Uploaded' : 'Not uploaded'}
+                  {product.digitalConfig?.isActive === false ? 'Paused' : 'Enabled'}
                 </p>
               </div>
             )}

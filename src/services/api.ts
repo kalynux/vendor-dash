@@ -1,6 +1,6 @@
-import { ApiError, type ApiErrorDetail } from '@/types/api';
+import { ApiError, type ApiErrorDetail, type UploadViolation } from '@/types/api';
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8022/api';
+export const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8022/api';
 
 // ─── Refresh queue ────────────────────────────────────────────────────────────
 // Ensures only one token refresh is in-flight at a time.
@@ -62,10 +62,20 @@ async function buildApiError(res: Response): Promise<ApiError> {
         (body.message as string) ??
         `Request failed with status ${res.status}`;
     const code = (error.code as string) ?? String(res.status);
-    const details = (error.details as ApiErrorDetail[]) ?? undefined;
     const requestId = (body.requestId as string) ?? undefined;
 
-    return new ApiError(res.status, code, message, details, requestId);
+    // `error.details` shape varies by code:
+    //  - VALIDATION_ERROR        → an array of { field, message }
+    //  - UPLOAD_POLICY_VIOLATION → an object { violations: [...] }
+    // Keep the array path as `details`; lift `violations` out separately.
+    const rawDetails = error.details;
+    const details = Array.isArray(rawDetails) ? (rawDetails as ApiErrorDetail[]) : undefined;
+    const violations =
+        rawDetails && typeof rawDetails === 'object' && Array.isArray((rawDetails as Record<string, unknown>).violations)
+            ? ((rawDetails as Record<string, unknown>).violations as UploadViolation[])
+            : undefined;
+
+    return new ApiError(res.status, code, message, details, requestId, violations);
 }
 
 // ─── Core request function ────────────────────────────────────────────────────

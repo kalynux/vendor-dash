@@ -80,43 +80,6 @@ export const variantRowSchema = z.object({
 
 export type VariantRowFormValues = z.infer<typeof variantRowSchema>;
 
-// ─── Step 5 (digital): License Tier / Pricing Variant ────────────────────────
-
-export const licenseTierSchema = z.object({
-  tempId: z.string(),
-  sku: z
-    .string()
-    .min(1, 'SKU is required')
-    .max(100, 'SKU must be 100 characters or less'),
-  name: z.string().min(1, 'License tier name is required'),
-  price: z.number({ message: 'Price is required' }).min(0, 'Price must be 0 or more'),
-  compareAtPrice: z
-    .number()
-    .min(0, 'Compare-at price must be 0 or more')
-    .optional(),
-});
-
-export type LicenseTierFormValues = z.infer<typeof licenseTierSchema>;
-
-// ─── Digital Config ───────────────────────────────────────────────────────────
-
-export const digitalConfigSchema = z.object({
-  maxDownloads: z
-    .number()
-    .int('Must be a whole number')
-    .min(1, 'Must be at least 1')
-    .nullable()
-    .default(null),
-  expiresAfterDays: z
-    .number()
-    .int('Must be a whole number')
-    .min(1, 'Must be at least 1 day')
-    .nullable()
-    .default(null),
-});
-
-export type DigitalConfigFormValues = z.infer<typeof digitalConfigSchema>;
-
 // ─── Client-side activation pre-flight ───────────────────────────────────────
 // Mirrors backend rules from products.md "Activation Requirements" section.
 
@@ -125,7 +88,6 @@ export function validateActivation(params: {
   description: string;
   variants: Pick<ApiVariant, 'price' | 'status'>[];
   defaultVariantId: string | null;
-  digitalAssetId: string | undefined;
 }): string[] {
   const errors: string[] = [];
 
@@ -136,7 +98,15 @@ export function validateActivation(params: {
   const activeVariants = params.variants.filter((v) => v.status === 'active');
 
   if (activeVariants.length === 0) {
-    errors.push('At least one active variant is required');
+    // For digital products an active variant is one with an uploaded asset, so
+    // "no active variant" means "no format has a file yet".
+    errors.push(
+      params.productType === 'digital'
+        ? (params.variants.length > 0
+          ? 'At least one active variant is required'
+          : 'Upload a file for at least one format before publishing')
+        : 'At least one active variant is required'
+    );
   }
 
   const zeroPriced = activeVariants.filter((v) => v.price <= 0);
@@ -146,10 +116,6 @@ export function validateActivation(params: {
 
   if (!params.defaultVariantId) {
     errors.push('A default variant must be set');
-  }
-
-  if (params.productType === 'digital' && !params.digitalAssetId) {
-    errors.push('A digital asset file must be uploaded before publishing');
   }
 
   return errors;

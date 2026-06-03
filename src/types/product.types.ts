@@ -1,5 +1,7 @@
 // ─── Product Types & Status ───────────────────────────────────────────────────
 
+import type { ApiFile } from '@/types/file.types';
+
 export type ApiProductType = 'physical' | 'digital';
 
 export type ApiProductStatus =
@@ -22,12 +24,25 @@ export interface ApiProductSeo {
   description: string;
 }
 
+// Product-wide digital config. Per the multi-variant model, this only carries
+// the product-wide download kill switch — assets/limits live on each variant.
 export interface ApiDigitalConfig {
-  assetId?: string; // absent (undefined) when no asset has been uploaded yet
-  asset?: ApiFileDetail;  
+  isActive: boolean;
+}
+
+// Per-variant digital asset summary (raw download URL is never exposed here).
+export interface ApiDigitalAsset {
+  id: string;
+  originalName: string;
+  mimeType: string;
+  size: number;
+}
+
+// The `digital` block present only on variants of a `type: "digital"` product.
+export interface ApiVariantDigital {
+  asset?: ApiDigitalAsset; // undefined until a file is uploaded
   maxDownloads: number | null;
   expiresAfterDays: number | null;
-  isActive: boolean;
 }
 
 // Fully-populated file object returned by single-resource endpoints
@@ -119,6 +134,9 @@ export interface ApiVariant {
   optionValueIds: string[];  // physical only
   deliveryAgencyId?: string; // physical only
   files: ApiFileDetail[];
+  // Digital products only — computed label + per-variant asset/limits
+  displayName?: string;
+  digital?: ApiVariantDigital;
   createdAt: string;
   updatedAt: string;
   deletedAt: null;
@@ -201,9 +219,8 @@ export interface UpdateProductPayload {
   seoTitle?: string;
   seoDescription?: string;
   fileIds?: string[];
+  // Product-wide download kill switch only (per-variant assets/limits live on the variant).
   digitalConfig?: {
-    maxDownloads?: number | null;
-    expiresAfterDays?: number | null;
     isActive?: boolean;
   };
   vectorisationEnabled?: boolean;
@@ -226,6 +243,11 @@ export interface CreateVariantPayload {
   width?: number;
   height?: number;
   deliveryAgencyId?: string;
+  // Digital products only — per-variant download limits (assetId is set via upload endpoint)
+  digitalConfig?: {
+    maxDownloads?: number | null;
+    expiresAfterDays?: number | null;
+  };
 }
 
 export interface UpdateVariantPayload {
@@ -244,6 +266,11 @@ export interface UpdateVariantPayload {
   width?: number;
   height?: number;
   deliveryAgencyId?: string;
+  // Digital only — partial; only sent fields change
+  digitalConfig?: {
+    maxDownloads?: number | null;
+    expiresAfterDays?: number | null;
+  };
 }
 
 export interface CreateOptionPayload {
@@ -293,6 +320,7 @@ export interface OptionValueBulkResponse {
 }
 
 export interface DigitalAssetUploadData {
+  variantId: string;
   assetId: string;
   filename: string;
   size: number;
@@ -303,12 +331,6 @@ export interface DigitalAssetResponse {
   success: boolean;
   data: DigitalAssetUploadData;
   message?: string;
-}
-
-export interface DigitalToggleResponse {
-  success: boolean;
-  data: { isActive: boolean };
-  message: string;
 }
 
 export interface FileUploadItem {
@@ -349,7 +371,7 @@ export interface ArchiveResponse {
 // ─── Wizard UI Types ──────────────────────────────────────────────────────────
 
 export type PhysicalStep = 'type' | 'basic-info' | 'media' | 'options-variants' | 'review';
-export type DigitalStep = 'type' | 'basic-info' | 'media' | 'digital-asset' | 'pricing' | 'review';
+export type DigitalStep = 'type' | 'basic-info' | 'media' | 'formats' | 'review';
 export type WizardStep = PhysicalStep | DigitalStep;
 
 export interface WizardState {
@@ -401,16 +423,26 @@ export interface OptionValueDetailResponse {
   message?: string;
 }
 
-// ─── Digital pricing tier row (used by StepPricing) ──────────────────────────
+// ─── Digital format row (used by StepDigitalFormats) ─────────────────────────
+// Each row is one digital "format" variant that owns its own asset + limits.
 
-export interface LicenseTierRow {
+export interface DigitalFormatRow {
   tempId: string;
+  serverId?: string; // variant id once saved
   sku: string;
   name: string;
   price: number;
   compareAtPrice?: number;
-  // Set after saved to server
-  serverId?: string;
+  maxDownloads: number | null;
+  expiresAfterDays: number | null;
+  asset?: ApiDigitalAsset; // existing uploaded asset (from variant.digital.asset)
+  // File = new/replacement upload; null = remove existing; undefined = unchanged
+  pendingFile?: File | null;
+  // Optional preview image (max 1, separate from the downloadable asset).
+  image?: ApiFileDetail; // existing image (from variant.files[0])
+  // ApiFile = newly picked library image; null = remove existing; undefined = unchanged
+  pendingImage?: ApiFile | null;
+  status?: 'active' | 'archived';
 }
 
 // ─── Delivery Agencies ────────────────────────────────────────────────────────

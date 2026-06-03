@@ -1,14 +1,12 @@
 import { createContext, useContext, useState, useCallback } from 'react';
 import type {
   User, Store, Product, Order, Vendor,
-  Notification, AnalyticsMetrics, DateRange,
-  MediaFile, MediaFolder, MediaSortField
+  Notification, AnalyticsMetrics, DateRange
 } from '@/types';
 import {
   mockUsers, mockStores,
   mockVendors, mockNotifications,
-  mockAnalytics, mockSalesData, mockCategoryBreakdown,
-  mockMediaFiles, mockMediaFolders
+  mockAnalytics, mockSalesData, mockCategoryBreakdown
 } from '@/data/mockData';
 import {
   fetchOrders as apiFetchOrders,
@@ -132,38 +130,9 @@ interface AnalyticsState {
 
 const AnalyticsStoreContext = createContext<AnalyticsState | null>(null);
 
-// Media Store Context
-interface MediaState {
-  files: MediaFile[];
-  folders: MediaFolder[];
-  selectedFiles: string[];
-  isLoading: boolean;
-  uploadProgress: Record<string, number>;
-  currentFolderId?: string;
-  viewMode: 'grid' | 'list';
-  sortBy: MediaSortField;
-  sortOrder: 'asc' | 'desc';
-  filterType?: 'image' | 'video' | 'document' | 'audio';
-  searchQuery: string;
-  fetchFiles: () => Promise<void>;
-  fetchFolders: () => Promise<void>;
-  uploadFile: (file: File, metadata?: Partial<MediaFile['metadata']>) => Promise<void>;
-  deleteFile: (id: string) => Promise<void>;
-  deleteMultipleFiles: (ids: string[]) => Promise<void>;
-  toggleFileSelection: (id: string) => void;
-  selectAllFiles: (ids: string[]) => void;
-  clearSelection: () => void;
-  setViewMode: (mode: 'grid' | 'list') => void;
-  setSortBy: (field: MediaSortField) => void;
-  setSortOrder: (order: 'asc' | 'desc') => void;
-  setFilterType: (type?: 'image' | 'video' | 'document' | 'audio') => void;
-  setSearchQuery: (query: string) => void;
-  setCurrentFolder: (folderId?: string) => void;
-  createFolder: (name: string, parentId?: string) => Promise<void>;
-  updateFileMetadata: (id: string, metadata: Partial<MediaFile['metadata']>) => Promise<void>;
-}
-
-const MediaStoreContext = createContext<MediaState | null>(null);
+// Note: Media is no longer in the global store. The Media Library
+// (src/pages/MediaGallery.tsx) and MediaPicker talk to the backend File
+// Management Service directly via src/services/files.service.ts.
 
 // Provider Component
 export function StoreProvider({ children }: { children: React.ReactNode }) {
@@ -372,118 +341,6 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     setAnalyticsLoading(false);
   }, []);
 
-  // Media State
-  const [mediaFiles, setMediaFiles] = useState<MediaFile[]>(mockMediaFiles);
-  const [mediaFolders, setMediaFolders] = useState<MediaFolder[]>(mockMediaFolders);
-  const [selectedMediaFiles, setSelectedMediaFiles] = useState<string[]>([]);
-  const [mediaLoading, setMediaLoading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({});
-  const [currentMediaFolder, setCurrentMediaFolder] = useState<string | undefined>(undefined);
-  const [mediaViewMode, setMediaViewMode] = useState<'grid' | 'list'>('grid');
-  const [mediaSortBy, setMediaSortBy] = useState<MediaSortField>('date');
-  const [mediaSortOrder, setMediaSortOrder] = useState<'asc' | 'desc'>('desc');
-  const [mediaFilterType, setMediaFilterType] = useState<'image' | 'video' | 'document' | 'audio' | undefined>(undefined);
-  const [mediaSearchQuery, setMediaSearchQuery] = useState('');
-
-  const fetchMediaFiles = useCallback(async () => {
-    setMediaLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 500));
-    setMediaLoading(false);
-  }, []);
-
-  const fetchMediaFolders = useCallback(async () => {
-    await new Promise(resolve => setTimeout(resolve, 300));
-  }, []);
-
-  const uploadMediaFile = useCallback(async (file: File, metadata?: Partial<MediaFile['metadata']>) => {
-    const fileId = String(Date.now());
-    setUploadProgress(prev => ({ ...prev, [fileId]: 0 }));
-
-    // Simulate upload progress
-    for (let i = 0; i <= 100; i += 10) {
-      await new Promise(resolve => setTimeout(resolve, 100));
-      setUploadProgress(prev => ({ ...prev, [fileId]: i }));
-    }
-
-    const newFile: MediaFile = {
-      id: fileId,
-      name: file.name,
-      url: URL.createObjectURL(file),
-      thumbnailUrl: file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined,
-      type: file.type.startsWith('image/') ? 'image' : file.type.startsWith('video/') ? 'video' : 'document',
-      mimeType: file.type,
-      size: file.size,
-      metadata: {
-        alt: metadata?.alt || '',
-        caption: metadata?.caption || '',
-        title: metadata?.title || file.name,
-        description: metadata?.description || '',
-      },
-      tags: [],
-      folderId: currentMediaFolder,
-      uploadedBy: authUser?.id || 'unknown',
-      uploadedAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      usageCount: 0,
-      usedIn: [],
-    };
-
-    setMediaFiles(prev => [newFile, ...prev]);
-    setUploadProgress(prev => {
-      const newProgress = { ...prev };
-      delete newProgress[fileId];
-      return newProgress;
-    });
-  }, [currentMediaFolder, authUser]);
-
-  const deleteMediaFile = useCallback(async (id: string) => {
-    setMediaLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 500));
-    setMediaFiles(prev => prev.filter(f => f.id !== id));
-    setSelectedMediaFiles(prev => prev.filter(fid => fid !== id));
-    setMediaLoading(false);
-  }, []);
-
-  const deleteMultipleMediaFiles = useCallback(async (ids: string[]) => {
-    setMediaLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 800));
-    setMediaFiles(prev => prev.filter(f => !ids.includes(f.id)));
-    setSelectedMediaFiles(prev => prev.filter(fid => !ids.includes(fid)));
-    setMediaLoading(false);
-  }, []);
-
-  const toggleMediaFileSelection = useCallback((id: string) => {
-    setSelectedMediaFiles(prev =>
-      prev.includes(id) ? prev.filter(fid => fid !== id) : [...prev, id]
-    );
-  }, []);
-
-  const selectAllMediaFiles = useCallback((ids: string[]) => {
-    setSelectedMediaFiles(ids);
-  }, []);
-
-  const clearMediaSelection = useCallback(() => {
-    setSelectedMediaFiles([]);
-  }, []);
-
-  const createMediaFolder = useCallback(async (name: string, parentId?: string) => {
-    await new Promise(resolve => setTimeout(resolve, 300));
-    const newFolder: MediaFolder = {
-      id: String(Date.now()),
-      name,
-      parentId,
-      createdAt: new Date().toISOString(),
-    };
-    setMediaFolders(prev => [...prev, newFolder]);
-  }, []);
-
-  const updateFileMetadata = useCallback(async (id: string, metadata: Partial<MediaFile['metadata']>) => {
-    await new Promise(resolve => setTimeout(resolve, 300));
-    setMediaFiles(prev => prev.map(f =>
-      f.id === id ? { ...f, metadata: { ...f.metadata, ...metadata }, updatedAt: new Date().toISOString() } : f
-    ));
-  }, []);
-
   return (
     <AuthStoreContext.Provider value={{
       user: authUser,
@@ -558,37 +415,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
                     fetchAnalytics,
                     setDateRange: setAnalyticsDateRange
                   }}>
-                    <MediaStoreContext.Provider value={{
-                      files: mediaFiles,
-                      folders: mediaFolders,
-                      selectedFiles: selectedMediaFiles,
-                      isLoading: mediaLoading,
-                      uploadProgress,
-                      currentFolderId: currentMediaFolder,
-                      viewMode: mediaViewMode,
-                      sortBy: mediaSortBy,
-                      sortOrder: mediaSortOrder,
-                      filterType: mediaFilterType,
-                      searchQuery: mediaSearchQuery,
-                      fetchFiles: fetchMediaFiles,
-                      fetchFolders: fetchMediaFolders,
-                      uploadFile: uploadMediaFile,
-                      deleteFile: deleteMediaFile,
-                      deleteMultipleFiles: deleteMultipleMediaFiles,
-                      toggleFileSelection: toggleMediaFileSelection,
-                      selectAllFiles: selectAllMediaFiles,
-                      clearSelection: clearMediaSelection,
-                      setViewMode: setMediaViewMode,
-                      setSortBy: setMediaSortBy,
-                      setSortOrder: setMediaSortOrder,
-                      setFilterType: setMediaFilterType,
-                      setSearchQuery: setMediaSearchQuery,
-                      setCurrentFolder: setCurrentMediaFolder,
-                      createFolder: createMediaFolder,
-                      updateFileMetadata,
-                    }}>
-                      {children}
-                    </MediaStoreContext.Provider>
+                    {children}
                   </AnalyticsStoreContext.Provider>
                 </NotificationStoreContext.Provider>
               </VendorStoreContext.Provider>
@@ -646,11 +473,5 @@ export function useNotificationStore() {
 export function useAnalyticsStore() {
   const context = useContext(AnalyticsStoreContext);
   if (!context) throw new Error('useAnalyticsStore must be used within StoreProvider');
-  return context;
-}
-
-export function useMediaStore() {
-  const context = useContext(MediaStoreContext);
-  if (!context) throw new Error('useMediaStore must be used within StoreProvider');
   return context;
 }

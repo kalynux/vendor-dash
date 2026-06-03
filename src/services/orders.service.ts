@@ -112,6 +112,8 @@ interface ApiEntitlement {
   orderItemId: string;
   productId: string;
   productTitle: string;
+  variantId?: string;
+  variantName?: string | null;
   assetId: string;
   assetName: string;
   customerId: string;
@@ -352,6 +354,8 @@ function adaptEntitlement(e: ApiEntitlement): Entitlement {
     orderItemId: e.orderItemId,
     productId: e.productId,
     productTitle: e.productTitle,
+    variantId: e.variantId,
+    variantName: e.variantName ?? null,
     assetId: e.assetId,
     assetName: e.assetName,
     customerId: e.customerId,

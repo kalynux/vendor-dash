@@ -15,7 +15,9 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
+import { VariantImageStack } from './VariantImageStack';
 import type { VariantRow, VariantRowPatch, DraftOption } from './variant.types';
+import type { ApiFileDetail } from '@/types/product.types';
 
 // ─── Props ───────────────────────────────────────────────────────────────────
 
@@ -33,6 +35,12 @@ interface VariantTableProps {
   newRowCount: number;
   modifiedRowCount: number;
   persistedRowCount: number;
+  // ── Variant images ──
+  productId: string;
+  maxImages: number;
+  /** Resolved image list per saved variant id. */
+  filesByVariantId: Record<string, ApiFileDetail[]>;
+  onVariantImagesChange: (variantId: string, files: ApiFileDetail[]) => void;
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -51,6 +59,10 @@ export function VariantTable({
   newRowCount,
   modifiedRowCount,
   persistedRowCount,
+  productId,
+  maxImages,
+  filesByVariantId,
+  onVariantImagesChange,
 }: VariantTableProps) {
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [bulkPrice, setBulkPrice] = useState('');
@@ -197,6 +209,10 @@ export function VariantTable({
               onToggleExpand={() => toggleExpand(row.localId)}
               onUpdate={(patch) => onUpdateRow(row.localId, patch)}
               errors={rowErrors}
+              productId={productId}
+              maxImages={maxImages}
+              files={row.serverId ? (filesByVariantId[row.serverId] ?? []) : []}
+              onImagesChange={onVariantImagesChange}
             />
           ))}
         </div>
@@ -228,6 +244,9 @@ export function VariantTable({
                 <th className="text-left p-2 font-medium text-muted-foreground min-w-[80px]">
                   Stock
                 </th>
+                <th className="text-left p-2 font-medium text-muted-foreground min-w-[90px]">
+                  Images
+                </th>
                 <th className="text-center p-2 font-medium text-muted-foreground w-[70px]">
                   Status
                 </th>
@@ -244,6 +263,10 @@ export function VariantTable({
                   onToggleExpand={() => toggleExpand(row.localId)}
                   onUpdate={(patch) => onUpdateRow(row.localId, patch)}
                   errors={rowErrors}
+                  productId={productId}
+                  maxImages={maxImages}
+                  files={row.serverId ? (filesByVariantId[row.serverId] ?? []) : []}
+                  onImagesChange={onVariantImagesChange}
                 />
               ))}
             </tbody>
@@ -283,6 +306,10 @@ interface VariantRowComponentProps {
   onToggleExpand: () => void;
   onUpdate: (patch: VariantRowPatch) => void;
   errors: Record<string, string>;
+  productId: string;
+  maxImages: number;
+  files: ApiFileDetail[];
+  onImagesChange: (variantId: string, files: ApiFileDetail[]) => void;
 }
 
 function VariantRowComponent({
@@ -292,6 +319,10 @@ function VariantRowComponent({
   onToggleExpand,
   onUpdate,
   errors,
+  productId,
+  maxImages,
+  files,
+  onImagesChange,
 }: VariantRowComponentProps) {
   const statusBadge = STATUS_BADGE[row.status];
 
@@ -370,6 +401,16 @@ function VariantRowComponent({
           )}
         </td>
 
+        <td className="p-2">
+          <VariantImageStack
+            productId={productId}
+            variantId={row.serverId}
+            files={files}
+            maxImages={maxImages}
+            onChange={onImagesChange}
+          />
+        </td>
+
         <td className="p-2 text-center">
           <Badge variant="outline" className={cn('text-xs', statusBadge.className)}>
             {statusBadge.label}
@@ -394,7 +435,7 @@ function VariantRowComponent({
 
       {isExpanded && (
         <tr className="border-b bg-muted/20">
-          <td colSpan={sortedOptions.length + 6} className="p-4">
+          <td colSpan={sortedOptions.length + 7} className="p-4">
             <SecondaryFields row={row} onChange={handleFieldChange} />
           </td>
         </tr>
@@ -412,6 +453,10 @@ function VariantRowCard({
   onToggleExpand,
   onUpdate,
   errors,
+  productId,
+  maxImages,
+  files,
+  onImagesChange,
 }: VariantRowComponentProps) {
   const statusBadge = STATUS_BADGE[row.status];
 
@@ -511,6 +556,17 @@ function VariantRowCard({
           )}
         </FieldRow>
       </div>
+
+      {/* Images */}
+      <FieldRow label="Images">
+        <VariantImageStack
+          productId={productId}
+          variantId={row.serverId}
+          files={files}
+          maxImages={maxImages}
+          onChange={onImagesChange}
+        />
+      </FieldRow>
 
       {/* Expand toggle */}
       <button

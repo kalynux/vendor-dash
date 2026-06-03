@@ -37,6 +37,7 @@ const ALLOWED_MIME_TYPES = new Set([
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'application/vnd.ms-excel',
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/epub+zip',
 ]);
 
 const MAX_SIZE_BYTES = 500 * 1024 * 1024; // 500MB

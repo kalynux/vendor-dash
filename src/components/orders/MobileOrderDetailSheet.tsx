@@ -609,6 +609,9 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                               </div>
                               <div className="min-w-0">
                                 <p className="text-sm font-medium truncate">{entitlement.productTitle}</p>
+                                {entitlement.variantName && (
+                                  <p className="text-xs font-medium text-violet-700 truncate">{entitlement.variantName}</p>
+                                )}
                                 <p className="text-xs text-muted-foreground truncate">{entitlement.assetName}</p>
                                 <Badge
                                   variant={entitlement.isRevoked ? 'destructive' : entitlement.isExpired ? 'secondary' : 'outline'}

@@ -537,6 +537,8 @@ Body:
       "orderItemId": "string",
       "productId": "string",
       "productTitle": "E-book: Advanced TypeScript",
+      "variantId": "string",
+      "variantName": "PDF Edition",
       "assetId": "string",
       "assetName": "advanced-typescript.pdf",
       "customerId": "string",
@@ -562,6 +564,7 @@ Body:
 ```
 
 > `downloadsRemaining` is the string `"unlimited"` when `maxDownloads` is `null`.
+> `variantId`/`variantName` identify which **format** of the digital product was purchased (e.g. "PDF Edition" vs "Source Code (ZIP)"). Each entitlement maps to exactly one variant's asset, with `maxDownloads`/`expiresAt` snapshotted from that variant at purchase time. See the [Digital Products Guide](./digital-products.md).
 
 **Error Responses**:
 - `404` – `NOT_FOUND` – Order not found or does not belong to vendor

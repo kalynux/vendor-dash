@@ -52,8 +52,8 @@ Phase 4: TYPE-SPECIFIC CONFIGURATION
      • Add option values (S, M, L / Red, Blue, Black)
      • Create variants (one per SKU/combination) with pricing + stock
    Digital:
-     • POST /api/vendor/products/:id/digital/asset (upload file)
-     • Create pricing variants (Personal License, Commercial License, etc.)
+     • Create 1–5 format variants (PDF, ZIP, EPUB, …) with pricing
+     • POST /products/:id/variants/:variantId/digital/asset (upload file per variant → variant becomes active)
    Service:
      • PATCH /api/vendor/products/:id with serviceConfig
      • Create pricing variants (Basic, Premium tier, etc.)
@@ -104,6 +104,7 @@ Phase 5: VALIDATION & PUBLISHING
 | `tags` | string[] | Unique, non-empty strings |
 | `seoTitle` | string | Max 60 chars |
 | `seoDescription` | string | Max 160 chars |
+| `fileIds` | string[] | Media to attach at creation. Each id must reference a file the vendor owns (uploaded via `POST /api/files/upload`); their `usageCount` is incremented. Omit to attach media later via `PATCH`. |
 
 #### Example Request
 
@@ -458,9 +459,12 @@ PATCH /api/vendor/products/:id/status
 
 Digital products are downloadable or streamable content (eBooks, music, videos, licenses, etc.).
 
+> [!IMPORTANT]
+> **Digital products are multi-variant.** A digital product holds **1–5 variants**, where each variant is a downloadable **format** (PDF, ZIP, EPUB, MP4, …) with its **own asset, price, SKU, name, and download limits**. This replaces the old "one file per product" model. For the complete reference (data shapes, state machine, UI guidance, post-purchase model), see the **[Digital Products — Multi-Variant Guide](./digital-products.md)**.
+
 **Rules:**
-- One file asset per product. Use separate products for different formats (PDF vs EPUB).
-- Multiple variants supported for different pricing tiers (Personal vs Commercial license).
+- 1–5 variants per product; each variant carries exactly one asset.
+- A digital variant is `status: "active"` **only when it has an uploaded asset** (created `archived`, flips to `active` on upload, back to `archived` on remove).
 - No `optionValueIds`, dimensions, or delivery agency on digital variants.
 
 ### Complete Flow Sequence
@@ -469,22 +473,65 @@ Digital products are downloadable or streamable content (eBooks, music, videos, 
 1. Create Product Draft (type: 'digital')
 2. Update Product Details (description, SEO, tags)
 3. Upload Product Cover Images → Link to product (optional)
-4. Upload Digital Asset (the downloadable file)
-   → Backend auto-sets digitalConfig.assetId
-5. Create Pricing Variants (one per license tier)
+4. Create Format Variants (1–5)        → each starts "archived"
    → First variant auto-sets defaultVariantId on product
-6. Configure Access Rules (maxDownloads, expiresAfterDays) — optional
+5. Upload a Digital Asset per variant   → variant flips to "active"
+6. Configure per-variant Access Rules (maxDownloads, expiresAfterDays) — optional
 7. Publish
 ```
 
 ---
 
-### Step 4.1: Upload Digital Asset
+### Step 4.1: Create Format Variants (1–5)
 
-**Purpose**: Upload the downloadable file customers receive.
-**Blocking**: Yes — required before activation.
+**Purpose**: Define each downloadable format / tier.
+**Blocking**: Yes — at least one active variant required before activation.
 
-**Endpoint**: `POST /api/vendor/products/:id/digital/asset`
+Digital variants must not include physical-only fields (`optionValueIds`, `weight`, `length`, `width`, `height`, `deliveryAgencyId`). Optionally include `digitalConfig` to set download limits up front.
+
+```json
+POST /api/vendor/products/507f1f77bcf86cd799439011/variants
+{
+  "sku": "JS-COURSE-PDF",
+  "name": "PDF Edition",
+  "price": 29.99,
+  "isInfiniteStock": true,
+  "stock": 0,
+  "digitalConfig": { "maxDownloads": 5, "expiresAfterDays": 365 }
+}
+```
+
+```json
+POST /api/vendor/products/507f1f77bcf86cd799439011/variants
+{
+  "sku": "JS-COURSE-ZIP",
+  "name": "Source Code (ZIP)",
+  "price": 49.99,
+  "isInfiniteStock": true,
+  "stock": 0
+}
+```
+
+- The created variant returns with `status: "archived"` — expected; it flips to `active` once its asset is uploaded (Step 4.2).
+- The first variant created automatically becomes `product.defaultVariantId`.
+- Creating a 6th variant returns `400 CATALOG_DIGITAL_VARIANT_LIMIT_EXCEEDED`.
+
+To change the default later:
+
+```json
+PATCH /api/vendor/products/507f1f77bcf86cd799439011/default-variant
+{ "variantId": "zip_variant_id" }
+```
+
+---
+
+### Step 4.2: Upload a Digital Asset per Variant
+
+**Purpose**: Attach the downloadable file to a specific variant.
+**Blocking**: Yes — every active variant must have an asset.
+**Side effect**: the variant transitions to `status: "active"`.
+
+**Endpoint**: `POST /api/vendor/products/:productId/variants/:variantId/digital/asset`
 **Content-Type**: `multipart/form-data`
 
 | Form Field | Type | Notes |
@@ -496,19 +543,18 @@ Digital products are downloadable or streamable content (eBooks, music, videos, 
 | Limit | Value |
 |-------|-------|
 | Max size | 500MB |
-| Allowed types | PDF, ZIP, RAR, MP4, MOV, MP3, WAV, JPEG, PNG, GIF, Word (.doc/.docx), Excel (.xls/.xlsx), binary |
+| Accepted formats | PDF, EPUB, ZIP, RAR, 7-Zip, MP4, MOV, MP3, WAV, JPEG, PNG, WebP, GIF (real type detected from content; Office docs not accepted — wrap in `.zip`) |
 
 **Example (JavaScript):**
 
 ```javascript
 const formData = new FormData();
-formData.append('file', fileBlob, 'ebook.pdf');
+formData.append('file', fileBlob, 'js-course.pdf');
 
-const res = await fetch('/api/vendor/products/507f1f77bcf86cd799439011/digital/asset', {
-  method: 'POST',
-  headers: { 'Authorization': `Bearer ${vendorJwt}` },
-  body: formData
-});
+const res = await fetch(
+  `/api/vendor/products/${productId}/variants/${variantId}/digital/asset`,
+  { method: 'POST', headers: { Authorization: `Bearer ${vendorJwt}` }, body: formData }
+);
 ```
 
 **Response `201`:**
@@ -517,92 +563,38 @@ const res = await fetch('/api/vendor/products/507f1f77bcf86cd799439011/digital/a
 {
   "success": true,
   "data": {
-    "assetId": "507f1f77bcf86cd799439020",
-    "filename": "ebook.pdf",
-    "size": 5242880,
+    "variantId": "507f1f77bcf86cd799439020",
+    "assetId": "507f1f77bcf86cd799439030",
+    "filename": "js-course.pdf",
+    "size": 12582912,
     "mimeType": "application/pdf"
   },
   "message": "Digital asset uploaded successfully"
 }
 ```
 
-After this call, `GET /products/:id` will show `digitalConfig.asset` populated with `{ id, originalName, mimeType, size }` automatically. No separate PATCH is needed to link the asset.
+After this call, `GET /products/:id/variants/:variantId` shows `digital.asset` populated and `status: "active"`.
 
 **Error scenarios:**
 
 | Status | Code | Cause |
 |--------|------|-------|
-| 409 | `CATALOG_DIGITAL_ASSET_ALREADY_EXISTS` | Asset already uploaded — use `PUT` to replace |
+| 409 | `CATALOG_DIGITAL_ASSET_ALREADY_EXISTS` | Variant already has an asset — use `PUT` to replace |
 | 400 | `CATALOG_FILE_TOO_LARGE` | File exceeds 500MB |
 | 400 | `CATALOG_FILE_TYPE_INVALID` | MIME type not in allowed list |
 | 400 | `CATALOG_DIGITAL_ASSET_MISSING_FILE` | No file attached to request |
 
 ---
 
-### Step 4.2: Create Pricing Variants
+### Step 4.3: Configure Per-Variant Download Access (Optional)
 
-**Purpose**: Define license tiers or pricing options.
-**Blocking**: Yes — required before activation.
-
-Digital variants must not include physical-only fields (`optionValueIds`, `weight`, `length`, `width`, `height`, `deliveryAgencyId`).
-
-**Single license:**
+Control how customers access each format after purchase. Limits are **per variant**.
 
 ```json
-POST /api/vendor/products/507f1f77bcf86cd799439011/variants
+PATCH /api/vendor/products/507f1f77bcf86cd799439011/variants/507f1f77bcf86cd799439020/digital/config
 {
-  "sku": "EBOOK-PDF-STANDARD",
-  "name": "Standard License",
-  "price": 29.99,
-  "isInfiniteStock": true,
-  "stock": 0
-}
-```
-
-**Multiple license tiers:**
-
-```json
-POST /api/vendor/products/507f1f77bcf86cd799439011/variants
-{
-  "sku": "EBOOK-PERSONAL",
-  "name": "Personal License",
-  "price": 29.99,
-  "isInfiniteStock": true,
-  "stock": 0
-}
-```
-
-```json
-POST /api/vendor/products/507f1f77bcf86cd799439011/variants
-{
-  "sku": "EBOOK-COMMERCIAL",
-  "name": "Commercial License",
-  "price": 79.99,
-  "isInfiniteStock": true,
-  "stock": 0
-}
-```
-
-The first variant created automatically becomes `product.defaultVariantId`. To change the default:
-
-```json
-PATCH /api/vendor/products/507f1f77bcf86cd799439011/default-variant
-{ "variantId": "commercial_variant_id" }
-```
-
----
-
-### Step 4.3: Configure Download Access (Optional)
-
-These settings control how customers can access the file after purchase.
-
-```json
-PATCH /api/vendor/products/507f1f77bcf86cd799439011
-{
-  "digitalConfig": {
-    "maxDownloads": 5,
-    "expiresAfterDays": 365
-  }
+  "maxDownloads": 5,
+  "expiresAfterDays": 365
 }
 ```
 
@@ -613,74 +605,57 @@ PATCH /api/vendor/products/507f1f77bcf86cd799439011
 | `expiresAfterDays` | number | Access expires N days after purchase date |
 | `expiresAfterDays` | `null` | Access never expires (default) |
 
+(You can also set these in the create-variant body, or via the variant `PATCH` with a `digitalConfig` block.)
+
 **Post-purchase flow (for context):**
-1. Customer completes payment
-2. Order record created with `digitalConfig` snapshot at purchase time
-3. Customer accesses secure download link from order page
-4. Backend tracks download count per entitlement
-5. Access revoked when `maxDownloads` reached or `expiresAfterDays` passed
+1. Customer completes payment for a specific variant.
+2. A per-variant entitlement is created with the variant's `assetId`, `maxDownloads`, and `expiresAfterDays` snapshotted at purchase time.
+3. Customer accesses a secure download link from their library / order page.
+4. Backend tracks download count per entitlement.
+5. Access revoked when `maxDownloads` reached or `expiresAfterDays` passed.
 
 ---
 
-### Step 4.4: Replace Digital Asset
+### Step 4.4: Replace a Variant's Asset
 
-To release a v2.0:
+To release a v2.0 of one format:
 
 ```json
-PUT /api/vendor/products/:id/digital/asset
+PUT /api/vendor/products/:productId/variants/:variantId/digital/asset
 Content-Type: multipart/form-data
 
-file: [ebook-v2.pdf]
+file: [js-course-v2.pdf]
 ```
 
-- Old asset deleted after new one is successfully stored
-- `digitalConfig.asset` updated automatically (next `GET /products/:id` will show new asset details)
-- All **future** customer downloads get the new file
-- Existing entitlements and download counts are preserved
+- Old asset deleted after the new one is stored.
+- Variant stays `active`; `digital.asset` updates on next read.
+- All **future** customer downloads get the new file; existing entitlements/counts are preserved.
 
 ---
 
-### Step 4.5: Remove Digital Asset
+### Step 4.5: Remove a Variant's Asset
 
 ```json
-DELETE /api/vendor/products/:id/digital/asset
+DELETE /api/vendor/products/:productId/variants/:variantId/digital/asset
 ```
 
-- `digitalConfig.asset` is cleared (`undefined`) in subsequent GET responses
-- `digitalConfig.isActive` set to `false`
-- Asset file is soft-deleted
-- Product can no longer be activated until a new asset is uploaded
-- Existing customer entitlements are not revoked
+- `digital.asset` is cleared in subsequent reads.
+- **The variant becomes `status: "archived"`** (digital variants cannot be active without an asset).
+- Asset file is soft-deleted.
+- Existing customer entitlements are not revoked.
 
 ---
 
-### Step 4.6: Toggle Download Availability
+### Step 4.6: Pause/Resume Downloads (Product-Wide)
 
-Temporarily block downloads without removing the asset or archiving the product:
+There is no per-product toggle endpoint anymore. To pause downloads across the whole product, update `digitalConfig.isActive`:
 
 ```json
-PATCH /api/vendor/products/:id/digital/toggle
+PATCH /api/vendor/products/:id
+{ "digitalConfig": { "isActive": false } }
 ```
 
-No body required. Each call flips `digitalConfig.isActive` to its opposite.
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": { "isActive": false },
-  "message": "Digital asset disabled - downloads are temporarily blocked"
-}
-```
-
-Call again to re-enable:
-```json
-{
-  "success": true,
-  "data": { "isActive": true },
-  "message": "Digital asset enabled - customers can now download"
-}
-```
+When `false`, purchases of any variant do not grant download entitlements. Set back to `true` to resume.
 
 ---
 
@@ -696,10 +671,11 @@ PATCH /api/vendor/products/:id/status
 | Check | Error Code | Resolution |
 |-------|------------|------------|
 | `description` is non-empty | `CATALOG_PRODUCT_NO_DESCRIPTION` | Add a description via Step 2 |
-| At least one active variant exists | `CATALOG_PRODUCT_NO_VARIANTS` | Create a pricing variant |
+| At least one active variant exists | `CATALOG_PRODUCT_NO_VARIANTS` | Create a variant and upload its asset |
 | Every active variant has `price > 0` | `CATALOG_PRODUCT_VARIANT_ZERO_PRICE` | Update variant price |
 | `defaultVariantId` points to an active variant | `CATALOG_PRODUCT_NO_DEFAULT_VARIANT` | Auto-set on first variant; use `/default-variant` if cleared |
-| `digitalConfig.assetId` is set | `CATALOG_PRODUCT_DIGITAL_NO_ASSET` | Upload the digital file (Step 4.1) |
+| No more than 5 active variants | `CATALOG_DIGITAL_VARIANT_LIMIT_EXCEEDED` | Archive/remove extra variants |
+| Every active variant has an asset | `CATALOG_VARIANT_NO_DIGITAL_ASSET` | Upload a file for each format variant (Step 4.2) |
 
 ---
 
@@ -938,7 +914,8 @@ PATCH /api/vendor/products/:id/status
 
 | Type | Additional Requirement | Error Code |
 |------|------------------------|------------|
-| Digital | `digitalConfig.asset` is set (file was uploaded) | `CATALOG_PRODUCT_DIGITAL_NO_ASSET` |
+| Digital | Every active variant has an uploaded asset | `CATALOG_VARIANT_NO_DIGITAL_ASSET` |
+| Digital | No more than 5 active variants | `CATALOG_DIGITAL_VARIANT_LIMIT_EXCEEDED` |
 | Service | `serviceConfig.durationMinutes` is set | `CATALOG_PRODUCT_SERVICE_NO_DURATION` |
 | Physical | None beyond universal | — |
 
@@ -1046,7 +1023,7 @@ All product-level changes (description, tags, SEO, fileIds, digitalConfig, servi
 | `PATCH /products/:id` | ✅ On 5xx | Safe to retry |
 | `POST /variants` | ✅ On 5xx | SKU conflict (409) on retry = variant already exists |
 | `PATCH /variants/:id` | ✅ On 5xx | Safe to retry |
-| `POST /digital/asset` | ❌ | Use resumable upload pattern instead |
+| `POST /variants/:variantId/digital/asset` | ❌ | Use resumable upload pattern instead |
 | `PATCH /products/:id/status` | ❌ | May cause double-activation |
 
 ---
@@ -1082,14 +1059,19 @@ await updateProduct({ fileIds: [...existingIds, newFileId] });
 { sku: '...', optionValueIds: ['val_black_id', 'val_medium_id'] }
 ```
 
-**4. Trying to set `digitalConfig.assetId` via PATCH:**
+**4. Trying to set a digital asset or limits on the product:**
 ```javascript
-// ❌ WRONG — asset linkage is managed by upload endpoints only
-await updateProduct({ digitalConfig: { assetId: '...', maxDownloads: 5 } });
+// ❌ WRONG — product.digitalConfig only accepts { isActive }; assets/limits are per-variant
+await updateProduct({ digitalConfig: { assetId: '...', maxDownloads: 5 } }); // 400 VALIDATION_ERROR
 
-// ✅ CORRECT — POST /products/:id/digital/asset sets it automatically; only update limits here
-await updateProduct({ digitalConfig: { maxDownloads: 5 } });
-// Then GET /products/:id returns digitalConfig.asset with { id, originalName, mimeType, size }
+// ✅ CORRECT — upload the asset to a variant (sets it + activates the variant)
+await uploadVariantAsset(productId, variantId, fileBlob);
+// And set per-variant limits via the variant config endpoint:
+await fetch(`/api/vendor/products/${productId}/variants/${variantId}/digital/config`, {
+  method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${jwt}` },
+  body: JSON.stringify({ maxDownloads: 5, expiresAfterDays: 365 }),
+});
+// GET /products/:id/variants/:variantId then returns variant.digital.asset + limits
 ```
 
 **5. Publishing without pre-validating:**
@@ -1140,14 +1122,15 @@ const price = serviceConfig.durationMinutes * ratePerMinute;
 | `PATCH` | `/api/vendor/products/:productId/variants/:variantId` | Update variant |
 | `DELETE` | `/api/vendor/products/:productId/variants/:variantId` | Archive variant |
 
-### Digital Asset Endpoints
+### Digital Asset Endpoints (per variant)
 
 | Method | Endpoint | Purpose |
 |--------|----------|---------|
-| `POST` | `/api/vendor/products/:id/digital/asset` | Upload asset (product must have no asset) |
-| `PUT` | `/api/vendor/products/:id/digital/asset` | Replace asset (product must already have one) |
-| `DELETE` | `/api/vendor/products/:id/digital/asset` | Remove asset (clears assetId) |
-| `PATCH` | `/api/vendor/products/:id/digital/toggle` | Toggle `isActive` (no body required) |
+| `POST` | `/api/vendor/products/:productId/variants/:variantId/digital/asset` | Upload asset (variant must have none) → variant becomes `active` |
+| `PUT` | `/api/vendor/products/:productId/variants/:variantId/digital/asset` | Replace asset (variant must already have one) |
+| `DELETE` | `/api/vendor/products/:productId/variants/:variantId/digital/asset` | Remove asset → variant becomes `archived` |
+| `PATCH` | `/api/vendor/products/:productId/variants/:variantId/digital/config` | Update limits `{ maxDownloads?, expiresAfterDays? }` |
+| `PATCH` | `/api/vendor/products/:id` | Product-wide pause/resume via `{ digitalConfig: { isActive } }` (replaces old toggle) |
 
 ### Product Option Endpoints
 

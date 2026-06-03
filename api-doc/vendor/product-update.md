@@ -218,7 +218,8 @@ PATCH /api/vendor/products/prod_abc123/status
 
 **Use Case**: eBooks, software, music, design assets, videos, licenses.
 
-**Constraint**: One digital asset file per product. Use separate products for different formats (PDF vs EPUB). Use multiple variants for different license tiers (Personal vs Commercial).
+> [!IMPORTANT]
+> **Digital products are multi-variant.** A product holds **1–5 variants**, each a downloadable **format** (PDF, ZIP, EPUB, MP4, …) with its own asset, price, SKU, name, and download limits. The flow is: create each format variant, then upload its file (which makes that variant `active`). Full reference: **[Digital Products — Multi-Variant Guide](./digital-products.md)**.
 
 ### Step 1: Create Draft Shell
 
@@ -246,21 +247,57 @@ PATCH /api/vendor/products/prod_xyz789
 {
   "description": "<p>Everything you need to master Node.js...</p>",
   "tags": ["nodejs", "javascript", "backend", "programming"],
-  "seoTitle": "Ultimate Node.js Guide - PDF eBook",
-  "seoDescription": "Master Node.js in 30 days with this comprehensive PDF guide."
+  "seoTitle": "Ultimate Node.js Guide - eBook",
+  "seoDescription": "Master Node.js in 30 days with this comprehensive guide."
 }
 ```
 
-> **Do not set `digitalConfig.maxDownloads` or `digitalConfig.expiresAfterDays` on the first call here.** These settings make more sense after the asset is uploaded and variants are created. They can be set at any time via this endpoint.
+> The product-level `digitalConfig` only accepts `{ isActive }` (a product-wide download toggle). Download **limits** are per variant — see Step 5.
 
 ---
 
-### Step 3: Upload the Digital Asset
+### Step 3: Create Format Variant(s) (1–5)
 
-This is the downloadable file your customers receive. The backend sets `digitalConfig.assetId` automatically on success.
+Each variant is a downloadable format/tier. No dimensions, delivery agency, or `optionValueIds`. Optionally include `digitalConfig` for per-variant download limits.
 
 ```http
-POST /api/vendor/products/prod_xyz789/digital/asset
+POST /api/vendor/products/prod_xyz789/variants
+Authorization: Bearer <vendor_jwt>
+Content-Type: application/json
+
+{
+  "sku": "NODEJS-GUIDE-PDF",
+  "name": "PDF Edition",
+  "price": 29.99,
+  "isInfiniteStock": true,
+  "stock": 0,
+  "digitalConfig": { "maxDownloads": 5, "expiresAfterDays": 365 }
+}
+```
+
+```http
+POST /api/vendor/products/prod_xyz789/variants
+{
+  "sku": "NODEJS-GUIDE-ZIP",
+  "name": "Source Code (ZIP)",
+  "price": 49.99,
+  "isInfiniteStock": true,
+  "stock": 0
+}
+```
+
+> - Each variant returns `status: "archived"` until its asset is uploaded (Step 4) — this is expected.
+> - The first variant created auto-sets `product.defaultVariantId`. Reassign via `PATCH /products/prod_xyz789/default-variant { "variantId": "..." }`.
+> - A 6th variant returns `400 CATALOG_DIGITAL_VARIANT_LIMIT_EXCEEDED`.
+
+---
+
+### Step 4: Upload an Asset per Variant
+
+The downloadable file for each format. **Uploading flips the variant to `status: "active"`.** The backend sets `variant.digital.asset` automatically.
+
+```http
+POST /api/vendor/products/prod_xyz789/variants/var_pdf_id/digital/asset
 Authorization: Bearer <vendor_jwt>
 Content-Type: multipart/form-data
 
@@ -273,6 +310,7 @@ file: [nodejs-guide.pdf]
 {
   "success": true,
   "data": {
+    "variantId": "var_pdf_id",
     "assetId": "507f1f77bcf86cd799439013",
     "filename": "nodejs-guide.pdf",
     "size": 5242880,
@@ -282,76 +320,19 @@ file: [nodejs-guide.pdf]
 }
 ```
 
-After this call, `GET /products/prod_xyz789` will show `digitalConfig.assetId` set.
-
-**Allowed file types:** PDF, ZIP, RAR, MP4, MOV, MP3, WAV, JPEG, PNG, GIF, Word, Excel, generic binary.
-**Max size:** 500MB.
+Repeat for each variant. **Accepted formats:** PDF, EPUB, ZIP, RAR, 7-Zip, MP4, MOV, MP3, WAV, JPEG, PNG, WebP, GIF. The real file type is detected from its content (not the filename/`Content-Type`); Office documents are not accepted — wrap them in a `.zip`. **Max size:** 500MB.
 
 ---
 
-### Step 4: Create Pricing Variant(s)
+### Step 5: Configure Per-Variant Download Access (Optional)
 
-Digital products use variants for pricing tiers, not for option combinations. No dimensions, delivery agency, or `optionValueIds`.
-
-**Single license (simple):**
+Limits are **per variant** and apply to future purchases.
 
 ```http
-POST /api/vendor/products/prod_xyz789/variants
-Authorization: Bearer <vendor_jwt>
-Content-Type: application/json
-
+PATCH /api/vendor/products/prod_xyz789/variants/var_pdf_id/digital/config
 {
-  "sku": "NODEJS-GUIDE-PDF",
-  "name": "Standard License",
-  "price": 29.99,
-  "isInfiniteStock": true,
-  "stock": 0
-}
-```
-
-**Multiple license tiers:**
-
-```http
-POST /api/vendor/products/prod_xyz789/variants
-{
-  "sku": "NODEJS-GUIDE-PERSONAL",
-  "name": "Personal License",
-  "price": 29.99,
-  "isInfiniteStock": true,
-  "stock": 0
-}
-```
-
-```http
-POST /api/vendor/products/prod_xyz789/variants
-{
-  "sku": "NODEJS-GUIDE-COMMERCIAL",
-  "name": "Commercial License",
-  "price": 79.99,
-  "isInfiniteStock": true,
-  "stock": 0
-}
-```
-
-> The first variant created auto-sets `product.defaultVariantId`. To change which variant is shown by default, call:
-> ```http
-> PATCH /api/vendor/products/prod_xyz789/default-variant
-> { "variantId": "var_commercial_id" }
-> ```
-
----
-
-### Step 5: Configure Download Access (Optional)
-
-Control how many times customers can download and when access expires. These defaults apply to all future purchases.
-
-```http
-PATCH /api/vendor/products/prod_xyz789
-{
-  "digitalConfig": {
-    "maxDownloads": 5,
-    "expiresAfterDays": 365
-  }
+  "maxDownloads": 5,
+  "expiresAfterDays": 365
 }
 ```
 
@@ -376,14 +357,16 @@ PATCH /api/vendor/products/prod_xyz789/status
 **Backend validates (all must be true):**
 1. At least one active variant exists with `price > 0`
 2. `defaultVariantId` points to an active variant
-3. `digitalConfig.assetId` is set
+3. Every active variant has an uploaded asset
+4. No more than 5 active variants
 
 | Failure Code | Fix |
 |---|---|
 | `CATALOG_PRODUCT_NO_VARIANTS` | Create at least one variant |
 | `CATALOG_PRODUCT_VARIANT_ZERO_PRICE` | Update variant `price` to > 0 |
-| `CATALOG_PRODUCT_NO_DEFAULT_VARIANT` | Variant auto-set if you followed Step 4; or use `/default-variant` |
-| `CATALOG_PRODUCT_DIGITAL_NO_ASSET` | Upload the digital asset file (Step 3) |
+| `CATALOG_PRODUCT_NO_DEFAULT_VARIANT` | Variant auto-set if you followed Step 3; or use `/default-variant` |
+| `CATALOG_VARIANT_NO_DIGITAL_ASSET` | Upload a file for each format variant (Step 4) |
+| `CATALOG_DIGITAL_VARIANT_LIMIT_EXCEEDED` | Archive/remove variants beyond 5 |
 
 ---
 
@@ -453,32 +436,37 @@ DELETE /api/vendor/products/:id
 
 Soft delete — status becomes `archived`. Data is preserved. Can be restored by changing status back to `draft` or `active`.
 
-### Replacing a Digital Asset
+### Replacing a Variant's Digital Asset
 
-To release a v2.0 of a file:
+To release a v2.0 of one format:
 
 ```http
-PUT /api/vendor/products/:id/digital/asset
+PUT /api/vendor/products/:productId/variants/:variantId/digital/asset
 Content-Type: multipart/form-data
 
 file: [nodejs-guide-v2.pdf]
 ```
 
-Old file is deleted after the new one is successfully stored. All future customer downloads receive the new file. Existing entitlements are preserved.
+Old file is deleted after the new one is stored. The variant stays `active`. All future customer downloads receive the new file; existing entitlements are preserved.
 
-### Temporarily Disabling Digital Downloads
-
-```http
-PATCH /api/vendor/products/:id/digital/toggle
-```
-
-No body required. Toggles `digitalConfig.isActive`. Customers cannot download while `isActive: false` even if the product is `active`.
-
-Call again to re-enable:
+### Removing a Variant's Digital Asset
 
 ```http
-PATCH /api/vendor/products/:id/digital/toggle
+DELETE /api/vendor/products/:productId/variants/:variantId/digital/asset
 ```
+
+Clears the asset and **archives the variant** (digital variants cannot be active without a file).
+
+### Temporarily Disabling Digital Downloads (Product-Wide)
+
+There is no per-product toggle endpoint. Pause/resume all downloads via the product:
+
+```http
+PATCH /api/vendor/products/:id
+{ "digitalConfig": { "isActive": false } }
+```
+
+While `isActive: false`, purchases of any variant do not grant download entitlements even if the product is `active`. Set back to `true` to resume.
 
 ---
 
@@ -507,15 +495,19 @@ const current = await getProduct(productId);
 updateProduct({ fileIds: [...current.fileIds, newFileId] });
 ```
 
-**❌ Setting `digitalConfig.assetId` via PATCH**
-The `assetId` is managed exclusively by `POST /digital/asset` and `PUT /digital/asset`. Sending it in a PATCH body is ignored by design.
+**❌ Setting a digital asset or limits on the product**
+The product's `digitalConfig` only accepts `{ isActive }`. Assets and limits are **per variant** — upload via `POST /products/:productId/variants/:variantId/digital/asset` and set limits via `.../digital/config`. Sending `assetId`/`maxDownloads`/`expiresAfterDays` on the product returns `400 VALIDATION_ERROR`.
 
 **❌ Publishing without pre-validation**
 ```javascript
 // CORRECT — check before calling
 const checks = [];
 if (!product.hasVariants) checks.push('Create at least one variant');
-if (product.type === 'digital' && !product.digitalConfig?.assetId) checks.push('Upload the digital asset');
+if (product.type === 'digital') {
+  const variants = await getVariants(productId);
+  const activeWithAsset = variants.filter(v => v.status === 'active' && v.digital?.asset);
+  if (activeWithAsset.length === 0) checks.push('Upload a file for at least one format variant');
+}
 if (checks.length > 0) { showErrors(checks); return; }
 await changeStatus('active');
 ```

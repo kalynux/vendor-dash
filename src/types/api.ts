@@ -245,11 +245,40 @@ export interface ApiErrorDetail {
   message: string;
 }
 
+/**
+ * Machine-readable reasons returned per file when a file upload fails the
+ * security/policy pipeline (`UPLOAD_POLICY_VIOLATION`). See
+ * `api-doc/errors/README.md` §7.
+ */
+export type UploadViolationCode =
+  | 'FILE_TOO_LARGE'
+  | 'MIME_NOT_ALLOWED'
+  | 'TOO_MANY_FILES'
+  | 'QUOTA_EXCEEDED'
+  | 'VIRUS_DETECTED'
+  | 'PERMISSION_DENIED'
+  | 'TOTAL_SIZE_EXCEEDED'
+  | 'DUPLICATE_FILE'
+  | 'MIME_TYPE_MISMATCH'
+  | 'POLYGLOT_DETECTED'
+  | 'UNDETECTABLE_TYPE';
+
+/** One entry of `error.details.violations` on an `UPLOAD_POLICY_VIOLATION`. */
+export interface UploadViolation {
+  code: UploadViolationCode | string;
+  message: string;
+  /** 0-based index into the uploaded files array; absent for request-wide violations. */
+  fileIndex?: number;
+  metadata?: Record<string, unknown> & { originalName?: string; detectedMimeType?: string };
+}
+
 export class ApiError extends Error {
   readonly status: number;
   readonly code: string;
   readonly details?: ApiErrorDetail[];
   readonly requestId?: string;
+  /** Populated for `UPLOAD_POLICY_VIOLATION` — per-file upload failure reasons. */
+  readonly violations?: UploadViolation[];
 
   constructor(
     status: number,
@@ -257,6 +286,7 @@ export class ApiError extends Error {
     message: string,
     details?: ApiErrorDetail[],
     requestId?: string,
+    violations?: UploadViolation[],
   ) {
     super(message);
     this.name = 'ApiError';
@@ -264,6 +294,7 @@ export class ApiError extends Error {
     this.code = code;
     this.details = details;
     this.requestId = requestId;
+    this.violations = violations;
   }
 
   get isUnauthorized() {

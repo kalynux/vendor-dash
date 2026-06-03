@@ -89,6 +89,19 @@ function SheetHeader({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
+// Scrollable region for a fixed-header sheet. Pair with a non-scrolling
+// SheetContent (the default) so SheetHeader and the close button stay pinned
+// while only this body scrolls.
+function SheetBody({ className, ...props }: React.ComponentProps<"div">) {
+  return (
+    <div
+      data-slot="sheet-body"
+      className={cn("min-h-0 flex-1 overflow-y-auto", className)}
+      {...props}
+    />
+  )
+}
+
 function SheetFooter({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -131,6 +144,7 @@ export {
   SheetClose,
   SheetContent,
   SheetHeader,
+  SheetBody,
   SheetFooter,
   SheetTitle,
   SheetDescription,

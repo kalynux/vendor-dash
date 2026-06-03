@@ -80,20 +80,15 @@ This is the full shape of a product object returned by all read endpoints.
 ```json
 {
   "digitalConfig": {
-    "asset": {
-      "id": "507f1f77bcf86cd799439013",
-      "originalName": "course.zip",
-      "mimeType": "application/zip",
-      "size": 12345678
-    },
-    "maxDownloads": 5,
-    "expiresAfterDays": 30,
     "isActive": true
   }
 }
 ```
 
-> `digitalConfig.asset` is `undefined` on draft digital products that have not yet had a file uploaded. After upload it is set automatically — no `PATCH` needed. It must be present for activation. Digital asset URLs are not exposed here; access is gated through the customer entitlement and download-link flow.
+> [!IMPORTANT]
+> **Digital products are now multi-variant.** Each variant owns its own asset, price, SKU, name, and download limits (`maxDownloads`, `expiresAfterDays`). The product-level `digitalConfig` only carries `isActive` — a product-wide download kill switch. The asset/limit fields are **no longer** on the product.
+>
+> See the dedicated **[Digital Products — Multi-Variant Guide](./digital-products.md)** for the full model, per-variant asset upload endpoints, the variant `status ⇔ asset` invariant, the 1–5 variant cap, and frontend UI guidance. The per-variant asset shape is documented on the variant object (`variant.digital.asset`) in [variants.md](./variants.md).
 
 **Service product — additional fields:**
 ```json
@@ -226,7 +221,8 @@ All products start in `draft` status. The `type` cannot be changed after creatio
   "description": "Comfortable cotton t-shirt",
   "tags": ["cotton", "summer", "casual"],
   "seoTitle": "Buy Blue T-Shirt Online",
-  "seoDescription": "High quality cotton t-shirt"
+  "seoDescription": "High quality cotton t-shirt",
+  "fileIds": ["507f1f77bcf86cd799439030"]
 }
 ```
 
@@ -241,8 +237,12 @@ All products start in `draft` status. The `type` cannot be changed after creatio
 | `tags` | string[] | No | Array of unique, non-empty strings |
 | `seoTitle` | string | No | Max 60 characters |
 | `seoDescription` | string | No | Max 160 characters |
+| `fileIds` | string[] | No | Product images. Array of file ObjectIds; **must be unique** (duplicates rejected). Subject to the per-type image cap below. |
 
 > **Do not** pass `digitalConfig` or `serviceConfig` here. Both are set via `PATCH /products/:id` after the product exists.
+
+> [!IMPORTANT]
+> **Image limit (per product, by type):** physical **7**, service **7**, digital **1**. Exceeding the cap returns `400 CATALOG_IMAGE_LIMIT_EXCEEDED`. Duplicate file IDs in the same array are rejected with `400 VALIDATION_ERROR`.
 
 **Response `201`:**
 
@@ -275,7 +275,8 @@ All products start in `draft` status. The `type` cannot be changed after creatio
 > **Vectorisation on create:** The product is saved first and the `201` response is returned immediately. Vectorisation then runs asynchronously in the background — no action required from the frontend. `vectorisationStatus` will be `not_started` on fresh drafts (vectorisation only triggers once the product is active and `vectorisationEnabled` is `true`).
 
 **Error Responses:**
-- `400 VALIDATION_ERROR` — Request body failed schema validation
+- `400 VALIDATION_ERROR` — Request body failed schema validation (includes duplicate `fileIds`)
+- `400 CATALOG_IMAGE_LIMIT_EXCEEDED` — More images than the per-type cap (physical/service 7, digital 1)
 
 ---
 
@@ -299,8 +300,7 @@ Partial update — only provided fields are changed. Allowed on `draft` and `act
   "seoDescription": "New SEO description",
   "fileIds": ["507f1f77bcf86cd799439030", "507f1f77bcf86cd799439031"],
   "digitalConfig": {
-    "maxDownloads": 10,
-    "expiresAfterDays": 60
+    "isActive": true
   },
   "vectorisationEnabled": true
 }
@@ -316,24 +316,25 @@ Partial update — only provided fields are changed. Allowed on `draft` and `act
 | `tags` | string[] | No | **Full replacement** of tags array |
 | `seoTitle` | string | No | Max 60 characters |
 | `seoDescription` | string | No | Max 160 characters |
-| `fileIds` | string[] | No | **Full replacement** — send complete desired array of file ObjectIds |
-| `digitalConfig` | object | No | Digital products only — merged with existing config |
+| `fileIds` | string[] | No | **Full replacement** — send complete desired array of file ObjectIds. Must be unique; capped per type (physical/service **7**, digital **1**). |
+| `digitalConfig` | object | No | Digital products only — product-wide toggle. Only `{ isActive }` is accepted (strict). Per-variant asset/limits live on the variant. |
 | `serviceConfig` | object | No | Service products only — merged with existing config |
 | `vectorisationEnabled` | boolean | No | Toggle vectorisation opt-in. When provided, the backend runs the enable or disable flow after the content update — see [Vectorisation](#vectorisation). For quick toggles only, use `PATCH /:id/vectorisation`. |
 
 > [!WARNING]
 > **`fileIds` is a full array replacement, not an append operation.**
 > If the product currently has `fileIds: ["A", "B"]` and you send `fileIds: ["C"]`, the result is `["C"]`. Always send the complete desired array. To add a file: fetch current fileIds, append the new id, send the merged array.
+>
+> File IDs must be **unique** within the array, and the total must not exceed the per-type cap (physical/service **7**, digital **1**) — otherwise `400 CATALOG_IMAGE_LIMIT_EXCEEDED`.
 
-**`digitalConfig` sub-fields (merged with existing):**
+**`digitalConfig` sub-fields:**
 
 | Field | Type | Notes |
 |-------|------|-------|
-| `maxDownloads` | number \| null | Max downloads per customer. `null` = unlimited |
-| `expiresAfterDays` | number \| null | Days until access expires after purchase. `null` = never |
-| `isActive` | boolean | Enables/disables downloads. Prefer using the dedicated toggle endpoint |
+| `isActive` | boolean | Product-wide download kill switch. When `false`, purchases of any variant do not grant a download entitlement. |
 
-> `digitalConfig.assetId` is managed exclusively by the digital asset upload/remove endpoints. Do not attempt to set it here.
+> [!IMPORTANT]
+> `digitalConfig` on the product accepts **only** `isActive` (the schema is strict). `maxDownloads`, `expiresAfterDays`, and `assetId` are **per-variant** now — set them via the variant endpoints. Sending them here returns `400 VALIDATION_ERROR`. See [Digital Products Guide](./digital-products.md).
 
 **`serviceConfig` sub-fields (merged with existing):**
 
@@ -403,7 +404,7 @@ PATCH /api/vendor/products/:id/status
 >
 > Additionally, per product type:
 > - **Physical**: a delivery agency must be resolvable — either set directly on the product (`delivery.agencyId`) or configured as the vendor's default (`vendor.default_delivery_agency_id`). Without one of these, the backend will reject activation.
-> - **Digital**: `digitalConfig.assetId` must be set (file must be uploaded)
+> - **Digital**: **every active variant must have an uploaded asset**, and there must be **no more than 5** active variants. (Digital variants without an asset are auto-archived, so this normally passes by construction.) See [Digital Products Guide](./digital-products.md).
 > - **Service**: `serviceConfig.durationMinutes` must be set (min: 1)
 
 **Response `200`:**
@@ -427,7 +428,8 @@ PATCH /api/vendor/products/:id/status
 | `CATALOG_PRODUCT_VARIANT_ZERO_PRICE` | An active variant has price = 0 |
 | `CATALOG_PRODUCT_NO_DEFAULT_VARIANT` | `defaultVariantId` missing or points to archived/nonexistent variant |
 | `CATALOG_PRODUCT_NO_DELIVERY_AGENCY` | Physical product has no delivery agency on the product or vendor profile |
-| `CATALOG_PRODUCT_DIGITAL_NO_ASSET` | Digital product has no uploaded asset |
+| `CATALOG_VARIANT_NO_DIGITAL_ASSET` | A digital product's active variant has no uploaded asset (details include the variant name/sku) |
+| `CATALOG_DIGITAL_VARIANT_LIMIT_EXCEEDED` | Digital product has more than 5 active variants |
 | `CATALOG_PRODUCT_SERVICE_NO_DURATION` | Service product has no `durationMinutes` |
 
 ---
@@ -468,9 +470,8 @@ Creates an independent copy of the product in `draft` status.
 | `tags`, `seo`, `category` | Copied as-is |
 | `hasVariants` | Always `false` — variants are NOT copied |
 | `defaultVariantId` | Always `null` — must create new variants for the clone |
-| Digital: `digitalConfig.assetId` | **NOT copied** — vendor must re-upload the asset |
-| Digital: `maxDownloads`, `expiresAfterDays` | Copied |
-| Digital: `isActive` | Always `false` |
+| Digital: `digitalConfig.isActive` | Always `false` |
+| Digital: variants & per-variant assets/limits | **NOT copied** — variants aren't cloned, so the vendor must re-create each format variant and re-upload its asset |
 | Service: `serviceConfig` | Copied as-is |
 | `vectorisationEnabled` | Always `false` — must be explicitly re-enabled on the clone |
 | `vectorisationStatus` | Always `not_started` |
@@ -625,184 +626,22 @@ POST /api/vendor/products/bulk/status
 
 ## Digital Product Asset Management
 
-Digital asset management endpoints are specific to `type: "digital"` products.
+> [!IMPORTANT]
+> **Digital assets are now managed per variant**, not per product. A digital product holds **1–5 variants**, each owning its own file, price, SKU, name, and download limits. The old product-scoped routes (`POST/PUT/DELETE /products/:id/digital/asset` and `PATCH /products/:id/digital/toggle`) have been **removed** and return 404.
+>
+> Full reference — request/response shapes, the variant `status ⇔ asset` invariant, the 1–5 cap, the activation rules, the post-purchase entitlement model, and UI guidance — is in the **[Digital Products — Multi-Variant Guide](./digital-products.md)**. Endpoint summary below.
 
-### Upload Digital Asset
+| Action | Method & Path |
+|--------|---------------|
+| Upload a variant's asset | `POST /api/vendor/products/:productId/variants/:variantId/digital/asset` (`multipart/form-data`, field `file`) — variant becomes `active` |
+| Replace a variant's asset | `PUT /api/vendor/products/:productId/variants/:variantId/digital/asset` (`multipart/form-data`, field `file`) |
+| Remove a variant's asset | `DELETE /api/vendor/products/:productId/variants/:variantId/digital/asset` — variant becomes `archived` |
+| Update a variant's download limits | `PATCH /api/vendor/products/:productId/variants/:variantId/digital/config` — body `{ maxDownloads?, expiresAfterDays? }` |
+| Product-wide pause/resume | `PATCH /api/vendor/products/:id` — body `{ "digitalConfig": { "isActive": false } }` (replaces the old toggle endpoint) |
 
-```http
-POST /api/vendor/products/:id/digital/asset
-```
+**File constraints (all uploads):** max 500 MB (configurable via `MAX_DIGITAL_ASSET_SIZE`); allowed MIME types: `application/pdf`, `application/zip`, `application/x-zip-compressed`, `application/x-rar-compressed`, `application/octet-stream`, `video/mp4`, `video/quicktime`, `audio/mpeg`, `audio/wav`, `audio/mp3`, `image/jpeg`, `image/png`, `image/gif`, `application/msword`, `application/vnd.openxmlformats-officedocument.wordprocessingml.document`, `application/vnd.ms-excel`, `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`, `application/epub+zip`.
 
-Uploads the file customers will download after purchase. The backend automatically sets `product.digitalConfig.assetId` on success.
-
-**Requirements:**
-- Product must exist, belong to the vendor, and be `type: "digital"`
-- Product must **not** already have an asset — if it does, use `PUT` (replace) instead
-- Exactly one file per request
-
-**Request:** `multipart/form-data`
-
-| Form Field | Type | Description |
-|------------|------|-------------|
-| `file` | File | The digital asset to upload |
-
-**File Constraints:**
-
-| Constraint | Limit |
-|------------|-------|
-| Max file size | 500MB (configurable via `MAX_DIGITAL_ASSET_SIZE` env) |
-| Allowed MIME types | `application/pdf`, `application/zip`, `application/x-zip-compressed`, `application/x-rar-compressed`, `application/octet-stream`, `video/mp4`, `video/quicktime`, `audio/mpeg`, `audio/wav`, `audio/mp3`, `image/jpeg`, `image/png`, `image/gif`, `application/msword`, `application/vnd.openxmlformats-officedocument.wordprocessingml.document`, `application/vnd.ms-excel`, `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` |
-
-**Response `201`:**
-
-```json
-{
-  "success": true,
-  "data": {
-    "assetId": "507f1f77bcf86cd799439013",
-    "filename": "guide.pdf",
-    "size": 102400,
-    "mimeType": "application/pdf"
-  },
-  "message": "Digital asset uploaded successfully"
-}
-```
-
-After this call, `GET /api/vendor/products/:id` will show `digitalConfig.assetId` set.
-
-**Error Responses:**
-
-| Status | Code | Reason |
-|--------|------|--------|
-| 404 | `CATALOG_PRODUCT_NOT_FOUND` | Product not found |
-| 400 | `CATALOG_PRODUCT_INVALID_TYPE` | Product is not `type: "digital"` |
-| 409 | `CATALOG_DIGITAL_ASSET_ALREADY_EXISTS` | Product already has an asset — use `PUT` |
-| 400 | `CATALOG_DIGITAL_ASSET_MISSING_FILE` | No file in request body |
-| 400 | `CATALOG_FILE_TOO_LARGE` | File exceeds maximum size |
-| 400 | `CATALOG_FILE_TYPE_INVALID` | MIME type not in allowed list |
-
----
-
-### Replace Digital Asset
-
-```http
-PUT /api/vendor/products/:id/digital/asset
-```
-
-Atomically replaces an existing asset. The old file is deleted after the new one is successfully stored and linked.
-
-**Requirements:**
-- Product must already have a `digitalConfig.assetId` — if not, use `POST` instead
-- Same file constraints as upload apply
-
-**Request:** `multipart/form-data` with `file` field.
-
-**Behavior:**
-1. Upload new file to storage
-2. Update `product.digitalConfig.assetId` to the new asset
-3. Delete the old asset from storage and database (non-blocking — deletion failure is logged but does not fail the response)
-4. All future customer downloads receive the new file; past purchases are unaffected
-
-**Response `200`:**
-
-```json
-{
-  "success": true,
-  "data": {
-    "assetId": "507f1f77bcf86cd799439016",
-    "filename": "guide-v2.pdf",
-    "size": 204800,
-    "mimeType": "application/pdf"
-  },
-  "message": "Digital asset replaced successfully"
-}
-```
-
-**Error Responses:**
-
-| Status | Code | Reason |
-|--------|------|--------|
-| 404 | `CATALOG_DIGITAL_ASSET_MISSING` | Product has no asset to replace — use `POST` |
-| 400 | `CATALOG_FILE_TOO_LARGE` | File exceeds size limit |
-| 400 | `CATALOG_FILE_TYPE_INVALID` | MIME type not allowed |
-
----
-
-### Remove Digital Asset
-
-```http
-DELETE /api/vendor/products/:id/digital/asset
-```
-
-Unlinks the asset from the product and marks it for deletion. Clears `digitalConfig.assetId` entirely.
-
-**Behavior:**
-- `product.digitalConfig.assetId` is **unset** (cleared, not just nulled)
-- `product.digitalConfig.isActive` is set to `false`
-- The underlying asset file is soft-deleted
-- The product can no longer be activated until a new asset is uploaded
-- Existing customer download entitlements are not revoked
-
-**Response `200`:**
-
-```json
-{
-  "success": true,
-  "message": "Digital asset removed successfully"
-}
-```
-
-**Error Responses:**
-
-| Status | Code | Reason |
-|--------|------|--------|
-| 400 | `CATALOG_DIGITAL_CONFIG_MISSING` | Product has no digital configuration |
-| 404 | `CATALOG_DIGITAL_ASSET_MISSING` | Product already has no asset |
-
----
-
-### Toggle Digital Asset Availability
-
-```http
-PATCH /api/vendor/products/:id/digital/toggle
-```
-
-Flips the `digitalConfig.isActive` flag. No request body required — each call toggles to the opposite of the current state.
-
-**Use case:** Temporarily block customer downloads without removing the asset or archiving the product (e.g., during a legal review, or to push an updated file version via replace first).
-
-**Request Body:** None
-
-**Response `200`:**
-
-```json
-{
-  "success": true,
-  "data": {
-    "isActive": false
-  },
-  "message": "Digital asset disabled - downloads are temporarily blocked"
-}
-```
-
-When toggled back on:
-
-```json
-{
-  "success": true,
-  "data": {
-    "isActive": true
-  },
-  "message": "Digital asset enabled - customers can now download"
-}
-```
-
-**Error Responses:**
-
-| Status | Code | Reason |
-|--------|------|--------|
-| 400 | `CATALOG_PRODUCT_INVALID_TYPE` | Product is not `type: "digital"` |
-| 404 | `CATALOG_DIGITAL_CONFIG_MISSING` | Product has no digital configuration |
+See [Digital Products Guide §5](./digital-products.md#5-endpoints) for full request/response/error details on each endpoint.
 
 ---
 
@@ -1272,7 +1111,8 @@ Summary of what the backend validates when changing status to `active`. Frontend
 
 | Requirement | Error Code | Description |
 |-------------|------------|-------------|
-| `digitalConfig.assetId` is set | `CATALOG_PRODUCT_DIGITAL_NO_ASSET` | Upload the digital asset file first |
+| Every active variant has an uploaded asset | `CATALOG_VARIANT_NO_DIGITAL_ASSET` | Upload a file for each format variant (auto-archives variants without one) |
+| No more than 5 active variants | `CATALOG_DIGITAL_VARIANT_LIMIT_EXCEEDED` | Remove/archive extra variants (max 5) |
 
 **Service products only:**
 
@@ -1323,12 +1163,12 @@ Validation errors include a `details` array:
 | `CATALOG_PRODUCT_NO_VARIANTS` | 422 | Activation blocked — no variants exist |
 | `CATALOG_PRODUCT_VARIANT_ZERO_PRICE` | 422 | Activation blocked — an active variant has `price = 0` |
 | `CATALOG_PRODUCT_NO_DEFAULT_VARIANT` | 422 | Activation blocked — `defaultVariantId` not set or points to archived variant |
-| `CATALOG_PRODUCT_DIGITAL_NO_ASSET` | 422 | Activation blocked — digital product has no asset |
+| `CATALOG_VARIANT_NO_DIGITAL_ASSET` | 422 | Activation blocked — a digital variant has no uploaded asset |
+| `CATALOG_DIGITAL_VARIANT_LIMIT_EXCEEDED` | 400/422 | Digital product exceeds 5 variants (400 on create, 422 on activation) |
 | `CATALOG_PRODUCT_SERVICE_NO_DURATION` | 422 | Activation blocked — service product has no duration |
-| `CATALOG_DIGITAL_ASSET_ALREADY_EXISTS` | 409 | Attempted `POST` upload when asset already exists; use `PUT` |
-| `CATALOG_DIGITAL_ASSET_MISSING` | 404 | Attempted `PUT`/`DELETE` when no asset exists |
+| `CATALOG_DIGITAL_ASSET_ALREADY_EXISTS` | 409 | Attempted `POST` upload when the variant already has an asset; use `PUT` |
+| `CATALOG_DIGITAL_ASSET_MISSING` | 404 | Attempted `PUT`/`DELETE` when the variant has no asset |
 | `CATALOG_DIGITAL_ASSET_MISSING_FILE` | 400 | No file included in the upload request |
-| `CATALOG_DIGITAL_CONFIG_MISSING` | 400/404 | Product has no digital configuration |
 | `CATALOG_FILE_TOO_LARGE` | 400 | Upload exceeds size limit |
 | `CATALOG_FILE_TYPE_INVALID` | 400 | MIME type is not in the allowed list |
 | `VALIDATION_ERROR` | 400 | Zod schema validation failed |

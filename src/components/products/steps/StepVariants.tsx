@@ -19,7 +19,8 @@ import type {
   VariantPhase1Payload,
   VariantPhase2Payload,
 } from '@/components/products/variants';
-import type { WizardState, ApiProductOption } from '@/types/product.types';
+import { VARIANT_IMAGE_LIMIT } from '@/components/products/media.constants';
+import type { WizardState, ApiProductOption, ApiFileDetail } from '@/types/product.types';
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -35,6 +36,9 @@ interface StepVariantsProps {
       _phase2?: VariantPhase2Payload;
     },
   ) => void;
+  /** Session-local image overrides per variant id (survives a step remount). */
+  imageEditsByVariantId: Record<string, ApiFileDetail[]>;
+  onVariantImagesChange: (variantId: string, files: ApiFileDetail[]) => void;
   onBack: () => void;
 }
 
@@ -42,17 +46,25 @@ interface StepVariantsProps {
 
 export function StepVariants({
   mode,
-  productId: _productId,
+  productId,
   serverData,
   isSaving,
   stepError,
   onSaveComplete,
+  imageEditsByVariantId,
+  onVariantImagesChange,
   onBack,
 }: StepVariantsProps) {
   const serverOptions: ApiProductOption[] = serverData.serverOptions ?? [];
   const serverVariants = serverData.serverVariants ?? [];
 
   const { state, actions, selectors } = useVariantBuilder(serverOptions, serverVariants);
+
+  // Resolve each saved variant's images: session edits win over server data.
+  const maxImages = VARIANT_IMAGE_LIMIT[serverData.serverProduct?.type ?? 'physical'];
+  const filesByVariantId: Record<string, ApiFileDetail[]> = {};
+  for (const v of serverVariants) filesByVariantId[v.id] = v.files;
+  Object.assign(filesByVariantId, imageEditsByVariantId);
 
   // ── Phase 1: Propose → Confirm → Save option structure ──────────────────
 
@@ -153,6 +165,10 @@ export function StepVariants({
           newRowCount={selectors.newRowCount}
           modifiedRowCount={selectors.modifiedRowCount}
           persistedRowCount={selectors.persistedRowCount}
+          productId={productId}
+          maxImages={maxImages}
+          filesByVariantId={filesByVariantId}
+          onVariantImagesChange={onVariantImagesChange}
         />
       )}
 

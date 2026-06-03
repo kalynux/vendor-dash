@@ -6,7 +6,7 @@ Variants are the SKU-level entities that hold **price**, **stock**, and **physic
 
 **Key rules:**
 - **Physical products**: Support full variant features — option-based matrix (Size × Color), dimensions, delivery agency assignment
-- **Digital products**: Support pricing variants only (e.g., Personal vs Commercial license). No option values, no dimensions, no delivery agency
+- **Digital products**: Support **1–5 variants**, each representing a downloadable **format** (PDF, ZIP, EPUB, …) with its own asset, price, SKU, name, and download limits. No option values, no dimensions, no delivery agency. A digital variant is `active` only when it has an uploaded asset — see [Digital Products Guide](./digital-products.md).
 - **Service products**: Do not support variants. Service pricing is managed via booking configuration
 
 **Default Variant Auto-assignment:**
@@ -78,6 +78,28 @@ This is the full shape of a variant object returned by all read endpoints:
 }
 ```
 
+**Digital variant — additional fields:**
+
+For variants of a `type: "digital"` product, read endpoints also return a `displayName` and a `digital` block:
+
+```json
+{
+  "name": null,
+  "displayName": "js-course.pdf - pdf - 12 MB",
+  "status": "active",
+  "digital": {
+    "asset": {
+      "id": "507f1f77bcf86cd799439030",
+      "originalName": "js-course.pdf",
+      "mimeType": "application/pdf",
+      "size": 12582912
+    },
+    "maxDownloads": 5,
+    "expiresAfterDays": 365
+  }
+}
+```
+
 **Field reference:**
 
 | Field | Type | Description |
@@ -85,8 +107,10 @@ This is the full shape of a variant object returned by all read endpoints:
 | `id` | string | Variant ObjectId |
 | `productId` | string | Parent product ObjectId |
 | `sku` | string | Globally unique SKU identifier |
-| `name` | string \| undefined | Human-readable variant name |
-| `status` | `"active"` \| `"archived"` | Archived variants are excluded from listings |
+| `name` | string \| null | Human-readable variant name (optional) |
+| `displayName` | string | Computed label, always present. Fallback: `name` → `"<asset> - <format> - <size>"` → product title → sku |
+| `status` | `"active"` \| `"archived"` | Archived variants are excluded from listings. For digital variants, `active` requires an uploaded asset |
+| `digital` | object \| undefined | Digital variants only. `{ asset?, maxDownloads, expiresAfterDays }`. `asset` is `{ id, originalName, mimeType, size }` once uploaded; the raw download URL is never exposed here |
 | `optionSignature` | string | System-generated — pipe-joined sorted optionValueIds. Empty string `""` for variants with no options |
 | `price` | number | Selling price |
 | `compareAtPrice` | number \| undefined | Original/MSRP price — show as "was" price if > price |
@@ -131,7 +155,8 @@ Create a new variant for a product.
   "width": 20,
   "height": 2,
   "optionValueIds": ["507f1f77bcf86cd799439030", "507f1f77bcf86cd799439031"],
-  "deliveryAgencyId": "507f1f77bcf86cd799439050"
+  "deliveryAgencyId": "507f1f77bcf86cd799439050",
+  "fileIds": ["507f1f77bcf86cd799439040"]
 }
 ```
 
@@ -139,16 +164,25 @@ Create a new variant for a product.
 
 ```json
 {
-  "sku": "EBOOK-PERSONAL-LICENSE",
-  "name": "Personal License",
+  "sku": "JS-COURSE-PDF",
+  "name": "PDF Edition",
   "price": 29.99,
   "isInfiniteStock": true,
-  "stock": 0
+  "stock": 0,
+  "digitalConfig": {
+    "maxDownloads": 5,
+    "expiresAfterDays": 365
+  }
 }
 ```
 
 > [!IMPORTANT]
-> **Digital product restrictions** — the following fields are **rejected** (400 error) for `type: "digital"` products:
+> **Digital variants** represent downloadable formats (1–5 per product). Key rules:
+> - The created variant comes back with `status: "archived"` — it flips to `"active"` only after you **upload its asset** via `POST /products/:productId/variants/:variantId/digital/asset` (see [Digital Products Guide](./digital-products.md)).
+> - Creating a 6th variant returns `400 CATALOG_DIGITAL_VARIANT_LIMIT_EXCEEDED`.
+> - `digitalConfig` (optional) sets per-variant download limits: `{ maxDownloads?, expiresAfterDays? }`. `assetId` is **not** accepted here — it's set by the upload endpoint.
+>
+> The following fields are **rejected** (400 `CATALOG_PRODUCT_INVALID_TYPE`) for `type: "digital"`:
 > - `optionValueIds` — digital variants cannot be option-based
 > - `deliveryAgencyId` — delivery agencies only apply to physical products
 > - `weight`, `length`, `width`, `height` — physical dimensions only
@@ -169,6 +203,14 @@ Create a new variant for a product.
 | `width` | number | No | >= 0 (cm) | Physical only |
 | `height` | number | No | >= 0 (cm) | Physical only |
 | `deliveryAgencyId` | string | No | Valid 24-char ObjectId | Physical only |
+| `fileIds` | string[] | No | Variant images. Array of valid 24-char ObjectIds; **must be unique**. Capped per parent product type (physical **3**, digital **1**) | All |
+| `digitalConfig` | object | No | `{ maxDownloads?, expiresAfterDays? }` (each integer >= 1 or `null`) | Digital only |
+
+> [!IMPORTANT]
+> **Variant images can be set at creation time** (and via PATCH). The flow mirrors product media: the referenced files must be owned by the vendor (or be system files) or the request is rejected `403`. Caps: a **physical** variant allows **3** images, a **digital** variant allows **1**. Exceeding the cap → `400 CATALOG_IMAGE_LIMIT_EXCEEDED`; duplicate IDs → `400 VALIDATION_ERROR`. The create response returns fully populated `files` (not bare `fileIds`), same as the GET/PATCH endpoints.
+
+> [!NOTE]
+> **Digital variants are created `archived`.** They have no asset yet, and a digital variant can only be `active` with an asset. After creation, upload the file to flip it to `active`. Physical/service variants are created `active`. (Variant `fileIds` are display images — distinct from the downloadable **asset**, which is managed via the `…/digital/asset` endpoints.)
 
 **Success Response `201`:**
 
@@ -212,8 +254,12 @@ Create a new variant for a product.
 |--------|------|--------|
 | 404 | `CATALOG_PRODUCT_NOT_FOUND` | Product not found or not owned by vendor |
 | 400 | `CATALOG_PRODUCT_INVALID_TYPE` | Product is `type: "service"` (not supported); or digital product restriction violated |
+| 400 | `CATALOG_DIGITAL_VARIANT_LIMIT_EXCEEDED` | Digital product already has 5 variants (max) |
+| 400 | `CATALOG_IMAGE_LIMIT_EXCEEDED` | More images than the per-type cap (physical 3, digital 1) |
+| 403 | `CATALOG_PRODUCT_ACCESS_DENIED` | A `fileId` is not owned by this vendor |
+| 404 | `CATALOG_FILE_NOT_FOUND` | A referenced `fileId` does not exist |
 | 409 | `CATALOG_VARIANT_SKU_EXISTS` | SKU already in use by another variant globally |
-| 400 | `VALIDATION_ERROR` | Request body fails schema validation |
+| 400 | `VALIDATION_ERROR` | Request body fails schema validation (includes duplicate `fileIds`) |
 
 ---
 
@@ -367,19 +413,24 @@ Update a variant. All fields are optional — only provided fields are changed.
 | `isInfiniteStock` | boolean | No | — | All |
 | `lowStockThreshold` | number \| null | No | Integer >= 1, or `null` to disable alerts | All |
 | `allowOversell` | boolean | No | — | All |
-| `fileIds` | string[] | No | Array of valid 24-char ObjectIds; **full replacement** | All |
+| `fileIds` | string[] | No | Array of valid 24-char ObjectIds; **full replacement**; must be unique; capped per type (physical **3**, digital **1**) | All |
 | `weight` | number | No | >= 0 (grams) | Physical only |
 | `length` | number | No | >= 0 (cm) | Physical only |
 | `width` | number | No | >= 0 (cm) | Physical only |
 | `height` | number | No | >= 0 (cm) | Physical only |
 | `deliveryAgencyId` | string | No | Valid 24-char ObjectId | Physical only |
+| `digitalConfig` | object | No | `{ maxDownloads?, expiresAfterDays? }` — partial; only sent fields change. `assetId` is not accepted | Digital only |
 
 > [!IMPORTANT]
-> **`fileIds` is a full array replacement** — send the complete desired array. To add an image, fetch the current `fileIds`, append the new id, and send the merged array.
+> **`fileIds` is a full array replacement** — send the complete desired array. To add an image, fetch the current `fileIds`, append the new id, and send the merged array. IDs must be **unique**, and the total must not exceed the per-type cap (physical **3**, digital **1**) → otherwise `400 CATALOG_IMAGE_LIMIT_EXCEEDED`.
+>
+> **`digitalConfig` is a partial update** — sending `{ maxDownloads: 3 }` changes only `maxDownloads` and leaves `expiresAfterDays` and the asset untouched. There is also a dedicated convenience endpoint: `PATCH /products/:productId/variants/:variantId/digital/config`.
 >
 > **Digital product restrictions** — the following fields are **rejected** with a 400 error if sent for `type: "digital"` products:
 > - `deliveryAgencyId`
 > - `weight`, `length`, `width`, `height`
+>
+> Conversely, `digitalConfig` is rejected (400) on non-digital variants.
 
 **Cannot be modified:** `productId`, `optionSignature`, `optionValueIds` (changing options requires re-creating the variant)
 
@@ -426,8 +477,82 @@ Update a variant. All fields are optional — only provided fields are changed.
 |--------|------|--------|
 | 404 | `CATALOG_VARIANT_NOT_FOUND` | Variant not found or does not belong to specified product |
 | 400 | `CATALOG_PRODUCT_INVALID_TYPE` | Physical-only field sent for digital product |
+| 400 | `CATALOG_IMAGE_LIMIT_EXCEEDED` | More images than the per-type cap (physical 3, digital 1) |
+| 403 | `CATALOG_PRODUCT_ACCESS_DENIED` | A `fileId` is not owned by this vendor |
+| 404 | `CATALOG_FILE_NOT_FOUND` | A referenced `fileId` does not exist |
 | 409 | `CATALOG_VARIANT_SKU_EXISTS` | New SKU is already in use by another variant |
-| 400 | `VALIDATION_ERROR` | Body schema invalid |
+| 400 | `VALIDATION_ERROR` | Body schema invalid (includes duplicate `fileIds`) |
+
+---
+
+### PATCH /api/vendor/products/:productId/variants/:variantId/status
+
+Toggle a variant between `"active"` and `"archived"`. Designed for the **frontend toggle switch** — vendors use this to temporarily disable a variant they're short on (or no longer need for the moment) without losing the SKU, pricing, options, or asset, and to re-enable it later.
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `productId` | string | Product ObjectId |
+| `variantId` | string | Variant ObjectId |
+
+**Request Body:**
+
+```json
+{
+  "status": "archived"
+}
+```
+
+| Field | Type | Required | Validation |
+|-------|------|----------|------------|
+| `status` | string | ✅ | One of `"active"`, `"archived"` |
+
+**Activation rules** (enforced when `status: "active"`):
+
+- The variant's `price` must be `> 0`. A variant priced at `0` cannot be activated → `422 CATALOG_PRODUCT_VARIANT_ZERO_PRICE`.
+- For a **digital** product, the variant must already have an uploaded asset (`digitalConfig.assetId`) → otherwise `422 CATALOG_VARIANT_NO_DIGITAL_ASSET`. Upload the asset via `POST /products/:productId/variants/:variantId/digital/asset` first.
+- **Service** products do not support variants at all → `400 CATALOG_PRODUCT_INVALID_TYPE` (this case won't normally arise since variant creation is already blocked for service products).
+
+Sending the variant's **current** status is a no-op and returns `200` with `"Variant is already <status>"`.
+
+**Side Effects:**
+
+- **Archiving:** If the archived variant was `product.defaultVariantId`, the backend reassigns `defaultVariantId` to the next active variant (lowest `createdAt`) or clears it if none remain. `product.hasVariants` is updated accordingly.
+- **Both transitions:** The parent product is re-validated against its activation gate. If the product was `active` and the change leaves it without a valid default variant (or otherwise breaks the activation invariant), the product is demoted to `draft`.
+
+**Success Response `200`:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "507f1f77bcf86cd799439015",
+    "productId": "507f1f77bcf86cd799439011",
+    "sku": "TSHIRT-RED-M",
+    "status": "archived",
+    "price": 29.99,
+    "stock": 0,
+    "...": "...other variant fields"
+  },
+  "message": "Variant status changed to archived"
+}
+```
+
+**Error Responses:**
+
+| Status | Code | Reason |
+|--------|------|--------|
+| 404 | `CATALOG_PRODUCT_NOT_FOUND` | Product not found or not owned by vendor |
+| 404 | `CATALOG_VARIANT_NOT_FOUND` | Variant not found, or does not belong to the specified product |
+| 400 | `CATALOG_PRODUCT_INVALID_TYPE` | Product is `type: "service"` (does not support variants) |
+| 422 | `CATALOG_PRODUCT_VARIANT_ZERO_PRICE` | Cannot activate a variant whose price is `0` |
+| 422 | `CATALOG_VARIANT_NO_DIGITAL_ASSET` | Cannot activate a digital variant without an uploaded asset |
+| 409 | `CATALOG_PRODUCT_VECTORISATION_PENDING` | Product is currently being vectorised; retry after it completes |
+| 400 | `VALIDATION_ERROR` | Body missing `status` or value is not `"active"` / `"archived"` |
+
+> [!NOTE]
+> This endpoint is the one to wire to a single toggle/switch UI. Use `DELETE` only when you want the same archive behaviour without explicitly stating the new status.
 
 ---
 
@@ -445,6 +570,9 @@ Archive a variant (soft delete). Sets `status` to `"archived"`. Data is preserve
 **Side Effects:**
 - If the archived variant was `product.defaultVariantId`, the backend automatically reassigns `defaultVariantId` to the next active variant (lowest `createdAt`), or clears it if no other active variants remain
 - `product.hasVariants` is set to `false` if no active variants remain after archiving
+
+> [!NOTE]
+> For digital variants, archiving does **not** delete the uploaded asset — it remains linked. To free the asset (and the file), use `DELETE /products/:productId/variants/:variantId/digital/asset` instead, which also archives the variant.
 
 **Success Response `200`:**
 
@@ -466,12 +594,34 @@ Archive a variant (soft delete). Sets `status` to `"archived"`. Data is preserve
 
 | Feature | Physical | Digital | Service |
 |---------|----------|---------|---------|
-| Variants supported | ✅ | ✅ | ❌ |
+| Variants supported | ✅ | ✅ (1–5) | ❌ |
 | `optionValueIds` | ✅ | ❌ | ❌ |
 | Dimensions (`weight`, `length`, `width`, `height`) | ✅ | ❌ | ❌ |
 | `deliveryAgencyId` | ✅ | ❌ | ❌ |
+| `digitalConfig` (per-variant asset/limits) | ❌ | ✅ | ❌ |
+| Max variants | unlimited | **5** | N/A |
+| Max images per variant | **3** | **1** | N/A |
+| Images settable on create | ✅ | ✅ | N/A |
+| Created as | `active` | `archived` (until asset uploaded) | N/A |
 | `isInfiniteStock` | ✅ | ✅ (typically `true`) | N/A |
 | `stock` tracking | ✅ | No (ignored if `isInfiniteStock`) | N/A |
+
+### Digital Variants (Formats)
+
+Digital variants model the downloadable **formats** of a digital product (PDF, ZIP, EPUB, MP4, …). Each owns its own asset, price, SKU, name, and download limits.
+
+- **1–5 per product.** Creating a 6th returns `400 CATALOG_DIGITAL_VARIANT_LIMIT_EXCEEDED`.
+- **Status follows the asset:** created `archived` → upload asset → `active` → remove asset → `archived`. You cannot directly flip a digital variant to `active` without an asset.
+- **Asset management is via dedicated endpoints**, not the variant create/update body:
+
+| Action | Endpoint |
+|--------|----------|
+| Upload (→ active) | `POST /products/:productId/variants/:variantId/digital/asset` (`multipart/form-data`, field `file`) |
+| Replace | `PUT /products/:productId/variants/:variantId/digital/asset` |
+| Remove (→ archived) | `DELETE /products/:productId/variants/:variantId/digital/asset` |
+| Update limits | `PATCH /products/:productId/variants/:variantId/digital/config` — `{ maxDownloads?, expiresAfterDays? }` |
+
+Full details, request/response shapes, the state machine, activation rules, and UI guidance: **[Digital Products — Multi-Variant Guide](./digital-products.md)**.
 
 ### SKU Uniqueness
 
@@ -567,5 +717,9 @@ Validation errors include a `details` array:
 | `CATALOG_VARIANT_NOT_FOUND` | 404 | Variant not found, not active, or does not belong to specified product |
 | `CATALOG_VARIANT_SKU_EXISTS` | 409 | SKU already in use globally |
 | `CATALOG_PRODUCT_NOT_FOUND` | 404 | Parent product not found or not owned by vendor |
-| `CATALOG_PRODUCT_INVALID_TYPE` | 400 | Service products do not support variants; or physical-only field sent for digital product |
+| `CATALOG_PRODUCT_INVALID_TYPE` | 400 | Service products do not support variants; physical-only field sent for digital; or `digitalConfig` sent for non-digital |
+| `CATALOG_DIGITAL_VARIANT_LIMIT_EXCEEDED` | 400 | Digital product already has 5 variants (max) |
+| `CATALOG_IMAGE_LIMIT_EXCEEDED` | 400 | Too many variant images — physical max 3, digital max 1 |
+| `CATALOG_PRODUCT_VARIANT_ZERO_PRICE` | 422 | Status change rejected — cannot activate a variant with `price = 0` |
+| `CATALOG_VARIANT_NO_DIGITAL_ASSET` | 422 | Status change rejected — digital variant has no uploaded asset |
 | `VALIDATION_ERROR` | 400 | Zod schema validation failed |

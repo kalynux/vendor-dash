@@ -626,7 +626,14 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
                           <Download className={`w-4 h-4 ${entitlement.isRevoked ? 'text-red-600' : entitlement.isExpired ? 'text-gray-500' : 'text-violet-700'}`} />
                         </div>
                         <div className="min-w-0">
-                          <p className="font-medium truncate">{entitlement.productTitle}</p>
+                          <div className="flex items-center gap-2 min-w-0">
+                            <p className="font-medium truncate">{entitlement.productTitle}</p>
+                            {entitlement.variantName && (
+                              <Badge variant="secondary" className="text-xs font-normal shrink-0">
+                                {entitlement.variantName}
+                              </Badge>
+                            )}
+                          </div>
                           <p className="text-xs text-muted-foreground truncate">{entitlement.assetName}</p>
                         </div>
                       </div>

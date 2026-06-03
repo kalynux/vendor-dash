@@ -1,7 +1,7 @@
-import { useReducer, useCallback } from 'react';
+import { useReducer, useCallback, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { AlertCircle, Box, Package, ImageIcon, Tag, FileDigit, DollarSign, CheckSquare } from 'lucide-react';
+import { AlertCircle, Box, Package, ImageIcon, Tag, FileDigit, CheckSquare } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ProductStepIndicator } from '@/components/products/ProductStepIndicator';
@@ -9,14 +9,12 @@ import { StepTypeSelect } from '@/components/products/steps/StepTypeSelect';
 import { StepBasicInfo } from '@/components/products/steps/StepBasicInfo';
 import { StepMedia } from '@/components/products/steps/StepMedia';
 import { StepVariants } from '@/components/products/steps/StepVariants';
-import { StepDigitalAsset } from '@/components/products/steps/StepDigitalAsset';
-import { StepPricing } from '@/components/products/steps/StepPricing';
+import { StepDigitalFormats } from '@/components/products/steps/StepDigitalFormats';
 import { StepReview } from '@/components/products/steps/StepReview';
 import {
   fetchProductById,
   createProduct,
   updateProduct,
-  uploadFiles,
   createOption,
   bulkAddOptionValues,
   fetchOptions,
@@ -27,24 +25,25 @@ import {
   deleteOption,
   deleteOptionValue,
   setDefaultVariant,
-  uploadDigitalAsset,
-  replaceDigitalAsset,
-  deleteDigitalAsset,
+  uploadVariantAsset,
+  replaceVariantAsset,
+  removeVariantAsset,
   updateProductStatus,
   renameOption,
   renameOptionValue,
   reorderOptions,
 } from '@/services/products.service';
 import { ACTIVATION_ERROR_MAP } from '@/services/products.service';
+import { getUploadErrorMessage } from '@/lib/uploadErrors';
 import type {
   WizardState,
   WizardAction,
   WizardStep,
   ApiProductType,
-  LicenseTierRow,
+  DigitalFormatRow,
+  ApiFileDetail,
 } from '@/types/product.types';
 import type { BasicInfoFormValues } from '@/components/products/schemas/product.schemas';
-import type { MediaOrderItem } from '@/components/products/ProductMediaUpload';
 import type { VariantPhase1Payload, VariantPhase2Payload } from '@/components/products/variants';
 
 // ─── Step definitions ─────────────────────────────────────────────────────────
@@ -61,8 +60,7 @@ const DIGITAL_STEPS: { id: WizardStep; label: string; icon: React.ElementType }[
   { id: 'type', label: 'Type', icon: Box },
   { id: 'basic-info', label: 'Basic Info', icon: Package },
   { id: 'media', label: 'Media', icon: ImageIcon },
-  { id: 'digital-asset', label: 'Asset', icon: FileDigit },
-  { id: 'pricing', label: 'Pricing', icon: DollarSign },
+  { id: 'formats', label: 'Formats', icon: FileDigit },
   { id: 'review', label: 'Review', icon: CheckSquare },
 ];
 
@@ -142,7 +140,17 @@ function prevStep(current: WizardStep, productType: ApiProductType | null): Wiza
 
 export function ProductUpload() {
   const [state, dispatch] = useReducer(wizardReducer, INITIAL_STATE);
+  // Session-local variant image overrides (persisted immediately server-side;
+  // kept here so the matrix shows current images after a step remount).
+  const [variantImageEdits, setVariantImageEdits] = useState<Record<string, ApiFileDetail[]>>({});
   const navigate = useNavigate();
+
+  const handleVariantImagesChange = useCallback(
+    (variantId: string, files: ApiFileDetail[]) => {
+      setVariantImageEdits((prev) => ({ ...prev, [variantId]: files }));
+    },
+    [],
+  );
 
   const steps = getSteps(state.productType);
   const visibleSteps = state.productType ? steps : [];
@@ -202,27 +210,20 @@ export function ProductUpload() {
   // ─── Media ───────────────────────────────────────────────────────────────────
 
   const handleMediaSave = useCallback(
-    async (updates: Partial<WizardState> & { _mediaOrder?: MediaOrderItem[] }) => {
+    async (updates: Partial<WizardState> & { _mediaFileIds?: string[] }) => {
       const productId = state.productId;
       if (!productId) return;
 
-      const order = updates._mediaOrder ?? [];
-      const newItems = order.filter((i): i is { kind: 'new'; file: File } => i.kind === 'new');
-
-      if (newItems.length === 0) {
-        advance();
-        return;
-      }
+      // Picker selections are already-uploaded library files — just persist the
+      // ordered fileIds. The backend reconciles usageCount against the diff.
+      const fileIds = updates._mediaFileIds ?? [];
 
       dispatch({ type: 'SET_SAVING', value: true });
       try {
-        const uploaded = await uploadFiles(newItems.map((i) => i.file));
-        const uploadedIds = uploaded.map((f) => f.id);
-        const updated = await updateProduct(productId, { fileIds: uploadedIds });
+        const updated = await updateProduct(productId, { fileIds });
         advance({ serverProduct: updated });
       } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : 'Failed to upload images. Please try again.';
-        dispatch({ type: 'SET_STEP_ERROR', error: msg });
+        dispatch({ type: 'SET_STEP_ERROR', error: getUploadErrorMessage(err) });
       }
     },
     [state.productId, state.currentStep, state.completedSteps],
@@ -404,99 +405,129 @@ export function ProductUpload() {
     [state.productId, state.serverProduct, state.currentStep, state.completedSteps],
   );
 
-  // ─── Digital asset ───────────────────────────────────────────────────────────
+  // ─── Digital formats ───────────────────────────────────────────────────────
 
-  const handleDigitalAssetSave = useCallback(
-    async (updates: Partial<WizardState> & { _pendingAssetFile?: File | null }) => {
-      const productId = state.productId;
-      if (!productId) return;
-
-      const file = updates._pendingAssetFile;
-
-      if (file === undefined) {
-        advance();
-        return;
-      }
-
-      dispatch({ type: 'SET_SAVING', value: true });
-      try {
-        if (file === null) {
-          await deleteDigitalAsset(productId);
-          const updated = await updateProduct(productId, {});
-          advance({ serverProduct: updated });
-        } else {
-          const hasExistingAsset = !!state.serverProduct?.digitalConfig?.asset?.id;
-          const uploadFn = hasExistingAsset ? replaceDigitalAsset : uploadDigitalAsset;
-          await uploadFn(productId, file);
-          const updated = await fetchProductById(productId);
-          advance({ serverProduct: updated });
-        }
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : 'Failed to upload asset.';
-        dispatch({ type: 'SET_STEP_ERROR', error: msg });
-      }
-    },
-    [state.productId, state.serverProduct, state.currentStep, state.completedSteps],
-  );
-
-  // ─── Pricing (digital) ───────────────────────────────────────────────────────
-
-  const handlePricingSave = useCallback(
+  const handleFormatsSave = useCallback(
     async (
       updates: Partial<WizardState> & {
-        _pendingTiers?: LicenseTierRow[];
-        _digitalConfig?: { maxDownloads: number | null; expiresAfterDays: number | null };
+        _pendingFormats?: DigitalFormatRow[];
+        _digitalIsActive?: boolean;
       },
     ) => {
       const productId = state.productId;
       if (!productId) return;
 
-      if (!updates._pendingTiers) {
+      const formats = updates._pendingFormats;
+      if (!formats) {
         advance();
         return;
       }
 
-      const tiers = updates._pendingTiers;
       dispatch({ type: 'SET_SAVING', value: true });
       try {
-        const existingSkus = new Set(state.serverVariants.map((v) => v.sku));
-        const toCreate = tiers.filter((t) => !t.serverId && !existingSkus.has(t.sku));
-
-        const created = await Promise.all(
-          toCreate.map((tier) =>
-            createVariant(productId, {
-              sku: tier.sku,
-              name: tier.name,
-              price: tier.price,
-              compareAtPrice: tier.compareAtPrice,
-              isInfiniteStock: true,
-            }),
-          ),
-        );
-
-        const allVariants = [...state.serverVariants, ...created];
-
-        if (allVariants.length > 0 && !state.serverProduct?.defaultVariantId) {
-          await setDefaultVariant(productId, allVariants[0].id);
-        }
-
-        if (updates._digitalConfig) {
+        // 1. Product-wide downloads toggle
+        if (
+          updates._digitalIsActive !== undefined &&
+          updates._digitalIsActive !== state.serverProduct?.digitalConfig?.isActive
+        ) {
           await updateProduct(productId, {
-            digitalConfig: {
-              maxDownloads: updates._digitalConfig.maxDownloads,
-              expiresAfterDays: updates._digitalConfig.expiresAfterDays,
-            },
+            digitalConfig: { isActive: updates._digitalIsActive },
           });
         }
 
-        const updatedProduct = await fetchProductById(productId);
-        advance({ serverVariants: allVariants, serverProduct: updatedProduct });
+        // 2. Archive variants the vendor removed
+        const keptIds = new Set(formats.filter((f) => f.serverId).map((f) => f.serverId));
+        for (const v of state.serverVariants.filter((v) => !keptIds.has(v.id))) {
+          await archiveVariant(productId, v.id);
+        }
+
+        // 3. Create / update each format + its asset (sequential — files are large)
+        for (const f of formats) {
+          let variantId = f.serverId;
+          if (!variantId) {
+            const created = await createVariant(productId, {
+              sku: f.sku,
+              name: f.name,
+              price: f.price,
+              compareAtPrice: f.compareAtPrice,
+              isInfiniteStock: true,
+              digitalConfig: {
+                maxDownloads: f.maxDownloads,
+                expiresAfterDays: f.expiresAfterDays,
+              },
+            });
+            variantId = created.id;
+            if (f.pendingFile instanceof File) {
+              await uploadVariantAsset(productId, variantId, f.pendingFile);
+            }
+          } else {
+            await updateVariant(productId, variantId, {
+              sku: f.sku,
+              name: f.name,
+              price: f.price,
+              compareAtPrice: f.compareAtPrice,
+              digitalConfig: {
+                maxDownloads: f.maxDownloads,
+                expiresAfterDays: f.expiresAfterDays,
+              },
+            });
+            if (f.pendingFile instanceof File) {
+              if (f.asset) await replaceVariantAsset(productId, variantId, f.pendingFile);
+              else await uploadVariantAsset(productId, variantId, f.pendingFile);
+            } else if (f.pendingFile === null && f.asset) {
+              await removeVariantAsset(productId, variantId);
+            }
+          }
+
+          // Preview image (optional, max 1) — applies to both create & update.
+          // The picker hands back an already-uploaded library file, so we just
+          // attach its id; `null` means the existing preview was removed.
+          if (f.pendingImage) {
+            await updateVariant(productId, variantId, { fileIds: [f.pendingImage.id] });
+          } else if (f.pendingImage === null && f.image) {
+            await updateVariant(productId, variantId, { fileIds: [] });
+          }
+        }
+
+        // 4. Refresh server state
+        const [freshVariants, updatedProduct] = await Promise.all([
+          fetchVariants(productId),
+          fetchProductById(productId),
+        ]);
+
+        // 5. Ensure a default variant points at an active (asset-backed) format
+        let serverProduct: typeof updatedProduct = updatedProduct;
+        if (!updatedProduct.defaultVariantId) {
+          const firstActive = freshVariants.find((v) => v.status === 'active');
+          if (firstActive) {
+            await setDefaultVariant(productId, firstActive.id);
+            serverProduct = { ...updatedProduct, defaultVariantId: firstActive.id };
+          }
+        }
+
+        toast.success('Formats saved.');
+        advance({ serverVariants: freshVariants, serverProduct });
       } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : 'Failed to save pricing tiers.';
-        dispatch({ type: 'SET_STEP_ERROR', error: msg });
+        dispatch({ type: 'SET_STEP_ERROR', error: getUploadErrorMessage(err) });
       }
     },
     [state.productId, state.serverVariants, state.serverProduct, state.currentStep, state.completedSteps],
+  );
+
+  // ─── Per-variant status toggle (digital formats) ─────────────────────────────
+  // Keeps the wizard's `serverVariants` in sync with status changes the formats
+  // step persists individually, so Review and a remount of Formats don't read
+  // a stale list.
+  const handleVariantStatusChanged = useCallback(
+    (variantId: string, status: 'active' | 'archived') => {
+      dispatch({
+        type: 'SET_SERVER_VARIANTS',
+        variants: state.serverVariants.map((v) =>
+          v.id === variantId ? { ...v, status } : v,
+        ),
+      });
+    },
+    [state.serverVariants],
   );
 
   // ─── Review / publish ─────────────────────────────────────────────────────────
@@ -601,18 +632,18 @@ export function ProductUpload() {
             {...sharedStepProps}
             productId={state.productId}
             onSaveComplete={handleVariantsSave}
+            imageEditsByVariantId={variantImageEdits}
+            onVariantImagesChange={handleVariantImagesChange}
           />
         ) : null;
-      case 'digital-asset':
-        return state.productId ? (
-          <StepDigitalAsset
+      case 'formats':
+        return (
+          <StepDigitalFormats
             {...sharedStepProps}
-            productId={state.productId}
-            onSaveComplete={handleDigitalAssetSave}
+            onSaveComplete={handleFormatsSave}
+            onVariantStatusChanged={handleVariantStatusChanged}
           />
-        ) : null;
-      case 'pricing':
-        return <StepPricing {...sharedStepProps} onSaveComplete={handlePricingSave} />;
+        );
       case 'review':
         return (
           <StepReview

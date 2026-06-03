@@ -165,6 +165,8 @@ export interface Entitlement {
   orderItemId: string;
   productId: string;
   productTitle: string;
+  variantId?: string;
+  variantName: string | null; // which digital format was purchased
   assetId: string;
   assetName: string;
   customerId: string;
@@ -324,50 +326,8 @@ export interface FilterState {
   sortOrder?: 'asc' | 'desc';
 }
 
-// Media File Types
-export interface MediaFile {
-  id: string;
-  name: string;
-  url: string;
-  thumbnailUrl?: string;
-  type: 'image' | 'video' | 'document' | 'audio';
-  mimeType: string;
-  size: number;
-  width?: number;
-  height?: number;
-  duration?: number;
-  metadata: MediaMetadata;
-  tags: string[];
-  folderId?: string;
-  uploadedBy: string;
-  uploadedAt: string;
-  updatedAt: string;
-  usageCount: number;
-  usedIn: UsedInReference[];
-}
-
-export interface MediaMetadata {
-  alt?: string;
-  caption?: string;
-  title?: string;
-  description?: string;
-}
-
-export interface UsedInReference {
-  type: 'product' | 'category' | 'vendor' | 'page' | 'blog';
-  id: string;
-  name: string;
-}
-
-export interface MediaFolder {
-  id: string;
-  name: string;
-  parentId?: string;
-  createdAt: string;
-}
-
-export type MediaSortField = 'name' | 'date' | 'size' | 'usage';
-export type MediaViewMode = 'grid' | 'list';
+// Media/file types now live in src/types/file.types.ts (backend File Management
+// Service) and are consumed via src/services/files.service.ts.
 
 // Extended Product Types for Product Upload Flow
 export interface ServiceBookingSettings {
