@@ -296,6 +296,7 @@ export function ProductMediaUpload({
         multiple={maxFiles - items.length > 1}
         acceptedTypes={['image']}
         maxFiles={Math.max(0, maxFiles - items.length)}
+        alreadySelectedIds={items.map((f) => f.id)}
       />
 
       {/* Replace a single image in place */}
@@ -320,6 +321,9 @@ export function ProductMediaUpload({
           commit(next);
         }}
         acceptedTypes={['image']}
+        alreadySelectedIds={items
+          .filter((_, i) => i !== replaceIndex)
+          .map((f) => f.id)}
       />
     </div>
   );

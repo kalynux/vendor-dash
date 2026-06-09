@@ -79,6 +79,8 @@ interface MediaPickerProps {
   multiple?: boolean;
   acceptedTypes?: FileKind[];
   maxFiles?: number;
+  /** Ids already attached to the target — shown as "Added" and not re-selectable. */
+  alreadySelectedIds?: string[];
 }
 
 const typeIcons: Record<FileKind, typeof ImageIcon> = {
@@ -198,8 +200,14 @@ export function MediaPicker({
   multiple = false,
   acceptedTypes = ALL_KINDS,
   maxFiles,
+  alreadySelectedIds = [],
 }: MediaPickerProps) {
   const isMobile = useIsMobile();
+
+  const alreadySelected = useMemo(
+    () => new Set(alreadySelectedIds),
+    [alreadySelectedIds],
+  );
 
   const [files, setFiles] = useState<ApiFile[]>([]);
   const [pagination, setPagination] = useState<FilePagination | null>(null);
@@ -336,6 +344,7 @@ export function MediaPicker({
   const selectedCount = selectedIds.length;
 
   const toggleSelection = (file: ApiFile) => {
+    if (alreadySelected.has(file.id)) return; // already attached to the target
     const kind = kindFromMime(file.mimeType);
     // Reject files outside the accepted kinds (the type filter is browsable, so a
     // user can land on, e.g., a PDF while picking a cover image).
@@ -434,14 +443,19 @@ export function MediaPicker({
   const grid = (
     <div className="grid grid-cols-3 gap-4 sm:grid-cols-4 lg:grid-cols-5">
       {visibleFiles.map((file) => {
-        const isSelected = !!selected[file.id];
+        const added = alreadySelected.has(file.id);
+        const isSelected = added || !!selected[file.id];
         return (
           <div
             key={file.id}
             onClick={() => toggleSelection(file)}
             className={cn(
-              'group relative cursor-pointer overflow-hidden rounded-lg border-2 transition-all',
-              isSelected ? 'border-primary bg-primary/5' : 'border-transparent hover:border-muted',
+              'group relative overflow-hidden rounded-lg border-2 transition-all',
+              added
+                ? 'cursor-default border-primary/40 opacity-70'
+                : isSelected
+                  ? 'cursor-pointer border-primary bg-primary/5'
+                  : 'cursor-pointer border-transparent hover:border-muted',
             )}
           >
             <div className="relative aspect-square overflow-hidden rounded-t-lg bg-muted">
@@ -450,9 +464,13 @@ export function MediaPicker({
                 <SelectionBox checked={isSelected} />
               </div>
               <div className="absolute bottom-2 left-2">
-                <Badge variant="secondary" className="text-xs capitalize">
-                  {kindFromMime(file.mimeType)}
-                </Badge>
+                {added ? (
+                  <Badge className="bg-primary text-xs text-primary-foreground">Added</Badge>
+                ) : (
+                  <Badge variant="secondary" className="text-xs capitalize">
+                    {kindFromMime(file.mimeType)}
+                  </Badge>
+                )}
               </div>
             </div>
             <div className="p-3">
@@ -467,16 +485,19 @@ export function MediaPicker({
   const listView = (
     <div className="space-y-2">
       {visibleFiles.map((file) => {
-        const isSelected = !!selected[file.id];
+        const added = alreadySelected.has(file.id);
+        const isSelected = added || !!selected[file.id];
         return (
           <div
             key={file.id}
             onClick={() => toggleSelection(file)}
             className={cn(
-              'flex cursor-pointer items-center gap-4 rounded-lg border p-3 transition-all',
-              isSelected
-                ? 'border-primary bg-primary/5'
-                : 'border-transparent hover:border-muted hover:bg-muted/50',
+              'flex items-center gap-4 rounded-lg border p-3 transition-all',
+              added
+                ? 'cursor-default border-primary/40 opacity-70'
+                : isSelected
+                  ? 'cursor-pointer border-primary bg-primary/5'
+                  : 'cursor-pointer border-transparent hover:border-muted hover:bg-muted/50',
             )}
           >
             <div className="h-11 w-11 shrink-0 overflow-hidden rounded-md border bg-muted">
@@ -488,6 +509,9 @@ export function MediaPicker({
                 {formatFileSize(file.size)} · {new Date(file.createdAt).toLocaleDateString()}
               </p>
             </div>
+            {added && (
+              <Badge className="bg-primary text-xs text-primary-foreground">Added</Badge>
+            )}
             <SelectionBox checked={isSelected} />
           </div>
         );

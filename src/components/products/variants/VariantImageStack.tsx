@@ -164,6 +164,7 @@ export function VariantImageStack({
         multiple
         acceptedTypes={['image']}
         maxFiles={remaining}
+        alreadySelectedIds={currentIds}
       />
 
       {/* Per-image popup */}
@@ -230,6 +231,7 @@ export function VariantImageStack({
               if (openFile) handleReplace(openFile.id, picked);
             }}
             acceptedTypes={['image']}
+            alreadySelectedIds={currentIds.filter((id) => id !== openFile?.id)}
           />
         </DialogContent>
       </Dialog>
