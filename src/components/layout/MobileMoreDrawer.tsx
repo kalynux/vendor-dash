@@ -10,6 +10,7 @@ import {
   ChevronRight,
   Settings,
   HelpCircle,
+  Ticket,
 } from 'lucide-react';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
@@ -17,7 +18,7 @@ import { useAuth, useRouter } from '@/App';
 import { useNotificationStore } from '@/store';
 
 type LegacyRoute = 'overview' | 'orders' | 'products' | 'product-upload' | 'customers'
-  | 'analytics' | 'vendors' | 'notifications' | 'settings' | 'media' | 'support' | 'login';
+  | 'analytics' | 'vendors' | 'notifications' | 'settings' | 'media' | 'support' | 'tickets' | 'login';
 
 interface MenuItemProps {
   icon: React.ElementType;
@@ -119,6 +120,8 @@ export function MobileMoreDrawer({ open, onOpenChange }: MobileMoreDrawerProps) 
               <MenuItem icon={Users} label="Customers" route="customers" onNavigate={handleNavigate} />
               <div className="border-t" />
               <MenuItem icon={Image} label="Media library" route="media" onNavigate={handleNavigate} />
+              <div className="border-t" />
+              <MenuItem icon={Ticket} label="Tickets" route="tickets" onNavigate={handleNavigate} />
             </MenuGroup>
 
             {/* Group 3: Settings */}

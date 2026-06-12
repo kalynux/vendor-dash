@@ -15,6 +15,7 @@ import { MediaGallery } from '@/pages/MediaGallery';
 import { ProductUpload } from '@/pages/ProductUpload';
 import { ProductEdit } from '@/pages/ProductEdit';
 import { Support } from '@/pages/Support';
+import { Tickets } from '@/pages/Tickets';
 
 // Layout
 import { Sidebar } from '@/components/layout/Sidebar';
@@ -74,7 +75,7 @@ export const useAuth = () => useContext(LegacyAuthContext);
 
 type LegacyRoute =
   | 'overview' | 'orders' | 'products' | 'product-upload' | 'customers'
-  | 'analytics' | 'vendors' | 'notifications' | 'settings' | 'media' | 'support' | 'login';
+  | 'analytics' | 'vendors' | 'notifications' | 'settings' | 'media' | 'support' | 'tickets' | 'login';
 
 const LEGACY_ROUTE_MAP: Record<LegacyRoute, string> = {
   overview: '/dashboard',
@@ -88,6 +89,7 @@ const LEGACY_ROUTE_MAP: Record<LegacyRoute, string> = {
   settings: '/dashboard/settings',
   media: '/dashboard/media',
   support: '/dashboard/support',
+  tickets: '/dashboard/tickets',
   login: '/login',
 };
 
@@ -132,6 +134,7 @@ function DashboardShell() {
             <Route path="notifications" element={<Notifications />} />
             <Route path="settings" element={<Settings />} />
             <Route path="media" element={<MediaGallery />} />
+            <Route path="tickets" element={<Tickets />} />
             <Route path="support" element={<Support />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>

@@ -19,6 +19,7 @@ import {
   User,
   CreditCard,
   Image as ImageIcon,
+  Ticket,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -34,7 +35,7 @@ const navigation = [
 ];
 
 const adminNavigation = [
-  { name: 'Tickets', route: 'support' as const, icon: Shield },
+  { name: 'Tickets', route: 'tickets' as const, icon: Ticket },
 ];
 
 const bottomNavigation = [

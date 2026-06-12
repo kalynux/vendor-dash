@@ -24,8 +24,6 @@ import {
 } from '@/onboarding/schemas/onboarding.schemas';
 import { useOnboarding } from '@/onboarding/store/onboarding.store';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import {
     Select,
     SelectContent,
@@ -169,7 +167,6 @@ function PayoutMethodCard({
     control,
     register,
     setValue,
-    errors,
     onRemove,
     canRemove,
 }: {
@@ -177,7 +174,6 @@ function PayoutMethodCard({
     control: ReturnType<typeof useForm<Step1FormValues>>['control'];
     register: ReturnType<typeof useForm<Step1FormValues>>['register'];
     setValue: ReturnType<typeof useForm<Step1FormValues>>['setValue'];
-    errors: ReturnType<typeof useForm<Step1FormValues>>['formState']['errors'];
     onRemove: () => void;
     canRemove: boolean;
 }) {
@@ -464,7 +460,6 @@ export function Step1BasicSetup() {
                                 control={control}
                                 register={register}
                                 setValue={setValue}
-                                errors={errors}
                                 onRemove={() => remove(index)}
                                 canRemove={fields.length > 1}
                             />

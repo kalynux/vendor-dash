@@ -23,8 +23,6 @@ import {
   Pencil,
   ArchiveRestore,
   Undo2,
-  AlertTriangle,
-  Triangle,
   TriangleAlert,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -54,16 +52,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useProductStore } from '@/store';

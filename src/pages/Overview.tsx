@@ -102,7 +102,7 @@ function MetricCard({ title, value, change, changeType, icon: Icon, isLoading }:
 export function Overview() {
   const { metrics, salesData, dateRange, setDateRange, fetchAnalytics, isLoading } = useAnalyticsStore();
   const { orders, fetchOrders, isLoading: isOrderLoading, fetchOrderById } = useOrderStore();
-  const { products, fetchProducts } = useProductStore();
+  const { fetchProducts } = useProductStore();
   const { currentStore } = useStoreStore();
   const { navigate } = useRouter();
   const isMobile = useIsMobile();

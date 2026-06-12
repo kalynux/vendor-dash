@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import { useForm, useFieldArray, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import type { z } from 'zod';
 import {
     Loader2,
     ChevronRight,
@@ -174,7 +175,7 @@ export function Step4PolicySetup() {
         control,
         setValue,
         formState: { errors },
-    } = useForm<Step4FormValues>({
+    } = useForm<z.input<typeof step4Schema>, unknown, Step4FormValues>({
         resolver: zodResolver(step4Schema),
         defaultValues: {
             return_policy: draft?.return_policy ?? (existingPolicies?.return_policy

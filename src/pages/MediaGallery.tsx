@@ -22,6 +22,7 @@ import {
   Video,
   FileText,
   Music,
+  Play,
   Trash2,
   Pencil,
   Check,
@@ -82,7 +83,8 @@ import {
   getFile,
   deleteFile,
   updateFileName,
-  uploadFilesWithProgress,
+  uploadMediaWithProgress,
+  validateMediaSelection,
   resolveFileUrl,
   kindFromMime,
 } from '@/services/files.service';
@@ -96,7 +98,6 @@ import type {
 
 const PAGE_LIMIT = 24;
 const MAX_FILES_PER_UPLOAD = 10;
-const VENDOR_MAX_BYTES = 500 * 1024 * 1024; // 500 MB role limit
 
 const kindIcon: Record<FileKind, typeof ImageIcon> = {
   image: ImageIcon,
@@ -157,15 +158,26 @@ function statusBadgeClass(status?: string): string {
 
 // ─── File artwork ─────────────────────────────────────────────────────────────
 
-function FileArtwork({ file, className }: { file: ApiFile; className?: string }) {
+function FileArtwork({
+  file,
+  className,
+  controls = false,
+}: {
+  file: ApiFile;
+  className?: string;
+  // When true (detail view) videos render a full player; otherwise they show the
+  // poster frame with a play badge so a thumbnail still reads as a video.
+  controls?: boolean;
+}) {
   const kind = kindFromMime(file.mimeType);
   const Icon = kindIcon[kind];
   const [broken, setBroken] = useState(false);
+  const url = resolveFileUrl(file);
 
   if (kind === 'image' && !broken) {
     return (
       <img
-        src={resolveFileUrl(file)}
+        src={url}
         alt={file.originalName ?? 'File'}
         crossOrigin="use-credentials"
         loading="lazy"
@@ -175,12 +187,88 @@ function FileArtwork({ file, className }: { file: ApiFile; className?: string })
       />
     );
   }
+
+  if (kind === 'video' && !broken) {
+    if (controls) {
+      return (
+        <video
+          src={url}
+          controls
+          preload="metadata"
+          crossOrigin="use-credentials"
+          playsInline
+          onError={() => setBroken(true)}
+          className={cn('h-full w-full bg-black object-contain', className)}
+        />
+      );
+    }
+    return (
+      <div className={cn('relative h-full w-full bg-black', className)}>
+        <video
+          src={url}
+          muted
+          preload="metadata"
+          crossOrigin="use-credentials"
+          playsInline
+          onError={() => setBroken(true)}
+          className="h-full w-full object-cover"
+        />
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+          <span className="rounded-full bg-black/55 p-2 text-white backdrop-blur-sm">
+            <Play className="h-5 w-5" />
+          </span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={cn('flex h-full w-full items-center justify-center', className)}>
       <div className={cn('rounded-xl p-4', kindTint[kind])}>
         <Icon className="h-8 w-8" />
       </div>
     </div>
+  );
+}
+
+// Rich preview for the inspector: images and videos play inline, audio gets a
+// player, and documents/other hand off to the browser in a new tab (e.g. PDFs).
+function FilePreview({ file }: { file: ApiFile }) {
+  const kind = kindFromMime(file.mimeType);
+  const url = resolveFileUrl(file);
+
+  if (kind === 'image' || kind === 'video') {
+    return <FileArtwork file={file} controls />;
+  }
+
+  if (kind === 'audio') {
+    const Icon = kindIcon.audio;
+    return (
+      <div className="flex h-full w-full flex-col items-center justify-center gap-4 p-6">
+        <div className={cn('rounded-xl p-4', kindTint.audio)}>
+          <Icon className="h-8 w-8" />
+        </div>
+        <audio src={url} controls crossOrigin="use-credentials" className="w-full max-w-sm" />
+      </div>
+    );
+  }
+
+  const Icon = kindIcon[kind];
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noreferrer"
+      className="group flex h-full w-full flex-col items-center justify-center gap-3 p-6 text-center transition-colors hover:bg-muted"
+    >
+      <div className={cn('rounded-xl p-4', kindTint[kind])}>
+        <Icon className="h-8 w-8" />
+      </div>
+      <span className="inline-flex items-center gap-1.5 text-sm font-medium text-primary">
+        <ExternalLink className="h-4 w-4" />
+        Open in new tab
+      </span>
+    </a>
   );
 }
 
@@ -302,13 +390,9 @@ export function MediaGallery() {
     async (picked: FileList | File[]) => {
       const arr = Array.from(picked);
       if (arr.length === 0) return;
-      if (arr.length > MAX_FILES_PER_UPLOAD) {
-        toast.error(`You can upload at most ${MAX_FILES_PER_UPLOAD} files at once.`);
-        return;
-      }
-      const tooBig = arr.find((f) => f.size > VENDOR_MAX_BYTES);
-      if (tooBig) {
-        toast.error(`"${tooBig.name}" exceeds the 500 MB limit.`);
+      const invalid = validateMediaSelection(arr);
+      if (invalid) {
+        toast.error(invalid);
         return;
       }
 
@@ -316,7 +400,7 @@ export function MediaGallery() {
       setUploadPercent(0);
       setUploadLabel(arr.length === 1 ? arr[0].name : `${arr.length} files`);
       try {
-        await uploadFilesWithProgress(arr, setUploadPercent);
+        await uploadMediaWithProgress(arr, setUploadPercent);
         toast.success(`Uploaded ${arr.length} file${arr.length > 1 ? 's' : ''}.`);
         if (page !== 1) setPage(1);
         else await loadPage();
@@ -793,7 +877,7 @@ export function MediaGallery() {
             <div className="rounded-2xl border-2 border-dashed border-primary bg-background px-10 py-8 text-center shadow-lg">
               <Upload className="mx-auto mb-3 h-10 w-10 text-primary" />
               <p className="text-lg font-semibold">Drop to upload</p>
-              <p className="text-sm text-muted-foreground">Up to {MAX_FILES_PER_UPLOAD} files, 500 MB each</p>
+              <p className="text-sm text-muted-foreground">Up to {MAX_FILES_PER_UPLOAD} files (500 MB each) or 3 videos (70 MB each)</p>
             </div>
           </div>
         )}
@@ -876,7 +960,7 @@ function InspectorBody({
     <div className="flex flex-col">
       {/* Preview */}
       <div className="relative aspect-video w-full bg-muted">
-        <FileArtwork file={display} />
+        <FilePreview file={display} />
         {!hideClose && (
           <Button
             variant="secondary"

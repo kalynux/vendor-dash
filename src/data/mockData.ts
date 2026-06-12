@@ -357,6 +357,7 @@ export const mockOrders: Order[] = [
   {
     id: '1',
     orderNumber: '#1001',
+    orderType: 'physical',
     customer: mockCustomers[0],
     items: [
       {
@@ -395,11 +396,11 @@ export const mockOrders: Order[] = [
     updatedAt: '2024-03-14T16:45:00Z',
     tags: ['electronics', 'repeat-customer'],
     timeline: [
-      { id: 't1', type: 'order_placed', message: 'Order placed by customer', createdAt: '2024-03-10T10:30:00Z', actor: 'Alice Johnson' },
-      { id: 't2', type: 'payment_processed', message: 'Payment of $284.97 processed successfully', createdAt: '2024-03-10T10:31:00Z', actor: 'System' },
-      { id: 't3', type: 'fulfillment_started', message: 'Fulfillment process started', createdAt: '2024-03-10T11:00:00Z', actor: 'System' },
-      { id: 't4', type: 'shipped', message: 'Order shipped via FedEx (Tracking: 1234567890)', createdAt: '2024-03-11T09:15:00Z', actor: 'Warehouse' },
-      { id: 't5', type: 'delivered', message: 'Order delivered successfully', createdAt: '2024-03-14T16:45:00Z', actor: 'FedEx' }
+      { id: 't1', type: 'order.created' as const, message: 'Order placed by customer', description: null, createdAt: '2024-03-10T10:30:00Z', actor: 'Alice Johnson' },
+      { id: 't2', type: 'payment.updated' as const, message: 'Payment of $284.97 processed successfully', description: null, createdAt: '2024-03-10T10:31:00Z', actor: 'System' },
+      { id: 't3', type: 'fulfillment.updated' as const, message: 'Fulfillment process started', description: null, createdAt: '2024-03-10T11:00:00Z', actor: 'System' },
+      { id: 't4', type: 'fulfillment.updated' as const, message: 'Order shipped via FedEx (Tracking: 1234567890)', description: null, createdAt: '2024-03-11T09:15:00Z', actor: 'Warehouse' },
+      { id: 't5', type: 'fulfillment.updated' as const, message: 'Order delivered successfully', description: null, createdAt: '2024-03-14T16:45:00Z', actor: 'FedEx' }
     ],
     riskLevel: 'low',
     notes: 'Please leave at the front door if no one is home. Ring the bell twice.',
@@ -409,6 +410,7 @@ export const mockOrders: Order[] = [
   {
     id: '2',
     orderNumber: '#1002',
+    orderType: 'physical',
     customer: mockCustomers[1],
     items: [
       {
@@ -436,15 +438,16 @@ export const mockOrders: Order[] = [
     updatedAt: '2024-03-13T11:30:00Z',
     tags: ['electronics', 'promotion'],
     timeline: [
-      { id: 't6', type: 'order_placed', message: 'Order placed by customer', createdAt: '2024-03-12T14:20:00Z', actor: 'Bob Smith' },
-      { id: 't7', type: 'payment_processed', message: 'Payment of $303.99 processed successfully', createdAt: '2024-03-12T14:21:00Z', actor: 'System' },
-      { id: 't8', type: 'shipped', message: 'Order shipped via UPS (Tracking: 1Z999AA10123456784)', createdAt: '2024-03-13T11:30:00Z', actor: 'Warehouse' }
+      { id: 't6', type: 'order.created' as const, message: 'Order placed by customer', description: null, createdAt: '2024-03-12T14:20:00Z', actor: 'Bob Smith' },
+      { id: 't7', type: 'payment.updated' as const, message: 'Payment of $303.99 processed successfully', description: null, createdAt: '2024-03-12T14:21:00Z', actor: 'System' },
+      { id: 't8', type: 'fulfillment.updated' as const, message: 'Order shipped via UPS (Tracking: 1Z999AA10123456784)', description: null, createdAt: '2024-03-13T11:30:00Z', actor: 'Warehouse' }
     ],
     riskLevel: 'low'
   },
   {
     id: '3',
     orderNumber: '#1003',
+    orderType: 'physical',
     customer: mockCustomers[2],
     items: [
       {
@@ -482,14 +485,15 @@ export const mockOrders: Order[] = [
     updatedAt: '2024-03-13T09:01:00Z',
     tags: ['fashion', 'home'],
     timeline: [
-      { id: 't9', type: 'order_placed', message: 'Order placed by customer', createdAt: '2024-03-13T09:00:00Z', actor: 'Carol White' },
-      { id: 't10', type: 'payment_processed', message: 'Payment of $180.77 processed successfully', createdAt: '2024-03-13T09:01:00Z', actor: 'System' }
+      { id: 't9', type: 'order.created' as const, message: 'Order placed by customer', description: null, createdAt: '2024-03-13T09:00:00Z', actor: 'Carol White' },
+      { id: 't10', type: 'payment.updated' as const, message: 'Payment of $180.77 processed successfully', description: null, createdAt: '2024-03-13T09:01:00Z', actor: 'System' }
     ],
     riskLevel: 'medium'
   },
   {
     id: '4',
     orderNumber: '#1004',
+    orderType: 'physical',
     customer: mockCustomers[0],
     items: [
       {
@@ -517,13 +521,14 @@ export const mockOrders: Order[] = [
     updatedAt: '2024-03-14T16:00:00Z',
     tags: ['electronics', 'high-value'],
     timeline: [
-      { id: 't11', type: 'order_placed', message: 'Order placed by customer', createdAt: '2024-03-14T16:00:00Z', actor: 'Alice Johnson' }
+      { id: 't11', type: 'order.created' as const, message: 'Order placed by customer', description: null, createdAt: '2024-03-14T16:00:00Z', actor: 'Alice Johnson' }
     ],
     riskLevel: 'medium'
   },
   {
     id: '5',
     orderNumber: '#1005',
+    orderType: 'physical',
     customer: mockCustomers[1],
     items: [
       {
@@ -551,16 +556,17 @@ export const mockOrders: Order[] = [
     updatedAt: '2024-03-11T14:00:00Z',
     tags: ['cancelled'],
     timeline: [
-      { id: 't12', type: 'order_placed', message: 'Order placed by customer', createdAt: '2024-03-11T11:30:00Z', actor: 'Bob Smith' },
-      { id: 't13', type: 'payment_processed', message: 'Payment of $161.99 processed successfully', createdAt: '2024-03-11T11:31:00Z', actor: 'System' },
-      { id: 't14', type: 'note_added', message: 'Order cancelled by customer request', createdAt: '2024-03-11T14:00:00Z', actor: 'Support Team' },
-      { id: 't15', type: 'refund_processed', message: 'Full refund of $161.99 processed', createdAt: '2024-03-11T14:05:00Z', actor: 'System' }
+      { id: 't12', type: 'order.created' as const, message: 'Order placed by customer', description: null, createdAt: '2024-03-11T11:30:00Z', actor: 'Bob Smith' },
+      { id: 't13', type: 'payment.updated' as const, message: 'Payment of $161.99 processed successfully', description: null, createdAt: '2024-03-11T11:31:00Z', actor: 'System' },
+      { id: 't14', type: 'note.added' as const, message: 'Order cancelled by customer request', description: null, createdAt: '2024-03-11T14:00:00Z', actor: 'Support Team' },
+      { id: 't15', type: 'payment.updated' as const, message: 'Full refund of $161.99 processed', description: null, createdAt: '2024-03-11T14:05:00Z', actor: 'System' }
     ],
     riskLevel: 'low'
   },
   {
     id: '6',
     orderNumber: '#1006',
+    orderType: 'digital',
     customer: mockCustomers[2],
     items: [
       {
@@ -599,39 +605,52 @@ export const mockOrders: Order[] = [
     updatedAt: '2024-03-15T08:01:00Z',
     tags: ['digital', 'course'],
     timeline: [
-      { id: 't16', type: 'order_placed', message: 'Order placed by customer', createdAt: '2024-03-15T08:00:00Z', actor: 'Carol White' },
-      { id: 't17', type: 'payment_processed', message: 'Payment of $129.58 processed successfully', createdAt: '2024-03-15T08:00:30Z', actor: 'System' },
-      { id: 't18', type: 'delivered', message: 'Digital products delivered — download links sent to customer', createdAt: '2024-03-15T08:01:00Z', actor: 'System' }
+      { id: 't16', type: 'order.created' as const, message: 'Order placed by customer', description: null, createdAt: '2024-03-15T08:00:00Z', actor: 'Carol White' },
+      { id: 't17', type: 'payment.updated' as const, message: 'Payment of $129.58 processed successfully', description: null, createdAt: '2024-03-15T08:00:30Z', actor: 'System' },
+      { id: 't18', type: 'fulfillment.updated' as const, message: 'Digital products delivered — download links sent to customer', description: null, createdAt: '2024-03-15T08:01:00Z', actor: 'System' }
     ],
     riskLevel: 'low',
     entitlements: [
       {
         id: 'ent1',
-        orderId: '6',
+        orderItemId: 'oi8',
         productId: '6',
-        productName: 'UI Design Masterclass - Full Course',
+        productTitle: 'UI Design Masterclass - Full Course',
+        variantName: null,
+        assetId: 'asset-1',
+        assetName: 'Course Video Bundle',
         customerId: '3',
-        status: 'active',
-        downloadCount: 2,
+        downloadsUsed: 2,
         maxDownloads: 5,
+        downloadsRemaining: 3,
+        grantedAt: '2024-03-15T08:01:00Z',
         expiresAt: '2025-03-15T08:01:00Z',
         revokedAt: null,
-        revokeReason: null,
-        createdAt: '2024-03-15T08:01:00Z'
+        lastDownloadAt: null,
+        isActive: true,
+        isRevoked: false,
+        isExpired: false,
       },
       {
         id: 'ent2',
-        orderId: '6',
+        orderItemId: 'oi9',
         productId: '7',
-        productName: 'Premium Design Assets Bundle',
+        productTitle: 'Premium Design Assets Bundle',
+        variantName: null,
+        assetId: 'asset-2',
+        assetName: 'Design Assets ZIP',
         customerId: '3',
-        status: 'revoked',
-        downloadCount: 1,
+        downloadsUsed: 1,
         maxDownloads: 3,
+        downloadsRemaining: 2,
+        grantedAt: '2024-03-15T08:01:00Z',
         expiresAt: '2025-03-15T08:01:00Z',
         revokedAt: '2024-03-16T10:00:00Z',
+        lastDownloadAt: null,
+        isActive: false,
+        isRevoked: true,
+        isExpired: false,
         revokeReason: 'Customer requested refund for this item',
-        createdAt: '2024-03-15T08:01:00Z'
       }
     ] as Entitlement[]
   }

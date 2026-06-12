@@ -15,6 +15,7 @@ import {
   Video,
   FileText,
   Music,
+  Play,
   Upload,
   Grid3X3,
   List,
@@ -59,7 +60,8 @@ import { ApiError } from '@/types/api';
 import { getUploadErrorMessage } from '@/lib/uploadErrors';
 import {
   listFiles,
-  uploadFilesWithProgress,
+  uploadMediaWithProgress,
+  validateMediaSelection,
   resolveFileUrl,
   kindFromMime,
 } from '@/services/files.service';
@@ -106,7 +108,6 @@ const KIND_LABELS: Record<FileKind, string> = {
 
 const PICKER_LIMIT = 24;
 const MAX_FILES_PER_UPLOAD = 10;
-const VENDOR_MAX_BYTES = 500 * 1024 * 1024; // 500 MB role limit
 const SEARCH_DEBOUNCE_MS = 300;
 
 const ALL_KINDS: FileKind[] = ['image', 'video', 'document', 'audio'];
@@ -165,6 +166,25 @@ function FileThumb({ file }: { file: ApiFile }) {
         className="h-full w-full object-cover"
         draggable={false}
       />
+    );
+  }
+  if (kind === 'video') {
+    return (
+      <div className="relative h-full w-full bg-black">
+        <video
+          src={resolveFileUrl(file)}
+          muted
+          preload="metadata"
+          crossOrigin="use-credentials"
+          playsInline
+          className="h-full w-full object-cover"
+        />
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+          <span className="rounded-full bg-black/55 p-1.5 text-white backdrop-blur-sm">
+            <Play className="h-4 w-4" />
+          </span>
+        </div>
+      </div>
     );
   }
   return (
@@ -304,19 +324,15 @@ export function MediaPicker({
     async (picked: FileList | File[]) => {
       const arr = Array.from(picked);
       if (arr.length === 0) return;
-      if (arr.length > MAX_FILES_PER_UPLOAD) {
-        toast.error(`You can upload at most ${MAX_FILES_PER_UPLOAD} files at once.`);
-        return;
-      }
-      const tooBig = arr.find((f) => f.size > VENDOR_MAX_BYTES);
-      if (tooBig) {
-        toast.error(`"${tooBig.name}" exceeds the 500 MB limit.`);
+      const invalid = validateMediaSelection(arr);
+      if (invalid) {
+        toast.error(invalid);
         return;
       }
       setUploading(true);
       setUploadPercent(0);
       try {
-        await uploadFilesWithProgress(arr, setUploadPercent);
+        await uploadMediaWithProgress(arr, setUploadPercent);
         toast.success(`Uploaded ${arr.length} file${arr.length > 1 ? 's' : ''}.`);
         if (page !== 1) setPage(1);
         else await fetchFiles();
@@ -638,7 +654,7 @@ export function MediaPicker({
             <Upload className="mx-auto mb-3 h-10 w-10 text-primary" />
             <p className="text-lg font-semibold">Drop to upload</p>
             <p className="text-sm text-muted-foreground">
-              Up to {MAX_FILES_PER_UPLOAD} files, 500 MB each
+              Up to {MAX_FILES_PER_UPLOAD} files (500 MB each) or 3 videos (70 MB each)
             </p>
           </div>
         </div>

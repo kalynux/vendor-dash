@@ -119,9 +119,67 @@ export async function deleteFile(id: string): Promise<void> {
 
 // ─── Upload with progress (XHR) ───────────────────────────────────────────────
 // The fetch-based client can't report upload progress, so uploads go through XHR.
-// Cookie auth is preserved with `withCredentials`. Field name is `files` (1–10).
+// Cookie auth is preserved with `withCredentials`.
+//
+// Two upload routes (see api-doc/vendor/file-management.md):
+//   • images/docs/audio/archives → POST /files/upload        (field `files`, ≤10, 500 MB each)
+//   • videos                     → POST /files/upload/video  (field `videos`, ≤3, 70 MB each)
+// The general endpoint REJECTS videos, so a mixed selection is split and routed
+// per file. `uploadMediaWithProgress` is the single entry point callers should use.
 
-function errorFromXhr(xhr: XMLHttpRequest): ApiError {
+// Role-based limits for the general (non-video) upload route.
+export const MAX_FILES_PER_UPLOAD = 10;
+export const VENDOR_MAX_BYTES = 500 * 1024 * 1024; // 500 MB
+
+// Dedicated video route constraints. Only these formats are accepted; the server
+// re-validates by sniffing the bytes, so this is a UX guard, not the source of truth.
+export const VIDEO_MIME_TYPES = ['video/mp4', 'video/quicktime', 'video/webm'] as const;
+export const VIDEO_EXTENSIONS = ['mp4', 'mov', 'webm'] as const;
+export const VIDEO_MAX_BYTES = 70 * 1024 * 1024; // 70 MB per video
+export const MAX_VIDEOS_PER_UPLOAD = 3; // non-customer actors; customers get 1
+
+/**
+ * Does this selection belong on the video route? Any `video/*` file does — the
+ * general endpoint accepts no video at all. Falls back to the extension when the
+ * browser doesn't populate `File.type` (common for `.mov`).
+ */
+export function isVideoUpload(file: File): boolean {
+  if (file.type) return file.type.startsWith('video/');
+  const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
+  return (VIDEO_EXTENSIONS as readonly string[]).includes(ext);
+}
+
+/**
+ * Validate a mixed selection client-side before uploading. Returns a friendly
+ * error message, or `null` when the selection is acceptable. Videos and other
+ * files are checked against their own route's count/size/format limits.
+ */
+export function validateMediaSelection(files: File[]): string | null {
+  const videos = files.filter(isVideoUpload);
+  const others = files.filter((f) => !isVideoUpload(f));
+
+  if (others.length > MAX_FILES_PER_UPLOAD) {
+    return `You can upload at most ${MAX_FILES_PER_UPLOAD} files at once.`;
+  }
+  if (videos.length > MAX_VIDEOS_PER_UPLOAD) {
+    return `You can upload at most ${MAX_VIDEOS_PER_UPLOAD} videos at once.`;
+  }
+
+  const tooBig = others.find((f) => f.size > VENDOR_MAX_BYTES);
+  if (tooBig) return `"${tooBig.name}" exceeds the 500 MB limit.`;
+
+  const bigVideo = videos.find((f) => f.size > VIDEO_MAX_BYTES);
+  if (bigVideo) return `"${bigVideo.name}" exceeds the 70 MB video limit.`;
+
+  const badFormat = videos.find(
+    (f) => f.type && !(VIDEO_MIME_TYPES as readonly string[]).includes(f.type),
+  );
+  if (badFormat) return `"${badFormat.name}" is not a supported video (use MP4, MOV or WebM).`;
+
+  return null;
+}
+
+function errorFromXhr(xhr: XMLHttpRequest, files: File[]): ApiError {
   let body: Record<string, unknown> = {};
   try {
     body = JSON.parse(xhr.responseText);
@@ -142,25 +200,34 @@ function errorFromXhr(xhr: XMLHttpRequest): ApiError {
     Array.isArray((rawDetails as Record<string, unknown>).violations)
       ? ((rawDetails as Record<string, unknown>).violations as UploadViolation[])
       : undefined;
+  // `fileIndex` is scoped to this request's own file list. Because a mixed
+  // selection is split across two requests, backfill each violation's filename
+  // from THIS request so per-file messaging stays correct after the split.
+  violations?.forEach((v) => {
+    if (!v.metadata?.originalName && typeof v.fileIndex === 'number' && files[v.fileIndex]) {
+      v.metadata = { ...v.metadata, originalName: files[v.fileIndex].name };
+    }
+  });
   return new ApiError(xhr.status, code, message, details, undefined, violations);
 }
 
-export function uploadFilesWithProgress(
+/** Low-level XHR upload to a single route. Reports bytes loaded for aggregation. */
+function xhrUpload(
+  url: string,
+  fieldName: string,
   files: File[],
-  onProgress?: (percent: number) => void,
+  onBytes?: (loaded: number) => void,
 ): Promise<ApiFile[]> {
   return new Promise((resolve, reject) => {
     const fd = new FormData();
-    files.forEach((f) => fd.append('files', f));
+    files.forEach((f) => fd.append(fieldName, f));
 
     const xhr = new XMLHttpRequest();
-    xhr.open('POST', `${BASE_URL}/files/upload`);
+    xhr.open('POST', url);
     xhr.withCredentials = true;
 
     xhr.upload.onprogress = (event) => {
-      if (event.lengthComputable && onProgress) {
-        onProgress(Math.round((event.loaded / event.total) * 100));
-      }
+      if (event.lengthComputable && onBytes) onBytes(event.loaded);
     };
 
     xhr.onload = () => {
@@ -172,7 +239,7 @@ export function uploadFilesWithProgress(
           reject(new ApiError(xhr.status, 'PARSE_ERROR', 'Could not parse upload response'));
         }
       } else {
-        reject(errorFromXhr(xhr));
+        reject(errorFromXhr(xhr, files));
       }
     };
 
@@ -183,3 +250,47 @@ export function uploadFilesWithProgress(
     xhr.send(fd);
   });
 }
+
+/**
+ * Upload a mixed selection, routing videos to the dedicated video endpoint and
+ * everything else to the general one. Progress is aggregated across both requests
+ * by byte count. Returns the combined `ApiFile[]` for all uploaded files.
+ */
+export function uploadMediaWithProgress(
+  files: File[],
+  onProgress?: (percent: number) => void,
+): Promise<ApiFile[]> {
+  const videos = files.filter(isVideoUpload);
+  const others = files.filter((f) => !isVideoUpload(f));
+
+  const totalBytes = files.reduce((sum, f) => sum + f.size, 0) || 1;
+  const loaded = { files: 0, videos: 0 };
+  const report = () =>
+    onProgress?.(Math.round(((loaded.files + loaded.videos) / totalBytes) * 100));
+
+  const tasks: Promise<ApiFile[]>[] = [];
+  if (others.length > 0) {
+    tasks.push(
+      xhrUpload(`${BASE_URL}/files/upload`, 'files', others, (b) => {
+        loaded.files = b;
+        report();
+      }),
+    );
+  }
+  if (videos.length > 0) {
+    tasks.push(
+      xhrUpload(`${BASE_URL}/files/upload/video`, 'videos', videos, (b) => {
+        loaded.videos = b;
+        report();
+      }),
+    );
+  }
+
+  return Promise.all(tasks).then((groups) => groups.flat());
+}
+
+/**
+ * Back-compat alias — uploads through the smart router. Prefer
+ * `uploadMediaWithProgress` directly in new code.
+ */
+export const uploadFilesWithProgress = uploadMediaWithProgress;

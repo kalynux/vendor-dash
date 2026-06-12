@@ -2,7 +2,6 @@ import { useState } from 'react';
 import {
   Package,
   Truck,
-  CheckCircle,
   Clock,
   MapPin,
   CreditCard,

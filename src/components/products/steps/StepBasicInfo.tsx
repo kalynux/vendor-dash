@@ -1,6 +1,7 @@
 import { useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import type { z } from 'zod';
 import { AlertCircle, X, Plus, ChevronRight, ChevronLeft } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -37,7 +38,7 @@ export function StepBasicInfo({
     watch,
     setValue,
     formState: { errors },
-  } = useForm<BasicInfoFormValues>({
+  } = useForm<z.input<typeof basicInfoSchema>, unknown, BasicInfoFormValues>({
     resolver: zodResolver(basicInfoSchema),
     defaultValues: {
       title: product?.title ?? '',
