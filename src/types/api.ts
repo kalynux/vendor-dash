@@ -193,6 +193,40 @@ export type PolicySetupPayload =
       version?: number;
     };
 
+// ─── Post-onboarding profile update (PATCH /vendor/profile) ────────────────────
+// Partial update — send only the fields that changed. Object/array fields are a
+// FULL REPLACE (send the complete desired value). `version` is always required.
+// Note: default_delivery_agency_id is NOT editable here — use the dedicated
+// /vendor/profile/default-delivery-agency routes.
+
+export interface VendorProfileUpdatePayload {
+  displayName?: string;
+  businessDescription?: string | null;
+  phone?: string;
+  country?: string;
+  timezone?: string;
+  payout_details?: PayoutDetails[];
+  branding?: Partial<Branding>;
+  business_addresses?: BusinessAddress[];
+  social_links?: Partial<SocialLinks>;
+  policies?: {
+    return_policy?: ReturnPolicy | null;
+    cancellation_policy?: CancellationPolicy | null;
+    support_policy?: SupportPolicy | null;
+  } | null;
+  notificationPreferences?: { email?: boolean; whatsapp?: boolean; phone?: boolean };
+  /** Required — optimistic-locking guard. Pass the version from the last profile load. */
+  version: number;
+}
+
+/** Response from PATCH /vendor/profile. The DTO shape differs from VendorRoleEntity
+ *  (camelCase), so callers should merge optimistically and read `version` from here. */
+export interface VendorProfileUpdateResponse {
+  success: boolean;
+  message?: string;
+  data: { version?: number; [key: string]: unknown };
+}
+
 // ─── Delivery Agency ──────────────────────────────────────────────────────────
 
 export interface DeliveryAgencyHQAddress {

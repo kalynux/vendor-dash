@@ -14,6 +14,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useNotificationStore } from '@/store';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { MobilePageHeader } from '@/components/layout/MobilePageHeader';
 import { cn } from '@/lib/utils';
 
 const getNotificationIcon = (type: string) => {
@@ -48,6 +50,7 @@ const getNotificationColor = (type: string) => {
 
 export function Notifications() {
   const { notifications, unreadCount, fetchNotifications, markAsRead, markAllAsRead } = useNotificationStore();
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     fetchNotifications();
@@ -119,29 +122,56 @@ export function Notifications() {
   };
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold">Notifications</h1>
-          <p className="text-muted-foreground">
-            Stay updated with your store activity
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          {unreadCount > 0 && (
-            <Button variant="outline" onClick={() => markAllAsRead()}>
-              <Check className="w-4 h-4 mr-2" />
-              Mark all as read
+    <div className={cn('animate-fade-in', isMobile ? '-mx-6 -mt-6' : 'space-y-6')}>
+      {isMobile ? (
+        <MobilePageHeader
+          title="Notifications"
+          actions={
+            <>
+              {unreadCount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => markAllAsRead()}
+                  aria-label="Mark all as read"
+                  className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-accent transition-colors"
+                >
+                  <Check className="w-5 h-5" />
+                </button>
+              )}
+              <button
+                type="button"
+                aria-label="Notification settings"
+                className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-accent transition-colors"
+              >
+                <Settings className="w-5 h-5" />
+              </button>
+            </>
+          }
+        />
+      ) : (
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold">Notifications</h1>
+            <p className="text-muted-foreground">
+              Stay updated with your store activity
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            {unreadCount > 0 && (
+              <Button variant="outline" onClick={() => markAllAsRead()}>
+                <Check className="w-4 h-4 mr-2" />
+                Mark all as read
+              </Button>
+            )}
+            <Button variant="outline" size="icon">
+              <Settings className="w-4 h-4" />
             </Button>
-          )}
-          <Button variant="outline" size="icon">
-            <Settings className="w-4 h-4" />
-          </Button>
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* Stats */}
+      {/* Stats (desktop only) */}
+      {!isMobile && (
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card>
           <CardContent className="p-6">
@@ -183,9 +213,10 @@ export function Notifications() {
           </CardContent>
         </Card>
       </div>
+      )}
 
       {/* Notifications List */}
-      <Tabs defaultValue="all" className="w-full">
+      <Tabs defaultValue="all" className={cn('w-full', isMobile && 'px-4 pt-3 pb-28')}>
         <TabsList>
           <TabsTrigger value="all" className="gap-2">
             All

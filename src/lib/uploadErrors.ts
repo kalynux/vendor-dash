@@ -12,7 +12,7 @@ export const UPLOAD_VIOLATION_MESSAGES: Record<UploadViolationCode, string> = {
   FILE_TOO_LARGE: 'is too large',
   MIME_NOT_ALLOWED: 'has an unsupported file type',
   TOO_MANY_FILES: 'exceeds the maximum number of files',
-  QUOTA_EXCEEDED: 'would exceed your storage quota',
+  QUOTA_EXCEEDED: 'would exceed your storage quota — free up space in your Media Library or upgrade your plan',
   VIRUS_DETECTED: 'failed the security scan',
   PERMISSION_DENIED: 'cannot be uploaded (permission denied)',
   TOTAL_SIZE_EXCEEDED: 'pushes the upload over the total size limit',

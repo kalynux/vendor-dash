@@ -1,6 +1,9 @@
 // ─── Product Types & Status ───────────────────────────────────────────────────
 
 import type { ApiFile } from '@/types/file.types';
+// Service variants carry serviceConfig. Type-only import (erased at compile) —
+// no runtime circular dependency with services.types.
+import type { ServiceConfig } from '@/types/services.types';
 
 export type ApiProductType = 'physical' | 'digital';
 
@@ -137,6 +140,8 @@ export interface ApiVariant {
   // Digital products only — computed label + per-variant asset/limits
   displayName?: string;
   digital?: ApiVariantDigital;
+  // Service products only — the single variant carries duration/buffers/mode/peak.
+  serviceConfig?: ServiceConfig;
   createdAt: string;
   updatedAt: string;
   deletedAt: null;
@@ -248,6 +253,8 @@ export interface CreateVariantPayload {
     maxDownloads?: number | null;
     expiresAfterDays?: number | null;
   };
+  // Service products only — required for the single service variant.
+  serviceConfig?: ServiceConfig;
 }
 
 export interface UpdateVariantPayload {

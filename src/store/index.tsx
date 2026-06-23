@@ -12,8 +12,11 @@ import {
   fetchOrders as apiFetchOrders,
   fetchOrderById as apiFetchOrderById,
   updateOrderStatus as apiUpdateOrderStatus,
+  getOrderErrorMessage,
   type PaginationMeta,
 } from '@/services/orders.service';
+import { toast } from 'sonner';
+import { ApiError } from '@/types/api';
 import {
   fetchProducts as apiFetchProducts,
   updateProductStatus as apiUpdateProductStatus,
@@ -37,9 +40,11 @@ interface UIState {
   sidebarCollapsed: boolean;
   theme: 'light' | 'dark' | 'system';
   settingsTab: string;
+  servicesTab: string;
   toggleSidebar: () => void;
   setTheme: (theme: 'light' | 'dark' | 'system') => void;
   setSettingsTab: (tab: string) => void;
+  setServicesTab: (tab: string) => void;
 }
 
 const UIStoreContext = createContext<UIState | null>(null);
@@ -162,6 +167,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [theme, setTheme] = useState<'light' | 'dark' | 'system'>('light');
   const [settingsTab, setSettingsTab] = useState('profile');
+  const [servicesTab, setServicesTab] = useState('services');
 
   const toggleSidebar = useCallback(() => {
     setSidebarCollapsed(prev => !prev);
@@ -187,6 +193,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       const result = await apiFetchProducts(params ?? {});
       setProducts(result.data);
       setProductPagination(result.meta);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Failed to load products.');
     } finally {
       setProductLoading(false);
     }
@@ -202,6 +210,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       await apiUpdateProductStatus(id, 'archived');
       setProducts(prev => prev.filter(p => p.id !== id));
       setSelectedProducts(prev => prev.filter(pid => pid !== id));
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Failed to delete product.');
     } finally {
       setProductLoading(false);
     }
@@ -234,6 +244,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       const result = await apiFetchOrders({ page, limit });
       setOrders(result.data);
       setOrderPagination(result.meta);
+    } catch (err) {
+      toast.error(getOrderErrorMessage(err));
     } finally {
       setOrderLoading(false);
     }
@@ -354,9 +366,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         sidebarCollapsed,
         theme,
         settingsTab,
+        servicesTab,
         toggleSidebar,
         setTheme,
-        setSettingsTab
+        setSettingsTab,
+        setServicesTab
       }}>
         <StoreStoreContext.Provider value={{
           stores,

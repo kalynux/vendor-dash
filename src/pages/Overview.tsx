@@ -31,6 +31,8 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import type { Order } from '@/types';
+import { toast } from 'sonner';
+import { getOrderErrorMessage } from '@/services/orders.service';
 
 const dateRanges = [
   { label: 'Today', value: 'today' },
@@ -125,6 +127,9 @@ export function Overview() {
       await new Promise(resolve => setTimeout(resolve, 2000));
       const full = await fetchOrderById(order.id);
       setSelectedOrder(full);
+    } catch (err) {
+      toast.error(getOrderErrorMessage(err));
+      setOrderSheetOpen(false);
     } finally {
       setIsDetailLoading(false);
     }

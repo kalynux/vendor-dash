@@ -8,6 +8,8 @@ import type {
     BrandingPayload,
     PolicySetupPayload,
     OnboardingStepResponse,
+    VendorProfileUpdatePayload,
+    VendorProfileUpdateResponse,
 } from '@/types/api';
 
 export const onboardingService = {
@@ -39,6 +41,42 @@ export const onboardingService = {
     /** Step 4: policy setup (return, cancellation, support), or skip to complete onboarding. */
     submitPolicySetup(payload: PolicySetupPayload): Promise<OnboardingStepResponse> {
         return api.put<OnboardingStepResponse>('/vendor/onboarding/policy-setup', payload);
+    },
+
+    // ─── Post-onboarding edits (Settings) ───────────────────────────────────────
+
+    /**
+     * Update any profile field after onboarding is complete.
+     * Onboarding step endpoints return 409 once `onboarding_step === 0`; this is
+     * the endpoint for editing payout/branding/policies/country/timezone from Settings.
+     * Object/array fields are a full replace — send the complete desired value.
+     */
+    updateProfile(payload: VendorProfileUpdatePayload): Promise<VendorProfileUpdateResponse> {
+        return api.patch<VendorProfileUpdateResponse>('/vendor/profile', payload);
+    },
+
+    /** Current default delivery agency (or null). */
+    getDefaultDeliveryAgency(): Promise<{ success: boolean; data: DeliveryAgency | null }> {
+        return api.get<{ success: boolean; data: DeliveryAgency | null }>(
+            '/vendor/profile/default-delivery-agency',
+        );
+    },
+
+    /** Set/update the default delivery agency outside the onboarding flow. */
+    setDefaultDeliveryAgency(
+        agencyId: string,
+    ): Promise<{ success: boolean; data: DeliveryAgency; message?: string }> {
+        return api.put<{ success: boolean; data: DeliveryAgency; message?: string }>(
+            '/vendor/profile/default-delivery-agency',
+            { agencyId },
+        );
+    },
+
+    /** Clear the default delivery agency. */
+    clearDefaultDeliveryAgency(): Promise<{ success: boolean; message?: string }> {
+        return api.delete<{ success: boolean; message?: string }>(
+            '/vendor/profile/default-delivery-agency',
+        );
     },
 
     /** List delivery agencies available for step 2 selection. */

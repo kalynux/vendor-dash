@@ -71,6 +71,11 @@
   }
   body {
     @apply bg-background text-foreground;
+    /* Prevent the browser from nudging the scroll position when the sticky
+       mobile subheader collapses/expands. That nudge fires a scroll event that
+       otherwise feeds back into the reveal logic and makes it flicker on slow
+       scrolls. Lists append below the fold, so anchoring isn't needed. */
+    overflow-anchor: none;
   }
 }
 

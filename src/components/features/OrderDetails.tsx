@@ -39,7 +39,8 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { useOrderStore } from '@/store';
-import { addNote, fetchNote, revokeEntitlement, restoreEntitlement } from '@/services/orders.service';
+import { addNote, fetchNote, revokeEntitlement, restoreEntitlement, getOrderErrorMessage } from '@/services/orders.service';
+import { toast } from 'sonner';
 import type { Order, Entitlement, OrderTimelineEvent } from '@/types';
 import { getNextStatuses, STATUS_LABELS } from "@/pages/Orders";
 
@@ -125,6 +126,9 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
       const next = { ...currentOrder, status: status as Order['status'] };
       setCurrentOrder(next);
       onOrderUpdated?.(next);
+      toast.success(`Order marked as ${status}`);
+    } catch (err) {
+      toast.error(getOrderErrorMessage(err));
     } finally {
       setStatusLoading(false);
     }
@@ -139,6 +143,9 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
       const next = { ...currentOrder, status: 'cancelled' as Order['status'] };
       setCurrentOrder(next);
       onOrderUpdated?.(next);
+      toast.success('Order cancelled');
+    } catch (err) {
+      toast.error(getOrderErrorMessage(err));
     } finally {
       setStatusLoading(false);
     }
@@ -160,6 +167,9 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
         actor: 'You',
       }
       setCurrentOrder(prev => ({ ...prev, timeline: [pseudoEvent, ...prev.timeline] }));
+      toast.success('Note added');
+    } catch (err) {
+      toast.error(getOrderErrorMessage(err));
     } finally {
       setNoteLoading(false);
     }
@@ -179,6 +189,8 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
           e.id === event.id ? { ...e, description: message } : e,
         ),
       }));
+    } catch (err) {
+      toast.error(getOrderErrorMessage(err));
     } finally {
       setFetchingNoteId(null);
     }
@@ -220,6 +232,9 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
         ),
       }));
       setActionDialog(null);
+      toast.success(type === 'revoke' ? 'Entitlement revoked' : 'Entitlement restored');
+    } catch (err) {
+      toast.error(getOrderErrorMessage(err));
     } finally {
       setActionLoading(false);
     }

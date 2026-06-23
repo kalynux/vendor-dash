@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   Search,
   Filter,
@@ -46,10 +46,16 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { useOrderStore } from '@/store';
+import { fetchOrders as apiFetchOrders, getOrderErrorMessage } from '@/services/orders.service';
+import { toast } from 'sonner';
 import { OrderDetails } from '@/components/features/OrderDetails';
 import { OrderStatusBadge } from '@/components/orders/OrderStatusBadge';
 import { MobileOrderDetailSheet } from '@/components/orders/MobileOrderDetailSheet';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useInfiniteList } from '@/hooks/use-infinite-list';
+import { useScrollRestoration } from '@/hooks/use-scroll-restoration';
+import { MobilePageHeader } from '@/components/layout/MobilePageHeader';
+import { MobileListFooter } from '@/components/layout/MobileListFooter';
 import type { Order } from '@/types';
 import { cn } from '@/lib/utils';
 
@@ -106,9 +112,43 @@ export function Orders() {
   const [cancelConfirmationText, setCancelConfirmationText] = useState('');
   const [actionsSheetOrder, setActionsSheetOrder] = useState<Order | null>(null);
 
+  useScrollRestoration('orders');
+
+  // Desktop uses the store + page-number pagination; mobile uses infinite scroll.
+  // Only fetch on mount when the store is empty so returning to the tab (or back
+  // from a detail) doesn't reload data that's already there.
   useEffect(() => {
-    fetchOrders({ page: 1 });
-  }, [fetchOrders]);
+    if (!isMobile && orders.length === 0) fetchOrders({ page: 1 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMobile]);
+
+  // Debounce search for the mobile server-side fetch.
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => setDebouncedSearch(searchQuery.trim()), 400);
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [searchQuery]);
+
+  const fetchOrdersPage = useCallback(
+    (page: number, limit: number) =>
+      apiFetchOrders({
+        page,
+        limit,
+        q: debouncedSearch || undefined,
+        status: mobilePillFilter === 'All' ? undefined : mobilePillFilter.toLowerCase(),
+      }).then((r) => ({ items: r.data, total: r.meta.total, totalPages: r.meta.pages })),
+    [debouncedSearch, mobilePillFilter],
+  );
+
+  const infinite = useInfiniteList<Order>({
+    fetchPage: fetchOrdersPage,
+    rowHeight: 84,
+    enabled: isMobile,
+    deps: [debouncedSearch, mobilePillFilter],
+    cacheKey: 'orders',
+  });
 
   const filteredOrders = orders.filter((order: Order) => {
     const matchesSearch =
@@ -135,8 +175,12 @@ export function Orders() {
     try {
       await new Promise(resolve => setTimeout(resolve, 2000));
       await updateOrderStatus(order.id, status);
+      if (isMobile) infinite.reload();
+      toast.success(`Order marked as ${status}`);
       // const next = { ...order, status: status as Order['status'] };
       // setSelectedOrder(next);
+    } catch (err) {
+      toast.error(getOrderErrorMessage(err));
     } finally {
       setStatusLoading(null);
     }
@@ -151,9 +195,13 @@ export function Orders() {
     try {
       await new Promise(resolve => setTimeout(resolve, 2000));
       await updateOrderStatus(order.id, 'cancelled');
+      if (isMobile) infinite.reload();
       if (selectedOrder?.id === order.id) {
         setSelectedOrder(prev => prev ? { ...prev, status: 'cancelled' } : null);
       }
+      toast.success('Order cancelled');
+    } catch (err) {
+      toast.error(getOrderErrorMessage(err));
     } finally {
       setStatusLoading(null);
     }
@@ -211,6 +259,9 @@ export function Orders() {
       await new Promise(resolve => setTimeout(resolve, 2000));
       const full = await fetchOrderById(order.id);
       setSelectedOrder(full);
+    } catch (err) {
+      toast.error(getOrderErrorMessage(err));
+      setIsDetailsOpen(false);
     } finally {
       setIsDetailLoading(false);
     }
@@ -274,137 +325,144 @@ export function Orders() {
   if (isMobile) {
     return (
       <div className="-mx-6 -mt-6">
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 pt-4 pb-3">
-          <h1 className="text-xl font-bold">Orders</h1>
-          <div className="flex items-center gap-1">
-            <Button variant="ghost" size="icon" onClick={() => {/* create order */ }}>
-              <Plus className="w-5 h-5" />
-            </Button>
-            <Sheet>
-              <SheetTrigger asChild>
-                <Button variant="ghost" size="icon">
-                  <Filter className="w-5 h-5" />
-                </Button>
-              </SheetTrigger>
-              <SheetContent>
-                <SheetHeader>
-                  <SheetTitle>Filter Orders</SheetTitle>
-                </SheetHeader>
-                <div className="mt-6 space-y-6">
-                  <div>
-                    <h4 className="text-sm font-medium mb-3">Order Status</h4>
-                    <div className="space-y-2">
-                      {statusOptions.map((status) => (
-                        <label key={status.value} className="flex items-center gap-2 cursor-pointer">
-                          <Checkbox
-                            checked={statusFilter.includes(status.value)}
-                            onCheckedChange={() => toggleStatusFilter(status.value)}
-                          />
-                          <span className="capitalize">{status.label}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </SheetContent>
-            </Sheet>
-          </div>
-        </div>
-
-        {/* Search */}
-        <div className="px-4 mb-3">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              placeholder="Search orders"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10"
-            />
-          </div>
-        </div>
-
-        {/* Filter pills */}
-        <div className="flex gap-2 px-4 mb-4 overflow-x-auto scrollbar-none">
-          {mobileFilterPills.map((pill) => (
+        <MobilePageHeader
+          title="Orders"
+          actions={
             <button
-              key={pill}
-              onClick={() => setMobilePillFilter(pill)}
-              className={cn(
-                'flex-shrink-0 px-4 py-1.5 rounded-full text-sm font-medium transition-colors border',
-                mobilePillFilter === pill
-                  ? 'bg-black text-white border-black'
-                  : 'bg-background border-border'
-              )}
+              type="button"
+              onClick={() => {/* create order */ }}
+              aria-label="Create order"
+              className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-accent transition-colors"
             >
-              {pill}
+              <Plus className="w-5 h-5" />
             </button>
-          ))}
-        </div>
-
-        {/* Order cards */}
-        <div>
-          {filteredOrders.map((order: Order) => (
-            <div
-              key={order.id}
-              role="button"
-              tabIndex={0}
-              onClick={() => handleViewDetails(order)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  handleViewDetails(order);
-                }
-              }}
-              className="w-full px-4 py-3 border-b hover:bg-muted/30 transition-colors text-left cursor-pointer"
-            >
-              <div className="flex items-start gap-3">
-                <img
-                  src={order.customer.avatar || `https://i.pravatar.cc/150?u=${order.customer.id}`}
-                  alt={order.customer.name}
-                  className="w-10 h-10 rounded-full flex-shrink-0 object-cover"
+          }
+          subheader={
+            <div className="space-y-3">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search orders"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10"
                 />
-                <div className="flex-1 min-w-0">
-                  <div className="flex justify-between">
-                    <p className="font-semibold text-sm">{order.orderNumber}</p>
-                    <p className="font-semibold text-sm">{formatCurrency(order.total)}</p>
-                  </div>
-                  <div className="flex justify-between mt-0.5">
-                    <p className="text-xs text-muted-foreground">{order.customer.name}</p>
-                    <p className="text-xs text-muted-foreground">{timeAgo(order.createdAt)}</p>
-                  </div>
-                  <div className="flex items-center justify-between mt-2">
-                    <div className="flex items-center gap-1.5">
-                      <OrderStatusBadge status={order.status} />
-                      {order.orderType === 'digital' ? (
-                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-violet-300 text-violet-700 bg-violet-50 gap-1">
-                          <Download className="w-2.5 h-2.5" />Digital
-                        </Badge>
-                      ) : (
-                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-blue-300 text-blue-700 bg-blue-50 gap-1">
-                          <Package className="w-2.5 h-2.5" />Physical
-                        </Badge>
-                      )}
-                    </div>
-                    <p className="text-xs text-muted-foreground">{order.items.length} items</p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setActionsSheetOrder(order);
-                  }}
-                  className="w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-full hover:bg-accent transition-colors -mr-1 -mt-1"
-                  aria-label="Order actions"
-                >
-                  <MoreHorizontal className="w-5 h-5 text-muted-foreground" />
-                </button>
+              </div>
+              <div className="-mx-1 flex gap-2 overflow-x-auto px-1 scrollbar-none">
+                {mobileFilterPills.map((pill) => (
+                  <button
+                    key={pill}
+                    onClick={() => setMobilePillFilter(pill)}
+                    className={cn(
+                      'flex-shrink-0 px-4 py-1.5 rounded-full text-sm font-medium transition-colors border',
+                      mobilePillFilter === pill
+                        ? 'bg-black text-white border-black'
+                        : 'bg-background border-border'
+                    )}
+                  >
+                    {pill}
+                  </button>
+                ))}
               </div>
             </div>
-          ))}
+          }
+        />
+
+        {/* Order cards */}
+        <div className="pb-28">
+          {infinite.loading ? (
+            Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-3 px-4 py-3 border-b">
+                <div className="w-10 h-10 rounded-full bg-muted animate-pulse flex-shrink-0" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-3.5 bg-muted animate-pulse rounded w-2/3" />
+                  <div className="h-3 bg-muted animate-pulse rounded w-1/2" />
+                </div>
+              </div>
+            ))
+          ) : infinite.error ? (
+            <div className="flex flex-col items-center gap-3 py-16 text-center">
+              <AlertTriangle className="w-10 h-10 text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">{infinite.error}</p>
+              <Button variant="outline" size="sm" onClick={infinite.reload}>Try again</Button>
+            </div>
+          ) : infinite.items.length === 0 ? (
+            <div className="flex flex-col items-center gap-3 py-16 text-center">
+              <Package className="w-12 h-12 text-muted-foreground" />
+              <p className="text-muted-foreground">No orders found</p>
+            </div>
+          ) : (
+            <>
+              {infinite.items.map((order: Order) => (
+                <div
+                  key={order.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => handleViewDetails(order)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      handleViewDetails(order);
+                    }
+                  }}
+                  className="w-full px-4 py-3 border-b hover:bg-muted/30 transition-colors text-left cursor-pointer"
+                >
+                  <div className="flex items-start gap-3">
+                    <img
+                      src={order.customer.avatar || `https://i.pravatar.cc/150?u=${order.customer.id}`}
+                      alt={order.customer.name}
+                      className="w-10 h-10 rounded-full flex-shrink-0 object-cover"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex justify-between">
+                        <p className="font-semibold text-sm">{order.orderNumber}</p>
+                        <p className="font-semibold text-sm">{formatCurrency(order.total)}</p>
+                      </div>
+                      <div className="flex justify-between mt-0.5">
+                        <p className="text-xs text-muted-foreground">{order.customer.name}</p>
+                        <p className="text-xs text-muted-foreground">{timeAgo(order.createdAt)}</p>
+                      </div>
+                      <div className="flex items-center justify-between mt-2">
+                        <div className="flex items-center gap-1.5">
+                          <OrderStatusBadge status={order.status} />
+                          {order.orderType === 'digital' ? (
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-violet-300 text-violet-700 bg-violet-50 gap-1">
+                              <Download className="w-2.5 h-2.5" />Digital
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-blue-300 text-blue-700 bg-blue-50 gap-1">
+                              <Package className="w-2.5 h-2.5" />Physical
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground">{order.items.length} items</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setActionsSheetOrder(order);
+                      }}
+                      className="w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-full hover:bg-accent transition-colors -mr-1 -mt-1"
+                      aria-label="Order actions"
+                    >
+                      <MoreHorizontal className="w-5 h-5 text-muted-foreground" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+              <div ref={infinite.sentinelRef} className="h-1" />
+              {infinite.loadingMore && (
+                <div className="flex justify-center py-4">
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                </div>
+              )}
+            </>
+          )}
         </div>
+
+        <MobileListFooter shown={infinite.items.length} total={infinite.total} noun="orders" />
 
         {/* Order Details Sheet */}
         <MobileOrderDetailSheet

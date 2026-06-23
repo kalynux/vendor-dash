@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { AlertCircle, Box, Package, ImageIcon, Tag, FileDigit, CheckSquare } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { PageBackButton } from '@/components/layout/PageBackButton';
 import { ProductStepIndicator } from '@/components/products/ProductStepIndicator';
 import { StepTypeSelect } from '@/components/products/steps/StepTypeSelect';
 import { StepBasicInfo } from '@/components/products/steps/StepBasicInfo';
@@ -605,7 +606,8 @@ export function ProductUpload() {
   const handleBack = useCallback(() => {
     const prev = prevStep(state.currentStep, state.productType);
     if (prev) dispatch({ type: 'SET_STEP', step: prev });
-  }, [state.currentStep, state.productType]);
+    else navigate('/dashboard/products');
+  }, [state.currentStep, state.productType, navigate]);
 
   // ─── Render ───────────────────────────────────────────────────────────────────
 
@@ -661,6 +663,7 @@ export function ProductUpload() {
   return (
     <div className="space-y-4 sm:space-y-6 animate-fade-in max-w-3xl mx-auto -mx-6 sm:mx-auto">
       <div className="px-4 sm:px-0">
+        <PageBackButton fallbackPath="/dashboard/products" label="Products" className="mb-1" />
         <h1 className="text-xl sm:text-2xl font-bold">Create Product</h1>
         <p className="text-muted-foreground text-xs sm:text-sm mt-1">
           Add a new product to your store

@@ -57,7 +57,12 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useProductStore } from '@/store';
 import { useRouter } from '@/App';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useInfiniteList } from '@/hooks/use-infinite-list';
+import { useScrollRestoration } from '@/hooks/use-scroll-restoration';
+import { MobilePageHeader } from '@/components/layout/MobilePageHeader';
+import { MobileListFooter } from '@/components/layout/MobileListFooter';
 import {
+  fetchProducts as apiFetchProducts,
   setVectorisationEnabled,
   retryVectorisation,
   updateProductStatus,
@@ -212,24 +217,67 @@ export function Products() {
 
   // Debounced server-side search
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const didSearchInit = useRef(false);
 
+  useScrollRestoration('products');
+
+  // Desktop uses the store + page-number pagination; mobile uses infinite scroll.
+  // Only fetch on mount when the store is empty so returning to the tab (or back
+  // from product-edit) doesn't reload data that's already there.
   useEffect(() => {
-    fetchProducts();
+    if (!isMobile && products.length === 0) fetchProducts();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [isMobile]);
 
   useEffect(() => {
+    // Skip the initial run — the mount effect handles the first load; this only
+    // reacts to subsequent search changes (so returning to the page is no-reload).
+    if (!didSearchInit.current) {
+      didSearchInit.current = true;
+      return;
+    }
     if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
     searchTimerRef.current = setTimeout(() => {
-      fetchProducts({ q: searchQuery || undefined });
+      setDebouncedSearch(searchQuery.trim());
+      if (!isMobile) fetchProducts({ q: searchQuery || undefined });
     }, 400);
     return () => {
       if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
     };
-  }, [searchQuery]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQuery, isMobile]);
+
+  // Mobile infinite scroll
+  const fetchProductsPage = useCallback(
+    (page: number, limit: number) =>
+      apiFetchProducts({ page, limit, q: debouncedSearch || undefined }).then((r) => ({
+        items: r.data,
+        total: r.meta.total,
+        totalPages: r.meta.totalPages,
+      })),
+    [debouncedSearch],
+  );
+
+  const infinite = useInfiniteList<ProductListItem>({
+    fetchPage: fetchProductsPage,
+    rowHeight: 84,
+    enabled: isMobile,
+    deps: [debouncedSearch],
+    cacheKey: 'products',
+  });
+
+  const reloadList = useCallback(() => {
+    if (isMobile) infinite.reload();
+    else fetchProducts();
+  }, [isMobile, infinite, fetchProducts]);
 
   const handleEdit = useCallback(
     (product: ProductListItem) => {
+      if (product.vectorisationStatus === 'pending') {
+        toast.error('Product is being indexed, please try again later');
+        return;
+      }
       navigate(`/dashboard/product-edit/${product.id}`);
     },
     [navigate],
@@ -240,7 +288,8 @@ export function Products() {
     const id = productToDelete.id;
     setProductToDelete(null);
     await deleteProduct(id);
-  }, [productToDelete, deleteProduct]);
+    if (isMobile) infinite.reload();
+  }, [productToDelete, deleteProduct, isMobile, infinite]);
 
   const requestStatusTransition = useCallback(
     async (product: ProductListItem, transition: StatusTransition) => {
@@ -280,7 +329,7 @@ export function Products() {
         `"${product.title}" is now ${transition.target.replace('_', ' ')}.`,
       );
       setTransitionState(null);
-      await fetchProducts();
+      reloadList();
     } catch (err: unknown) {
       const mapped =
         err instanceof ApiError && ACTIVATION_ERROR_MAP[err.code]
@@ -291,7 +340,7 @@ export function Products() {
       toast.error(mapped);
       setTransitionState(null);
     }
-  }, [transitionState, fetchProducts]);
+  }, [transitionState, reloadList]);
 
   const handleVectorisationAction = useCallback(
     async (id: string, action: 'enable' | 'disable' | 'retry') => {
@@ -306,14 +355,14 @@ export function Products() {
           await retryVectorisation(id);
           toast.success('Retry queued — indexing started.');
         }
-        await fetchProducts();
+        reloadList();
       } catch (err: unknown) {
         const msg =
           err instanceof ApiError ? err.message : 'Could not update AI search.';
         toast.error(msg);
       }
     },
-    [fetchProducts],
+    [reloadList],
   );
 
   const toggleStatusFilter = useCallback((status: string) => {
@@ -322,10 +371,18 @@ export function Products() {
     );
   }, []);
 
+  // Service products live in their own Services tab — exclude them here so they
+  // don't appear under Products. (Minor: server pagination counts still include
+  // services; acceptable as services are few.)
+  const nonServiceProducts = products.filter((p) => (p.type as string) !== 'service');
+
   // Client-side status filter (server search already filters by text)
   const filteredProducts = statusFilter.length === 0
-    ? products
-    : products.filter((p) => statusFilter.includes(p.status));
+    ? nonServiceProducts
+    : nonServiceProducts.filter((p) => statusFilter.includes(p.status));
+
+  // Mobile infinite list — same service exclusion.
+  const mobileItems = infinite.items.filter((p) => (p.type as string) !== 'service');
 
   const allSelected =
     filteredProducts.length > 0 && selectedProducts.length === filteredProducts.length;
@@ -466,31 +523,33 @@ export function Products() {
   if (isMobile) {
     return (
       <div className="-mx-6 -mt-6">
-        <div className="flex items-center justify-between px-4 pt-4 pb-3">
-          <h1 className="text-xl font-bold">Products</h1>
-          <button
-            onClick={() => legacyNavigate('product-upload')}
-            className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-accent transition-colors"
-          >
-            <Plus className="w-5 h-5" />
-          </button>
-        </div>
+        <MobilePageHeader
+          title="Products"
+          actions={
+            <button
+              onClick={() => legacyNavigate('product-upload')}
+              aria-label="Add product"
+              className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-accent transition-colors"
+            >
+              <Plus className="w-5 h-5" />
+            </button>
+          }
+          subheader={
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Search products"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+          }
+        />
 
-        <div className="px-4 mb-3">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              placeholder="Search products"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10"
-            />
-          </div>
-        </div>
-
-        <div>
-          {isLoading
-            ? Array.from({ length: 5 }).map((_, i) => (
+        <div className="pb-28">
+          {infinite.loading ? (
+            Array.from({ length: 6 }).map((_, i) => (
               <div key={i} className="flex items-center gap-3 px-4 py-3 border-b">
                 <div className="w-16 h-16 rounded-xl bg-muted animate-pulse flex-shrink-0" />
                 <div className="flex-1 space-y-2">
@@ -500,59 +559,82 @@ export function Products() {
                 </div>
               </div>
             ))
-            : filteredProducts.map((product) => {
-              const editLocked = product.vectorisationStatus === 'pending';
-              const openEdit = () => {
-                if (editLocked) {
-                  toast.error('Editing is locked while AI indexing is in progress.');
-                  return;
-                }
-                handleEdit(product);
-              };
-              return (
-                <div
-                  key={product.id}
-                  role="button"
-                  tabIndex={0}
-                  onClick={openEdit}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      openEdit();
-                    }
-                  }}
-                  className="w-full flex items-center gap-3 px-4 py-3 border-b hover:bg-muted/30 transition-colors text-left cursor-pointer"
-                >
-                  <ProductThumbnail product={product} size="lg" />
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-sm truncate">{product.title}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5 capitalize">{product.type}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">{product.category}</p>
-                  </div>
-                  <div className="flex items-center gap-1 flex-shrink-0">
-                    <div className="flex flex-col items-end gap-1">
-                      <StatusBadge status={product.status} />
-                      <VectorisationBadge
-                        enabled={product.vectorisationEnabled}
-                        status={product.vectorisationStatus}
-                      />
+          ) : infinite.error ? (
+            <div className="flex flex-col items-center gap-3 py-16 text-center">
+              <TriangleAlert className="w-10 h-10 text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">{infinite.error}</p>
+              <Button variant="outline" size="sm" onClick={infinite.reload}>Try again</Button>
+            </div>
+          ) : mobileItems.length === 0 ? (
+            <div className="flex flex-col items-center gap-3 py-16 text-center">
+              <Package className="w-12 h-12 text-muted-foreground" />
+              <p className="text-muted-foreground">No products found</p>
+            </div>
+          ) : (
+            <>
+              {mobileItems.map((product) => {
+                const editLocked = product.vectorisationStatus === 'pending';
+                const openEdit = () => {
+                  if (editLocked) {
+                    toast.error('Editing is locked while AI indexing is in progress.');
+                    return;
+                  }
+                  handleEdit(product);
+                };
+                return (
+                  <div
+                    key={product.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={openEdit}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        openEdit();
+                      }
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-3 border-b hover:bg-muted/30 transition-colors text-left cursor-pointer"
+                  >
+                    <ProductThumbnail product={product} size="lg" />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-sm truncate">{product.title}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5 capitalize">{product.type}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{product.category}</p>
                     </div>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setActionsSheetProduct(product);
-                      }}
-                      className="w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-full hover:bg-accent transition-colors -mr-1"
-                      aria-label="Product actions"
-                    >
-                      <MoreHorizontal className="w-5 h-5 text-muted-foreground" />
-                    </button>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <div className="flex flex-col items-end gap-1">
+                        <StatusBadge status={product.status} />
+                        <VectorisationBadge
+                          enabled={product.vectorisationEnabled}
+                          status={product.vectorisationStatus}
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setActionsSheetProduct(product);
+                        }}
+                        className="w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-full hover:bg-accent transition-colors -mr-1"
+                        aria-label="Product actions"
+                      >
+                        <MoreHorizontal className="w-5 h-5 text-muted-foreground" />
+                      </button>
+                    </div>
                   </div>
+                );
+              })}
+              <div ref={infinite.sentinelRef} className="h-1" />
+              {infinite.loadingMore && (
+                <div className="flex justify-center py-4">
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
                 </div>
-              );
-            })}
+              )}
+            </>
+          )}
         </div>
+
+        <MobileListFooter shown={mobileItems.length} total={infinite.total} noun="products" />
 
         {/* Mobile actions bottom sheet */}
         <Sheet
@@ -847,6 +929,7 @@ export function Products() {
                     : filteredProducts.map((product) => (
                       <tr
                         key={product.id}
+                        onClick={() => handleEdit(product)}
                         className="border-b hover:bg-muted/50 transition-colors"
                       >
                         <td className="p-4">
@@ -982,7 +1065,7 @@ function ProductGridCard({
 }: ProductGridCardProps) {
   return (
     <div className="animate-fade-in">
-      <Card className="group hover:shadow-lg transition-all overflow-hidden gap-0">
+      <Card onClick={onEdit} className="group hover:shadow-lg transition-all overflow-hidden gap-0">
         <div className="relative aspect-square bg-muted">
           {product.firstFileUrl ? (
             <img

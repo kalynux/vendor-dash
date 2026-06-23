@@ -1,286 +1,527 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Search,
-  Mail,
-  Phone,
-  MapPin,
-  ShoppingCart,
-  DollarSign,
-  MoreHorizontal,
-  Users,
-  UserPlus,
+  Search, Users, Tag, ChevronRight, Loader2, ShoppingBag,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import { mockCustomers } from '@/data/mockData';
-import type { Customer } from '@/types';
+  Empty, EmptyHeader, EmptyTitle, EmptyDescription, EmptyContent, EmptyMedia,
+} from '@/components/ui/empty';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { useInfiniteList } from '@/hooks/use-infinite-list';
+import { useScrollRestoration } from '@/hooks/use-scroll-restoration';
+import { getListCache, setListCache } from '@/lib/listCache';
+import { MobilePageHeader } from '@/components/layout/MobilePageHeader';
+import { MobileListFooter } from '@/components/layout/MobileListFooter';
+import { CustomerAvatar } from '@/components/customers/CustomerAvatar';
+import { FlagBadge, FlagDot } from '@/components/customers/FlagBadge';
+import { CustomerDetailSheet } from '@/components/customers/CustomerDetailSheet';
+import { FlagsManagerSheet } from '@/components/customers/FlagsManagerSheet';
+import {
+  CUSTOMER_SORT_OPTIONS, formatMoney, relativeTime,
+} from '@/components/customers/customer.constants';
+import { fetchCustomers, fetchFlags } from '@/services/customers.service';
+import { ApiError } from '@/types/api';
+import type {
+  CustomerListItem, CustomerListMeta, CustomerDetail, CustomerFlag, CustomersQueryParams,
+} from '@/types/customers.types';
+
+const PAGE_LIMIT = 20;
+const ALL = '__all__';
+
+const CUSTOMERS_DESKTOP_KEY = 'customers-desktop';
+interface CustomersDesktopCache {
+  customers: CustomerListItem[];
+  meta: CustomerListMeta | null;
+  searchQuery: string;
+  debouncedSearch: string;
+  flagFilter: string;
+  sort: string;
+  page: number;
+}
 
 export function Customers() {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
-  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
+  const dCache = getListCache<CustomersDesktopCache>(CUSTOMERS_DESKTOP_KEY);
+  const [customers, setCustomers] = useState<CustomerListItem[]>(dCache?.customers ?? []);
+  const [meta, setMeta] = useState<CustomerListMeta | null>(dCache?.meta ?? null);
+  const [loading, setLoading] = useState(!dCache);
+  const [error, setError] = useState<string | null>(null);
 
-  const filteredCustomers = mockCustomers.filter((customer: Customer) => {
-    return (
-      customer.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      customer.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (customer.phone && customer.phone.includes(searchQuery))
-    );
+  const [searchQuery, setSearchQuery] = useState(dCache?.searchQuery ?? '');
+  const [debouncedSearch, setDebouncedSearch] = useState(dCache?.debouncedSearch ?? '');
+  const [flagFilter, setFlagFilter] = useState(dCache?.flagFilter ?? '');
+  const [sort, setSort] = useState(dCache?.sort ?? CUSTOMER_SORT_OPTIONS[0].value);
+  const [page, setPage] = useState(dCache?.page ?? 1);
+
+  const [flags, setFlags] = useState<CustomerFlag[]>([]);
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const [flagsManagerOpen, setFlagsManagerOpen] = useState(false);
+
+  // Local overrides applied after an in-detail edit, so both the desktop list and
+  // the mobile infinite list reflect name/flag/stat changes without a full reload.
+  const [overrides, setOverrides] = useState<Record<string, CustomerDetail>>({});
+
+  const isMobile = useIsMobile();
+
+  const sortConfig = useMemo(
+    () => CUSTOMER_SORT_OPTIONS.find((s) => s.value === sort) ?? CUSTOMER_SORT_OPTIONS[0],
+    [sort],
+  );
+
+  // Flags are fetched once and shared with the filter, detail picker and manager.
+  const loadFlags = useCallback(() => {
+    fetchFlags().then(setFlags).catch(() => setFlags([]));
+  }, []);
+  useEffect(() => { loadFlags(); }, [loadFlags]);
+
+  const load = useCallback(async (params: CustomersQueryParams) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await fetchCustomers({ limit: PAGE_LIMIT, ...params });
+      setCustomers(result.data);
+      setMeta(result.meta);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Failed to load customers');
+      setCustomers([]);
+      setMeta(null);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Debounce the search box; reset to page 1. Skip first run so a restored value
+  // doesn't reset paging on return.
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchDidInit = useRef(false);
+  useEffect(() => {
+    if (!searchDidInit.current) {
+      searchDidInit.current = true;
+      return;
+    }
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      setDebouncedSearch(searchQuery.trim());
+      setPage(1);
+    }, 400);
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [searchQuery]);
+
+  const queryParams: CustomersQueryParams = useMemo(() => ({
+    search: debouncedSearch || undefined,
+    flagId: flagFilter || undefined,
+    sortBy: sortConfig.sortBy,
+    sortOrder: sortConfig.sortOrder,
+    page,
+  }), [debouncedSearch, flagFilter, sortConfig, page]);
+
+  // Desktop: page-based. Skip first load if restored from cache.
+  const desktopInit = useRef(false);
+  useEffect(() => {
+    if (isMobile) return;
+    if (!desktopInit.current) {
+      desktopInit.current = true;
+      if (dCache) return;
+    }
+    load(queryParams);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [load, queryParams, isMobile]);
+
+  // Persist desktop list + filters for restore on remount.
+  useEffect(() => {
+    if (isMobile) return;
+    setListCache<CustomersDesktopCache>(CUSTOMERS_DESKTOP_KEY, {
+      customers, meta, searchQuery, debouncedSearch, flagFilter, sort, page,
+    });
+  }, [isMobile, customers, meta, searchQuery, debouncedSearch, flagFilter, sort, page]);
+
+  useScrollRestoration('customers');
+
+  // ── Mobile infinite scroll ──────────────────────────────────────────────────
+  const fetchCustomersPage = useCallback(
+    (pageArg: number, limit: number) =>
+      fetchCustomers({
+        search: debouncedSearch || undefined,
+        flagId: flagFilter || undefined,
+        sortBy: sortConfig.sortBy,
+        sortOrder: sortConfig.sortOrder,
+        page: pageArg,
+        limit,
+      }).then((r) => ({ items: r.data, total: r.meta.total, totalPages: r.meta.pages })),
+    [debouncedSearch, flagFilter, sortConfig],
+  );
+
+  const infinite = useInfiniteList<CustomerListItem>({
+    fetchPage: fetchCustomersPage,
+    rowHeight: 76,
+    enabled: isMobile,
+    deps: [debouncedSearch, flagFilter, sort],
+    cacheKey: 'customers',
   });
 
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-    }).format(value);
-  };
+  // Apply any in-session overrides (after a detail edit) onto a list row.
+  const applyOverride = useCallback(
+    (item: CustomerListItem): CustomerListItem => {
+      const o = overrides[item.customerId];
+      if (!o) return item;
+      return {
+        ...item,
+        displayName: o.displayName,
+        realName: o.realName,
+        hasNameOverride: o.hasNameOverride,
+        flags: o.flags,
+        orderCount: o.orderCount,
+        totalSpent: o.totalSpent,
+        lastOrderAt: o.lastOrderAt,
+      };
+    },
+    [overrides],
+  );
 
-  const handleViewDetails = (customer: Customer) => {
-    setSelectedCustomer(customer);
-    setIsDetailsOpen(true);
-  };
+  const handleDetailUpdated = useCallback((detail: CustomerDetail) => {
+    setOverrides((prev) => ({ ...prev, [detail.customerId]: detail }));
+  }, []);
 
-  return (
-    <div className="space-y-6 animate-fade-in">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold">Customers</h1>
-          <p className="text-muted-foreground">
-            Manage your customer relationships
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <Button variant="outline" className="gap-2">
-            <Users className="w-4 h-4" />
-            Import
-          </Button>
-          <Button className="gap-2">
-            <UserPlus className="w-4 h-4" />
-            Add Customer
-          </Button>
-        </div>
+  const handleFlagsChanged = useCallback(() => {
+    loadFlags();
+    // A flag rename/delete can change rows + the active filter target; refresh both lists.
+    if (isMobile) infinite.reload();
+    else load(queryParams);
+    setOverrides({});
+  }, [loadFlags, isMobile, infinite, load, queryParams]);
+
+  function clearFilters() {
+    setSearchQuery('');
+    setFlagFilter('');
+    setSort(CUSTOMER_SORT_OPTIONS[0].value);
+    setPage(1);
+  }
+
+  const hasActiveQuery = !!flagFilter || searchQuery.trim().length > 0;
+  const activeFlag = flags.find((f) => f.id === flagFilter) ?? null;
+
+  // ── Shared filters UI ─────────────────────────────────────────────────────────
+  const filtersNode = (
+    <div className="flex flex-col gap-3 lg:flex-row">
+      <div className="relative flex-1">
+        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          placeholder="Search by name or email…"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="pl-10"
+        />
       </div>
+      <div className="-mx-1 flex gap-3 overflow-x-auto px-1 pb-1 lg:mx-0 lg:overflow-visible lg:px-0 lg:pb-0">
+        {/* Flag filter */}
+        <Select
+          value={flagFilter || ALL}
+          onValueChange={(v) => { setFlagFilter(v === ALL ? '' : v); setPage(1); }}
+        >
+          <SelectTrigger className="w-44 shrink-0">
+            <SelectValue placeholder="All flags" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL}>All flags</SelectItem>
+            {flags.map((flag) => (
+              <SelectItem key={flag.id} value={flag.id}>
+                <span className="flex items-center gap-2">
+                  <FlagDot color={flag.color} />
+                  {flag.name}
+                </span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
 
-      {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Total Customers</p>
-                <p className="text-2xl font-bold">1,234</p>
-              </div>
-              <div className="p-3 bg-primary/10 rounded-lg">
-                <Users className="w-5 h-5 text-primary" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">New This Month</p>
-                <p className="text-2xl font-bold">89</p>
-              </div>
-              <div className="p-3 bg-green-100 rounded-lg">
-                <UserPlus className="w-5 h-5 text-green-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Avg. Lifetime Value</p>
-                <p className="text-2xl font-bold">{formatCurrency(456)}</p>
-              </div>
-              <div className="p-3 bg-blue-100 rounded-lg">
-                <DollarSign className="w-5 h-5 text-blue-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        {/* Sort */}
+        <Select value={sort} onValueChange={(v) => { setSort(v); setPage(1); }}>
+          <SelectTrigger className="w-48 shrink-0"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {CUSTOMER_SORT_OPTIONS.map((o) => (
+              <SelectItem key={o.value} value={o.value}>Sort: {o.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
+    </div>
+  );
 
-      {/* Search */}
-      <Card>
-        <CardContent className="p-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              placeholder="Search customers by name, email, phone..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10"
-            />
-          </div>
-        </CardContent>
-      </Card>
+  const emptyNode = (
+    <Empty className="py-16">
+      <EmptyHeader>
+        <EmptyMedia variant="icon"><Users className="h-6 w-6" /></EmptyMedia>
+        <EmptyTitle>{hasActiveQuery ? 'No matching customers' : 'No customers yet'}</EmptyTitle>
+        <EmptyDescription>
+          {hasActiveQuery
+            ? 'Try adjusting your search or flag filter.'
+            : 'Customers appear here once they place their first order with you.'}
+        </EmptyDescription>
+      </EmptyHeader>
+      {hasActiveQuery && (
+        <EmptyContent>
+          <Button variant="outline" onClick={clearFilters}>Clear filters</Button>
+        </EmptyContent>
+      )}
+    </Empty>
+  );
 
-      {/* Customers Table */}
-      <Card>
-        <CardContent className="p-0">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b bg-muted/50">
-                <th className="text-left p-4 text-sm font-medium">Customer</th>
-                <th className="text-left p-4 text-sm font-medium">Contact</th>
-                <th className="text-left p-4 text-sm font-medium">Orders</th>
-                <th className="text-right p-4 text-sm font-medium">Total Spent</th>
-                <th className="w-12 p-4"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredCustomers.map((customer: Customer) => (
-                <tr
-                  key={customer.id}
-                  className="border-b hover:bg-muted/50 transition-colors"
-                >
-                  <td className="p-4">
-                    <div className="flex items-center gap-3">
-                      <img
-                        src={customer.avatar || `https://i.pravatar.cc/150?u=${customer.id}`}
-                        alt={customer.name}
-                        className="w-10 h-10 rounded-full"
-                      />
-                      <div>
-                        <p className="font-medium">{customer.name}</p>
-                        <p className="text-sm text-muted-foreground">ID: {customer.id}</p>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="p-4">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2 text-sm">
-                        <Mail className="w-4 h-4 text-muted-foreground" />
-                        {customer.email}
-                      </div>
-                      {customer.phone && (
-                        <div className="flex items-center gap-2 text-sm">
-                          <Phone className="w-4 h-4 text-muted-foreground" />
-                          {customer.phone}
-                        </div>
-                      )}
-                    </div>
-                  </td>
-                  <td className="p-4">
-                    <div className="flex items-center gap-2">
-                      <ShoppingCart className="w-4 h-4 text-muted-foreground" />
-                      <span className="font-medium">{customer.orderCount}</span>
-                    </div>
-                  </td>
-                  <td className="p-4 text-right font-medium">
-                    {formatCurrency(customer.totalSpent)}
-                  </td>
-                  <td className="p-4">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon">
-                          <MoreHorizontal className="w-4 h-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => handleViewDetails(customer)}>
-                          View Details
-                        </DropdownMenuItem>
-                        <DropdownMenuItem>Send Email</DropdownMenuItem>
-                        <DropdownMenuItem>View Orders</DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </CardContent>
-      </Card>
+  const sheets = (
+    <>
+      <CustomerDetailSheet
+        customerId={detailId}
+        open={!!detailId}
+        onOpenChange={(o) => { if (!o) setDetailId(null); }}
+        availableFlags={flags}
+        onUpdated={handleDetailUpdated}
+        onManageFlags={() => setFlagsManagerOpen(true)}
+      />
+      <FlagsManagerSheet
+        open={flagsManagerOpen}
+        onOpenChange={setFlagsManagerOpen}
+        flags={flags}
+        onChanged={handleFlagsChanged}
+      />
+    </>
+  );
 
-      {/* Customer Details Dialog */}
-      <Dialog open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Customer Details</DialogTitle>
-          </DialogHeader>
-          {selectedCustomer && (
-            <div className="space-y-6">
-              <div className="flex items-center gap-4">
-                <img
-                  src={selectedCustomer.avatar || `https://i.pravatar.cc/150?u=${selectedCustomer.id}`}
-                  alt={selectedCustomer.name}
-                  className="w-20 h-20 rounded-full"
-                />
-                <div>
-                  <h2 className="text-xl font-bold">{selectedCustomer.name}</h2>
-                  <p className="text-muted-foreground">{selectedCustomer.email}</p>
-                  {selectedCustomer.phone && (
-                    <p className="text-muted-foreground">{selectedCustomer.phone}</p>
-                  )}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <Card>
-                  <CardContent className="p-4">
-                    <p className="text-sm text-muted-foreground">Total Orders</p>
-                    <p className="text-2xl font-bold">{selectedCustomer.orderCount}</p>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="p-4">
-                    <p className="text-sm text-muted-foreground">Total Spent</p>
-                    <p className="text-2xl font-bold">
-                      {formatCurrency(selectedCustomer.totalSpent)}
-                    </p>
-                  </CardContent>
-                </Card>
-              </div>
-
-              {selectedCustomer.defaultAddress && (
-                <Card>
-                  <div className="p-4 border-b">
-                    <h3 className="text-sm font-medium flex items-center gap-2">
-                      <MapPin className="w-4 h-4" />
-                      Default Address
-                    </h3>
-                  </div>
-                  <CardContent className="p-4">
-                    <p>
-                      {selectedCustomer.defaultAddress.firstName}{' '}
-                      {selectedCustomer.defaultAddress.lastName}
-                    </p>
-                    <p>{selectedCustomer.defaultAddress.address1}</p>
-                    {selectedCustomer.defaultAddress.address2 && (
-                      <p>{selectedCustomer.defaultAddress.address2}</p>
-                    )}
-                    <p>
-                      {selectedCustomer.defaultAddress.city},{' '}
-                      {selectedCustomer.defaultAddress.province}{' '}
-                      {selectedCustomer.defaultAddress.zip}
-                    </p>
-                    <p>{selectedCustomer.defaultAddress.country}</p>
-                  </CardContent>
-                </Card>
+  const renderMobileRow = (c: CustomerListItem) => {
+    const item = applyOverride(c);
+    return (
+      <button
+        key={item.customerId}
+        onClick={() => setDetailId(item.customerId)}
+        className="flex w-full items-center gap-3 border-b px-4 py-3 text-left transition-colors hover:bg-muted/30"
+      >
+        <CustomerAvatar name={item.displayName} avatar={item.avatar} />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold">{item.displayName}</p>
+          <p className="truncate text-xs text-muted-foreground">{item.email ?? `${item.orderCount} orders`}</p>
+          {item.flags.length > 0 && (
+            <div className="mt-1 flex flex-wrap gap-1">
+              {item.flags.slice(0, 2).map((f) => <FlagBadge key={f.id} flag={f} />)}
+              {item.flags.length > 2 && (
+                <span className="text-[10px] text-muted-foreground">+{item.flags.length - 2}</span>
               )}
             </div>
           )}
-        </DialogContent>
-      </Dialog>
+        </div>
+        <div className="flex flex-col items-end">
+          <span className="text-sm font-medium">{formatMoney(item.totalSpent)}</span>
+          <span className="text-xs text-muted-foreground">{relativeTime(item.lastOrderAt)}</span>
+        </div>
+      </button>
+    );
+  };
+
+  // ── Mobile layout ───────────────────────────────────────────────────────────
+  if (isMobile) {
+    return (
+      <div className="-mx-6 -mt-6">
+        <MobilePageHeader
+          title="Customers"
+          actions={
+            <button
+              type="button"
+              onClick={() => setFlagsManagerOpen(true)}
+              aria-label="Manage flags"
+              className="flex h-9 w-9 items-center justify-center rounded-full transition-colors hover:bg-accent"
+            >
+              <Tag className="h-5 w-5" />
+            </button>
+          }
+          subheader={filtersNode}
+        />
+
+        <div className="pb-28">
+          {infinite.loading ? (
+            <CustomerListSkeleton mobile />
+          ) : infinite.error ? (
+            <div className="flex flex-col items-center gap-3 py-16 text-center">
+              <Users className="h-10 w-10 text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">{infinite.error}</p>
+              <Button variant="outline" size="sm" onClick={infinite.reload}>Try again</Button>
+            </div>
+          ) : infinite.items.length === 0 ? (
+            emptyNode
+          ) : (
+            <>
+              {infinite.items.map(renderMobileRow)}
+              <div ref={infinite.sentinelRef} className="h-1" />
+              {infinite.loadingMore && (
+                <div className="flex justify-center py-4">
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        <MobileListFooter shown={infinite.items.length} total={infinite.total} noun="customers" />
+        {sheets}
+      </div>
+    );
+  }
+
+  // ── Desktop layout ──────────────────────────────────────────────────────────
+  return (
+    <div className="space-y-5">
+      {/* Header */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Customers</h1>
+          <p className="text-muted-foreground">
+            {meta ? `${meta.total} customer${meta.total !== 1 ? 's' : ''} who have ordered from you` : 'Manage your customer relationships'}
+          </p>
+        </div>
+        <Button variant="outline" onClick={() => setFlagsManagerOpen(true)} className="gap-2">
+          <Tag className="h-4 w-4" /> Manage flags
+        </Button>
+      </div>
+
+      {/* Active flag filter chip */}
+      {activeFlag && (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <span>Filtered by</span>
+          <FlagBadge flag={activeFlag} onRemove={() => { setFlagFilter(''); setPage(1); }} />
+        </div>
+      )}
+
+      {filtersNode}
+
+      {/* Content */}
+      {loading ? (
+        <CustomerListSkeleton />
+      ) : error ? (
+        <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed py-16 text-center">
+          <Users className="h-10 w-10 text-muted-foreground" />
+          <p className="text-sm text-muted-foreground">{error}</p>
+          <Button variant="outline" size="sm" onClick={() => load(queryParams)}>Try again</Button>
+        </div>
+      ) : customers.length === 0 ? (
+        emptyNode
+      ) : (
+        <>
+          <div className="overflow-hidden rounded-lg border">
+            <table className="w-full text-sm">
+              <thead className="border-b bg-muted/40 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                <tr>
+                  <th className="px-4 py-3">Customer</th>
+                  <th className="px-4 py-3">Flags</th>
+                  <th className="px-4 py-3 text-right">Orders</th>
+                  <th className="px-4 py-3 text-right">Total spent</th>
+                  <th className="px-4 py-3">Last order</th>
+                  <th className="w-8 px-4 py-3" />
+                </tr>
+              </thead>
+              <tbody>
+                {customers.map((row) => {
+                  const c = applyOverride(row);
+                  return (
+                    <tr
+                      key={c.customerId}
+                      onClick={() => setDetailId(c.customerId)}
+                      className="group cursor-pointer border-b last:border-0 hover:bg-muted/40"
+                    >
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <CustomerAvatar name={c.displayName} avatar={c.avatar} className="h-9 w-9" />
+                          <div className="min-w-0">
+                            <p className="truncate font-medium text-foreground">{c.displayName}</p>
+                            <p className="truncate text-xs text-muted-foreground">{c.email ?? '—'}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        {c.flags.length === 0 ? (
+                          <span className="text-muted-foreground">—</span>
+                        ) : (
+                          <div className="flex flex-wrap gap-1">
+                            {c.flags.slice(0, 3).map((f) => <FlagBadge key={f.id} flag={f} />)}
+                            {c.flags.length > 3 && (
+                              <span className="text-xs text-muted-foreground">+{c.flags.length - 3}</span>
+                            )}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <span className="inline-flex items-center gap-1.5 font-medium">
+                          <ShoppingBag className="h-3.5 w-3.5 text-muted-foreground" />
+                          {c.orderCount}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right font-medium">{formatMoney(c.totalSpent)}</td>
+                      <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">{relativeTime(c.lastOrderAt)}</td>
+                      <td className="px-4 py-3 text-right">
+                        <ChevronRight className="ml-auto h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination */}
+          {meta && (
+            <div className="flex flex-col items-center justify-between gap-3 text-sm text-muted-foreground sm:flex-row">
+              <span>Showing {customers.length} of {meta.total} customer{meta.total !== 1 ? 's' : ''}</span>
+              {meta.pages > 1 && (
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" disabled={meta.page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
+                    Previous
+                  </Button>
+                  <span>Page {meta.page} of {meta.pages}</span>
+                  <Button variant="outline" size="sm" disabled={meta.page >= meta.pages} onClick={() => setPage((p) => p + 1)}>
+                    Next
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      )}
+
+      {sheets}
+    </div>
+  );
+}
+
+function CustomerListSkeleton({ mobile }: { mobile?: boolean }) {
+  if (mobile) {
+    return (
+      <div>
+        {Array.from({ length: 8 }).map((_, i) => (
+          <div key={i} className="flex items-center gap-3 border-b px-4 py-3">
+            <Skeleton className="h-10 w-10 rounded-full" />
+            <div className="flex-1 space-y-2">
+              <Skeleton className="h-3.5 w-2/5" />
+              <Skeleton className="h-3 w-3/5" />
+            </div>
+            <Skeleton className="h-3 w-12" />
+          </div>
+        ))}
+      </div>
+    );
+  }
+  return (
+    <div className="overflow-hidden rounded-lg border">
+      {Array.from({ length: 8 }).map((_, i) => (
+        <div key={i} className="flex items-center gap-4 border-b p-4 last:border-0">
+          <Skeleton className="h-9 w-9 rounded-full" />
+          <div className="flex-1 space-y-2">
+            <Skeleton className="h-4 w-1/4" />
+            <Skeleton className="h-3 w-1/3" />
+          </div>
+          <Skeleton className="h-6 w-16 rounded-full" />
+          <Skeleton className="h-4 w-12" />
+          <Skeleton className="h-4 w-16" />
+        </div>
+      ))}
     </div>
   );
 }

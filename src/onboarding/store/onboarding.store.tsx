@@ -18,6 +18,7 @@ import type {
     PolicySetupPayload,
     OnboardingStepResponse,
     VendorOnboardingStep,
+    VendorProfileUpdatePayload,
 } from '@/types/api';
 import type {
     Step1FormValues,
@@ -96,6 +97,19 @@ export interface OnboardingState {
 
     /** Submit Step 4 — policy setup (return, cancellation, support), or skip to complete onboarding. */
     submitPolicySetup: (payload: PolicySetupPayload) => Promise<void>;
+
+    /**
+     * Post-onboarding edit (Settings). PATCH /vendor/profile with a partial patch.
+     * Merges the submitted fields into session.role_entity and bumps version.
+     * Use for payout, branding, addresses, policies, country/timezone.
+     */
+    updateVendorProfile: (patch: Omit<VendorProfileUpdatePayload, 'version'>) => Promise<void>;
+
+    /** Post-onboarding: set the default delivery agency (dedicated route). */
+    setDeliveryAgency: (agencyId: string) => Promise<void>;
+
+    /** Post-onboarding: clear the default delivery agency (dedicated route). */
+    clearDeliveryAgency: () => Promise<void>;
 
     /** Navigate to the previous step (no-op when already on step 1). */
     goBack: () => void;
@@ -271,6 +285,100 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
         [wrapStep],
     );
 
+    const updateVendorProfile = useCallback(
+        async (patch: Omit<VendorProfileUpdatePayload, 'version'>) => {
+            setIsSubmitting(true);
+            setError(null);
+            try {
+                const currentVersion = session?.role_entity.version ?? 0;
+                const res = await onboardingService.updateProfile({
+                    ...patch,
+                    version: currentVersion,
+                });
+                const nextVersion = res.data?.version ?? currentVersion + 1;
+
+                // Optimistically merge the submitted fields into role_entity. The PATCH
+                // response DTO is camelCase and not shaped like VendorRoleEntity, so we
+                // apply what we sent rather than trusting the response body wholesale.
+                setSession((prev) => {
+                    if (!prev) return prev;
+                    const re = prev.role_entity;
+                    return {
+                        ...prev,
+                        role_entity: {
+                            ...re,
+                            ...(patch.country !== undefined ? { country: patch.country } : {}),
+                            ...(patch.timezone !== undefined ? { timezone: patch.timezone } : {}),
+                            ...(patch.payout_details !== undefined ? { payout_details: patch.payout_details } : {}),
+                            ...(patch.business_addresses !== undefined ? { business_addresses: patch.business_addresses } : {}),
+                            ...(patch.branding !== undefined ? { branding: { ...re.branding, ...patch.branding } } : {}),
+                            ...(patch.social_links !== undefined ? { social_links: { ...re.social_links, ...patch.social_links } } : {}),
+                            ...(patch.policies !== undefined ? { policies: patch.policies } : {}),
+                            ...(patch.displayName !== undefined ? { display_name: patch.displayName } : {}),
+                            ...(patch.businessDescription !== undefined ? { business_description: patch.businessDescription } : {}),
+                            ...(patch.phone !== undefined ? { phone: patch.phone } : {}),
+                            version: nextVersion,
+                        },
+                    };
+                });
+            } catch (err) {
+                const apiErr =
+                    err instanceof ApiError
+                        ? err
+                        : new ApiError(500, 'UPDATE_FAILED', 'Profile update failed');
+                setError(apiErr);
+                throw apiErr;
+            } finally {
+                setIsSubmitting(false);
+            }
+        },
+        [session?.role_entity.version],
+    );
+
+    const setDeliveryAgency = useCallback(async (agencyId: string) => {
+        setIsSubmitting(true);
+        setError(null);
+        try {
+            await onboardingService.setDefaultDeliveryAgency(agencyId);
+            setSession((prev) =>
+                prev
+                    ? { ...prev, role_entity: { ...prev.role_entity, default_delivery_agency_id: agencyId } }
+                    : prev,
+            );
+        } catch (err) {
+            const apiErr =
+                err instanceof ApiError
+                    ? err
+                    : new ApiError(500, 'UPDATE_FAILED', 'Could not set delivery agency');
+            setError(apiErr);
+            throw apiErr;
+        } finally {
+            setIsSubmitting(false);
+        }
+    }, []);
+
+    const clearDeliveryAgency = useCallback(async () => {
+        setIsSubmitting(true);
+        setError(null);
+        try {
+            await onboardingService.clearDefaultDeliveryAgency();
+            setSession((prev) =>
+                prev
+                    ? { ...prev, role_entity: { ...prev.role_entity, default_delivery_agency_id: null } }
+                    : prev,
+            );
+        } catch (err) {
+            const apiErr =
+                err instanceof ApiError
+                    ? err
+                    : new ApiError(500, 'UPDATE_FAILED', 'Could not clear delivery agency');
+            setError(apiErr);
+            throw apiErr;
+        } finally {
+            setIsSubmitting(false);
+        }
+    }, []);
+
     const goBack = useCallback(() => {
         const v = viewingStep;
         if (!v || v <= 1) return;
@@ -320,6 +428,9 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
                 submitDeliveryLinking,
                 submitBranding,
                 submitPolicySetup,
+                updateVendorProfile,
+                setDeliveryAgency,
+                clearDeliveryAgency,
                 goBack,
                 logout,
                 clearError,

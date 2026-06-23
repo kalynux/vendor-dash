@@ -1,0 +1,190 @@
+// ─── Vendor Billing — display constants & helpers ────────────────────────────────
+
+import type {
+  PaymentGateway,
+  PhoneOperator,
+  LedgerReasonCode,
+  LedgerType,
+  PaymentStatus,
+  VendorPlanStatus,
+} from '@/types/billing.types';
+import type { PaymentMethodType } from '@/types/payment-method.types';
+import { ApiError } from '@/types/api';
+
+// Re-export the generic formatters used across the app so billing components have
+// a single import surface. These live in the customers module today.
+export { formatMoney, formatDate, relativeTime } from '@/components/customers/customer.constants';
+
+// ─── Settings limits ──────────────────────────────────────────────────────────
+
+export const NOTIFY_DAYS_MIN = 0;
+export const NOTIFY_DAYS_MAX = 90;
+
+// ─── Polling ────────────────────────────────────────────────────────────────────
+
+/** How often to poll a pending payment's verify endpoint. */
+export const PAYMENT_POLL_INTERVAL_MS = 4000;
+/** Give up polling after this long (mobile money can take a couple of minutes). */
+export const PAYMENT_POLL_TIMEOUT_MS = 3 * 60 * 1000;
+
+// ─── Mobile-money operators ──────────────────────────────────────────────────────
+
+export const PHONE_OPERATORS: { value: PhoneOperator; label: string }[] = [
+  { value: 'MTN', label: 'MTN Mobile Money' },
+  { value: 'ORANGE', label: 'Orange Money' },
+  { value: 'MOOV', label: 'Moov Money' },
+];
+
+/** Gateway used for mobile-money charges (default operator gateway). */
+export const MOBILE_MONEY_GATEWAY: PaymentGateway = 'NOTCHPAY';
+export const CARD_GATEWAY: PaymentGateway = 'STRIPE';
+
+// ─── Gateway catalog (drives the gateway-first checkout chips) ───────────────────
+// Each gateway maps to the method type it collects: mobile-money gateways need a
+// phone + operator; the card gateway (Stripe) tokenises a card. The Stripe chip is
+// only shown when a publishable key is configured (see PaymentDialog).
+
+export interface GatewayMeta {
+  value: PaymentGateway;
+  label: string;
+  /** Which channel fields this gateway collects. */
+  methodType: Extract<PaymentMethodType, 'card' | 'mobile_money'>;
+  /** Short helper line shown under the chip row. */
+  description: string;
+}
+
+export const GATEWAYS: GatewayMeta[] = [
+  { value: 'NOTCHPAY', label: 'NotchPay', methodType: 'mobile_money', description: 'Mobile money (MTN, Orange, Moov)' },
+  { value: 'MYCOOLPAY', label: 'MyCoolPay', methodType: 'mobile_money', description: 'Mobile money (MTN, Orange, Moov)' },
+  { value: 'STRIPE', label: 'Card', methodType: 'card', description: 'Visa, Mastercard & more' },
+];
+
+export function gatewayLabel(gateway: PaymentGateway): string {
+  return GATEWAYS.find((g) => g.value === gateway)?.label ?? gateway;
+}
+
+// ─── Saved payment-method display ────────────────────────────────────────────────
+
+const METHOD_TYPE_LABELS: Record<PaymentMethodType, string> = {
+  card: 'Card',
+  mobile_money: 'Mobile money',
+  bank_transfer: 'Bank transfer',
+};
+
+export function methodTypeLabel(type: PaymentMethodType): string {
+  return METHOD_TYPE_LABELS[type] ?? type;
+}
+
+const PROVIDER_LABELS: Record<string, string> = {
+  stripe: 'Stripe',
+  notchpay: 'NotchPay',
+  mycoolpay: 'MyCoolPay',
+  mtn_momo: 'MTN MoMo',
+  orange_money: 'Orange Money',
+};
+
+export function providerLabel(provider: string): string {
+  return PROVIDER_LABELS[provider.toLowerCase()] ?? provider;
+}
+
+/** Provider/operator string for the gateway used to tokenise a mobile-money method. */
+export function gatewayProvider(gateway: PaymentGateway): string {
+  return gateway.toLowerCase();
+}
+
+// ─── Plan tier accents ────────────────────────────────────────────────────────
+// Keyed by plan `code`; falls back to a neutral accent for admin-created plans.
+
+export const PLAN_ACCENTS: Record<string, string> = {
+  starter: 'border-muted',
+  growth: 'border-primary',
+  business: 'border-amber-500',
+};
+
+export function planAccent(code: string): string {
+  return PLAN_ACCENTS[code] ?? 'border-border';
+}
+
+// ─── Ledger display ──────────────────────────────────────────────────────────────
+
+const LEDGER_REASON_LABELS: Record<LedgerReasonCode, string> = {
+  plan_allowance: 'Plan allowance',
+  topup_purchase: 'Credit top-up',
+  vectorisation: 'AI product indexing',
+  whatsapp_template: 'WhatsApp message',
+  admin_adjustment: 'Adjustment',
+};
+
+export function ledgerReasonLabel(code: LedgerReasonCode): string {
+  return LEDGER_REASON_LABELS[code] ?? code;
+}
+
+/** A signed-credit movement is a gain when positive. */
+export function isCredit(type: LedgerType): boolean {
+  return type === 'allowance' || type === 'topup' || type === 'refund';
+}
+
+// ─── Status badge variants ───────────────────────────────────────────────────────
+
+export function paymentStatusLabel(status: PaymentStatus): string {
+  return status === 'paid' ? 'Paid' : status === 'failed' ? 'Failed' : 'Pending';
+}
+
+export function vendorPlanStatusLabel(status: VendorPlanStatus): string {
+  switch (status) {
+    case 'active':
+      return 'Active';
+    case 'pending_activation':
+      return 'Queued';
+    case 'expired':
+      return 'Expired';
+    case 'cancelled':
+      return 'Cancelled';
+    default:
+      return status;
+  }
+}
+
+// ─── Term / credits formatting ────────────────────────────────────────────────────
+
+export function formatTerm(termDays: number | null): string {
+  if (termDays === null || termDays === undefined) return 'Never expires';
+  if (termDays % 30 === 0) {
+    const months = termDays / 30;
+    return months === 1 ? 'Monthly' : `Every ${months} months`;
+  }
+  return `Every ${termDays} days`;
+}
+
+export function formatProductCap(cap: number | null): string {
+  return cap === null || cap === undefined ? 'Unlimited' : new Intl.NumberFormat().format(cap);
+}
+
+export function formatCredits(n: number): string {
+  return new Intl.NumberFormat().format(n);
+}
+
+// ─── Error-code → friendly message ────────────────────────────────────────────────
+
+const BILLING_ERROR_MESSAGES: Record<string, string> = {
+  BILLING_PLAN_NOT_FOUND: 'That plan is no longer available.',
+  BILLING_PLAN_INACTIVE: 'That plan is no longer available for purchase.',
+  BILLING_PLAN_NOT_PURCHASABLE: 'The free Starter plan is the default tier and cannot be purchased.',
+  BILLING_PENDING_PLAN_EXISTS: 'You already have a plan queued to start when your current one ends. Wait for it to activate before buying another.',
+  BILLING_TOPUP_PACK_NOT_FOUND: 'That credit pack is no longer available.',
+  BILLING_INSUFFICIENT_CREDITS: 'Not enough credits for this action.',
+  PAYMENT_GATEWAY_NOT_SUPPORTED: 'That payment method is not supported.',
+  PAYMENT_INITIATION_FAILED: 'The payment provider could not start the payment. Please try again.',
+  BILLING_TOPUP_INVALID_STATE: 'This payment cannot be verified yet. Please retry in a moment.',
+  BILLING_PURCHASE_INVALID_STATE: 'This payment cannot be verified yet. Please retry in a moment.',
+  PAYMENT_METHOD_NOT_FOUND: 'That payment method could not be found.',
+  PAYMENT_METHOD_LIMIT_REACHED: 'You can save up to 10 payment methods. Remove one to add another.',
+  VALIDATION_ERROR: 'Please check the details and try again.',
+};
+
+export function billingErrorMessage(err: unknown, fallback = 'Something went wrong. Please try again.'): string {
+  if (err instanceof ApiError) {
+    return BILLING_ERROR_MESSAGES[err.code] ?? err.message ?? fallback;
+  }
+  return fallback;
+}

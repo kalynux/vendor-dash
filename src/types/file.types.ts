@@ -120,6 +120,31 @@ export interface FileListParams {
   sortOrder?: 'asc' | 'desc';
 }
 
+// ─── Storage usage (api-doc/vendor/storage.md §2) ─────────────────────────────
+// Total media bytes a vendor stores against their plan cap. Digital-product
+// assets are excluded by the backend, so they never inflate `usedBytes`.
+
+export interface StorageCategoryUsage {
+  bytes: number;
+  count: number;
+}
+
+export interface StorageUsage {
+  /** Active plan's `max_storage_bytes`. `null` for non-vendor roles (no cap). */
+  limitBytes: number | null;
+  /** Total media bytes in use; equals the sum of `byCategory[*].bytes`. */
+  usedBytes: number;
+  /** `max(0, limitBytes − usedBytes)`. `null` when there is no limit. */
+  remainingBytes: number | null;
+  /** Per-category `bytes` + file `count`. Absent on the embedded list summary. */
+  byCategory?: Record<MediaCategory, StorageCategoryUsage>;
+}
+
+export interface StorageResponse {
+  success: boolean;
+  data: StorageUsage;
+}
+
 // ─── Response envelopes ───────────────────────────────────────────────────────
 
 export interface FileListResponse {
@@ -127,6 +152,9 @@ export interface FileListResponse {
   data: {
     files: ApiFile[];
     pagination: FilePagination;
+    // Same storage object as GET /files/storage, embedded so a media-library
+    // screen can show usage without a second call. `null` for admins.
+    storage?: StorageUsage | null;
   };
 }
 

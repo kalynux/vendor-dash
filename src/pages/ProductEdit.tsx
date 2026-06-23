@@ -5,6 +5,7 @@ import { AlertCircle, Box, Package, ImageIcon, Tag, FileDigit, CheckSquare } fro
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { PageBackButton } from '@/components/layout/PageBackButton';
 import { ProductStepIndicator } from '@/components/products/ProductStepIndicator';
 import { StepTypeSelect } from '@/components/products/steps/StepTypeSelect';
 import { StepBasicInfo } from '@/components/products/steps/StepBasicInfo';
@@ -641,8 +642,11 @@ export function ProductEdit() {
 
   const handleBack = useCallback(() => {
     const prev = prevStep(state.currentStep, state.productType);
-    if (prev) dispatch({ type: 'SET_STEP', step: prev });
-  }, [state.currentStep, state.productType]);
+    // In edit mode the Type step is locked (product type can't change), so it is
+    // not a reachable back target — leaving the wizard goes to the products list.
+    if (prev && prev !== 'type') dispatch({ type: 'SET_STEP', step: prev });
+    else navigate('/dashboard/products');
+  }, [state.currentStep, state.productType, navigate]);
 
   // ─── Render ───────────────────────────────────────────────────────────────────
 
@@ -708,6 +712,7 @@ export function ProductEdit() {
   return (
     <div className="space-y-4 sm:space-y-6 animate-fade-in max-w-3xl mx-auto -mx-6 sm:mx-auto">
       <div className="px-4 sm:px-0">
+        <PageBackButton fallbackPath="/dashboard/products" label="Products" className="mb-1" />
         <h1 className="text-xl sm:text-2xl font-bold">Edit Product</h1>
         {state.serverProduct && (
           <p className="text-muted-foreground text-xs sm:text-sm mt-1 truncate">

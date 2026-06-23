@@ -1,5 +1,36 @@
 import { api } from './api';
+import { ApiError } from '@/types/api';
 import type { Order, OrderItem, Customer, OrderTimelineEvent, Entitlement, TimelineEventType } from '@/types';
+
+// ─── Error Handling ────────────────────────────────────────────────────────────
+
+/**
+ * Friendly, user-facing labels for known order/entitlement error codes.
+ * Falls back to the backend `err.message` for any unmapped code (see
+ * getOrderErrorMessage). Mirrors the REFUND_ERROR_LABELS pattern.
+ */
+export const ORDER_ERROR_LABELS: Record<string, string> = {
+  // status transitions (PATCH /vendor/orders/:id/status)
+  ORDER_PAYMENT_REQUIRED: "This order can't be processed because its payment hasn't been completed.",
+  ORDER_PAYMENT_FAILED_STATE: "Payment for this order failed, so it can't be moved forward.",
+  ORDER_TERMINAL_STATE: 'This order is in a final state and can no longer be updated.',
+  ORDER_INVALID_TRANSITION: "That status change isn't allowed from the order's current status.",
+  ORDER_WRONG_TYPE: "That action doesn't apply to this order's type.",
+  ORDER_NOT_FOUND: 'This order could no longer be found.',
+  ORDER_DELIVERY_AGENCY_NOT_FOUND: 'No delivery agency is assigned to this order.',
+  // entitlements (revoke/restore)
+  DIGITAL_ENTITLEMENT_NOT_FOUND: 'This entitlement could no longer be found.',
+  DIGITAL_ENTITLEMENT_ALREADY_REVOKED: 'This entitlement has already been revoked.',
+  DIGITAL_ENTITLEMENT_NOT_REVOKED: 'This entitlement is not currently revoked.',
+  DIGITAL_ENTITLEMENT_EXPIRED: "This entitlement has expired and can't be restored.",
+  DIGITAL_ENTITLEMENT_UNAUTHORIZED: "You don't have access to this entitlement.",
+};
+
+/** Resolve a user-facing message for any error thrown by an order API call. */
+export function getOrderErrorMessage(err: unknown): string {
+  if (err instanceof ApiError) return ORDER_ERROR_LABELS[err.code] ?? err.message;
+  return 'Something went wrong. Please try again.';
+}
 
 // ─── API Response Types ────────────────────────────────────────────────────────
 
@@ -189,6 +220,8 @@ export interface OrdersQueryParams {
   status?: string;
   paymentStatus?: string;
   orderType?: 'physical' | 'digital';
+  /** Scope the list to a single customer (used by the Customers tab). */
+  customerId?: string;
   dateFrom?: string;
   dateTo?: string;
   q?: string;
@@ -381,6 +414,7 @@ export async function fetchOrders(
   if (params.status) query.set('status', params.status);
   if (params.paymentStatus) query.set('paymentStatus', params.paymentStatus);
   if (params.orderType) query.set('orderType', params.orderType);
+  if (params.customerId) query.set('customerId', params.customerId);
   if (params.dateFrom) query.set('dateFrom', params.dateFrom);
   if (params.dateTo) query.set('dateTo', params.dateTo);
   if (params.q) query.set('q', params.q);

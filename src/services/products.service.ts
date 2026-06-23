@@ -28,6 +28,7 @@ import type {
   VectorisationStatusDto,
   VectorisationActionResponse,
 } from '@/types/product.types';
+import type { ServiceConfig } from '@/types/services.types';
 import { ApiError } from '@/types/api';
 import { validateActivation } from '@/components/products/schemas/product.schemas';
 import { fetchDefaultDeliveryAgency } from '@/services/agencies.service';
@@ -294,6 +295,21 @@ export async function updateVariantDigitalConfig(
     `/vendor/products/${productId}/variants/${variantId}/digital/config`,
     config,
   );
+}
+
+// Service variant only — merge-patch the scheduling/peak config (duration,
+// buffers, bookingMode, maxBookings, peakHours). Mirrors the digital/config
+// endpoint above. Returns the updated variant.
+export async function updateVariantServiceConfig(
+  productId: string,
+  variantId: string,
+  serviceConfig: Partial<ServiceConfig>,
+): Promise<ApiVariant> {
+  const res = await api.patch<VariantDetailResponse>(
+    `/vendor/products/${productId}/variants/${variantId}/service/config`,
+    serviceConfig,
+  );
+  return res.data;
 }
 
 // ─── Vectorisation ────────────────────────────────────────────────────────────

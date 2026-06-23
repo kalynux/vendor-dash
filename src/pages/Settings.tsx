@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import {
   Shield,
-  CreditCard,
   Mail,
   Globe,
   Moon,
@@ -10,7 +9,6 @@ import {
   Eye,
   EyeOff,
   Save,
-  CheckCircle,
   X,
 } from 'lucide-react';
 import {
@@ -32,6 +30,11 @@ import { Tabs, TabsContent } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { useAuthStore, useUIStore } from '@/store';
+import { BillingTab } from '@/components/billing/BillingTab';
+import { BasicSetupSettings } from '@/components/vendor-settings/BasicSetupSettings';
+import { DeliverySettings } from '@/components/vendor-settings/DeliverySettings';
+import { BrandingSettings } from '@/components/vendor-settings/BrandingSettings';
+import { PoliciesSettings } from '@/components/vendor-settings/PoliciesSettings';
 
 export function Settings() {
   const { user } = useAuthStore();
@@ -225,6 +228,22 @@ export function Settings() {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="basic" className="space-y-6">
+          <BasicSetupSettings />
+        </TabsContent>
+
+        <TabsContent value="delivery" className="space-y-6">
+          <DeliverySettings />
+        </TabsContent>
+
+        <TabsContent value="branding" className="space-y-6">
+          <BrandingSettings />
+        </TabsContent>
+
+        <TabsContent value="policies" className="space-y-6">
+          <PoliciesSettings />
         </TabsContent>
 
         <TabsContent value="notifications" className="space-y-6">
@@ -438,82 +457,7 @@ export function Settings() {
         </TabsContent>
 
         <TabsContent value="billing" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Billing & Subscription</CardTitle>
-              <CardDescription>Manage your subscription and payment methods</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="p-4 bg-primary/5 border border-primary/20 rounded-lg">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium text-primary">Professional Plan</p>
-                    <p className="text-sm text-muted-foreground">
-                      $79/month • Renews on March 15, 2024
-                    </p>
-                  </div>
-                  <Button variant="outline">Upgrade Plan</Button>
-                </div>
-              </div>
-
-              <Separator />
-
-              <div className="space-y-4">
-                <h4 className="font-medium">Payment Methods</h4>
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <CreditCard className="w-5 h-5" />
-                      <div>
-                        <p className="font-medium">Visa ending in 4242</p>
-                        <p className="text-sm text-muted-foreground">Expires 12/25</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <Badge variant="outline">Default</Badge>
-                      <Button variant="ghost" size="sm">
-                        Edit
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-                <Button variant="outline" className="gap-2">
-                  <CreditCard className="w-4 h-4" />
-                  Add Payment Method
-                </Button>
-              </div>
-
-              <Separator />
-
-              <div className="space-y-4">
-                <h4 className="font-medium">Billing History</h4>
-                <div className="space-y-2">
-                  {[
-                    { date: 'Feb 15, 2024', amount: 79, status: 'Paid' },
-                    { date: 'Jan 15, 2024', amount: 79, status: 'Paid' },
-                    { date: 'Dec 15, 2023', amount: 79, status: 'Paid' },
-                  ].map((invoice, index) => (
-                    <div key={index} className="flex items-center justify-between p-3 hover:bg-muted rounded-lg">
-                      <div>
-                        <p className="font-medium">{invoice.date}</p>
-                        <p className="text-sm text-muted-foreground">Professional Plan</p>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <span className="font-medium">${invoice.amount}</span>
-                        <Badge variant="outline" className="gap-1">
-                          <CheckCircle className="w-3 h-3" />
-                          {invoice.status}
-                        </Badge>
-                        <Button variant="ghost" size="sm">
-                          Download
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          <BillingTab />
         </TabsContent>
       </Tabs>
 

@@ -1,13 +1,16 @@
 import { useState } from 'react';
-import { LayoutDashboard, ShoppingCart, Package, Menu, Plus, Box, ShoppingBag, UserPlus, Image, ChevronRight } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { LayoutDashboard, ShoppingCart, Package, Menu, Plus, ChevronRight } from 'lucide-react';
 import { useRouter } from '@/App';
 import { useNotificationStore } from '@/store';
 import { cn } from '@/lib/utils';
 import { MobileMoreDrawer } from './MobileMoreDrawer';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
+import { QUICK_ACTIONS, type QuickAction } from '@/config/quickActions';
 
 type LegacyRoute = 'overview' | 'orders' | 'products' | 'product-upload' | 'customers'
-  | 'analytics' | 'vendors' | 'notifications' | 'settings' | 'media' | 'support' | 'login';
+  | 'analytics' | 'vendors' | 'notifications' | 'settings' | 'media' | 'tickets'
+  | 'services' | 'login';
 
 interface TabButtonProps {
   label: string;
@@ -39,38 +42,20 @@ function TabButton({ label, icon: Icon, active, badge, onClick }: TabButtonProps
   );
 }
 
-const quickActions = [
-  {
-    icon: Box,
-    label: 'Add Product',
-    description: 'Create a new listing',
-    route: 'product-upload' as LegacyRoute,
-  },
-  {
-    icon: ShoppingBag,
-    label: 'Create Order',
-    description: 'Draft an order for a customer',
-    route: 'orders' as LegacyRoute,
-  },
-  {
-    icon: UserPlus,
-    label: 'Add Customer',
-    description: 'Save a new contact',
-    route: 'customers' as LegacyRoute,
-  },
-  {
-    icon: Image,
-    label: 'Upload Media',
-    description: 'Add product photos or banners',
-    route: 'media' as LegacyRoute,
-  },
-];
-
 export function MobileTabBar() {
   const { route, navigate } = useRouter();
+  const reactNavigate = useNavigate();
   const { unreadCount } = useNotificationStore();
   const [moreOpen, setMoreOpen] = useState(false);
   const [quickActionsOpen, setQuickActionsOpen] = useState(false);
+
+  const handleQuickAction = (action: QuickAction) => {
+    reactNavigate(
+      `/dashboard/${action.route}`,
+      action.intent ? { state: { create: true } } : undefined,
+    );
+    setQuickActionsOpen(false);
+  };
 
   const tabs: { label: string; icon: React.ElementType; route: LegacyRoute; badge?: number }[] = [
     { label: 'Overview', icon: LayoutDashboard, route: 'overview' },
@@ -83,7 +68,7 @@ export function MobileTabBar() {
 
   return (
     <>
-      <nav className="fixed bottom-0 left-0 right-0 z-50 bg-background border-t h-16 safe-area-inset-bottom">
+      <nav className="fixed bottom-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-sm border-t shadow-[0_-4px_12px_rgba(0,0,0,0.05)] h-16 safe-area-inset-bottom">
         <div className="flex items-center justify-around h-full px-2">
           {tabs.map((tab) => (
             <TabButton
@@ -135,13 +120,10 @@ export function MobileTabBar() {
             </p>
           </div>
           <div className="py-2">
-            {quickActions.map((action) => (
+            {QUICK_ACTIONS.map((action) => (
               <button
-                key={action.route}
-                onClick={() => {
-                  navigate(action.route);
-                  setQuickActionsOpen(false);
-                }}
+                key={action.id}
+                onClick={() => handleQuickAction(action)}
                 className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-accent transition-colors"
               >
                 <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center flex-shrink-0">

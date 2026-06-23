@@ -16,6 +16,8 @@ import type {
   FileUpdateResponse,
   FileUploadResponse,
   FilePagination,
+  StorageUsage,
+  StorageResponse,
 } from '@/types/file.types';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -73,10 +75,24 @@ export function isAttached(detail: ApiFileDetail): boolean {
 
 export async function listFiles(
   params: FileListParams = {},
-): Promise<{ files: ApiFile[]; pagination: FilePagination }> {
+): Promise<{ files: ApiFile[]; pagination: FilePagination; storage: StorageUsage | null }> {
   const qs = buildQueryString(params as Record<string, unknown>);
   const res = await api.get<FileListResponse>(`/files${qs}`);
-  return { files: res.data.files, pagination: res.data.pagination };
+  return {
+    files: res.data.files,
+    pagination: res.data.pagination,
+    // Embedded usage summary (api-doc/vendor/storage.md §2); `null` for admins.
+    storage: res.data.storage ?? null,
+  };
+}
+
+/**
+ * Account-wide media storage usage + plan limit (api-doc/vendor/storage.md §2).
+ * The primary source for a storage widget — includes the per-category breakdown.
+ */
+export async function fetchStorageUsage(): Promise<StorageUsage> {
+  const res = await api.get<StorageResponse>('/files/storage');
+  return res.data;
 }
 
 export async function getFile(id: string): Promise<ApiFileDetail> {

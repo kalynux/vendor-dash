@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { createContext, useContext, useCallback, useState } from 'react';
 import { Toaster } from '@/components/ui/sonner';
 
@@ -14,8 +14,10 @@ import { Settings } from '@/pages/Settings';
 import { MediaGallery } from '@/pages/MediaGallery';
 import { ProductUpload } from '@/pages/ProductUpload';
 import { ProductEdit } from '@/pages/ProductEdit';
-import { Support } from '@/pages/Support';
 import { Tickets } from '@/pages/Tickets';
+import { Services } from '@/pages/Services';
+import { ServiceUpload } from '@/pages/ServiceUpload';
+import { ServiceEdit } from '@/pages/ServiceEdit';
 
 // Layout
 import { Sidebar } from '@/components/layout/Sidebar';
@@ -75,7 +77,8 @@ export const useAuth = () => useContext(LegacyAuthContext);
 
 type LegacyRoute =
   | 'overview' | 'orders' | 'products' | 'product-upload' | 'customers'
-  | 'analytics' | 'vendors' | 'notifications' | 'settings' | 'media' | 'support' | 'tickets' | 'login';
+  | 'analytics' | 'vendors' | 'notifications' | 'settings' | 'media' | 'tickets'
+  | 'services' | 'service-upload' | 'login';
 
 const LEGACY_ROUTE_MAP: Record<LegacyRoute, string> = {
   overview: '/dashboard',
@@ -88,10 +91,33 @@ const LEGACY_ROUTE_MAP: Record<LegacyRoute, string> = {
   notifications: '/dashboard/notifications',
   settings: '/dashboard/settings',
   media: '/dashboard/media',
-  support: '/dashboard/support',
   tickets: '/dashboard/tickets',
+  services: '/dashboard/services',
+  'service-upload': '/dashboard/service-upload',
   login: '/login',
 };
+
+// Reverse-map the current URL to a legacy route name so Sidebar/Header/MobileTabBar
+// can highlight the active item. Product wizard routes map to 'products'.
+function pathToLegacyRoute(pathname: string): LegacyRoute {
+  if (pathname === '/dashboard' || pathname === '/dashboard/') return 'overview';
+  if (
+    pathname.startsWith('/dashboard/product-edit') ||
+    pathname.startsWith('/dashboard/product-upload')
+  ) {
+    return 'products';
+  }
+  if (
+    pathname.startsWith('/dashboard/service-upload') ||
+    pathname.startsWith('/dashboard/service-edit')
+  ) {
+    return 'services';
+  }
+  const match = (Object.entries(LEGACY_ROUTE_MAP) as [LegacyRoute, string][])
+    .filter(([key]) => key !== 'overview')
+    .find(([, path]) => pathname === path || pathname.startsWith(`${path}/`));
+  return match ? match[0] : 'overview';
+}
 
 interface LegacyRouterContextType {
   route: LegacyRoute;
@@ -135,7 +161,9 @@ function DashboardShell() {
             <Route path="settings" element={<Settings />} />
             <Route path="media" element={<MediaGallery />} />
             <Route path="tickets" element={<Tickets />} />
-            <Route path="support" element={<Support />} />
+            <Route path="services" element={<Services />} />
+            <Route path="service-upload" element={<ServiceUpload />} />
+            <Route path="service-edit/:id" element={<ServiceEdit />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
         </main>
@@ -151,6 +179,8 @@ function AppContent() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const { theme } = useUIStore();
   const reactNavigate = useNavigate();
+  const location = useLocation();
+  const currentRoute = pathToLegacyRoute(location.pathname);
 
   const toggleSidebar = useCallback(() => setSidebarCollapsed((p) => !p), []);
 
@@ -182,7 +212,7 @@ function AppContent() {
         logout: () => reactNavigate('/login'),
       }}
     >
-      <LegacyRouterContext.Provider value={{ route: 'overview', navigate: legacyNavigate }}>
+      <LegacyRouterContext.Provider value={{ route: currentRoute, navigate: legacyNavigate }}>
         <UIContext.Provider value={{ sidebarCollapsed, toggleSidebar }}>
           <div className={theme === 'dark' ? 'dark' : ''}>
             <OnboardingErrorBoundary>

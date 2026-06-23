@@ -44,7 +44,8 @@ import { Input } from '@/components/ui/input';
 import { OrderStatusBadge } from './OrderStatusBadge';
 import { cn } from '@/lib/utils';
 import { useOrderStore } from '@/store';
-import { addNote, revokeEntitlement, restoreEntitlement, fetchNote } from '@/services/orders.service';
+import { addNote, revokeEntitlement, restoreEntitlement, fetchNote, getOrderErrorMessage } from '@/services/orders.service';
+import { toast } from 'sonner';
 import type { Order, Entitlement, OrderTimelineEvent } from '@/types';
 
 type TabId = 'details' | 'items' | 'timeline' | 'payment' | 'entitlements';
@@ -170,6 +171,9 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
     try {
       await updateOrderStatus(order.id, status);
       setOrder(prev => prev ? { ...prev, status: status as Order['status'] } : prev);
+      toast.success(`Order marked as ${status}`);
+    } catch (err) {
+      toast.error(getOrderErrorMessage(err));
     } finally {
       setStatusLoading(false);
     }
@@ -182,6 +186,9 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
     try {
       await updateOrderStatus(order.id, 'cancelled');
       setOrder(prev => prev ? { ...prev, status: 'cancelled' as Order['status'] } : prev);
+      toast.success('Order cancelled');
+    } catch (err) {
+      toast.error(getOrderErrorMessage(err));
     } finally {
       setStatusLoading(false);
     }
@@ -202,6 +209,9 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
         actor: 'You',
       };
       setOrder(prev => prev ? { ...prev, timeline: [pseudoEvent, ...prev.timeline] } : prev);
+      toast.success('Note added');
+    } catch (err) {
+      toast.error(getOrderErrorMessage(err));
     } finally {
       setNoteLoading(false);
     }
@@ -221,6 +231,8 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
           e.id === event.id ? { ...e, description: message } : e,
         ),
       } : prev);
+    } catch (err) {
+      toast.error(getOrderErrorMessage(err));
     } finally {
       setFetchingNoteId(null);
     }
@@ -264,6 +276,9 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
         };
       });
       setActionDialog(null);
+      toast.success(type === 'revoke' ? 'Entitlement revoked' : 'Entitlement restored');
+    } catch (err) {
+      toast.error(getOrderErrorMessage(err));
     } finally {
       setActionLoading(false);
     }

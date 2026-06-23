@@ -1,6 +1,8 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth, useRouter } from '@/App';
-import { useNotificationStore } from '@/store';
+import { useNotificationStore, useUIStore } from '@/store';
+import { useOnboarding } from '@/onboarding/store/onboarding.store';
 import {
   Search,
   Bell,
@@ -10,12 +12,13 @@ import {
   ArrowRight,
   ShoppingCart,
   Package,
-  Users,
-  FileText,
+  LogOut,
+  User,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -24,13 +27,17 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-
-const quickActions = [
-  { name: 'Create Product', icon: Package, route: 'products' as const },
-  { name: 'Create Order', icon: ShoppingCart, route: 'orders' as const },
-  { name: 'Add Customer', icon: Users, route: 'customers' as const },
-  { name: 'Generate Report', icon: FileText, route: 'analytics' as const },
-];
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { QUICK_ACTIONS, type QuickAction } from '@/config/quickActions';
 
 const recentSearches = [
   'Order #1001',
@@ -39,15 +46,44 @@ const recentSearches = [
   'Tech Gadgets Pro',
 ];
 
+function initialsOf(name: string): string {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((w) => w[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
+}
+
 export function Header() {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const { user, logout } = useAuth();
+  const [logoutOpen, setLogoutOpen] = useState(false);
+  const { logout } = useAuth();
   const { navigate } = useRouter();
+  const reactNavigate = useNavigate();
+  const { setSettingsTab } = useUIStore();
   const { notifications, unreadCount, markAllAsRead } = useNotificationStore();
+  const roleEntity = useOnboarding().session?.role_entity;
 
-  const toggleSearch = () => {
-    setIsSearchOpen(!isSearchOpen);
+  const storeName = roleEntity?.display_name || roleEntity?.business_name || 'My Store';
+  const storeLogo = roleEntity?.branding?.logo_url || null;
+  const storeEmail = roleEntity?.email ?? '';
+
+  const toggleSearch = () => setIsSearchOpen((v) => !v);
+
+  const handleQuickAction = (action: QuickAction) => {
+    setIsSearchOpen(false);
+    reactNavigate(
+      `/dashboard/${action.route}`,
+      action.intent ? { state: { create: true } } : undefined,
+    );
+  };
+
+  const goToProfile = () => {
+    setSettingsTab('profile');
+    navigate('settings');
   };
 
   const unreadNotifications = notifications.filter((n: { read: boolean }) => !n.read).slice(0, 5);
@@ -56,7 +92,7 @@ export function Header() {
     <>
       <header className="h-16 border-b bg-card/50 backdrop-blur-sm sticky top-0 z-30">
         <div className="h-full px-6 flex items-center justify-between">
-          {/* Left - Breadcrumbs could go here */}
+          {/* Left - search */}
           <div className="flex items-center gap-4">
             <Button
               variant="outline"
@@ -81,17 +117,20 @@ export function Header() {
                   <Plus className="w-4 h-4" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuContent align="end" className="w-60">
                 <DropdownMenuLabel>Quick Actions</DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                {quickActions.map((action) => (
+                {QUICK_ACTIONS.map((action) => (
                   <DropdownMenuItem
-                    key={action.name}
-                    onClick={() => navigate(action.route)}
+                    key={action.id}
+                    onClick={() => handleQuickAction(action)}
                     className="gap-3"
                   >
                     <action.icon className="w-4 h-4" />
-                    <span className="flex-1">{action.name}</span>
+                    <div className="flex flex-col">
+                      <span>{action.label}</span>
+                      <span className="text-xs text-muted-foreground">{action.description}</span>
+                    </div>
                   </DropdownMenuItem>
                 ))}
               </DropdownMenuContent>
@@ -168,42 +207,68 @@ export function Header() {
             {/* User Menu */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="relative h-9 w-9 rounded-full">
-                  <img
-                    src={user?.avatar || `https://i.pravatar.cc/150?u=${user?.id}`}
-                    alt={user?.name}
-                    className="h-9 w-9 rounded-full object-cover"
-                  />
+                <Button variant="ghost" className="relative h-9 w-9 rounded-full p-0">
+                  <Avatar className="h-9 w-9">
+                    <AvatarImage src={storeLogo ?? undefined} alt={storeName} />
+                    <AvatarFallback className="text-xs font-semibold">
+                      {initialsOf(storeName)}
+                    </AvatarFallback>
+                  </Avatar>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
                 <DropdownMenuLabel>
                   <div className="flex flex-col">
-                    <span>{user?.name}</span>
-                    <span className="text-xs text-muted-foreground font-normal">
-                      {user?.email}
-                    </span>
+                    <span className="truncate">{storeName}</span>
+                    {storeEmail && (
+                      <span className="text-xs text-muted-foreground font-normal truncate">
+                        {storeEmail}
+                      </span>
+                    )}
                   </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => navigate('settings')}>
-                  Settings
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => navigate('settings')}>
+                <DropdownMenuItem onClick={goToProfile} className="gap-2">
+                  <User className="w-4 h-4" />
                   Profile
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
-                  onClick={logout}
-                  className="text-destructive"
+                  onSelect={(e) => {
+                    e.preventDefault();
+                    setLogoutOpen(true);
+                  }}
+                  className="gap-2 text-destructive focus:text-destructive"
                 >
-                  Log out
+                  <LogOut className="w-4 h-4" />
+                  Logout
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
         </div>
       </header>
+
+      {/* Logout confirmation */}
+      <AlertDialog open={logoutOpen} onOpenChange={setLogoutOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Log out?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You&apos;ll need to sign in again to access your dashboard.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => logout()}
+              className="bg-destructive text-white hover:bg-destructive/90"
+            >
+              Log out
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Global Search Overlay */}
       {isSearchOpen && (
@@ -273,17 +338,14 @@ export function Header() {
                         Quick Actions
                       </p>
                       <div className="grid grid-cols-2 gap-2">
-                        {quickActions.map((action) => (
+                        {QUICK_ACTIONS.map((action) => (
                           <button
-                            key={action.name}
-                            onClick={() => {
-                              navigate(action.route);
-                              setIsSearchOpen(false);
-                            }}
+                            key={action.id}
+                            onClick={() => handleQuickAction(action)}
                             className="flex items-center gap-3 p-3 rounded-lg hover:bg-accent text-left transition-colors"
                           >
                             <action.icon className="w-4 h-4 text-muted-foreground" />
-                            <span className="text-sm">{action.name}</span>
+                            <span className="text-sm">{action.label}</span>
                           </button>
                         ))}
                       </div>

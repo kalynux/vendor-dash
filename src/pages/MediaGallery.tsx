@@ -74,9 +74,15 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { cn, formatFileSize } from '@/lib/utils';
+import { cn, formatFileSize, storagePercent, storageBarColor } from '@/lib/utils';
 import { ApiError } from '@/types/api';
 import { getUploadErrorMessage } from '@/lib/uploadErrors';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { useInfiniteList } from '@/hooks/use-infinite-list';
+import { useScrollRestoration } from '@/hooks/use-scroll-restoration';
+import { getListCache, setListCache } from '@/lib/listCache';
+import { MobilePageHeader } from '@/components/layout/MobilePageHeader';
+import { MobileListFooter } from '@/components/layout/MobileListFooter';
 import {
   listFiles,
   getFilesUsage,
@@ -87,6 +93,7 @@ import {
   validateMediaSelection,
   resolveFileUrl,
   kindFromMime,
+  categoryFromKind,
 } from '@/services/files.service';
 import type {
   ApiFile,
@@ -94,6 +101,7 @@ import type {
   FileKind,
   FilePagination,
   StorageProvider,
+  StorageUsage,
 } from '@/types/file.types';
 
 const PAGE_LIMIT = 24;
@@ -274,27 +282,49 @@ function FilePreview({ file }: { file: ApiFile }) {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
+// Desktop list-state cache so returning to the Media tab restores what was
+// loaded instead of refetching.
+const MEDIA_DESKTOP_KEY = 'media-desktop';
+interface MediaDesktopCache {
+  files: ApiFile[];
+  pagination: FilePagination | null;
+  page: number;
+  provider: StorageProvider | 'all';
+  kind: FileKind | 'all';
+  detailCache: Record<string, ApiFileDetail>;
+  search: string;
+  sortField: SortField;
+  sortAsc: boolean;
+  viewMode: 'grid' | 'list';
+}
+
 export function MediaGallery() {
   const navigate = useNavigate();
   const isDesktop = useIsDesktop();
+  const isMobile = useIsMobile();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const dCache = getListCache<MediaDesktopCache>(MEDIA_DESKTOP_KEY);
+
   // Server-driven list state
-  const [files, setFiles] = useState<ApiFile[]>([]);
-  const [pagination, setPagination] = useState<FilePagination | null>(null);
-  const [page, setPage] = useState(1);
-  const [provider, setProvider] = useState<StorageProvider | 'all'>('all');
-  const [kind, setKind] = useState<FileKind | 'all'>('all');
-  const [loading, setLoading] = useState(true);
+  const [files, setFiles] = useState<ApiFile[]>(dCache?.files ?? []);
+  const [pagination, setPagination] = useState<FilePagination | null>(dCache?.pagination ?? null);
+  const [page, setPage] = useState(dCache?.page ?? 1);
+  const [provider, setProvider] = useState<StorageProvider | 'all'>(dCache?.provider ?? 'all');
+  const [kind, setKind] = useState<FileKind | 'all'>(dCache?.kind ?? 'all');
+  const [loading, setLoading] = useState(!dCache);
+
+  // Account-wide storage usage + plan limit, embedded in the file listing.
+  const [storage, setStorage] = useState<StorageUsage | null>(null);
 
   // Reference-based enrichment cache (the source of attachment truth)
-  const [detailCache, setDetailCache] = useState<Record<string, ApiFileDetail>>({});
+  const [detailCache, setDetailCache] = useState<Record<string, ApiFileDetail>>(dCache?.detailCache ?? {});
 
   // Client-side view controls
-  const [search, setSearch] = useState('');
-  const [sortField, setSortField] = useState<SortField>('date');
-  const [sortAsc, setSortAsc] = useState(false);
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [search, setSearch] = useState(dCache?.search ?? '');
+  const [sortField, setSortField] = useState<SortField>(dCache?.sortField ?? 'date');
+  const [sortAsc, setSortAsc] = useState(dCache?.sortAsc ?? false);
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>(dCache?.viewMode ?? 'grid');
 
   // Inspector
   const [inspectId, setInspectId] = useState<string | null>(null);
@@ -305,7 +335,9 @@ export function MediaGallery() {
   const [uploadLabel, setUploadLabel] = useState('');
   const [dragActive, setDragActive] = useState(false);
 
-  const activeMime = KIND_FILTERS.find((k) => k.value === kind)?.mime;
+  // Backend filters by broad `category` (image/video/audio/document); the
+  // `mimeType` param is an EXACT match, so a prefix like "image/" matches nothing.
+  const activeCategory = kind === 'all' ? undefined : categoryFromKind(kind);
 
   const loadPage = useCallback(async () => {
     setLoading(true);
@@ -313,11 +345,12 @@ export function MediaGallery() {
       const res = await listFiles({
         page,
         limit: PAGE_LIMIT,
-        mimeType: activeMime,
+        category: activeCategory,
         provider: provider === 'all' ? undefined : provider,
       });
       setFiles(res.files);
       setPagination(res.pagination);
+      if (res.storage) setStorage(res.storage);
       // Enrich the page with usage references for attachment status.
       const missing = res.files.map((f) => f.id);
       if (missing.length > 0) {
@@ -329,28 +362,92 @@ export function MediaGallery() {
     } finally {
       setLoading(false);
     }
-  }, [page, activeMime, provider]);
+  }, [page, activeCategory, provider]);
 
+  useScrollRestoration('media');
+
+  // Desktop uses page-based pagination; mobile uses infinite scroll below.
+  // Skip the first load if we restored a cached list (no reload on return).
+  const desktopInit = useRef(false);
   useEffect(() => {
+    if (isMobile) return;
+    if (!desktopInit.current) {
+      desktopInit.current = true;
+      if (dCache) return;
+    }
     loadPage();
-  }, [loadPage]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadPage, isMobile]);
 
-  // Reset to page 1 whenever a server-side filter changes.
+  // Reset to page 1 whenever a server-side filter changes (skip the first run so
+  // a restored filter doesn't reset paging on return).
+  const filterInit = useRef(false);
   useEffect(() => {
+    if (!filterInit.current) {
+      filterInit.current = true;
+      return;
+    }
     setPage(1);
   }, [provider, kind]);
+
+  // Persist the desktop list + filters so a remount can restore them.
+  useEffect(() => {
+    if (isMobile) return;
+    setListCache<MediaDesktopCache>(MEDIA_DESKTOP_KEY, {
+      files, pagination, page, provider, kind, detailCache, search, sortField, sortAsc, viewMode,
+    });
+  }, [isMobile, files, pagination, page, provider, kind, detailCache, search, sortField, sortAsc, viewMode]);
+
+  // Mobile infinite scroll (enriches each page with usage references too).
+  const fetchMediaPage = useCallback(
+    async (pageArg: number, limit: number) => {
+      const res = await listFiles({
+        page: pageArg,
+        limit,
+        category: activeCategory,
+        provider: provider === 'all' ? undefined : provider,
+      });
+      if (res.storage) setStorage(res.storage);
+      const ids = res.files.map((f) => f.id);
+      if (ids.length > 0) {
+        try {
+          const map = await getFilesUsage(ids);
+          setDetailCache((prev) => ({ ...prev, ...map }));
+        } catch {
+          /* enrichment is best-effort */
+        }
+      }
+      return {
+        items: res.files,
+        total: res.pagination.total,
+        totalPages: res.pagination.pages,
+      };
+    },
+    [activeCategory, provider],
+  );
+
+  const infinite = useInfiniteList<ApiFile>({
+    fetchPage: fetchMediaPage,
+    rowHeight: 140,
+    enabled: isMobile,
+    deps: [activeCategory, provider],
+    cacheKey: 'media',
+  });
+
+  // Single source of truth for the rendered list (mobile accumulates pages).
+  const sourceFiles = isMobile ? infinite.items : files;
 
   // ─── Derived (client-side search + sort) ───────────────────────────────────
 
   const visibleFiles = useMemo(() => {
     const q = search.trim().toLowerCase();
     const filtered = q
-      ? files.filter(
+      ? sourceFiles.filter(
         (f) =>
           (f.originalName ?? '').toLowerCase().includes(q) ||
           f.mimeType.toLowerCase().includes(q),
       )
-      : files;
+      : sourceFiles;
     const sorted = [...filtered].sort((a, b) => {
       let cmp = 0;
       if (sortField === 'name') {
@@ -363,7 +460,7 @@ export function MediaGallery() {
       return sortAsc ? cmp : -cmp;
     });
     return sorted;
-  }, [files, search, sortField, sortAsc]);
+  }, [sourceFiles, search, sortField, sortAsc]);
 
   const pageStats = useMemo(() => {
     let attached = 0;
@@ -402,7 +499,8 @@ export function MediaGallery() {
       try {
         await uploadMediaWithProgress(arr, setUploadPercent);
         toast.success(`Uploaded ${arr.length} file${arr.length > 1 ? 's' : ''}.`);
-        if (page !== 1) setPage(1);
+        if (isMobile) infinite.reload();
+        else if (page !== 1) setPage(1);
         else await loadPage();
       } catch (err) {
         toast.error(getUploadErrorMessage(err, arr));
@@ -412,7 +510,7 @@ export function MediaGallery() {
         setUploadLabel('');
       }
     },
-    [page, loadPage],
+    [page, loadPage, isMobile, infinite],
   );
 
   const onInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -454,11 +552,12 @@ export function MediaGallery() {
       setDetailCache((prev) =>
         prev[id] ? { ...prev, [id]: { ...prev[id], originalName: trimmed } } : prev,
       );
+      if (isMobile) infinite.reload();
       toast.success('File renamed.');
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Could not rename file.');
     }
-  }, []);
+  }, [isMobile, infinite]);
 
   const handleDelete = useCallback(
     async (id: string) => {
@@ -468,15 +567,32 @@ export function MediaGallery() {
         return;
       }
       if (!confirm('Delete this file? This cannot be undone.')) return;
+      const removed = files.find((f) => f.id === id);
       try {
         await deleteFile(id);
         setFiles((prev) => prev.filter((f) => f.id !== id));
+        // Keep the usage bar in sync without a full re-list (desktop doesn't reload).
+        if (removed) {
+          setStorage((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  usedBytes: Math.max(0, prev.usedBytes - removed.size),
+                  remainingBytes:
+                    prev.remainingBytes !== null
+                      ? prev.remainingBytes + removed.size
+                      : null,
+                }
+              : prev,
+          );
+        }
         setDetailCache((prev) => {
           const next = { ...prev };
           delete next[id];
           return next;
         });
         if (inspectId === id) setInspectId(null);
+        if (isMobile) infinite.reload();
         toast.success('File deleted.');
       } catch (err) {
         if (err instanceof ApiError && err.status === 409) {
@@ -486,7 +602,7 @@ export function MediaGallery() {
         }
       }
     },
-    [detailCache, inspectId],
+    [files, detailCache, inspectId, isMobile, infinite],
   );
 
   // ─── Render helpers ──────────────────────────────────────────────────────────
@@ -513,12 +629,66 @@ export function MediaGallery() {
     );
   };
 
-  const totalCount = pagination?.total ?? files.length;
+  const totalCount = isMobile ? infinite.total : (pagination?.total ?? files.length);
+  const listLoading = isMobile ? infinite.loading : loading;
+
+  // Compact controls reused inside the mobile sticky subheader.
+  const mobileToolbar = (
+    <div className="space-y-3">
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          placeholder="Search by name or type…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="pl-10"
+        />
+      </div>
+      <div className="-mx-1 flex items-center gap-2 overflow-x-auto px-1">
+        <div className="flex shrink-0 items-center gap-1 rounded-lg border p-1">
+          {KIND_FILTERS.map((k) => (
+            <button
+              key={k.value}
+              onClick={() => setKind(k.value)}
+              className={cn(
+                'rounded-md px-2.5 py-1 text-sm transition-colors whitespace-nowrap',
+                kind === k.value
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:bg-muted',
+              )}
+            >
+              {k.label}
+            </button>
+          ))}
+        </div>
+        <Select
+          value={`${sortField}:${sortAsc ? 'asc' : 'desc'}`}
+          onValueChange={(v) => {
+            const [field, dir] = v.split(':') as [SortField, 'asc' | 'desc'];
+            setSortField(field);
+            setSortAsc(dir === 'asc');
+          }}
+        >
+          <SelectTrigger className="w-[140px] shrink-0">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="date:desc">Newest first</SelectItem>
+            <SelectItem value="date:asc">Oldest first</SelectItem>
+            <SelectItem value="name:asc">Name A–Z</SelectItem>
+            <SelectItem value="name:desc">Name Z–A</SelectItem>
+            <SelectItem value="size:desc">Largest first</SelectItem>
+            <SelectItem value="size:asc">Smallest first</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+    </div>
+  );
 
   return (
     <TooltipProvider delayDuration={200}>
       <div
-        className="space-y-6 animate-fade-in"
+        className={cn('animate-fade-in', isMobile ? '-mx-6 -mt-6 pb-28' : 'space-y-6')}
         onDragOver={(e) => {
           e.preventDefault();
           setDragActive(true);
@@ -528,30 +698,53 @@ export function MediaGallery() {
         }}
         onDrop={onDrop}
       >
-        {/* Header */}
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">Media Library</h1>
-            <p className="text-muted-foreground">
-              Manage every file you've uploaded and see exactly where each one is attached.
-            </p>
-          </div>
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            className="hidden"
-            onChange={onInputChange}
+        {/* Always-available file picker */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          className="hidden"
+          onChange={onInputChange}
+        />
+
+        {/* Mobile sticky header */}
+        {isMobile && (
+          <MobilePageHeader
+            title="Media"
+            actions={
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+                aria-label="Upload"
+                className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-accent transition-colors disabled:opacity-50"
+              >
+                {uploading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Upload className="h-5 w-5" />}
+              </button>
+            }
+            subheader={mobileToolbar}
           />
-          <Button onClick={() => fileInputRef.current?.click()} disabled={uploading} className="gap-2">
-            {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-            Upload
-          </Button>
-        </div>
+        )}
+
+        {/* Desktop header */}
+        {!isMobile && (
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight">Media Library</h1>
+              <p className="text-muted-foreground">
+                Manage every file you've uploaded and see exactly where each one is attached.
+              </p>
+            </div>
+            <Button onClick={() => fileInputRef.current?.click()} disabled={uploading} className="gap-2">
+              {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+              Upload
+            </Button>
+          </div>
+        )}
 
         {/* Upload progress */}
         {uploading && (
-          <Card>
+          <Card className={cn(isMobile && 'mx-4')}>
             <CardContent className="space-y-2 p-4">
               <div className="flex items-center justify-between text-sm">
                 <span className="font-medium truncate">Uploading {uploadLabel}…</span>
@@ -562,27 +755,48 @@ export function MediaGallery() {
           </Card>
         )}
 
-        {/* Overview */}
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <StatCard icon={Layers} label="Total files" value={String(totalCount)} />
-          <StatCard
-            icon={HardDrive}
-            label="Storage (page)"
-            value={formatFileSize(pageStats.bytes)}
-          />
-          <StatCard
-            icon={Link2}
-            label="Attached (page)"
-            value={pageStats.resolved ? String(pageStats.attached) : '—'}
-          />
-          <StatCard
-            icon={Inbox}
-            label="Unused (page)"
-            value={pageStats.resolved ? String(pageStats.unused) : '—'}
-          />
+        {/* Overview (desktop only) */}
+        {!isMobile && (
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <StatCard icon={Layers} label="Total files" value={String(totalCount)} />
+            <StatCard
+              icon={HardDrive}
+              label="Storage used"
+              value={
+                storage
+                  ? storage.limitBytes !== null
+                    ? `${formatFileSize(storage.usedBytes)} / ${formatFileSize(storage.limitBytes)}`
+                    : formatFileSize(storage.usedBytes)
+                  : formatFileSize(pageStats.bytes)
+              }
+            />
+            <StatCard
+              icon={Link2}
+              label="Attached (page)"
+              value={pageStats.resolved ? String(pageStats.attached) : '—'}
+            />
+            <StatCard
+              icon={Inbox}
+              label="Unused (page)"
+              value={pageStats.resolved ? String(pageStats.unused) : '—'}
+            />
+          </div>
+          {storage && storage.limitBytes !== null && (
+            <StorageBar storage={storage} />
+          )}
         </div>
+        )}
 
-        {/* Toolbar */}
+        {/* Storage bar (mobile) */}
+        {isMobile && storage && storage.limitBytes !== null && (
+          <div className="px-4">
+            <StorageBar storage={storage} />
+          </div>
+        )}
+
+        {/* Toolbar (desktop only — mobile uses the sticky subheader) */}
+        {!isMobile && (
         <Card>
           <CardContent className="flex flex-col gap-3 p-4 lg:flex-row lg:items-center">
             <div className="relative flex-1">
@@ -662,11 +876,12 @@ export function MediaGallery() {
             </div>
           </CardContent>
         </Card>
+        )}
 
         {/* Main: library + persistent inspector (desktop) */}
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+        <div className={cn('grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_360px]', isMobile && 'px-4 pt-3')}>
           <div className="min-w-0">
-            {loading ? (
+            {listLoading ? (
               <LibrarySkeleton viewMode={viewMode} />
             ) : visibleFiles.length === 0 ? (
               <EmptyState
@@ -776,8 +991,8 @@ export function MediaGallery() {
               </Card>
             )}
 
-            {/* Pagination */}
-            {pagination && pagination.pages > 1 && (
+            {/* Desktop pagination */}
+            {!isMobile && pagination && pagination.pages > 1 && (
               <div className="mt-4 flex items-center justify-between">
                 <p className="text-sm text-muted-foreground">
                   Page {pagination.page} of {pagination.pages} ·{' '}
@@ -807,6 +1022,18 @@ export function MediaGallery() {
                 </div>
               </div>
             )}
+
+            {/* Mobile infinite-scroll sentinel */}
+            {isMobile && visibleFiles.length > 0 && (
+              <>
+                <div ref={infinite.sentinelRef} className="h-1" />
+                {infinite.loadingMore && (
+                  <div className="flex justify-center py-4">
+                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                  </div>
+                )}
+              </>
+            )}
           </div>
 
           {/* Persistent inspector (desktop only) */}
@@ -817,7 +1044,7 @@ export function MediaGallery() {
                   {inspectId ? (
                     <InspectorBody
                       fileId={inspectId}
-                      file={files.find((f) => f.id === inspectId)}
+                      file={sourceFiles.find((f) => f.id === inspectId)}
                       detail={inspectDetail}
                       onRename={handleRename}
                       onDelete={handleDelete}
@@ -881,12 +1108,42 @@ export function MediaGallery() {
             </div>
           </div>
         )}
+
+        {isMobile && (
+          <MobileListFooter shown={visibleFiles.length} total={totalCount} noun="files" />
+        )}
       </div>
     </TooltipProvider>
   );
 }
 
 // ─── Stat card ────────────────────────────────────────────────────────────────
+
+function StorageBar({ storage }: { storage: StorageUsage }) {
+  const pct = storagePercent(storage.usedBytes, storage.limitBytes);
+  return (
+    <Card>
+      <CardContent className="space-y-2 p-4">
+        <div className="flex items-center justify-between text-sm">
+          <span className="flex items-center gap-1.5 text-muted-foreground">
+            <HardDrive className="h-4 w-4" /> Media storage
+          </span>
+          <span className="font-medium">
+            {formatFileSize(storage.usedBytes)} of {formatFileSize(storage.limitBytes ?? 0)} ({pct}%)
+          </span>
+        </div>
+        <Progress value={pct} indicatorClassName={storageBarColor(pct)} />
+        {pct >= 80 && (
+          <p className="text-xs text-muted-foreground">
+            {pct >= 100
+              ? 'Storage is full — delete unused media to upload more.'
+              : 'Storage is nearly full. Delete unused media or upgrade your plan.'}
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 function StatCard({
   icon: Icon,
