@@ -7,6 +7,8 @@ import {
   XCircle,
   Clock,
   Plus,
+  Info,
+  ArrowLeft,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -38,7 +40,7 @@ import type {
 import type { SavedPaymentMethod } from '@/types/payment-method.types';
 import { isStripeConfigured } from '@/lib/stripe';
 import { fetchPaymentMethods } from '@/services/payment-methods.service';
-import { StripeCardField, type StripeCardFieldHandle } from './StripeCardField';
+import { StripePaymentElement, type StripePaymentElementHandle } from './StripePaymentElement';
 import { CardPreview } from './CardPreview';
 import {
   PHONE_OPERATORS,
@@ -47,9 +49,21 @@ import {
   PAYMENT_POLL_TIMEOUT_MS,
   billingErrorMessage,
   formatMoney,
+  formatCharged,
+  saveStripeResume,
+  clearStripeResume,
+  type StripeResumeKind,
 } from './billing.constants';
 
-type Phase = 'form' | 'processing' | 'success' | 'failed' | 'timeout';
+type Phase = 'form' | 'card' | 'processing' | 'success' | 'failed' | 'timeout';
+
+/** Stripe init details carried from `form` into the `card` (Payment Element) phase. */
+interface StripeInit {
+  id: string;
+  clientSecret: string;
+  chargedAmount?: number;
+  chargedCurrency?: string;
+}
 
 export interface PaymentDialogProps {
   open: boolean;
@@ -59,6 +73,8 @@ export interface PaymentDialogProps {
   summary: string;
   amount: number;
   currency: string;
+  /** Which flow this is — drives the Stripe 3-D Secure resume marker. */
+  paymentKind: StripeResumeKind;
   /** Initiate the gateway payment. Returns the normalised init result. */
   initiate: (gateway: PaymentGateway, channel: PaymentChannel) => Promise<PaymentInitResult>;
   /** Poll a pending payment; resolves with its current status. */
@@ -69,6 +85,7 @@ export interface PaymentDialogProps {
 }
 
 const PHONE_RE = /^\+?\d{8,15}$/;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /** Gateways selectable in the checkout (Stripe hidden when not configured). */
 function availableGateways() {
@@ -105,6 +122,7 @@ export function PaymentDialog({
   summary,
   amount,
   currency,
+  paymentKind,
   initiate,
   verify,
   onPaid,
@@ -116,22 +134,26 @@ export function PaymentDialog({
   const [phone, setPhone] = useState('');
   const [operator, setOperator] = useState<PhoneOperator>('MTN');
   const [holderName, setHolderName] = useState('');
+  const [email, setEmail] = useState('');
   const [phase, setPhase] = useState<Phase>('form');
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [cardError, setCardError] = useState<string | null>(null);
   const [instructionMsg, setInstructionMsg] = useState<string | null>(null);
   const [ussd, setUssd] = useState<string | null>(null);
+  const [stripeInit, setStripeInit] = useState<StripeInit | null>(null);
+  const [cardReady, setCardReady] = useState(false);
 
   // Saved methods power the quick-select chip row + autofill.
   const [savedMethods, setSavedMethods] = useState<SavedPaymentMethod[]>([]);
   const [selectedSavedId, setSelectedSavedId] = useState<string | null>(null);
 
-  const cardRef = useRef<StripeCardFieldHandle>(null);
+  const cardRef = useRef<StripePaymentElementHandle>(null);
   const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollDeadline = useRef<number>(0);
 
   const methodType = gateways.find((g) => g.value === gateway)?.methodType ?? 'mobile_money';
-  const selectedSaved = savedMethods.find((m) => m.id === selectedSavedId) ?? null;
+  const isStripe = methodType === 'card';
 
   // Reset everything when the dialog is (re)opened or closed.
   useEffect(() => {
@@ -140,11 +162,15 @@ export function PaymentDialog({
       setPhone('');
       setOperator('MTN');
       setHolderName('');
+      setEmail('');
       setPhase('form');
       setSubmitting(false);
       setFormError(null);
+      setCardError(null);
       setInstructionMsg(null);
       setUssd(null);
+      setStripeInit(null);
+      setCardReady(false);
       setSelectedSavedId(null);
     }
     return stopPolling;
@@ -221,33 +247,37 @@ export function PaymentDialog({
     setPhone('');
   }
 
-  async function handleSubmit() {
-    setFormError(null);
-
-    let channel: PaymentChannel;
-
-    if (methodType === 'mobile_money') {
-      if (!PHONE_RE.test(phone.trim())) {
-        setFormError('Enter a valid phone number (e.g. +237650000000).');
-        return;
+  /** Build the `channel` for the chosen gateway. Returns null + sets formError on bad input. */
+  function buildChannel(): PaymentChannel | null {
+    if (isStripe) {
+      // Stripe collects the card client-side — send only identification fields.
+      if (email.trim() && !EMAIL_RE.test(email.trim())) {
+        setFormError('Enter a valid email, or leave it blank.');
+        return null;
       }
-      channel = { phoneNumber: phone.trim(), phoneOperator: operator };
-    } else {
-      setSubmitting(true);
-      try {
-        const cardToken = await cardRef.current!.createToken();
-        channel = { cardToken };
-        if (holderName.trim()) channel.customerName = holderName.trim();
-      } catch (err) {
-        setSubmitting(false);
-        setFormError(err instanceof Error ? err.message : 'Could not validate the card.');
-        return;
-      }
+      const channel: PaymentChannel = {};
+      if (email.trim()) channel.customerEmail = email.trim();
+      if (holderName.trim()) channel.customerName = holderName.trim();
+      return channel;
     }
+    // Mobile money — phone + operator are required.
+    if (!PHONE_RE.test(phone.trim())) {
+      setFormError('Enter a valid phone number (e.g. +237650000000).');
+      return null;
+    }
+    return { phoneNumber: phone.trim(), phoneOperator: operator };
+  }
+
+  /** Step 1: initiate the payment server-side. */
+  async function handleInitiate() {
+    setFormError(null);
+    const channel = buildChannel();
+    if (!channel) return;
 
     setSubmitting(true);
     try {
       const result = await initiate(gateway, channel);
+
       if (result.status === 'paid') {
         setPhase('success');
         onPaid();
@@ -258,13 +288,25 @@ export function PaymentDialog({
         setPhase('failed');
         return;
       }
-      // pending → show instructions and poll
+
+      // pending. For Stripe, mount the Payment Element and confirm the card next.
+      if (isStripe && result.instructions?.clientSecret) {
+        setStripeInit({
+          id: result.id,
+          clientSecret: result.instructions.clientSecret,
+          chargedAmount: result.instructions.chargedAmount,
+          chargedCurrency: result.instructions.chargedCurrency,
+        });
+        setCardError(null);
+        setCardReady(false);
+        setPhase('card');
+        return;
+      }
+
+      // Mobile money (or a gateway that already confirmed): show instructions + poll.
       setUssd(result.instructions?.ussdCode ?? null);
       setInstructionMsg(
-        result.instructions?.message ??
-          (methodType === 'mobile_money'
-            ? 'Confirm the payment prompt on your phone.'
-            : 'Completing the card payment…'),
+        result.instructions?.message ?? 'Confirm the payment prompt on your phone.',
       );
       setPhase('processing');
       startPolling(result.id);
@@ -275,10 +317,60 @@ export function PaymentDialog({
     }
   }
 
+  /** Step 2 (Stripe only): confirm the card via the Payment Element, then poll. */
+  async function handleCardConfirm() {
+    if (!stripeInit) return;
+    setCardError(null);
+    setSubmitting(true);
+
+    // Persist a resume marker BEFORE confirming: if 3-D Secure forces a full-page
+    // redirect, the verify-on-return picks the payment back up. (The webhook is the
+    // authoritative finalizer regardless.)
+    saveStripeResume(paymentKind, stripeInit.id);
+
+    try {
+      const returnUrl = window.location.href;
+      const outcome = await cardRef.current!.confirm(returnUrl);
+
+      if (outcome.status === 'redirecting') {
+        // Stripe is navigating to the bank — leave the marker, the page will unload.
+        setInstructionMsg('Redirecting you to your bank to confirm the payment…');
+        return;
+      }
+
+      // Confirmed in-page (succeeded / processing) — finalize via the verify poll.
+      clearStripeResume();
+      setInstructionMsg(
+        outcome.status === 'succeeded'
+          ? 'Card confirmed — applying your purchase…'
+          : 'Confirming your payment…',
+      );
+      setPhase('processing');
+      startPolling(stripeInit.id);
+    } catch (err) {
+      clearStripeResume();
+      setCardError(err instanceof Error ? err.message : 'The card payment failed. Please try again.');
+      setSubmitting(false);
+    }
+  }
+
+  function backToForm() {
+    setStripeInit(null);
+    setCardError(null);
+    setCardReady(false);
+    setSubmitting(false);
+    setPhase('form');
+  }
+
   function handleClose(next: boolean) {
     if (!next) stopPolling();
     onOpenChange(next);
   }
+
+  const chargedLine =
+    stripeInit?.chargedAmount != null
+      ? formatCharged(stripeInit.chargedAmount, stripeInit.chargedCurrency)
+      : null;
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -347,6 +439,9 @@ export function PaymentDialog({
                       <Smartphone className="h-4 w-4" />
                     )}
                     {g.label}
+                    <span className="text-[10px] font-normal text-muted-foreground">
+                      {g.chargeCurrency}
+                    </span>
                   </button>
                 ))}
               </div>
@@ -383,30 +478,35 @@ export function PaymentDialog({
               </div>
             ) : (
               <div className="space-y-3">
-                <CardPreview
-                  brand={selectedSaved?.brand}
-                  last4={selectedSaved?.last4}
-                  holderName={holderName}
-                  expMonth={selectedSaved?.exp_month}
-                  expYear={selectedSaved?.exp_year}
-                />
+                {/* Card payments are charged in USD — make that explicit up front. */}
+                <div className="flex gap-2 rounded-lg border border-blue-500/30 bg-blue-500/5 p-3 text-xs text-muted-foreground">
+                  <Info className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
+                  <span>
+                    Card payments are processed in <span className="font-medium text-foreground">USD</span>;
+                    your bank may apply its own conversion. We'll show the exact dollar amount on the
+                    next step.
+                  </span>
+                </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="pay-holder">Card holder name</Label>
+                  <Label htmlFor="pay-name">Name on card (optional)</Label>
                   <Input
-                    id="pay-holder"
-                    placeholder="Name on card"
+                    id="pay-name"
+                    placeholder="Jane's Store"
                     value={holderName}
                     onChange={(e) => setHolderName(e.target.value)}
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Card details</Label>
-                  <StripeCardField ref={cardRef} disabled={submitting} />
-                  {selectedSaved && (
-                    <p className="text-xs text-muted-foreground">
-                      Re-enter your card details to confirm this payment.
-                    </p>
-                  )}
+                  <Label htmlFor="pay-email">Email for receipt (optional)</Label>
+                  <Input
+                    id="pay-email"
+                    type="email"
+                    inputMode="email"
+                    placeholder="vendor@example.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    aria-invalid={!!formError}
+                  />
                 </div>
               </div>
             )}
@@ -417,9 +517,59 @@ export function PaymentDialog({
               <Button variant="outline" onClick={() => handleClose(false)} disabled={submitting}>
                 Cancel
               </Button>
-              <Button onClick={handleSubmit} disabled={submitting}>
+              <Button onClick={handleInitiate} disabled={submitting}>
                 {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Confirm Payment · {formatMoney(amount, currency)}
+                {isStripe ? 'Continue to card' : `Confirm Payment · ${formatMoney(amount, currency)}`}
+              </Button>
+            </DialogFooter>
+          </div>
+        )}
+
+        {phase === 'card' && stripeInit && (
+          <div className="space-y-4">
+            <CardPreview holderName={holderName} />
+
+            {/* The exact USD charge from the server — never computed on the frontend. */}
+            <div className="rounded-lg border bg-muted/30 p-3 text-center">
+              {chargedLine ? (
+                <>
+                  <p className="text-sm text-muted-foreground">You'll be charged</p>
+                  <p className="text-2xl font-bold">{chargedLine}</p>
+                  <p className="text-xs text-muted-foreground">
+                    for {summary} ({formatMoney(amount, currency)})
+                  </p>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Completing payment for {summary} ({formatMoney(amount, currency)})
+                </p>
+              )}
+            </div>
+
+            <div className="flex gap-2 rounded-lg border border-blue-500/30 bg-blue-500/5 p-3 text-xs text-muted-foreground">
+              <Info className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
+              <span>Charged in USD; your bank may apply its own currency conversion.</span>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Card details</Label>
+              <StripePaymentElement
+                ref={cardRef}
+                clientSecret={stripeInit.clientSecret}
+                disabled={submitting}
+                onReady={() => setCardReady(true)}
+              />
+            </div>
+
+            {cardError && <p className="text-sm text-destructive">{cardError}</p>}
+
+            <DialogFooter>
+              <Button variant="outline" onClick={backToForm} disabled={submitting}>
+                <ArrowLeft className="mr-1 h-4 w-4" /> Back
+              </Button>
+              <Button onClick={handleCardConfirm} disabled={submitting || !cardReady}>
+                {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {chargedLine ? `Pay ${chargedLine}` : 'Pay now'}
               </Button>
             </DialogFooter>
           </div>
@@ -465,7 +615,7 @@ export function PaymentDialog({
                 <Button variant="outline" onClick={() => handleClose(false)}>
                   Close
                 </Button>
-                <Button onClick={() => setPhase('form')}>Try again</Button>
+                <Button onClick={backToForm}>Try again</Button>
               </>
             }
           />
@@ -481,7 +631,7 @@ export function PaymentDialog({
                 <Button variant="outline" onClick={() => handleClose(false)}>
                   Close
                 </Button>
-                <Button onClick={() => setPhase('form')}>Start over</Button>
+                <Button onClick={backToForm}>Start over</Button>
               </>
             }
           />

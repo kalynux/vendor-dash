@@ -13,8 +13,6 @@ export interface SavedCardResult {
 }
 
 export interface StripeCardFieldHandle {
-  /** Tokenise the entered card. Returns the cardToken or throws with a message. */
-  createToken(): Promise<string>;
   /**
    * Create a reusable PaymentMethod for saving. Returns the instrument id (`pm_…`)
    * plus display metadata, or throws with a message.
@@ -25,7 +23,9 @@ export interface StripeCardFieldHandle {
 /**
  * Mounts a Stripe Elements card field using the hosted Stripe.js script. The card
  * details stay inside Stripe's iframe and never touch our code. The parent calls
- * `createToken()` (via ref) on submit to obtain a `cardToken` for the API.
+ * `createPaymentMethod()` (via ref) to obtain a reusable instrument id when saving
+ * a card. (Self-serve plan/credit purchases use the Payment Element instead — see
+ * `StripePaymentElement`.)
  */
 export const StripeCardField = forwardRef<StripeCardFieldHandle, { disabled?: boolean }>(
   function StripeCardField({ disabled }, ref) {
@@ -73,18 +73,6 @@ export const StripeCardField = forwardRef<StripeCardFieldHandle, { disabled?: bo
     }, []);
 
     useImperativeHandle(ref, () => ({
-      async createToken() {
-        if (!stripeRef.current || !cardRef.current) {
-          throw new Error('Card form is not ready yet.');
-        }
-        const { token, error } = await stripeRef.current.createToken(cardRef.current);
-        if (error || !token) {
-          const msg = error?.message ?? 'Could not validate the card.';
-          setCardError(msg);
-          throw new Error(msg);
-        }
-        return token.id;
-      },
       async createPaymentMethod(holderName?: string) {
         if (!stripeRef.current || !cardRef.current) {
           throw new Error('Card form is not ready yet.');

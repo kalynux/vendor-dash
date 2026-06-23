@@ -124,16 +124,25 @@ export interface PlanPurchase {
 export interface PaymentChannel {
   phoneNumber?: string;
   phoneOperator?: PhoneOperator;
-  cardToken?: string;
+  // `cardToken` is deprecated/ignored by the backend — Stripe cards are now
+  // collected client-side with the returned `clientSecret`. Do NOT send it.
   customerEmail?: string;
   customerName?: string;
 }
 
 export interface GatewayInstructions {
+  // Mobile money (NotchPay / MyCoolPay)
   ussdCode?: string;
-  clientSecret?: string;
-  message?: string;
   expiresAt?: string;
+  // Stripe (card) — charge is in USD while the catalog price stays XAF.
+  /** PaymentIntent client secret — bind Stripe Elements + confirm the card with it. */
+  clientSecret?: string;
+  /** Exact amount the card will be charged (in `chargedCurrency`). */
+  chargedAmount?: number;
+  /** Presentment currency for the charge (always `usd` today). */
+  chargedCurrency?: string;
+  /** Human-readable instruction line. */
+  message?: string;
 }
 
 // ─── Write payloads ─────────────────────────────────────────────────────────────

@@ -51,12 +51,14 @@ export interface GatewayMeta {
   methodType: Extract<PaymentMethodType, 'card' | 'mobile_money'>;
   /** Short helper line shown under the chip row. */
   description: string;
+  /** Currency the vendor is actually charged in (mobile money: XAF, card: USD). */
+  chargeCurrency: 'XAF' | 'USD';
 }
 
 export const GATEWAYS: GatewayMeta[] = [
-  { value: 'NOTCHPAY', label: 'NotchPay', methodType: 'mobile_money', description: 'Mobile money (MTN, Orange, Moov)' },
-  { value: 'MYCOOLPAY', label: 'MyCoolPay', methodType: 'mobile_money', description: 'Mobile money (MTN, Orange, Moov)' },
-  { value: 'STRIPE', label: 'Card', methodType: 'card', description: 'Visa, Mastercard & more' },
+  { value: 'NOTCHPAY', label: 'NotchPay', methodType: 'mobile_money', description: 'Mobile money — charged in XAF', chargeCurrency: 'XAF' },
+  { value: 'MYCOOLPAY', label: 'MyCoolPay', methodType: 'mobile_money', description: 'Mobile money — charged in XAF', chargeCurrency: 'XAF' },
+  { value: 'STRIPE', label: 'Card', methodType: 'card', description: 'Visa, Mastercard & more — charged in USD', chargeCurrency: 'USD' },
 ];
 
 export function gatewayLabel(gateway: PaymentGateway): string {
@@ -164,6 +166,77 @@ export function formatCredits(n: number): string {
   return new Intl.NumberFormat().format(n);
 }
 
+/**
+ * Format the exact amount Stripe will charge (in USD). Stripe charges in USD even
+ * though the catalog price stays in XAF — render this for the card path. The
+ * backend supplies the amount (`instructions.chargedAmount`); never convert it
+ * on the frontend.
+ */
+export function formatCharged(amount: number, currency = 'usd'): string {
+  const code = currency.toUpperCase();
+  try {
+    const formatted = new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: code,
+      minimumFractionDigits: 2,
+    }).format(amount);
+    return `${formatted} ${code}`;
+  } catch {
+    return `$${amount.toFixed(2)} ${code}`;
+  }
+}
+
+// ─── Stripe 3-D Secure return / resume ───────────────────────────────────────────
+// A card payment that needs a full bank redirect (3-D Secure) leaves the SPA via
+// Stripe's `return_url`. We persist a marker so that when the vendor lands back in
+// billing we can re-verify that purchase and refresh. The Stripe WEBHOOK is the
+// authoritative finalizer server-side; this is only for immediate UX on return.
+
+export type StripeResumeKind = 'plan' | 'topup';
+
+export interface StripeResumeMarker {
+  kind: StripeResumeKind;
+  id: string;
+  /** ms epoch — used to expire stale markers. */
+  at: number;
+}
+
+const RESUME_KEY = 'billing.stripe.resume';
+/** Drop resume markers older than this (a return that never happened). */
+const RESUME_TTL_MS = 30 * 60 * 1000;
+
+export function saveStripeResume(kind: StripeResumeKind, id: string): void {
+  try {
+    localStorage.setItem(RESUME_KEY, JSON.stringify({ kind, id, at: Date.now() }));
+  } catch {
+    // localStorage unavailable (private mode / quota) — resume is best-effort.
+  }
+}
+
+export function readStripeResume(): StripeResumeMarker | null {
+  try {
+    const raw = localStorage.getItem(RESUME_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as StripeResumeMarker;
+    if (!parsed?.id || !parsed?.kind) return null;
+    if (Date.now() - (parsed.at ?? 0) > RESUME_TTL_MS) {
+      clearStripeResume();
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+export function clearStripeResume(): void {
+  try {
+    localStorage.removeItem(RESUME_KEY);
+  } catch {
+    // ignore
+  }
+}
+
 // ─── Error-code → friendly message ────────────────────────────────────────────────
 
 const BILLING_ERROR_MESSAGES: Record<string, string> = {
@@ -175,6 +248,7 @@ const BILLING_ERROR_MESSAGES: Record<string, string> = {
   BILLING_INSUFFICIENT_CREDITS: 'Not enough credits for this action.',
   PAYMENT_GATEWAY_NOT_SUPPORTED: 'That payment method is not supported.',
   PAYMENT_INITIATION_FAILED: 'The payment provider could not start the payment. Please try again.',
+  PAYMENT_CARD_DECLINED: 'Your card was declined. Check the details or try another card.',
   BILLING_TOPUP_INVALID_STATE: 'This payment cannot be verified yet. Please retry in a moment.',
   BILLING_PURCHASE_INVALID_STATE: 'This payment cannot be verified yet. Please retry in a moment.',
   PAYMENT_METHOD_NOT_FOUND: 'That payment method could not be found.',

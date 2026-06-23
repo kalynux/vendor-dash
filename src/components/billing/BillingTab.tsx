@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AlertCircle } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import {
   fetchCurrentPlan,
@@ -33,7 +34,12 @@ import { BillingSettingsCard } from './BillingSettingsCard';
 import { SavedPaymentMethodsCard } from './SavedPaymentMethodsCard';
 import { PaymentDialog } from './PaymentDialog';
 import { CardSkeleton, PlansSkeleton } from './BillingSkeletons';
-import { formatCredits } from './billing.constants';
+import {
+  formatCredits,
+  readStripeResume,
+  clearStripeResume,
+  type StripeResumeKind,
+} from './billing.constants';
 
 interface PaymentRequest {
   title: string;
@@ -41,6 +47,7 @@ interface PaymentRequest {
   amount: number;
   currency: string;
   successLabel: string;
+  paymentKind: StripeResumeKind;
   initiate: (gateway: PaymentGateway, channel: PaymentChannel) => Promise<PaymentInitResult>;
   verify: (id: string) => Promise<{ status: PaymentStatus }>;
 }
@@ -97,6 +104,46 @@ export function BillingTab() {
     load();
   }, [load]);
 
+  // Resume a Stripe card payment that left the SPA for 3-D Secure. On return we
+  // re-verify the purchase for immediate feedback; the Stripe webhook is the
+  // authoritative finalizer, so the plan/credits apply server-side regardless.
+  useEffect(() => {
+    const marker = readStripeResume();
+    if (!marker) return;
+    clearStripeResume();
+    let cancelled = false;
+    (async () => {
+      const verify = marker.kind === 'plan' ? verifyPlanPurchase : verifyTopup;
+      // Poll a few times — the webhook usually finalizes within seconds of return.
+      for (let i = 0; i < 5 && !cancelled; i++) {
+        try {
+          const { status } = await verify(marker.id);
+          if (status === 'paid') {
+            if (!cancelled) {
+              toast.success(marker.kind === 'plan' ? 'Plan purchased' : 'Credits added');
+              await refreshAfterPayment();
+            }
+            return;
+          }
+          if (status === 'failed') {
+            if (!cancelled) toast.error('The card payment was not completed.');
+            return;
+          }
+        } catch {
+          // transient — retry
+        }
+        await new Promise((r) => setTimeout(r, 3000));
+      }
+      if (!cancelled) {
+        toast.info("We're still confirming your card payment — it'll update here shortly.");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Refresh the live figures after a successful payment.
   const refreshAfterPayment = useCallback(async () => {
     try {
@@ -126,6 +173,7 @@ export function BillingTab() {
       amount: plan.price,
       currency: plan.currency,
       successLabel: 'Plan purchased',
+      paymentKind: 'plan',
       initiate: (gateway, channel) => initiatePlanPurchase(plan._id, { gateway, channel }),
       verify: verifyPlanPurchase,
     });
@@ -139,6 +187,7 @@ export function BillingTab() {
       amount: pack.price,
       currency: pack.currency,
       successLabel: 'Credits added',
+      paymentKind: 'topup',
       initiate: (gateway, channel) => initiateTopup({ packCode: pack.code, gateway, channel }),
       verify: verifyTopup,
     });
@@ -205,6 +254,7 @@ export function BillingTab() {
           amount={payment.amount}
           currency={payment.currency}
           successLabel={payment.successLabel}
+          paymentKind={payment.paymentKind}
           initiate={payment.initiate}
           verify={payment.verify}
           onPaid={refreshAfterPayment}
