@@ -199,6 +199,12 @@ export function BookingDetailSheet({ bookingId, open, onOpenChange, onChanged }:
                   {booking.paymentMethod && ` · ${booking.paymentMethod}`}
                   {booking.paidAt && ` · paid ${formatDateTime(booking.paidAt)}`}
                 </p>
+                {booking.paymentStatus === 'disputed' && (
+                  <p className="mt-2 rounded-md bg-orange-50 px-2.5 py-2 text-xs text-orange-700">
+                    The customer opened a chargeback on this payment. Stripe is resolving it —
+                    no action is needed. If lost, the booking is refunded and cancelled.
+                  </p>
+                )}
               </InfoCard>
 
               {booking.cancelledReason && (

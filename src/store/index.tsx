@@ -1,13 +1,19 @@
 import { createContext, useContext, useState, useCallback } from 'react';
 import type {
   User, Store, Product, Order, Vendor,
-  Notification, AnalyticsMetrics, DateRange
+  AnalyticsMetrics, DateRange
 } from '@/types';
+import type { VendorNotification, NotificationListParams } from '@/types/notifications.types';
 import {
   mockUsers, mockStores,
-  mockVendors, mockNotifications,
+  mockVendors,
   mockAnalytics, mockSalesData, mockCategoryBreakdown
 } from '@/data/mockData';
+import {
+  fetchNotifications as apiFetchNotifications,
+  markNotificationRead as apiMarkNotificationRead,
+  markAllNotificationsRead as apiMarkAllNotificationsRead,
+} from '@/services/notifications.service';
 import {
   fetchOrders as apiFetchOrders,
   fetchOrderById as apiFetchOrderById,
@@ -39,12 +45,8 @@ const AuthStoreContext = createContext<AuthState | null>(null);
 interface UIState {
   sidebarCollapsed: boolean;
   theme: 'light' | 'dark' | 'system';
-  settingsTab: string;
-  servicesTab: string;
   toggleSidebar: () => void;
   setTheme: (theme: 'light' | 'dark' | 'system') => void;
-  setSettingsTab: (tab: string) => void;
-  setServicesTab: (tab: string) => void;
 }
 
 const UIStoreContext = createContext<UIState | null>(null);
@@ -113,11 +115,14 @@ const VendorStoreContext = createContext<VendorState | null>(null);
 
 // Notification Store Context
 interface NotificationState {
-  notifications: Notification[];
+  notifications: VendorNotification[];
   unreadCount: number;
-  fetchNotifications: () => Promise<void>;
+  isLoading: boolean;
+  fetchNotifications: (params?: NotificationListParams) => Promise<void>;
   markAsRead: (id: string) => Promise<void>;
   markAllAsRead: () => Promise<void>;
+  /** Prepend a live (push) notification and bump the unread badge. */
+  prependNotification: (n: VendorNotification) => void;
 }
 
 const NotificationStoreContext = createContext<NotificationState | null>(null);
@@ -166,8 +171,6 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   // UI State
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [theme, setTheme] = useState<'light' | 'dark' | 'system'>('light');
-  const [settingsTab, setSettingsTab] = useState('profile');
-  const [servicesTab, setServicesTab] = useState('services');
 
   const toggleSidebar = useCallback(() => {
     setSidebarCollapsed(prev => !prev);
@@ -315,26 +318,63 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     setVendorLoading(false);
   }, []);
 
-  // Notification State
-  const [notifications, setNotifications] = useState<Notification[]>(mockNotifications);
+  // Notification State — real data from GET /vendor/notifications.
+  const [notifications, setNotifications] = useState<VendorNotification[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [notificationsLoading, setNotificationsLoading] = useState(false);
 
-  const fetchNotifications = useCallback(async () => {
-    await new Promise(resolve => setTimeout(resolve, 300));
+  const fetchNotifications = useCallback(async (params?: NotificationListParams) => {
+    setNotificationsLoading(true);
+    try {
+      const res = await apiFetchNotifications(params);
+      setNotifications(res.data);
+      setUnreadCount(res.unreadCount);
+    } catch (err) {
+      // Non-fatal: the badge/list just won't refresh. Avoid a toast on every
+      // background reconciliation; surface only unexpected errors.
+      if (err instanceof ApiError && err.status >= 500) {
+        toast.error('Could not load notifications.');
+      }
+    } finally {
+      setNotificationsLoading(false);
+    }
   }, []);
 
   const markAsRead = useCallback(async (id: string) => {
-    await new Promise(resolve => setTimeout(resolve, 200));
-    setNotifications(prev => prev.map(n =>
-      n.id === id ? { ...n, read: true } : n
-    ));
+    let wasUnread = false;
+    setNotifications(prev => prev.map(n => {
+      if (n.id === id && !n.isRead) wasUnread = true;
+      return n.id === id ? { ...n, isRead: true } : n;
+    }));
+    if (wasUnread) setUnreadCount(c => Math.max(0, c - 1));
+    try {
+      await apiMarkNotificationRead(id);
+    } catch (err) {
+      // Revert on failure.
+      setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: false } : n));
+      if (wasUnread) setUnreadCount(c => c + 1);
+      toast.error(err instanceof ApiError ? err.message : 'Could not mark as read.');
+    }
   }, []);
 
   const markAllAsRead = useCallback(async () => {
-    await new Promise(resolve => setTimeout(resolve, 300));
-    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-  }, []);
+    const snapshot = notifications;
+    const prevUnread = unreadCount;
+    setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
+    setUnreadCount(0);
+    try {
+      await apiMarkAllNotificationsRead();
+    } catch (err) {
+      setNotifications(snapshot);
+      setUnreadCount(prevUnread);
+      toast.error(err instanceof ApiError ? err.message : 'Could not mark all as read.');
+    }
+  }, [notifications, unreadCount]);
 
-  const unreadCount = notifications.filter(n => !n.read).length;
+  const prependNotification = useCallback((n: VendorNotification) => {
+    setNotifications(prev => (prev.some(p => p.id === n.id) ? prev : [n, ...prev]));
+    if (!n.isRead) setUnreadCount(c => c + 1);
+  }, []);
 
   // Analytics State
   const [analyticsMetrics] = useState<AnalyticsMetrics>(mockAnalytics);
@@ -365,12 +405,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       <UIStoreContext.Provider value={{
         sidebarCollapsed,
         theme,
-        settingsTab,
-        servicesTab,
         toggleSidebar,
-        setTheme,
-        setSettingsTab,
-        setServicesTab
+        setTheme
       }}>
         <StoreStoreContext.Provider value={{
           stores,
@@ -416,9 +452,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
                 <NotificationStoreContext.Provider value={{
                   notifications,
                   unreadCount,
+                  isLoading: notificationsLoading,
                   fetchNotifications,
                   markAsRead,
-                  markAllAsRead
+                  markAllAsRead,
+                  prependNotification
                 }}>
                   <AnalyticsStoreContext.Provider value={{
                     metrics: analyticsMetrics,

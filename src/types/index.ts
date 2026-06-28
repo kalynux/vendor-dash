@@ -141,10 +141,25 @@ export interface Order {
   deliveryAgency?: { name: string; address: string };
   assignedAgent?: { name: string };
   entitlements?: Entitlement[];
+  /**
+   * Set when a card payment is under dispute (chargeback). While `active` is true the
+   * order is frozen — fulfilment status changes return `423 ORDER_DISPUTE_HOLD`.
+   * Resolution is automatic via Stripe webhooks; the vendor cannot act on it.
+   */
+  disputeHold?: DisputeHold;
 }
 
-export type OrderStatus = 'pending' | 'confirmed' | 'processing' | 'shipped' | 'delivered' | 'fulfilled' | 'cancelled' | 'refunded';
-export type PaymentStatus = 'pending' | 'authorized' | 'paid' | 'partially_refunded' | 'refunded' | 'failed';
+/** Chargeback freeze marker carried on an order (mirrors the API `dispute_hold` object). */
+export interface DisputeHold {
+  active: boolean;
+  disputedAt?: string | null;
+  resolvedAt?: string | null;
+  gatewayDisputeId?: string | null;
+  reason?: string | null;
+}
+
+export type OrderStatus = 'pending' | 'confirmed' | 'processing' | 'shipped' | 'delivered' | 'fulfilled' | 'cancelled' | 'refunded' | 'returned';
+export type PaymentStatus = 'pending' | 'authorized' | 'paid' | 'partially_refunded' | 'refunded' | 'failed' | 'disputed';
 export type FulfillmentStatus = 'unfulfilled' | 'partial' | 'fulfilled' | 'restocked';
 
 export interface OrderItem {

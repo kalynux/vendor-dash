@@ -170,7 +170,9 @@ export type BookingStatus =
   | 'no-show'
   | 'cancelled';
 
-export type PaymentStatus = 'unpaid' | 'pending' | 'paid' | 'failed' | 'refunded';
+// `disputed` = a card payment is under chargeback; the backend resolves it to
+// `paid` (won) or `refunded`/cancelled (lost). No vendor action is possible.
+export type PaymentStatus = 'unpaid' | 'pending' | 'paid' | 'disputed' | 'failed' | 'refunded';
 
 export type PaymentMethod = 'cash' | string;
 

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams, useSearchParams, Navigate } from 'react-router-dom';
 import { CalendarClock, TriangleAlert } from 'lucide-react';
 import { toast } from 'sonner';
 import { Tabs, TabsContent } from '@/components/ui/tabs';
@@ -8,12 +8,21 @@ import { BookingsPanel } from '@/components/services/BookingsPanel';
 import { CalendarConnectionPanel } from '@/components/services/CalendarConnectionPanel';
 import { MobilePageHeader } from '@/components/layout/MobilePageHeader';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { useUIStore } from '@/store';
 import type { CalendarStatus } from '@/types/services.types';
 
 type ServicesTab = 'services' | 'bookings' | 'calendar';
 
-const VALID_TABS: ServicesTab[] = ['services', 'bookings', 'calendar'];
+// Bookings sub-tabs are real routes. The index route is the services list; the
+// other two get their own URL segment.
+const PARAM_TO_TAB: Record<string, ServicesTab> = {
+  appointments: 'bookings',
+  calendar: 'calendar',
+};
+const TAB_TO_PATH: Record<ServicesTab, string> = {
+  services: '/dashboard/services',
+  bookings: '/dashboard/services/appointments',
+  calendar: '/dashboard/services/calendar',
+};
 
 // Mobile header title per sidebar sub-tab (mirrors the Bookings submenu labels).
 const TAB_TITLES: Record<ServicesTab, string> = {
@@ -35,18 +44,8 @@ export function Services() {
   const location = useLocation();
   const reactNavigate = useNavigate();
   const isMobile = useIsMobile();
+  const { tab: tabParam } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
-
-  // The active tab is sidebar-controlled via the UI store (mirrors Settings).
-  const { servicesTab, setServicesTab } = useUIStore();
-  const tab = (VALID_TABS.includes(servicesTab as ServicesTab) ? servicesTab : 'services') as ServicesTab;
-
-  // Seed the store from a `?tab=` deep link once on mount.
-  useEffect(() => {
-    const tabParam = searchParams.get('tab') as ServicesTab | null;
-    if (tabParam && VALID_TABS.includes(tabParam)) setServicesTab(tabParam);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const [reloadToken] = useState(0);
   const [calendarRefreshKey, setCalendarRefreshKey] = useState(0);
@@ -69,19 +68,34 @@ export function Services() {
       const reason = searchParams.get('reason') ?? '';
       toast.error(OAUTH_REASON_MESSAGES[reason] ?? 'Could not connect Google Calendar.');
     }
-    setServicesTab('calendar');
     setCalendarRefreshKey((k) => k + 1);
-    // Strip the params so a refresh doesn't re-toast.
+    // Strip the params and land on the Calendar tab so a refresh doesn't re-toast.
     const next = new URLSearchParams(searchParams);
     next.delete('calendar');
     next.delete('reason');
     setSearchParams(next, { replace: true });
+    reactNavigate('/dashboard/services/calendar', { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Tab switching is driven by the sidebar submenu now; this stays a no-op so the
-  // Tabs/connect-banner handlers have something to call.
-  function changeTab(_next: string) {}
+  // Deep-link from a notification (`/dashboard/services/appointments?view=<id>`):
+  // hand the booking id to BookingsPanel to auto-open, then strip the param so a
+  // refresh/back doesn't reopen it.
+  const bookingDeepLinkId = searchParams.get('view');
+  useEffect(() => {
+    if (!bookingDeepLinkId) return;
+    const next = new URLSearchParams(searchParams);
+    next.delete('view');
+    setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bookingDeepLinkId]);
+
+  const changeTab = useCallback(
+    (next: string) => {
+      reactNavigate(TAB_TO_PATH[next as ServicesTab] ?? '/dashboard/services');
+    },
+    [reactNavigate],
+  );
 
   const goToCreate = useCallback(() => {
     reactNavigate('/dashboard/service-upload');
@@ -90,6 +104,15 @@ export function Services() {
   const goToManage = useCallback((serviceId: string) => {
     reactNavigate(`/dashboard/service-edit/${serviceId}`);
   }, [reactNavigate]);
+
+  // Resolve the active tab from the URL segment. Unknown segments redirect home.
+  const tab: ServicesTab | null = tabParam
+    ? PARAM_TO_TAB[tabParam] ?? null
+    : 'services';
+
+  if (tab === null) {
+    return <Navigate to="/dashboard/services" replace />;
+  }
 
   const showConnectBanner = connected === false && tab !== 'calendar';
 
@@ -119,7 +142,7 @@ export function Services() {
       </TabsContent>
 
       <TabsContent value="bookings" className="mt-0">
-        <BookingsPanel />
+        <BookingsPanel openBookingId={bookingDeepLinkId} />
       </TabsContent>
 
       <TabsContent value="calendar" className="mt-0 max-w-2xl">

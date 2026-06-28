@@ -10,9 +10,9 @@ import { mapProfileError } from '@/components/vendor-settings/errors';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 
-const FORM_ID = 'settings-basic-form';
+const FORM_ID = 'settings-payout-form';
 
-export function BasicSetupSettings() {
+export function PayoutSetupSettings() {
     const { session, updateVendorProfile } = useOnboarding();
     const roleEntity = session?.role_entity;
     const [saving, setSaving] = useState(false);
@@ -23,12 +23,10 @@ export function BasicSetupSettings() {
             setSaving(true);
             setError(null);
             try {
-                await updateVendorProfile({
-                    country: values.country,
-                    timezone: values.timezone,
-                    payout_details: values.payout_details,
-                });
-                toast.success('Basic setup updated');
+                // Country/timezone now live in the Store tab — only payout methods
+                // are managed here.
+                await updateVendorProfile({ payout_details: values.payout_details });
+                toast.success('Payout setup updated');
             } catch (err) {
                 setError(mapProfileError(err));
             } finally {
@@ -40,6 +38,8 @@ export function BasicSetupSettings() {
 
     if (!roleEntity) return null;
 
+    // Country/timezone are kept in defaultValues (hidden) so step1Schema stays
+    // satisfied; they are not editable here.
     const defaultValues: Step1FormValues = {
         country: roleEntity.country ?? '',
         timezone: roleEntity.timezone ?? '',
@@ -51,9 +51,9 @@ export function BasicSetupSettings() {
     return (
         <Card>
             <CardHeader>
-                <CardTitle>Basic Setup</CardTitle>
+                <CardTitle>Payout Setup</CardTitle>
                 <CardDescription>
-                    Your operating country, timezone, and payout methods.
+                    How you get paid. Add up to 3 payout methods — the first is used by default.
                 </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -66,7 +66,12 @@ export function BasicSetupSettings() {
                     </div>
                 )}
 
-                <BasicSetupFields formId={FORM_ID} defaultValues={defaultValues} onSubmit={onSubmit} />
+                <BasicSetupFields
+                    formId={FORM_ID}
+                    defaultValues={defaultValues}
+                    onSubmit={onSubmit}
+                    showRegion={false}
+                />
 
                 <div className="flex justify-end border-t pt-4">
                     <Button type="submit" form={FORM_ID} disabled={saving} className="gap-2">

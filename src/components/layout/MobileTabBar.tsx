@@ -10,7 +10,7 @@ import { QUICK_ACTIONS, type QuickAction } from '@/config/quickActions';
 
 type LegacyRoute = 'overview' | 'orders' | 'products' | 'product-upload' | 'customers'
   | 'analytics' | 'vendors' | 'notifications' | 'settings' | 'media' | 'tickets'
-  | 'services' | 'login';
+  | 'services' | 'login' | 'transactions';
 
 interface TabButtonProps {
   label: string;

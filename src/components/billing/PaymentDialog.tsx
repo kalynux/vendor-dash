@@ -217,7 +217,7 @@ export function PaymentDialog({
           setPhase('success');
           onPaid();
           toast.success(successLabel);
-        } else if (status === 'failed') {
+        } else if (status === 'failed' || status === 'reversed') {
           stopPolling();
           setPhase('failed');
         }
@@ -284,7 +284,7 @@ export function PaymentDialog({
         toast.success(successLabel);
         return;
       }
-      if (result.status === 'failed') {
+      if (result.status === 'failed' || result.status === 'reversed') {
         setPhase('failed');
         return;
       }

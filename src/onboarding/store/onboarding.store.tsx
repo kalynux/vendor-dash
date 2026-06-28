@@ -9,6 +9,8 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { authService } from '@/services/auth.service';
 import { onboardingService } from '@/services/onboarding.service';
+import { deleteCurrentToken } from '@/lib/fcm';
+import { unregisterDevice } from '@/services/devices.service';
 import { ApiError } from '@/types/api';
 import type {
     AuthMeVendorResponse,
@@ -309,6 +311,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
                             ...re,
                             ...(patch.country !== undefined ? { country: patch.country } : {}),
                             ...(patch.timezone !== undefined ? { timezone: patch.timezone } : {}),
+                            ...(patch.preferred_language !== undefined ? { preferred_language: patch.preferred_language } : {}),
                             ...(patch.payout_details !== undefined ? { payout_details: patch.payout_details } : {}),
                             ...(patch.business_addresses !== undefined ? { business_addresses: patch.business_addresses } : {}),
                             ...(patch.branding !== undefined ? { branding: { ...re.branding, ...patch.branding } } : {}),
@@ -397,6 +400,14 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     );
 
     const logout = useCallback(async () => {
+        // Stop pushing to this device before the session is torn down (best-effort:
+        // the backend self-heals stale tokens, so failures here are non-fatal).
+        try {
+            const token = await deleteCurrentToken();
+            if (token) await unregisterDevice(token);
+        } catch {
+            // ignore — proceed with logout regardless
+        }
         try {
             await authService.logout();
         } catch {

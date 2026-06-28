@@ -11,6 +11,8 @@ import { Analytics } from '@/pages/Analytics';
 import { Vendors } from '@/pages/Vendors';
 import { Notifications } from '@/pages/Notifications';
 import { Settings } from '@/pages/Settings';
+import { Account } from '@/pages/Account';
+import { Transactions } from '@/pages/Transactions';
 import { MediaGallery } from '@/pages/MediaGallery';
 import { ProductUpload } from '@/pages/ProductUpload';
 import { ProductEdit } from '@/pages/ProductEdit';
@@ -23,6 +25,7 @@ import { ServiceEdit } from '@/pages/ServiceEdit';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { Header } from '@/components/layout/Header';
 import { MobileTabBar } from '@/components/layout/MobileTabBar';
+import { NotificationsBootstrap } from '@/components/notifications/NotificationsBootstrap';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 
@@ -78,7 +81,7 @@ export const useAuth = () => useContext(LegacyAuthContext);
 type LegacyRoute =
   | 'overview' | 'orders' | 'products' | 'product-upload' | 'customers'
   | 'analytics' | 'vendors' | 'notifications' | 'settings' | 'media' | 'tickets'
-  | 'services' | 'service-upload' | 'login';
+  | 'services' | 'service-upload' | 'login' | 'transactions' | 'account';
 
 const LEGACY_ROUTE_MAP: Record<LegacyRoute, string> = {
   overview: '/dashboard',
@@ -90,11 +93,13 @@ const LEGACY_ROUTE_MAP: Record<LegacyRoute, string> = {
   vendors: '/dashboard/vendors',
   notifications: '/dashboard/notifications',
   settings: '/dashboard/settings',
+  account: '/dashboard/account',
   media: '/dashboard/media',
   tickets: '/dashboard/tickets',
   services: '/dashboard/services',
   'service-upload': '/dashboard/service-upload',
   login: '/login',
+  transactions: '/dashboard/transactions',
 };
 
 // Reverse-map the current URL to a legacy route name so Sidebar/Header/MobileTabBar
@@ -139,6 +144,7 @@ function DashboardShell() {
 
   return (
     <div className="min-h-screen bg-background">
+      <NotificationsBootstrap />
       {!isMobile && <Sidebar />}
       <div
         className={cn(
@@ -158,10 +164,15 @@ function DashboardShell() {
             <Route path="analytics" element={<Analytics />} />
             <Route path="vendors" element={<Vendors />} />
             <Route path="notifications" element={<Notifications />} />
-            <Route path="settings" element={<Settings />} />
+            <Route path="account" element={<Navigate to="/dashboard/account/profile" replace />} />
+            <Route path="account/:tab" element={<Account />} />
+            <Route path="settings" element={<Navigate to="/dashboard/settings/delivery" replace />} />
+            <Route path="settings/:tab" element={<Settings />} />
+            <Route path="transactions" element={<Transactions />} />
             <Route path="media" element={<MediaGallery />} />
             <Route path="tickets" element={<Tickets />} />
             <Route path="services" element={<Services />} />
+            <Route path="services/:tab" element={<Services />} />
             <Route path="service-upload" element={<ServiceUpload />} />
             <Route path="service-edit/:id" element={<ServiceEdit />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />

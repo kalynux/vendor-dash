@@ -67,6 +67,8 @@ export interface VendorRoleEntity {
   phone_verified: boolean;
   country: string | null;
   timezone: string;
+  /** Language every notification is rendered in (en | fr | pt | es | ar). Default `en`. */
+  preferred_language?: string | null;
   branding: Branding;
   business_addresses: BusinessAddress[];
   /** Ordered array — index 0 is the preferred payout method. */
@@ -205,6 +207,8 @@ export interface VendorProfileUpdatePayload {
   phone?: string;
   country?: string;
   timezone?: string;
+  /** Language for rendered notifications (en | fr | pt | es | ar). */
+  preferred_language?: string;
   payout_details?: PayoutDetails[];
   branding?: Partial<Branding>;
   business_addresses?: BusinessAddress[];

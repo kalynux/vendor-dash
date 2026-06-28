@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth, useRouter } from '@/App';
-import { useNotificationStore, useUIStore } from '@/store';
+import { useNotificationStore } from '@/store';
 import { useOnboarding } from '@/onboarding/store/onboarding.store';
 import {
   Search,
@@ -38,6 +38,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { QUICK_ACTIONS, type QuickAction } from '@/config/quickActions';
+import { notificationRoute, notificationVisual, notificationTimeAgo } from '@/lib/notifications.utils';
 
 const recentSearches = [
   'Order #1001',
@@ -63,8 +64,7 @@ export function Header() {
   const { logout } = useAuth();
   const { navigate } = useRouter();
   const reactNavigate = useNavigate();
-  const { setSettingsTab } = useUIStore();
-  const { notifications, unreadCount, markAllAsRead } = useNotificationStore();
+  const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotificationStore();
   const roleEntity = useOnboarding().session?.role_entity;
 
   const storeName = roleEntity?.display_name || roleEntity?.business_name || 'My Store';
@@ -82,11 +82,15 @@ export function Header() {
   };
 
   const goToProfile = () => {
-    setSettingsTab('profile');
-    navigate('settings');
+    reactNavigate('/dashboard/account/profile');
   };
 
-  const unreadNotifications = notifications.filter((n: { read: boolean }) => !n.read).slice(0, 5);
+  const unreadNotifications = notifications.filter((n) => !n.isRead).slice(0, 5);
+
+  const openNotification = (n: typeof notifications[number]) => {
+    markAsRead(n.id);
+    reactNavigate(notificationRoute(n));
+  };
 
   return (
     <>
@@ -169,22 +173,17 @@ export function Header() {
                     <p className="text-sm">No new notifications</p>
                   </div>
                 ) : (
-                  unreadNotifications.map((notification: { id: string; type: string; title: string; message: string; createdAt: string; actionUrl?: string }) => (
+                  unreadNotifications.map((notification) => (
                     <DropdownMenuItem
                       key={notification.id}
-                      onClick={() => notification.actionUrl && navigate('notifications')}
+                      onClick={() => openNotification(notification)}
                       className="flex flex-col items-start gap-1 p-3 cursor-pointer"
                     >
                       <div className="flex items-center gap-2 w-full">
-                        <span className={
-                          notification.type === 'order' ? 'w-2 h-2 rounded-full bg-blue-500' :
-                          notification.type === 'alert' ? 'w-2 h-2 rounded-full bg-red-500' :
-                          notification.type === 'customer' ? 'w-2 h-2 rounded-full bg-green-500' :
-                          'w-2 h-2 rounded-full bg-gray-500'
-                        } />
+                        <span className={`w-2 h-2 rounded-full ${notificationVisual(notification).dot}`} />
                         <span className="font-medium text-sm flex-1">{notification.title}</span>
                         <span className="text-xs text-muted-foreground">
-                          {new Date(notification.createdAt).toLocaleDateString()}
+                          {notificationTimeAgo(notification.createdAt)}
                         </span>
                       </div>
                       <p className="text-sm text-muted-foreground line-clamp-2 pl-4">

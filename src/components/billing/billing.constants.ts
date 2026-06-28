@@ -3,9 +3,6 @@
 import type {
   PaymentGateway,
   PhoneOperator,
-  LedgerReasonCode,
-  LedgerType,
-  PaymentStatus,
   VendorPlanStatus,
 } from '@/types/billing.types';
 import type { PaymentMethodType } from '@/types/payment-method.types';
@@ -107,30 +104,7 @@ export function planAccent(code: string): string {
   return PLAN_ACCENTS[code] ?? 'border-border';
 }
 
-// ─── Ledger display ──────────────────────────────────────────────────────────────
-
-const LEDGER_REASON_LABELS: Record<LedgerReasonCode, string> = {
-  plan_allowance: 'Plan allowance',
-  topup_purchase: 'Credit top-up',
-  vectorisation: 'AI product indexing',
-  whatsapp_template: 'WhatsApp message',
-  admin_adjustment: 'Adjustment',
-};
-
-export function ledgerReasonLabel(code: LedgerReasonCode): string {
-  return LEDGER_REASON_LABELS[code] ?? code;
-}
-
-/** A signed-credit movement is a gain when positive. */
-export function isCredit(type: LedgerType): boolean {
-  return type === 'allowance' || type === 'topup' || type === 'refund';
-}
-
 // ─── Status badge variants ───────────────────────────────────────────────────────
-
-export function paymentStatusLabel(status: PaymentStatus): string {
-  return status === 'paid' ? 'Paid' : status === 'failed' ? 'Failed' : 'Pending';
-}
 
 export function vendorPlanStatusLabel(status: VendorPlanStatus): string {
   switch (status) {

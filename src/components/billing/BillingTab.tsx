@@ -29,7 +29,6 @@ import { CurrentPlanCard } from './CurrentPlanCard';
 import { StorageUsageCard } from './StorageUsageCard';
 import { CreditWalletCard } from './CreditWalletCard';
 import { PlansCatalog } from './PlansCatalog';
-import { CreditLedger } from './CreditLedger';
 import { BillingSettingsCard } from './BillingSettingsCard';
 import { SavedPaymentMethodsCard } from './SavedPaymentMethodsCard';
 import { PaymentDialog } from './PaymentDialog';
@@ -67,7 +66,6 @@ export function BillingTab() {
 
   const [payment, setPayment] = useState<PaymentRequest | null>(null);
   const [paymentOpen, setPaymentOpen] = useState(false);
-  const [ledgerRefreshKey, setLedgerRefreshKey] = useState(0);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -125,7 +123,7 @@ export function BillingTab() {
             }
             return;
           }
-          if (status === 'failed') {
+          if (status === 'failed' || status === 'reversed') {
             if (!cancelled) toast.error('The card payment was not completed.');
             return;
           }
@@ -157,9 +155,8 @@ export function BillingTab() {
       setBalance(bal);
       setStorage(storageData);
     } catch {
-      // best-effort; the ledger refresh below still fires
+      // best-effort
     }
-    setLedgerRefreshKey((k) => k + 1);
   }, []);
 
   const scrollToPlans = useCallback(() => {
@@ -238,8 +235,6 @@ export function BillingTab() {
         </div>
         <PlansCatalog plans={plans} current={current} onBuy={openPlanPurchase} />
       </section>
-
-      <CreditLedger refreshKey={ledgerRefreshKey} />
 
       <SavedPaymentMethodsCard />
 

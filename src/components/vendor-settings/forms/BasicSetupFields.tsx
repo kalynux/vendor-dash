@@ -220,9 +220,16 @@ export interface BasicSetupFieldsProps {
     formId: string;
     defaultValues: Step1FormValues;
     onSubmit: (values: Step1FormValues) => void | Promise<void>;
+    /**
+     * Show the Country + Timezone fields. Defaults to `true` (onboarding).
+     * The Settings "Payout Setup" surface sets this to `false` because those
+     * fields now live in the Store tab — the values still flow through
+     * `defaultValues` so the schema stays satisfied.
+     */
+    showRegion?: boolean;
 }
 
-export function BasicSetupFields({ formId, defaultValues, onSubmit }: BasicSetupFieldsProps) {
+export function BasicSetupFields({ formId, defaultValues, onSubmit, showRegion = true }: BasicSetupFieldsProps) {
     const {
         register,
         handleSubmit,
@@ -242,43 +249,47 @@ export function BasicSetupFields({ formId, defaultValues, onSubmit }: BasicSetup
 
     return (
         <form id={formId} onSubmit={handleSubmit(onSubmit)} className="space-y-6" noValidate>
-            {/* Country */}
-            <FieldRow label="Country" required error={errors.country?.message}>
-                <Select
-                    value={selectedCountry}
-                    onValueChange={(v) => setValue('country', v, { shouldValidate: true })}
-                >
-                    <SelectTrigger id="country" className={selectTriggerClass(!!errors.country)}>
-                        <SelectValue placeholder="Select your country" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        {COUNTRIES.map((c) => (
-                            <SelectItem key={c.code} value={c.code}>
-                                {c.name}
-                            </SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
-            </FieldRow>
+            {showRegion && (
+                <>
+                    {/* Country */}
+                    <FieldRow label="Country" required error={errors.country?.message}>
+                        <Select
+                            value={selectedCountry}
+                            onValueChange={(v) => setValue('country', v, { shouldValidate: true })}
+                        >
+                            <SelectTrigger id="country" className={selectTriggerClass(!!errors.country)}>
+                                <SelectValue placeholder="Select your country" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {COUNTRIES.map((c) => (
+                                    <SelectItem key={c.code} value={c.code}>
+                                        {c.name}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </FieldRow>
 
-            {/* Timezone */}
-            <FieldRow label="Timezone" required error={errors.timezone?.message}>
-                <Select
-                    value={selectedTimezone}
-                    onValueChange={(v) => setValue('timezone', v, { shouldValidate: true })}
-                >
-                    <SelectTrigger id="timezone" className={selectTriggerClass(!!errors.timezone)}>
-                        <SelectValue placeholder="Select your timezone" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        {TIMEZONES.map((tz) => (
-                            <SelectItem key={tz.value} value={tz.value}>
-                                {tz.label}
-                            </SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
-            </FieldRow>
+                    {/* Timezone */}
+                    <FieldRow label="Timezone" required error={errors.timezone?.message}>
+                        <Select
+                            value={selectedTimezone}
+                            onValueChange={(v) => setValue('timezone', v, { shouldValidate: true })}
+                        >
+                            <SelectTrigger id="timezone" className={selectTriggerClass(!!errors.timezone)}>
+                                <SelectValue placeholder="Select your timezone" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {TIMEZONES.map((tz) => (
+                                    <SelectItem key={tz.value} value={tz.value}>
+                                        {tz.label}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </FieldRow>
+                </>
+            )}
 
             {/* Payout methods array */}
             <div className="space-y-4 border-t pt-4">

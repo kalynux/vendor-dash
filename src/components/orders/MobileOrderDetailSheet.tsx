@@ -42,9 +42,11 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { OrderStatusBadge } from './OrderStatusBadge';
+import { PaymentStatusBadge } from './PaymentStatusBadge';
 import { cn } from '@/lib/utils';
 import { useOrderStore } from '@/store';
-import { addNote, revokeEntitlement, restoreEntitlement, fetchNote, getOrderErrorMessage } from '@/services/orders.service';
+import { addNote, revokeEntitlement, restoreEntitlement, fetchNote, getOrderErrorMessage, isOrderFrozen } from '@/services/orders.service';
+import { ApiError } from '@/types/api';
 import { toast } from 'sonner';
 import type { Order, Entitlement, OrderTimelineEvent } from '@/types';
 
@@ -140,7 +142,8 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
   const isPhysical = order.orderType === 'physical';
   const isDigital = order.orderType === 'digital';
   const hasEntitlements = (order.entitlements?.length ?? 0) > 0;
-  const nextStatuses = getNextStatuses(order.status, order.orderType);
+  const frozen = isOrderFrozen(order);
+  const nextStatuses = frozen ? [] : getNextStatuses(order.status, order.orderType);
 
   const TABS = hasEntitlements
     ? [...BASE_TABS, { id: 'entitlements' as TabId, label: 'Access' }]
@@ -173,6 +176,13 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
       setOrder(prev => prev ? { ...prev, status: status as Order['status'] } : prev);
       toast.success(`Order marked as ${status}`);
     } catch (err) {
+      if (err instanceof ApiError && err.status === 423 && err.code === 'ORDER_DISPUTE_HOLD') {
+        setOrder(prev => prev ? {
+          ...prev,
+          paymentStatus: 'disputed',
+          disputeHold: { ...(prev.disputeHold ?? {}), active: true },
+        } : prev);
+      }
       toast.error(getOrderErrorMessage(err));
     } finally {
       setStatusLoading(false);
@@ -575,12 +585,7 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                       <div className="grid grid-cols-2 gap-4">
                         <div>
                           <p className="text-xs text-muted-foreground mb-1">Status</p>
-                          <Badge
-                            variant={order.paymentStatus === 'paid' ? 'default' : 'secondary'}
-                            className={cn('capitalize text-xs', order.paymentStatus === 'paid' && 'bg-black text-white hover:bg-black/90')}
-                          >
-                            {order.paymentStatus}
-                          </Badge>
+                          <PaymentStatusBadge status={order.paymentStatus} size="xs" />
                         </div>
                         <div>
                           <p className="text-xs text-muted-foreground mb-1">Order Type</p>
@@ -595,6 +600,15 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                           <p className="text-sm font-medium">{formatDate(order.createdAt)}</p>
                         </div>
                       </div>
+                      {frozen && (
+                        <div className="mt-3 flex items-start gap-2 rounded-md bg-orange-50 border border-orange-100 p-2.5 text-xs">
+                          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-orange-600" />
+                          <p className="text-orange-700/90">
+                            <span className="font-medium text-orange-800">Payment disputed.</span> The order is
+                            frozen until Stripe resolves the chargeback — no action needed.
+                          </p>
+                        </div>
+                      )}
                     </div>
                     <div className="h-4" />
                   </div>
@@ -726,6 +740,11 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                       ))}
                     </DropdownMenuContent>
                   </DropdownMenu>
+                ) : frozen ? (
+                  <div className="flex items-center justify-center gap-2 py-1 text-sm text-orange-700">
+                    <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+                    <span>Payment disputed — order frozen</span>
+                  </div>
                 ) : (
                   <div className="text-center text-sm text-muted-foreground py-1 capitalize">
                     Order {order.status} — no further actions

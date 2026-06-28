@@ -2,13 +2,8 @@ import { api } from './api';
 import type {
   PricingPlan,
   CurrentPlanData,
-  CreditTransaction,
   CreditPack,
-  CreditTopup,
-  PlanPurchase,
   BillingSettings,
-  BillingListMeta,
-  BillingListParams,
   TopupInitPayload,
   PlanPurchasePayload,
   PaymentInitResult,
@@ -16,27 +11,15 @@ import type {
   PlansResponse,
   CurrentPlanResponse,
   CreditBalanceResponse,
-  LedgerResponse,
   CreditPacksResponse,
-  TopupsResponse,
   TopupInitResponse,
   TopupVerifyResponse,
   PlanPurchaseInitResponse,
   PlanPurchaseVerifyResponse,
-  PlanPurchasesResponse,
   BillingSettingsResponse,
 } from '@/types/billing.types';
 
 const BASE = '/vendor';
-
-// Reuses the products/tickets service query-string convention: drop empty values.
-function buildQueryString(params: Record<string, unknown>): string {
-  const entries = Object.entries(params).filter(
-    ([, v]) => v !== undefined && v !== null && v !== '',
-  );
-  if (entries.length === 0) return '';
-  return '?' + entries.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`).join('&');
-}
 
 // Docs document `_id`, but the live API may return `id`. Normalize so the rest
 // of the app can rely on `_id` being present.
@@ -56,13 +39,9 @@ export async function fetchCurrentPlan(): Promise<CurrentPlanData> {
   return res.data;
 }
 
-export async function fetchPlanPurchases(
-  params: BillingListParams = {},
-): Promise<{ data: PlanPurchase[]; meta: BillingListMeta }> {
-  const qs = buildQueryString(params as Record<string, unknown>);
-  const res = await api.get<PlanPurchasesResponse>(`${BASE}/plan-purchases${qs}`);
-  return { data: res.data.map(normalizeId), meta: res.meta };
-}
+// Purchase/top-up/ledger histories now live in the unified transactions feed —
+// see transactions.service.ts (`GET /vendor/transactions`). The old `/plan-purchases`,
+// `/credits/ledger` and `/credits/topups` list endpoints were removed by the backend.
 
 // ─── Credit wallet ────────────────────────────────────────────────────────────
 
@@ -71,25 +50,9 @@ export async function fetchCreditBalance(): Promise<number> {
   return res.data.balance;
 }
 
-export async function fetchLedger(
-  params: BillingListParams = {},
-): Promise<{ data: CreditTransaction[]; meta: BillingListMeta }> {
-  const qs = buildQueryString(params as Record<string, unknown>);
-  const res = await api.get<LedgerResponse>(`${BASE}/credits/ledger${qs}`);
-  return { data: res.data.map(normalizeId), meta: res.meta };
-}
-
 export async function fetchCreditPacks(): Promise<CreditPack[]> {
   const res = await api.get<CreditPacksResponse>(`${BASE}/credits/packs`);
   return res.data;
-}
-
-export async function fetchTopups(
-  params: BillingListParams = {},
-): Promise<{ data: CreditTopup[]; meta: BillingListMeta }> {
-  const qs = buildQueryString(params as Record<string, unknown>);
-  const res = await api.get<TopupsResponse>(`${BASE}/credits/topups${qs}`);
-  return { data: res.data.map(normalizeId), meta: res.meta };
 }
 
 // ─── Billing settings ───────────────────────────────────────────────────────────

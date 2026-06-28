@@ -146,7 +146,7 @@ export function formatDuration(minutes: number | null): string {
 
 // ─── Status metadata ─────────────────────────────────────────────────────────────
 
-export type BadgeTone = 'neutral' | 'success' | 'warning' | 'danger' | 'info';
+export type BadgeTone = 'neutral' | 'success' | 'warning' | 'danger' | 'info' | 'orange';
 
 export const SERVICE_STATUS_META: Record<ServiceStatus, { label: string; tone: BadgeTone }> = {
   draft: { label: 'Draft', tone: 'neutral' },
@@ -168,6 +168,7 @@ export const PAYMENT_STATUS_META: Record<PaymentStatus, { label: string; tone: B
   unpaid: { label: 'Unpaid', tone: 'warning' },
   pending: { label: 'Payment pending', tone: 'warning' },
   paid: { label: 'Paid', tone: 'success' },
+  disputed: { label: 'Disputed', tone: 'orange' },
   failed: { label: 'Payment failed', tone: 'danger' },
   refunded: { label: 'Refunded', tone: 'neutral' },
 };
@@ -179,6 +180,7 @@ export const TONE_CLASSES: Record<BadgeTone, string> = {
   warning: 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400',
   danger: 'bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-400',
   info: 'bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-400',
+  orange: 'bg-orange-100 text-orange-700 dark:bg-orange-500/15 dark:text-orange-400',
 };
 
 // ─── Booking status state machine (bookings.md) ─────────────────────────────────

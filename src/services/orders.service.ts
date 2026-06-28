@@ -1,6 +1,6 @@
 import { api } from './api';
 import { ApiError } from '@/types/api';
-import type { Order, OrderItem, Customer, OrderTimelineEvent, Entitlement, TimelineEventType } from '@/types';
+import type { Order, OrderItem, Customer, OrderTimelineEvent, Entitlement, TimelineEventType, DisputeHold } from '@/types';
 
 // ─── Error Handling ────────────────────────────────────────────────────────────
 
@@ -16,6 +16,7 @@ export const ORDER_ERROR_LABELS: Record<string, string> = {
   ORDER_TERMINAL_STATE: 'This order is in a final state and can no longer be updated.',
   ORDER_INVALID_TRANSITION: "That status change isn't allowed from the order's current status.",
   ORDER_WRONG_TYPE: "That action doesn't apply to this order's type.",
+  ORDER_DISPUTE_HOLD: "This order is frozen by an open payment dispute and can't be advanced until it settles.",
   ORDER_NOT_FOUND: 'This order could no longer be found.',
   ORDER_DELIVERY_AGENCY_NOT_FOUND: 'No delivery agency is assigned to this order.',
   // entitlements (revoke/restore)
@@ -34,12 +35,22 @@ export function getOrderErrorMessage(err: unknown): string {
 
 // ─── API Response Types ────────────────────────────────────────────────────────
 
+/** Raw `dispute_hold` shape on an order (snake_case from the API). */
+interface ApiDisputeHold {
+  active: boolean;
+  disputed_at?: string | null;
+  resolved_at?: string | null;
+  gateway_dispute_id?: string | null;
+  reason?: string | null;
+}
+
 interface ApiOrderListItem {
   id: string;
   orderNumber: string;
   orderType: 'physical' | 'digital';
   fulfillmentStatus: string;
   paymentStatus: string;
+  dispute_hold?: ApiDisputeHold | null;
   customer: {
     id: string;
     name: string;
@@ -62,6 +73,7 @@ interface ApiOrderDetail {
   fulfillmentStatus: string;
   paymentStatus: string;
   paymentIntentId?: string;
+  dispute_hold?: ApiDisputeHold | null;
   customer: {
     id: string;
     name: string;
@@ -235,13 +247,33 @@ export interface OrdersQueryParams {
 
 function adaptPaymentStatus(status: string): Order['paymentStatus'] {
   if (status === 'AWAITING_PAYMENT') return 'pending';
-  const valid: Order['paymentStatus'][] = ['pending', 'authorized', 'paid', 'partially_refunded', 'refunded', 'failed'];
+  const valid: Order['paymentStatus'][] = ['pending', 'authorized', 'paid', 'partially_refunded', 'refunded', 'failed', 'disputed'];
   return (valid as string[]).includes(status) ? (status as Order['paymentStatus']) : 'pending';
 }
 
 function adaptFulfillmentStatus(status: string): Order['status'] {
-  const valid: Order['status'][] = ['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'fulfilled', 'cancelled', 'refunded'];
+  const valid: Order['status'][] = ['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'fulfilled', 'cancelled', 'refunded', 'returned'];
   return (valid as string[]).includes(status) ? (status as Order['status']) : 'pending';
+}
+
+function adaptDisputeHold(hold?: ApiDisputeHold | null): DisputeHold | undefined {
+  if (!hold) return undefined;
+  return {
+    active: !!hold.active,
+    disputedAt: hold.disputed_at ?? null,
+    resolvedAt: hold.resolved_at ?? null,
+    gatewayDisputeId: hold.gateway_dispute_id ?? null,
+    reason: hold.reason ?? null,
+  };
+}
+
+/**
+ * Whether an order is frozen by an open payment dispute and cannot be advanced.
+ * Treats an explicit active `dispute_hold` OR a `disputed` payment status as frozen,
+ * so the UI stays safe even when a list item omits the full `dispute_hold` object.
+ */
+export function isOrderFrozen(order: Order): boolean {
+  return order.disputeHold?.active === true || order.paymentStatus === 'disputed';
 }
 
 function adaptListItemToOrder(item: ApiOrderListItem): Order {
@@ -251,6 +283,7 @@ function adaptListItemToOrder(item: ApiOrderListItem): Order {
     orderType: item.orderType,
     status: adaptFulfillmentStatus(item.fulfillmentStatus),
     paymentStatus: adaptPaymentStatus(item.paymentStatus),
+    disputeHold: adaptDisputeHold(item.dispute_hold),
     fulfillmentStatus: 'unfulfilled',
     total: item.total,
     subtotal: item.subtotal,
@@ -329,6 +362,7 @@ function adaptDetailToOrder(detail: ApiOrderDetail): Order {
     orderType: detail.orderType,
     status: adaptFulfillmentStatus(detail.fulfillmentStatus),
     paymentStatus: adaptPaymentStatus(detail.paymentStatus),
+    disputeHold: adaptDisputeHold(detail.dispute_hold),
     fulfillmentStatus: 'unfulfilled',
     total: detail.totalAmount,
     subtotal: detail.priceBreakdown.base,

@@ -461,6 +461,7 @@ const PAYMENT_PILL_CLASSES: Record<string, string> = {
   refunded: 'border-gray-400 text-gray-600 bg-gray-50',
   pending: 'border-amber-500 text-amber-600 bg-amber-50',
   authorized: 'border-blue-500 text-blue-600 bg-blue-50',
+  disputed: 'border-orange-500 text-orange-600 bg-orange-50',
   failed: 'border-red-500 text-red-600 bg-red-50',
 };
 
@@ -470,6 +471,7 @@ const PAYMENT_PILL_LABELS: Record<string, string> = {
   refunded: 'Refunded',
   pending: 'Unpaid',
   authorized: 'Authorized',
+  disputed: 'Disputed',
   failed: 'Failed',
 };
 

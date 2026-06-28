@@ -40,6 +40,7 @@ const PAYMENT_OPTIONS: { value: PaymentStatus | ''; label: string }[] = [
   { value: 'unpaid', label: 'Unpaid' },
   { value: 'pending', label: 'Pending' },
   { value: 'paid', label: 'Paid' },
+  { value: 'disputed', label: 'Disputed' },
   { value: 'failed', label: 'Failed' },
   { value: 'refunded', label: 'Refunded' },
 ];
@@ -51,7 +52,7 @@ function customerEmail(b: Booking): string {
   return typeof b.userId === 'object' ? b.userId.login_email ?? '—' : '—';
 }
 
-export function BookingsPanel() {
+export function BookingsPanel({ openBookingId }: { openBookingId?: string | null } = {}) {
   const isMobile = useIsMobile();
   const [view, setView] = useState<'list' | 'calendar'>('list');
 
@@ -68,6 +69,11 @@ export function BookingsPanel() {
   // Bumped after any mutation so list + calendar refetch.
   const [reloadToken, setReloadToken] = useState(0);
   const bump = useCallback(() => setReloadToken((t) => t + 1), []);
+
+  // Deep-link from a notification (`?view=<id>`): open that booking's detail.
+  useEffect(() => {
+    if (openBookingId) setDetailId(openBookingId);
+  }, [openBookingId]);
 
   const queryParams: BookingsQueryParams = useMemo(() => ({
     status: statusFilter || undefined,

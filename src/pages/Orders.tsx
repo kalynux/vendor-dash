@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Search,
   Filter,
@@ -46,10 +47,11 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { useOrderStore } from '@/store';
-import { fetchOrders as apiFetchOrders, getOrderErrorMessage } from '@/services/orders.service';
+import { fetchOrders as apiFetchOrders, getOrderErrorMessage, isOrderFrozen } from '@/services/orders.service';
 import { toast } from 'sonner';
 import { OrderDetails } from '@/components/features/OrderDetails';
 import { OrderStatusBadge } from '@/components/orders/OrderStatusBadge';
+import { PaymentStatusBadge } from '@/components/orders/PaymentStatusBadge';
 import { MobileOrderDetailSheet } from '@/components/orders/MobileOrderDetailSheet';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useInfiniteList } from '@/hooks/use-infinite-list';
@@ -66,6 +68,7 @@ const statusOptions = [
   { value: 'shipped', label: 'Shipped', color: 'bg-indigo-500' },
   { value: 'delivered', label: 'Delivered', color: 'bg-green-500' },
   { value: 'cancelled', label: 'Cancelled', color: 'bg-red-500' },
+  { value: 'returned', label: 'Returned', color: 'bg-rose-500' },
   { value: 'refunded', label: 'Refunded', color: 'bg-gray-500' },
 ];
 
@@ -111,8 +114,31 @@ export function Orders() {
   const [orderToCancel, setOrderToCancel] = useState<Order | null>(null);
   const [cancelConfirmationText, setCancelConfirmationText] = useState('');
   const [actionsSheetOrder, setActionsSheetOrder] = useState<Order | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
 
   useScrollRestoration('orders');
+
+  // Deep-link from a notification (`/dashboard/orders?view=<id>`): open that
+  // order's detail directly, then strip the param so a refresh/back doesn't
+  // reopen it.
+  useEffect(() => {
+    const viewId = searchParams.get('view');
+    if (!viewId) return;
+    setSelectedOrder(null);
+    setIsDetailsOpen(true);
+    setIsDetailLoading(true);
+    fetchOrderById(viewId)
+      .then((full) => setSelectedOrder(full))
+      .catch((err) => {
+        toast.error(getOrderErrorMessage(err));
+        setIsDetailsOpen(false);
+      })
+      .finally(() => setIsDetailLoading(false));
+    const next = new URLSearchParams(searchParams);
+    next.delete('view');
+    setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   // Desktop uses the store + page-number pagination; mobile uses infinite scroll.
   // Only fetch on mount when the store is empty so returning to the tab (or back
@@ -212,17 +238,6 @@ export function Orders() {
       prev.includes(status)
         ? prev.filter((s) => s !== status)
         : [...prev, status]
-    );
-  };
-
-  const getPaymentBadge = (status: string) => {
-    return (
-      <Badge
-        variant={status === 'paid' ? 'default' : 'secondary'}
-        className={cn('capitalize', status === 'paid' && 'bg-black text-white hover:bg-black/90')}
-      >
-        {status}
-      </Badge>
     );
   };
 
@@ -482,7 +497,8 @@ export function Orders() {
           <SheetContent side="bottom" className="p-0">
             {actionsSheetOrder && (() => {
               const o = actionsSheetOrder;
-              const nexts = getNextStatuses(o.status, o.orderType);
+              const frozen = isOrderFrozen(o);
+              const nexts = frozen ? [] : getNextStatuses(o.status, o.orderType);
               const close = () => setActionsSheetOrder(null);
               return (
                 <>
@@ -514,9 +530,16 @@ export function Orders() {
                       );
                     })}
                     {nexts.length === 0 && (
-                      <p className="px-5 py-3 text-sm text-muted-foreground">
-                        No further status changes available.
-                      </p>
+                      frozen ? (
+                        <div className="mx-5 my-2 flex items-start gap-2 rounded-lg border border-orange-200 bg-orange-50 p-3 text-sm text-orange-700">
+                          <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+                          <span>Payment under dispute — this order is frozen until it settles.</span>
+                        </div>
+                      ) : (
+                        <p className="px-5 py-3 text-sm text-muted-foreground">
+                          No further status changes available.
+                        </p>
+                      )
                     )}
                   </div>
                 </>
@@ -728,7 +751,7 @@ export function Orders() {
                       <td className="p-4">
                         <div className="flex items-center gap-2">
                           <CreditCard className="w-4 h-4 text-muted-foreground" />
-                          {getPaymentBadge(order.paymentStatus)}
+                          <PaymentStatusBadge status={order.paymentStatus} />
                         </div>
                       </td>
                       <td className="p-4 text-right font-medium">
@@ -746,15 +769,12 @@ export function Orders() {
                               <Eye className="w-4 h-4" />
                               View Details
                             </DropdownMenuItem>
-                            {/* <DropdownMenuItem>
-                              <Truck className="w-4 h-4 mr-2" />
-                              Mark as Shipped
-                            </DropdownMenuItem>
-                            <DropdownMenuItem className="text-destructive">
-                              <XCircle className="w-4 h-4 mr-2" />
-                              Cancel Order
-                            </DropdownMenuItem> */}
-                            {getNextStatuses(order.status, order.orderType).map((s) => (
+                            {isOrderFrozen(order) ? (
+                              <DropdownMenuItem disabled className="text-orange-600">
+                                <AlertTriangle className="w-4 h-4" />
+                                Frozen — payment disputed
+                              </DropdownMenuItem>
+                            ) : getNextStatuses(order.status, order.orderType).map((s) => (
                               <DropdownMenuItem
                                 key={s}
                                 onClick={() => handleStatusUpdate(order, s)}

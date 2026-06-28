@@ -1,10 +1,7 @@
 import { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Bell,
-  ShoppingCart,
-  Package,
-  Users,
-  AlertCircle,
   Check,
   Settings,
   ArrowRight,
@@ -17,102 +14,97 @@ import { useNotificationStore } from '@/store';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { MobilePageHeader } from '@/components/layout/MobilePageHeader';
 import { cn } from '@/lib/utils';
-
-const getNotificationIcon = (type: string) => {
-  switch (type) {
-    case 'order':
-      return ShoppingCart;
-    case 'product':
-      return Package;
-    case 'customer':
-      return Users;
-    case 'alert':
-      return AlertCircle;
-    default:
-      return Bell;
-  }
-};
-
-const getNotificationColor = (type: string) => {
-  switch (type) {
-    case 'order':
-      return 'bg-blue-100 text-blue-600';
-    case 'product':
-      return 'bg-purple-100 text-purple-600';
-    case 'customer':
-      return 'bg-green-100 text-green-600';
-    case 'alert':
-      return 'bg-red-100 text-red-600';
-    default:
-      return 'bg-gray-100 text-gray-600';
-  }
-};
+import { notificationRoute, notificationVisual, notificationTimeAgo, notificationActionLabel } from '@/lib/notifications.utils';
+import { PushPermissionBanner } from '@/components/notifications/PushPermissionBanner';
+import type { VendorNotification } from '@/types/notifications.types';
 
 export function Notifications() {
   const { notifications, unreadCount, fetchNotifications, markAsRead, markAllAsRead } = useNotificationStore();
   const isMobile = useIsMobile();
+  const navigate = useNavigate();
 
+  // Re-fetch the full feed whenever the vendor opens this tab.
   useEffect(() => {
-    fetchNotifications();
+    fetchNotifications({ page: 1, limit: 50 });
   }, [fetchNotifications]);
 
-  const unreadNotifications = notifications.filter((n: { read: boolean }) => !n.read);
-  const readNotifications = notifications.filter((n: { read: boolean }) => n.read);
+  const unreadNotifications = notifications.filter((n) => !n.isRead);
+  const readNotifications = notifications.filter((n) => n.isRead);
 
-  const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr);
-    const now = new Date();
-    const diff = now.getTime() - date.getTime();
-    
-    const minutes = Math.floor(diff / 60000);
-    const hours = Math.floor(diff / 3600000);
-    const days = Math.floor(diff / 86400000);
-    
-    if (minutes < 60) return `${minutes}m ago`;
-    if (hours < 24) return `${hours}h ago`;
-    if (days < 7) return `${days}d ago`;
-    return date.toLocaleDateString();
+  const openNotification = (n: VendorNotification) => {
+    if (!n.isRead) markAsRead(n.id);
+    navigate(notificationRoute(n));
   };
 
-  const NotificationItem = ({ notification }: { notification: { id: string; type: string; title: string; message: string; read: boolean; createdAt: string; actionUrl?: string } }) => {
-    const Icon = getNotificationIcon(notification.type);
-    
+  const NotificationItem = ({ notification }: { notification: VendorNotification }) => {
+    const { Icon, iconWrap } = notificationVisual(notification);
+    // Clicking the notification opens the entity that triggered it (and marks it
+    // read). Notifications with no associated screen aren't clickable.
+    const hasTarget = Boolean(notification.aggregateType);
+    const actionLabel = notificationActionLabel(notification);
+
     return (
       <div
+        role={hasTarget ? 'button' : undefined}
+        tabIndex={hasTarget ? 0 : undefined}
+        onClick={hasTarget ? () => openNotification(notification) : undefined}
+        onKeyDown={
+          hasTarget
+            ? (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  openNotification(notification);
+                }
+              }
+            : undefined
+        }
         className={cn(
           'flex items-start gap-4 p-4 rounded-lg transition-colors',
-          !notification.read && 'bg-primary/5',
+          !notification.isRead && 'bg-primary/5',
+          hasTarget && 'cursor-pointer',
           'hover:bg-muted/50'
         )}
       >
-        <div className={cn('p-2 rounded-lg flex-shrink-0', getNotificationColor(notification.type))}>
+        <div className={cn('p-2 rounded-lg flex-shrink-0', iconWrap)}>
           <Icon className="w-5 h-5" />
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
             <div>
-              <p className={cn('font-medium', !notification.read && 'text-primary')}>
+              <p className={cn('font-medium', !notification.isRead && 'text-primary')}>
                 {notification.title}
               </p>
               <p className="text-sm text-muted-foreground mt-1">{notification.message}</p>
             </div>
             <span className="text-xs text-muted-foreground flex-shrink-0">
-              {formatDate(notification.createdAt)}
+              {notificationTimeAgo(notification.createdAt)}
             </span>
           </div>
-          {notification.actionUrl && (
-            <Button variant="link" size="sm" className="p-0 h-auto mt-2 gap-1">
-              View details
+          {hasTarget && (
+            <Button
+              variant="link"
+              size="sm"
+              className="p-0 h-auto mt-2 gap-1"
+              onClick={(e) => {
+                e.stopPropagation();
+                openNotification(notification);
+              }}
+            >
+              {actionLabel}
               <ArrowRight className="w-3 h-3" />
             </Button>
           )}
         </div>
-        {!notification.read && (
+        {!notification.isRead && (
           <Button
             variant="ghost"
             size="icon"
             className="flex-shrink-0 h-8 w-8"
-            onClick={() => markAsRead(notification.id)}
+            onClick={(e) => {
+              e.stopPropagation();
+              markAsRead(notification.id);
+            }}
+            aria-label="Mark as read"
           >
             <Check className="w-4 h-4" />
           </Button>
@@ -141,6 +133,7 @@ export function Notifications() {
               <button
                 type="button"
                 aria-label="Notification settings"
+                onClick={() => navigate('/dashboard/settings/notifications')}
                 className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-accent transition-colors"
               >
                 <Settings className="w-5 h-5" />
@@ -163,16 +156,23 @@ export function Notifications() {
                 Mark all as read
               </Button>
             )}
-            <Button variant="outline" size="icon">
+            <Button
+              variant="outline"
+              size="icon"
+              aria-label="Notification settings"
+              onClick={() => navigate('/dashboard/settings/notifications')}
+            >
               <Settings className="w-4 h-4" />
             </Button>
           </div>
         </div>
       )}
 
+      <PushPermissionBanner className={cn(isMobile && 'mx-4 mt-3')} />
+
       {/* Stats (desktop only) */}
       {!isMobile && (
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
@@ -195,19 +195,6 @@ export function Notifications() {
               </div>
               <div className="p-3 bg-blue-100 rounded-lg">
                 <Check className="w-5 h-5 text-blue-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">This Week</p>
-                <p className="text-2xl font-bold">24</p>
-              </div>
-              <div className="p-3 bg-green-100 rounded-lg">
-                <ShoppingCart className="w-5 h-5 text-green-600" />
               </div>
             </div>
           </CardContent>
@@ -239,7 +226,7 @@ export function Notifications() {
                 </div>
               ) : (
                 <div className="divide-y">
-                  {notifications.map((notification: { id: string; type: string; title: string; message: string; read: boolean; createdAt: string; actionUrl?: string }) => (
+                  {notifications.map((notification) => (
                     <NotificationItem key={notification.id} notification={notification} />
                   ))}
                 </div>
@@ -258,7 +245,7 @@ export function Notifications() {
                 </div>
               ) : (
                 <div className="divide-y">
-                  {unreadNotifications.map((notification: { id: string; type: string; title: string; message: string; read: boolean; createdAt: string; actionUrl?: string }) => (
+                  {unreadNotifications.map((notification) => (
                     <NotificationItem key={notification.id} notification={notification} />
                   ))}
                 </div>
@@ -277,7 +264,7 @@ export function Notifications() {
                 </div>
               ) : (
                 <div className="divide-y">
-                  {readNotifications.map((notification: { id: string; type: string; title: string; message: string; read: boolean; createdAt: string; actionUrl?: string }) => (
+                  {readNotifications.map((notification) => (
                     <NotificationItem key={notification.id} notification={notification} />
                   ))}
                 </div>

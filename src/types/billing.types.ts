@@ -5,18 +5,14 @@
 
 export type PaymentGateway = 'NOTCHPAY' | 'MYCOOLPAY' | 'STRIPE';
 export type PhoneOperator = 'MTN' | 'ORANGE' | 'MOOV';
-/** Status of a top-up / plan purchase (the payment lifecycle). */
-export type PaymentStatus = 'pending' | 'paid' | 'failed';
+/**
+ * Status of a top-up / plan purchase (the payment lifecycle). `reversed` is a
+ * post-payment terminal state: the card charge was disputed/refunded and the
+ * backend unwound the purchase (plan dropped to free / credits clawed back).
+ */
+export type PaymentStatus = 'pending' | 'paid' | 'failed' | 'reversed';
 
 export type VendorPlanStatus = 'active' | 'pending_activation' | 'expired' | 'cancelled';
-
-export type LedgerType = 'allowance' | 'topup' | 'debit' | 'adjustment' | 'refund';
-export type LedgerReasonCode =
-  | 'plan_allowance'
-  | 'topup_purchase'
-  | 'vectorisation'
-  | 'whatsapp_template'
-  | 'admin_adjustment';
 
 // ─── Core entities ────────────────────────────────────────────────────────────
 
@@ -73,20 +69,6 @@ export interface CreditPack {
   credits: number;
   price: number;
   currency: string;
-}
-
-export interface CreditTransaction {
-  _id: string;
-  wallet_id?: string;
-  owner_type?: string;
-  owner_id?: string;
-  type: LedgerType;
-  /** Signed: positive credit, negative debit. */
-  amount: number;
-  balance_after: number;
-  reason_code: LedgerReasonCode;
-  ref?: string;
-  created_at: string;
 }
 
 export interface CreditTopup {
@@ -166,18 +148,6 @@ export interface BillingSettings {
 
 // ─── Query params + pagination ──────────────────────────────────────────────────
 
-export interface BillingListParams {
-  page?: number;
-  limit?: number;
-}
-
-export interface BillingListMeta {
-  total: number;
-  page: number;
-  limit: number;
-  totalPages: number;
-}
-
 // ─── Response envelopes ─────────────────────────────────────────────────────────
 
 export interface PlansResponse {
@@ -192,19 +162,9 @@ export interface CreditBalanceResponse {
   success: boolean;
   data: { balance: number };
 }
-export interface LedgerResponse {
-  success: boolean;
-  data: CreditTransaction[];
-  meta: BillingListMeta;
-}
 export interface CreditPacksResponse {
   success: boolean;
   data: CreditPack[];
-}
-export interface TopupsResponse {
-  success: boolean;
-  data: CreditTopup[];
-  meta: BillingListMeta;
 }
 export interface TopupInitResponse {
   success: boolean;
@@ -223,11 +183,6 @@ export interface PlanPurchaseInitResponse {
 export interface PlanPurchaseVerifyResponse {
   success: boolean;
   data: { purchase: PlanPurchase; vendorPlan: VendorPlan | null };
-}
-export interface PlanPurchasesResponse {
-  success: boolean;
-  data: PlanPurchase[];
-  meta: BillingListMeta;
 }
 export interface BillingSettingsResponse {
   success: boolean;

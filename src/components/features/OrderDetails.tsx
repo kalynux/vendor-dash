@@ -39,7 +39,9 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { useOrderStore } from '@/store';
-import { addNote, fetchNote, revokeEntitlement, restoreEntitlement, getOrderErrorMessage } from '@/services/orders.service';
+import { addNote, fetchNote, revokeEntitlement, restoreEntitlement, getOrderErrorMessage, isOrderFrozen } from '@/services/orders.service';
+import { PaymentStatusBadge } from '@/components/orders/PaymentStatusBadge';
+import { ApiError } from '@/types/api';
 import { toast } from 'sonner';
 import type { Order, Entitlement, OrderTimelineEvent } from '@/types';
 import { getNextStatuses, STATUS_LABELS } from "@/pages/Orders";
@@ -102,7 +104,9 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
   const isPhysical = currentOrder.orderType === 'physical';
   const isDigital = currentOrder.orderType === 'digital';
   const hasEntitlements = (currentOrder.entitlements?.length ?? 0) > 0;
-  const nextStatuses = getNextStatuses(currentOrder.status, currentOrder.orderType);
+  const frozen = isOrderFrozen(currentOrder);
+  // A frozen (disputed) order can't be advanced — the status PATCH returns 423.
+  const nextStatuses = frozen ? [] : getNextStatuses(currentOrder.status, currentOrder.orderType);
 
   const formatCurrency = (value: number) =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency: currentOrder.currency || 'USD' }).format(value);
@@ -128,6 +132,17 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
       onOrderUpdated?.(next);
       toast.success(`Order marked as ${status}`);
     } catch (err) {
+      // 423 → the order was frozen by a dispute since this view loaded. Reflect it
+      // locally so the controls disable and the banner shows, instead of a bare toast.
+      if (err instanceof ApiError && err.status === 423 && err.code === 'ORDER_DISPUTE_HOLD') {
+        const frozenOrder: Order = {
+          ...currentOrder,
+          paymentStatus: 'disputed',
+          disputeHold: { ...(currentOrder.disputeHold ?? {}), active: true },
+        };
+        setCurrentOrder(frozenOrder);
+        onOrderUpdated?.(frozenOrder);
+      }
       toast.error(getOrderErrorMessage(err));
     } finally {
       setStatusLoading(false);
@@ -305,6 +320,23 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
           )}
         </div>
       </div>
+
+      {/* Dispute freeze banner — fulfilment is locked until the chargeback settles. */}
+      {frozen && (
+        <div className="flex items-start gap-3 rounded-lg border border-orange-300 bg-orange-50 p-3 flex-shrink-0">
+          <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0 text-orange-600" />
+          <div className="text-sm">
+            <p className="font-semibold text-orange-800">Payment under dispute — order frozen</p>
+            <p className="text-orange-700/90 mt-0.5">
+              A chargeback is open on this order, so its status can't be changed until it settles.
+              {currentOrder.disputeHold?.disputedAt && (
+                <> Disputed on {formatDate(currentOrder.disputeHold.disputedAt)}.</>
+              )}{' '}
+              Resolution is automatic — no action is needed from you.
+            </p>
+          </div>
+        </div>
+      )}
 
       <Tabs defaultValue="details" className="w-full flex flex-col flex-1 min-h-0">
         <TabsList className={`grid w-full flex-shrink-0 ${hasEntitlements ? 'grid-cols-5' : 'grid-cols-4'}`}>
@@ -591,12 +623,7 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
                   <p className="text-muted-foreground mb-1">Payment Status</p>
-                  <Badge
-                    variant={currentOrder.paymentStatus === 'paid' ? 'default' : 'secondary'}
-                    className="capitalize"
-                  >
-                    {currentOrder.paymentStatus}
-                  </Badge>
+                  <PaymentStatusBadge status={currentOrder.paymentStatus} />
                 </div>
                 <div>
                   <p className="text-muted-foreground mb-1">Order Type</p>
@@ -611,6 +638,23 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
                   <p className="font-medium">{formatDate(currentOrder.createdAt)}</p>
                 </div>
               </div>
+
+              {frozen && (
+                <div className="flex items-start gap-2 rounded-md bg-orange-50 border border-orange-100 p-3 text-sm">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-orange-600" />
+                  <div>
+                    <p className="font-medium text-orange-800">Payment disputed</p>
+                    <p className="text-orange-700/90 mt-0.5">
+                      The customer opened a chargeback
+                      {currentOrder.disputeHold?.disputedAt && (
+                        <> on {formatDate(currentOrder.disputeHold.disputedAt)}</>
+                      )}
+                      . The order is frozen until Stripe resolves it; if the dispute is lost the
+                      payment is refunded and the order is returned/cancelled.
+                    </p>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
