@@ -16,9 +16,19 @@ export interface BrandingFieldsProps {
     formId: string;
     defaultValues: Step3FormValues;
     onSubmit: (values: Step3FormValues) => void | Promise<void>;
+    /** Render the logo/cover branding block. Default true (onboarding shows both). */
+    showBranding?: boolean;
+    /** Render the business-addresses block. Default true (onboarding shows both). */
+    showAddresses?: boolean;
 }
 
-export function BrandingFields({ formId, defaultValues, onSubmit }: BrandingFieldsProps) {
+export function BrandingFields({
+    formId,
+    defaultValues,
+    onSubmit,
+    showBranding = true,
+    showAddresses = true,
+}: BrandingFieldsProps) {
     const {
         register,
         handleSubmit,
@@ -37,6 +47,7 @@ export function BrandingFields({ formId, defaultValues, onSubmit }: BrandingFiel
     return (
         <form id={formId} onSubmit={handleSubmit(onSubmit)} className="space-y-6" noValidate>
             {/* Branding */}
+            {showBranding && (
             <div className="space-y-4">
                 <div className="flex items-center gap-2">
                     <ImageIcon className="w-4 h-4 text-muted-foreground" />
@@ -80,9 +91,11 @@ export function BrandingFields({ formId, defaultValues, onSubmit }: BrandingFiel
                     )}
                 </div>
             </div>
+            )}
 
             {/* Business addresses */}
-            <div className="space-y-4 border-t pt-4">
+            {showAddresses && (
+            <div className={cn('space-y-4', showBranding && 'border-t pt-4')}>
                 <div className="flex items-center justify-between">
                     <h2 className="font-semibold text-sm">Business Addresses</h2>
                     <Button
@@ -209,6 +222,7 @@ export function BrandingFields({ formId, defaultValues, onSubmit }: BrandingFiel
                     </div>
                 )}
             </div>
+            )}
         </form>
     );
 }

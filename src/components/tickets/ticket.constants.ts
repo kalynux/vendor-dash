@@ -223,9 +223,15 @@ export const TICKET_TYPE_LABELS: Record<string, string> = TICKET_TYPE_GROUPS.red
 /** Maximum attachments per ticket (api-doc/vendor/tickets.md §Attachment Limits). */
 export const MAX_ATTACHMENTS = 5;
 
+/** Maximum attachments accepted at ticket-creation time (api-doc/vendor/tickets.md). */
+export const MAX_CREATE_ATTACHMENTS = 5;
+
+/** Max length of the optional tracking number sent at ticket creation. */
+export const TRACKING_NUMBER_MAX = 120;
+
 /** Character limits for free-text fields (kept in sync with ticket.schemas.ts). */
-export const NOTE_MAX_LENGTH = 300;
-export const DESCRIPTION_MAX_LENGTH = 700;
+export const NOTE_MAX_LENGTH = 2000;
+export const DESCRIPTION_MAX_LENGTH = 5000;
 
 /**
  * Responsive props for a ticket Sheet: a bottom sheet on mobile, a right-side

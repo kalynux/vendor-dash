@@ -16,10 +16,19 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 
+/** Languages the backend renders notifications in (preferred_language). */
+const LANGUAGES = [
+  { value: 'en', label: 'English' },
+  { value: 'fr', label: 'French' },
+  { value: 'pt', label: 'Portuguese' },
+  { value: 'es', label: 'Spanish' },
+  { value: 'ar', label: 'Arabic' },
+];
+
 /**
- * Country + Timezone for the store, bound to the vendor profile.
- * Moved here from "Basic Setup" (now "Payout Setup") so regional settings live
- * alongside the rest of the store configuration.
+ * Localization for the store — country, timezone, and notification language,
+ * bound to the vendor profile. Country/timezone moved here from "Basic Setup"
+ * (now "Payout Setup") so all regional settings live with the store config.
  */
 export function StoreRegionFields() {
   const { session, updateVendorProfile } = useOnboarding();
@@ -27,6 +36,7 @@ export function StoreRegionFields() {
 
   const [country, setCountry] = useState(roleEntity?.country ?? '');
   const [timezone, setTimezone] = useState(roleEntity?.timezone ?? '');
+  const [language, setLanguage] = useState(roleEntity?.preferred_language ?? 'en');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -36,8 +46,8 @@ export function StoreRegionFields() {
     setSaving(true);
     setError(null);
     try {
-      await updateVendorProfile({ country, timezone });
-      toast.success('Regional settings updated');
+      await updateVendorProfile({ country, timezone, preferred_language: language });
+      toast.success('Localization updated');
     } catch (err) {
       setError(mapProfileError(err));
     } finally {
@@ -48,8 +58,8 @@ export function StoreRegionFields() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Regional Settings</CardTitle>
-        <CardDescription>Your operating country and timezone.</CardDescription>
+        <CardTitle>Localization</CardTitle>
+        <CardDescription>Your operating country, timezone, and language.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         {error && (
@@ -92,6 +102,25 @@ export function StoreRegionFields() {
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="store-language">Language</Label>
+            <Select value={language} onValueChange={setLanguage}>
+              <SelectTrigger id="store-language">
+                <SelectValue placeholder="Select a language" />
+              </SelectTrigger>
+              <SelectContent>
+                {LANGUAGES.map((l) => (
+                  <SelectItem key={l.value} value={l.value}>
+                    {l.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Language used for your notifications.
+            </p>
           </div>
         </div>
 

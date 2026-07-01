@@ -21,6 +21,12 @@ import type {
   TicketsQueryParams,
   TicketStatus,
   UpdatablePriority,
+  TicketReferenceOrder,
+  TicketReferenceProduct,
+  TicketReferencePagination,
+  TicketReferenceOrdersResponse,
+  TicketReferenceProductsResponse,
+  TicketReferenceQueryParams,
 } from '@/types/tickets.types';
 
 const BASE = '/vendor/tickets';
@@ -53,6 +59,26 @@ export async function fetchTickets(
 export async function fetchTicketById(id: string): Promise<ApiTicketDetail> {
   const res = await api.get<TicketDetailResponse>(`${BASE}/${id}`);
   return normalizeId(res.data);
+}
+
+// ─── Entity reference lists (create-ticket pickers) ─────────────────────────────
+
+/** Orders the vendor can reference when filing a ticket (incl. shipments + tracking). */
+export async function fetchReferenceOrders(
+  params: TicketReferenceQueryParams = {},
+): Promise<{ data: TicketReferenceOrder[]; meta: TicketReferencePagination }> {
+  const qs = buildQueryString(params as Record<string, unknown>);
+  const res = await api.get<TicketReferenceOrdersResponse>(`${BASE}/reference/orders${qs}`);
+  return { data: res.data, meta: res.pagination };
+}
+
+/** Products the vendor can reference when filing a ticket. */
+export async function fetchReferenceProducts(
+  params: TicketReferenceQueryParams = {},
+): Promise<{ data: TicketReferenceProduct[]; meta: TicketReferencePagination }> {
+  const qs = buildQueryString(params as Record<string, unknown>);
+  const res = await api.get<TicketReferenceProductsResponse>(`${BASE}/reference/products${qs}`);
+  return { data: res.data, meta: res.pagination };
 }
 
 export async function createTicket(payload: CreateTicketPayload): Promise<ApiTicketDetail> {

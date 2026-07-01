@@ -9,9 +9,14 @@ import { mapProfileError } from '@/components/vendor-settings/errors';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 
-const FORM_ID = 'settings-branding-form';
+const FORM_ID = 'settings-addresses-form';
 
-export function BrandingSettings() {
+/**
+ * Business pickup addresses. Lives under the Store tab (moved out of Branding).
+ * Submits ONLY `business_addresses` so it never clobbers the stored branding
+ * (PATCH /vendor/profile uses full-replace semantics per field).
+ */
+export function BusinessAddressSettings() {
     const { session, updateVendorProfile } = useOnboarding();
     const roleEntity = session?.role_entity;
     const [saving, setSaving] = useState(false);
@@ -23,12 +28,11 @@ export function BrandingSettings() {
             setError(null);
             try {
                 await updateVendorProfile({
-                    branding: {
-                        logo_url: values.logo_url || null,
-                        cover_image_url: values.cover_image_url || null,
-                    },
+                    business_addresses: (values.business_addresses ?? []).filter(
+                        (a) => a.address_line1.trim().length > 0,
+                    ),
                 });
-                toast.success('Branding updated');
+                toast.success('Business addresses updated');
             } catch (err) {
                 setError(mapProfileError(err));
             } finally {
@@ -41,19 +45,23 @@ export function BrandingSettings() {
     if (!roleEntity) return null;
 
     const defaultValues: Step3FormValues = {
-        logo_url: roleEntity.branding?.logo_url ?? '',
-        cover_image_url: roleEntity.branding?.cover_image_url ?? '',
-        // Addresses are managed under the Store tab now; keep empty here so the
-        // branding-only save never touches them (full-replace semantics).
-        business_addresses: [],
+        logo_url: '',
+        cover_image_url: '',
+        business_addresses: (roleEntity.business_addresses ?? []).map((a) => ({
+            label: a.label ?? '',
+            address_line1: a.address_line1,
+            address_line2: a.address_line2 ?? '',
+            city: a.city,
+            state: a.state ?? '',
+        })),
     };
 
     return (
         <Card>
             <CardHeader>
-                <CardTitle>Branding</CardTitle>
+                <CardTitle>Business Addresses</CardTitle>
                 <CardDescription>
-                    Your store logo and cover image.
+                    Your pickup locations. Customers won't see a pickup point until you add one.
                 </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -70,7 +78,7 @@ export function BrandingSettings() {
                     formId={FORM_ID}
                     defaultValues={defaultValues}
                     onSubmit={onSubmit}
-                    showAddresses={false}
+                    showBranding={false}
                 />
 
                 <div className="flex justify-end border-t pt-4">

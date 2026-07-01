@@ -195,6 +195,21 @@ export type PolicySetupPayload =
       version?: number;
     };
 
+// ─── Order automation settings ─────────────────────────────────────────────────
+// Per-vendor automation toggles on dedicated /vendor/profile sub-routes.
+
+export interface AutoRedirectSettings {
+  /** When true, a paid physical order's shipments advance pending → assigned automatically. */
+  autoRedirectOrdersToAgency: boolean;
+  /** Max order total (order's own currency) for which auto-redirect applies. Null = no cap. */
+  autoRedirectThresholdAmount: number | null;
+}
+
+export interface AutoCancelSettings {
+  /** Days an order may remain unpaid before the daily sweep auto-cancels it. Default 3. */
+  autoCancelUnpaidDays: number;
+}
+
 // ─── Post-onboarding profile update (PATCH /vendor/profile) ────────────────────
 // Partial update — send only the fields that changed. Object/array fields are a
 // FULL REPLACE (send the complete desired value). `version` is always required.
@@ -229,6 +244,18 @@ export interface VendorProfileUpdateResponse {
   success: boolean;
   message?: string;
   data: { version?: number; [key: string]: unknown };
+}
+
+// ─── Password change (PATCH /vendor/profile/password) ──────────────────────────
+
+export interface ChangePasswordPayload {
+  oldPassword: string;
+  newPassword: string;
+}
+
+export interface ChangePasswordResponse {
+  success: boolean;
+  message?: string;
 }
 
 // ─── Delivery Agency ──────────────────────────────────────────────────────────

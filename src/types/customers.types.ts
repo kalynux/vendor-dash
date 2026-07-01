@@ -94,6 +94,9 @@ export type RefundReasonCode =
   | 'REFUND_WINDOW_EXPIRED'
   | 'REFUND_NOT_ELIGIBLE';
 
+/** Who pays return shipping, echoed from the vendor's return policy (display-only). */
+export type ReturnShippingPayer = 'vendor' | 'customer' | 'customer_reimbursed_if_defect';
+
 export interface RefundEligibility {
   eligible: boolean;
   /** Most you may refund right now (policy + balance). */
@@ -101,6 +104,10 @@ export interface RefundEligibility {
   /** Un-refunded balance of the payment. */
   remaining: number;
   currency: string | null;
+  /** Policy: expected settle window. Null when no return policy is set. */
+  refundProcessingDays?: number | null;
+  /** Policy: who pays return shipping. Null when no return policy is set. */
+  returnShippingPayer?: ReturnShippingPayer | null;
   /** Present only when `eligible === false`. */
   reasonCode?: RefundReasonCode;
 }
@@ -120,6 +127,10 @@ export interface RefundResult {
   totalRefunded: number;
   /** When true, order.payment_status becomes "refunded". */
   fullyRefunded: boolean;
+  /** Policy: expected settle window. Null when no return policy is set. */
+  refundProcessingDays?: number | null;
+  /** Policy: who pays return shipping. Null when no return policy is set. */
+  returnShippingPayer?: ReturnShippingPayer | null;
 }
 
 // ─── Response envelopes ─────────────────────────────────────────────────────────

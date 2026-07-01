@@ -14,7 +14,7 @@ import {
 } from '@/components/customers/customer.constants';
 import { fetchRefundEligibility, refundOrder } from '@/services/customers.service';
 import { ApiError } from '@/types/api';
-import type { RefundEligibility, RefundResult } from '@/types/customers.types';
+import type { RefundEligibility, RefundResult, ReturnShippingPayer } from '@/types/customers.types';
 
 interface RefundDialogProps {
   orderId: string | null;
@@ -36,6 +36,12 @@ const REFUND_ERROR_LABELS: Record<string, string> = {
   REFUND_GATEWAY_NOT_SUPPORTED: 'This payment gateway does not support refunds.',
   REFUND_GATEWAY_FAILED: 'The payment gateway rejected the refund. Try again later.',
   ORDER_NOT_FOUND: 'Order not found.',
+};
+
+const RETURN_SHIPPING_PAYER_LABELS: Record<ReturnShippingPayer, string> = {
+  vendor: 'You (vendor)',
+  customer: 'Customer',
+  customer_reimbursed_if_defect: 'Customer (reimbursed if defective)',
 };
 
 export function RefundDialog({ orderId, orderNumber, open, onOpenChange, onRefunded }: RefundDialogProps) {
@@ -147,6 +153,21 @@ export function RefundDialog({ orderId, orderNumber, open, onOpenChange, onRefun
                 <p className="text-lg font-semibold">{formatMoney(eligibility.remaining, currency)}</p>
               </div>
             </div>
+
+            {/* Return-policy info (display-only) */}
+            {(eligibility.refundProcessingDays != null || eligibility.returnShippingPayer != null) && (
+              <div className="space-y-1 text-xs text-muted-foreground">
+                {eligibility.refundProcessingDays != null && (
+                  <p>Refund settles in ~{eligibility.refundProcessingDays} days.</p>
+                )}
+                {eligibility.returnShippingPayer != null && (
+                  <p>
+                    Return shipping paid by{' '}
+                    {RETURN_SHIPPING_PAYER_LABELS[eligibility.returnShippingPayer]}.
+                  </p>
+                )}
+              </div>
+            )}
 
             {/* Amount */}
             <div className="space-y-1.5">

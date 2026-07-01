@@ -10,6 +10,10 @@ import type {
     OnboardingStepResponse,
     VendorProfileUpdatePayload,
     VendorProfileUpdateResponse,
+    ChangePasswordPayload,
+    ChangePasswordResponse,
+    AutoRedirectSettings,
+    AutoCancelSettings,
 } from '@/types/api';
 
 export const onboardingService = {
@@ -55,6 +59,11 @@ export const onboardingService = {
         return api.patch<VendorProfileUpdateResponse>('/vendor/profile', payload);
     },
 
+    /** Change the vendor's password. Requires the current password. */
+    changePassword(payload: ChangePasswordPayload): Promise<ChangePasswordResponse> {
+        return api.patch<ChangePasswordResponse>('/vendor/profile/password', payload);
+    },
+
     /** Current default delivery agency (or null). */
     getDefaultDeliveryAgency(): Promise<{ success: boolean; data: DeliveryAgency | null }> {
         return api.get<{ success: boolean; data: DeliveryAgency | null }>(
@@ -76,6 +85,42 @@ export const onboardingService = {
     clearDefaultDeliveryAgency(): Promise<{ success: boolean; message?: string }> {
         return api.delete<{ success: boolean; message?: string }>(
             '/vendor/profile/default-delivery-agency',
+        );
+    },
+
+    // ─── Order automation settings ──────────────────────────────────────────────
+
+    /** Whether paid physical orders auto-dispatch to the agency, plus optional cap. */
+    getAutoRedirectOrders(): Promise<{ success: boolean; data: AutoRedirectSettings }> {
+        return api.get<{ success: boolean; data: AutoRedirectSettings }>(
+            '/vendor/profile/auto-redirect-orders',
+        );
+    },
+
+    /** Enable/disable auto-dispatch and optionally set the max-order-total cap. */
+    updateAutoRedirectOrders(
+        payload: { enabled: boolean; thresholdAmount?: number | null },
+    ): Promise<{ success: boolean; data: AutoRedirectSettings; message?: string }> {
+        return api.put<{ success: boolean; data: AutoRedirectSettings; message?: string }>(
+            '/vendor/profile/auto-redirect-orders',
+            payload,
+        );
+    },
+
+    /** Days an order may remain unpaid before the daily sweep auto-cancels it. */
+    getAutoCancelUnpaidDays(): Promise<{ success: boolean; data: AutoCancelSettings }> {
+        return api.get<{ success: boolean; data: AutoCancelSettings }>(
+            '/vendor/profile/auto-cancel-unpaid-days',
+        );
+    },
+
+    /** Set the unpaid-order auto-cancel window (1–90 days). */
+    updateAutoCancelUnpaidDays(
+        payload: { days: number },
+    ): Promise<{ success: boolean; data: AutoCancelSettings; message?: string }> {
+        return api.put<{ success: boolean; data: AutoCancelSettings; message?: string }>(
+            '/vendor/profile/auto-cancel-unpaid-days',
+            payload,
         );
     },
 

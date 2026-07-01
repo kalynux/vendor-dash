@@ -1,17 +1,27 @@
-import { useEffect, useRef, useState } from 'react';
-import { Check, ChevronsUpDown, Loader2, Search } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { AlertTriangle, Check, ChevronDown, Loader2, Package, ShoppingBag } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandInput, CommandList } from '@/components/ui/command';
+import { ResponsiveModal } from '@/components/services/ResponsiveModal';
 import { cn } from '@/lib/utils';
-import { fetchOrders } from '@/services/orders.service';
-import { fetchProducts } from '@/services/products.service';
-import type { TicketEntityType } from '@/types/tickets.types';
+import { fetchReferenceOrders, fetchReferenceProducts } from '@/services/tickets.service';
+import { ApiError } from '@/types/api';
+import type { OrderTrackingOption, TicketEntityType } from '@/types/tickets.types';
 
+/** Normalised, display-ready option for the searchable order/product picker. */
 interface EntityOption {
   id: string;
-  label: string;
-  sublabel?: string;
+  kind: 'order' | 'product';
+  /** Primary line — product title or order customer name. */
+  title: string;
+  /** Secondary muted line — product category or order delivery status. */
+  subtitle?: string;
+  /** Small de-emphasised line — order number or product tags. */
+  caption?: string;
+  imageUrl?: string | null;
+  /** Order-only: the order's shipments' tracking numbers, for the tracking picker. */
+  trackingOptions?: OrderTrackingOption[];
 }
 
 interface EntityPickerProps {
@@ -19,18 +29,23 @@ interface EntityPickerProps {
   /** Currently selected entity id (controlled). */
   value: string;
   onChange: (entityId: string) => void;
+  /** Fired when an order is selected (its tracking numbers) or cleared (`null`). */
+  onOrderSelected?: (options: OrderTrackingOption[] | null) => void;
   invalid?: boolean;
 }
 
 /** Entity types that support a searchable picker backed by an existing API. */
 const SEARCHABLE: Record<string, true> = { order: true, product: true };
 
-export function EntityPicker({ entityType, value, onChange, invalid }: EntityPickerProps) {
+/** Reference endpoints cap the page at 50 — plenty for a searchable picker. */
+const PAGE_LIMIT = 50;
+
+export function EntityPicker({ entityType, value, onChange, onOrderSelected, invalid }: EntityPickerProps) {
   // `booking`, `account`, `other` have no list API — fall back to a free-text id.
   if (!SEARCHABLE[entityType]) {
     return (
       <Input
-        placeholder="Enter the related entity ID"
+        placeholder={entityType === 'other' ? 'Optional — leave blank to use your account' : 'Enter the related entity ID'}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         aria-invalid={invalid}
@@ -38,128 +53,210 @@ export function EntityPicker({ entityType, value, onChange, invalid }: EntityPic
     );
   }
 
-  return <SearchablePicker entityType={entityType} value={value} onChange={onChange} invalid={invalid} />;
+  // Remount per entity type so all internal state (query, results, selection) resets cleanly.
+  return (
+    <SearchablePicker
+      key={entityType}
+      entityType={entityType}
+      value={value}
+      onChange={onChange}
+      onOrderSelected={onOrderSelected}
+      invalid={invalid}
+    />
+  );
 }
 
-function SearchablePicker({ entityType, value, onChange, invalid }: EntityPickerProps) {
+function SearchablePicker({ entityType, value, onChange, onOrderSelected, invalid }: EntityPickerProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<EntityOption[]>([]);
   const [loading, setLoading] = useState(false);
-  const [selectedLabel, setSelectedLabel] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [selected, setSelected] = useState<EntityOption | null>(null);
 
-  // Reset selection display when the entity type changes.
-  useEffect(() => {
-    setSelectedLabel(null);
-    setResults([]);
-    setQuery('');
-  }, [entityType]);
-
-  // Debounced search against the relevant list API.
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Load results (server-side search) whenever the modal is open and the query changes.
+  // setState is kept inside the deferred timer / promise callbacks (not the effect body).
   useEffect(() => {
     if (!open) return;
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(async () => {
+    let active = true;
+    const debounce = query.trim() ? 300 : 0;
+    const timer = setTimeout(() => {
       setLoading(true);
-      try {
-        const options = await searchEntities(entityType, query);
-        setResults(options);
-      } catch {
-        setResults([]);
-      } finally {
-        setLoading(false);
-      }
-    }, 350);
+      setError(null);
+      searchEntities(entityType, query.trim())
+        .then((opts) => active && setResults(opts))
+        .catch((err) => {
+          if (!active) return;
+          setError(err instanceof ApiError ? err.message : `Couldn't load ${entityType}s`);
+          setResults([]);
+        })
+        .finally(() => active && setLoading(false));
+    }, debounce);
     return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
+      active = false;
+      clearTimeout(timer);
     };
-  }, [query, open, entityType]);
+  }, [open, entityType, query]);
 
   function select(option: EntityOption) {
     onChange(option.id);
-    setSelectedLabel(option.label);
+    onOrderSelected?.(option.kind === 'order' ? option.trackingOptions ?? [] : null);
+    setSelected(option);
     setOpen(false);
+    setQuery('');
   }
 
-  const triggerLabel = selectedLabel ?? (value ? value : `Select ${entityType}…`);
-
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button
-          type="button"
-          variant="outline"
-          role="combobox"
-          aria-expanded={open}
-          aria-invalid={invalid}
-          className={cn('w-full justify-between font-normal', !selectedLabel && !value && 'text-muted-foreground')}
-        >
-          <span className="truncate">{triggerLabel}</span>
-          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
-        <div className="flex items-center gap-2 border-b px-3">
-          <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
-          <input
-            autoFocus
+    <div className="space-y-2">
+      <Button
+        type="button"
+        variant="outline"
+        role="combobox"
+        aria-invalid={invalid}
+        onClick={() => {
+          setLoading(true); // show the spinner immediately; the deferred effect resolves it
+          setOpen(true);
+        }}
+        className={cn('w-full justify-between font-normal', !selected && 'text-muted-foreground')}
+      >
+        {selected ? (
+          <span className="flex min-w-0 items-center gap-1.5">
+            <span className="truncate font-medium">{selected.title}</span>
+            {selected.caption && (
+              <span className="truncate text-xs text-muted-foreground">· {selected.caption}</span>
+            )}
+          </span>
+        ) : (
+          <span>Select {entityType}…</span>
+        )}
+        <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+      </Button>
+
+      <ResponsiveModal
+        open={open}
+        onOpenChange={setOpen}
+        title={`Select ${entityType}`}
+        description={
+          entityType === 'product'
+            ? 'Search your catalogue by name, category, or tag.'
+            : 'Search your orders by order number or customer.'
+        }
+        desktopClassName="sm:max-w-lg"
+      >
+        <Command shouldFilter={false} className="bg-transparent">
+          <CommandInput
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={`Search ${entityType}s…`}
-            className="flex h-10 w-full bg-transparent py-2 text-sm outline-none placeholder:text-muted-foreground"
+            onValueChange={setQuery}
+            placeholder={
+              entityType === 'product' ? 'Search by name, category, or tag…' : 'Search by order number or customer…'
+            }
           />
-        </div>
-        <div className="max-h-64 overflow-y-auto py-1">
-          {loading ? (
-            <div className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" /> Searching…
-            </div>
-          ) : results.length === 0 ? (
-            <div className="py-6 text-center text-sm text-muted-foreground">
-              No {entityType}s found.
-            </div>
-          ) : (
-            results.map((option) => (
-              <button
-                key={option.id}
-                type="button"
-                onClick={() => select(option)}
-                className="flex w-full items-start gap-2 px-3 py-2 text-left text-sm hover:bg-accent"
-              >
-                <Check
-                  className={cn(
-                    'mt-0.5 h-4 w-4 shrink-0',
-                    value === option.id ? 'opacity-100' : 'opacity-0',
-                  )}
-                />
-                <span className="min-w-0">
-                  <span className="block truncate font-medium">{option.label}</span>
-                  {option.sublabel && (
-                    <span className="block truncate text-xs text-muted-foreground">{option.sublabel}</span>
-                  )}
-                </span>
-              </button>
-            ))
-          )}
-        </div>
-      </PopoverContent>
-    </Popover>
+          <CommandList className="max-h-[55vh]">
+            {error ? (
+              <div className="flex flex-col items-center gap-2 py-10 text-center text-sm text-muted-foreground">
+                <AlertTriangle className="h-6 w-6 text-destructive" />
+                {error}
+              </div>
+            ) : loading && results.length === 0 ? (
+              <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" /> Loading {entityType}s…
+              </div>
+            ) : results.length === 0 ? (
+              <div className="py-10 text-center text-sm text-muted-foreground">No {entityType}s found.</div>
+            ) : (
+              <div className="p-1">
+                {results.map((option) => {
+                  const isSelected = value === option.id;
+                  return (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() => select(option)}
+                      className={cn(
+                        'flex w-full items-center gap-3 rounded-md px-2 py-2 text-left transition-colors',
+                        isSelected ? 'bg-accent' : 'hover:bg-accent/60',
+                      )}
+                    >
+                      <OptionContent option={option} />
+                      <Check
+                        className={cn('h-4 w-4 shrink-0 text-primary', isSelected ? 'opacity-100' : 'opacity-0')}
+                      />
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </CommandList>
+        </Command>
+      </ResponsiveModal>
+    </div>
   );
+}
+
+/** Renders the thumbnail + text block for a result row. */
+function OptionContent({ option }: { option: EntityOption }) {
+  return (
+    <span className="flex min-w-0 flex-1 items-center gap-3">
+      <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted">
+        {option.imageUrl ? (
+          <img
+            src={option.imageUrl}
+            alt={option.title}
+            crossOrigin="use-credentials"
+            className="h-full w-full object-cover"
+          />
+        ) : option.kind === 'product' ? (
+          <Package className="h-4 w-4 text-muted-foreground" />
+        ) : (
+          <ShoppingBag className="h-4 w-4 text-muted-foreground" />
+        )}
+      </span>
+      <span className="min-w-0">
+        <span className="block truncate text-sm font-medium">{option.title}</span>
+        {option.subtitle && (
+          <span className="block truncate text-xs text-muted-foreground">{option.subtitle}</span>
+        )}
+        {option.caption && (
+          <span className="block truncate text-[11px] text-muted-foreground/70">{option.caption}</span>
+        )}
+      </span>
+    </span>
+  );
+}
+
+function titleCase(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1).replace(/_/g, ' ');
 }
 
 async function searchEntities(entityType: TicketEntityType, query: string): Promise<EntityOption[]> {
   if (entityType === 'order') {
-    const { data } = await fetchOrders({ q: query || undefined, limit: 20 });
+    const { data } = await fetchReferenceOrders({ q: query || undefined, limit: PAGE_LIMIT });
     return data.map((o) => ({
       id: o.id,
-      label: o.orderNumber,
-      sublabel: o.customer?.name,
+      kind: 'order' as const,
+      title: o.customerName?.trim() || 'Unknown customer',
+      subtitle: `Delivery: ${titleCase(o.fulfillmentStatus)}`,
+      caption: o.orderNumber,
+      imageUrl: o.customerAvatarUrl,
+      trackingOptions: o.shipments
+        .filter((s) => s.trackingNumber)
+        .map((s) => ({
+          trackingNumber: s.trackingNumber as string,
+          agencyName: s.agencyName,
+          deliveryStatus: s.status,
+        })),
     }));
   }
   if (entityType === 'product') {
-    const { data } = await fetchProducts({ q: query || undefined, limit: 20 });
-    return data.map((p) => ({ id: p.id, label: p.title, sublabel: p.category }));
+    const { data } = await fetchReferenceProducts({ q: query || undefined, limit: PAGE_LIMIT });
+    return data.map((p) => ({
+      id: p.id,
+      kind: 'product' as const,
+      title: p.title,
+      subtitle: p.category ?? undefined,
+      caption: p.tags?.length ? p.tags.join(', ') : undefined,
+      imageUrl: p.firstFileUrl,
+    }));
   }
   return [];
 }

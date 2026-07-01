@@ -90,7 +90,7 @@ export const FOOTER_NAV: NavItem[] = [
       { name: 'Profile', path: '/dashboard/account/profile', icon: User },
       { name: 'Store', path: '/dashboard/account/store', icon: Store },
       { name: 'Branding', path: '/dashboard/account/branding', icon: ImageIcon },
-      { name: 'Security', path: '/dashboard/account/security', icon: Shield, disabled: true },
+      { name: 'Security', path: '/dashboard/account/security', icon: Shield, disabled: false },
       { name: 'Billing', path: '/dashboard/account/billing', icon: CreditCard },
       { name: 'Payout Setup', path: '/dashboard/account/payout', icon: Wallet },
     ],
@@ -103,7 +103,7 @@ export const FOOTER_NAV: NavItem[] = [
       { name: 'Delivery', path: '/dashboard/settings/delivery', icon: Truck },
       { name: 'Policies', path: '/dashboard/settings/policies', icon: ScrollText },
       { name: 'Notifications', path: '/dashboard/settings/notifications', icon: Bell },
-      { name: 'Preferences', path: '/dashboard/settings/preferences', icon: SlidersHorizontal, disabled: true },
+      { name: 'Preferences', path: '/dashboard/settings/preferences', icon: SlidersHorizontal },
     ],
   },
 ];

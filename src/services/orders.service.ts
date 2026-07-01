@@ -44,6 +44,22 @@ interface ApiDisputeHold {
   reason?: string | null;
 }
 
+/** A single shipment's delivery info (per-item and order-level overview share this shape). */
+interface ApiOrderDelivery {
+  agencyId?: string;
+  agencyName?: string;
+  agencyPhone?: string;
+  deliveryStatus?: string;
+  shipmentId?: string;
+  trackingNumber?: string | null;
+  agent?: {
+    id: string;
+    name: string;
+    phone?: string;
+    avatarUrl?: string;
+  } | null;
+}
+
 interface ApiOrderListItem {
   id: string;
   orderNumber: string;
@@ -101,6 +117,7 @@ interface ApiOrderDetail {
     price: number;
     subtotal: number;
     currency: string;
+    delivery?: ApiOrderDelivery | null;
   }>;
   priceBreakdown: {
     base: number;
@@ -111,19 +128,8 @@ interface ApiOrderDetail {
   };
   totalAmount: number;
   currency: string;
-  delivery?: {
-    agencyId?: string;
-    agencyName?: string;
-    agencyPhone?: string;
-    deliveryStatus?: string;
-    shipmentId?: string;
-    agent?: {
-      id: string;
-      name: string;
-      phone?: string;
-      avatarUrl?: string;
-    } | null;
-  } | null;
+  /** Order-level shipment overview (one entry per agency/shipment). Null for digital orders. */
+  deliveries?: ApiOrderDelivery[] | null;
   notes?: Array<{
     id: string;
     message: string;
@@ -372,11 +378,13 @@ function adaptDetailToOrder(detail: ApiOrderDetail): Order {
     currency: detail.currency,
     customer,
     items,
-    deliveryAgency: detail.delivery?.agencyName
-      ? { name: detail.delivery.agencyName, address: detail.delivery.agencyPhone ?? '' }
+    // An order can now be split across several shipments (deliveries[]); surface the
+    // first as the primary agency/agent to preserve the existing single-agency UI.
+    deliveryAgency: detail.deliveries?.[0]?.agencyName
+      ? { name: detail.deliveries[0].agencyName, address: detail.deliveries[0].agencyPhone ?? '' }
       : undefined,
-    assignedAgent: detail.delivery?.agent
-      ? { name: detail.delivery.agent.name }
+    assignedAgent: detail.deliveries?.[0]?.agent
+      ? { name: detail.deliveries[0].agent.name }
       : undefined,
     createdAt: detail.createdAt,
     updatedAt: detail.updatedAt,

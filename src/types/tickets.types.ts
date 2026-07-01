@@ -197,7 +197,12 @@ export interface CreateTicketPayload {
   type: TicketType;
   importance: TicketImportance;
   entityType: TicketEntityType;
-  entityId: string;
+  /** Optional for `other` (defaults server-side to the requester's own id); required otherwise. */
+  entityId?: string;
+  /** Required only for `order` tickets when the support policy lists `tracking_number`. Max 120. */
+  trackingNumber?: string;
+  /** File-reference ids. Required for `order`/`product` tickets when the policy lists `product_photo_video`. Max 5. */
+  attachments?: string[];
 }
 
 export interface UpdateTicketPayload {
@@ -216,6 +221,72 @@ export interface CreateAttachmentPayload {
   fileId: string;
   visibility?: VisibilityInput;
   visibleToUserIds?: string[];
+}
+
+// ─── Entity reference (create-ticket pickers) ─────────────────────────────────
+// Cheap, role-scoped lists for populating entityId + trackingNumber, from
+// GET /vendor/tickets/reference/orders and /reference/products.
+
+/** A shipment on a reference order — one agency + tracking number per entry. */
+export interface TicketReferenceShipment {
+  shipmentId: string;
+  agencyId: string | null;
+  agencyName: string | null;
+  agentId: string | null;
+  trackingNumber: string | null;
+  status: string;
+}
+
+export interface TicketReferenceOrder {
+  id: string;
+  orderNumber: string;
+  orderType: 'physical' | 'digital';
+  fulfillmentStatus: string;
+  createdAt: string;
+  customerName: string | null;
+  customerAvatarUrl: string | null;
+  shipments: TicketReferenceShipment[];
+}
+
+export interface TicketReferenceProduct {
+  id: string;
+  title: string;
+  slug: string;
+  category: string | null;
+  tags: string[];
+  firstFileUrl: string | null;
+}
+
+export interface TicketReferencePagination {
+  total: number;
+  page: number;
+  limit: number;
+  pages: number;
+}
+
+export interface TicketReferenceOrdersResponse {
+  success: boolean;
+  data: TicketReferenceOrder[];
+  pagination: TicketReferencePagination;
+}
+
+export interface TicketReferenceProductsResponse {
+  success: boolean;
+  data: TicketReferenceProduct[];
+  pagination: TicketReferencePagination;
+}
+
+export interface TicketReferenceQueryParams {
+  page?: number;
+  limit?: number;
+  q?: string;
+}
+
+/** A tracking number offered for an order, with its shipment context for labelling. */
+export interface OrderTrackingOption {
+  trackingNumber: string;
+  agencyName?: string | null;
+  deliveryStatus?: string;
 }
 
 // ─── Query Params ─────────────────────────────────────────────────────────────
