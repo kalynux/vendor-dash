@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth, useRouter } from '@/App';
-import { useNotificationStore } from '@/store';
+import { useNotificationStore, useStoreStore } from '@/store';
 import { useOnboarding } from '@/onboarding/store/onboarding.store';
 import {
   Search,
@@ -14,6 +14,7 @@ import {
   Package,
   LogOut,
   User,
+  ExternalLink,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -65,6 +66,7 @@ export function Header() {
   const { navigate } = useRouter();
   const reactNavigate = useNavigate();
   const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotificationStore();
+  const { currentStore } = useStoreStore();
   const roleEntity = useOnboarding().session?.role_entity;
 
   const storeName = roleEntity?.display_name || roleEntity?.business_name || 'My Store';
@@ -231,6 +233,18 @@ export function Header() {
                   <User className="w-4 h-4" />
                   Profile
                 </DropdownMenuItem>
+                {currentStore?.domain && (
+                  <DropdownMenuItem asChild className="gap-2">
+                    <a
+                      href={`https://${currentStore.domain}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                      My Store
+                    </a>
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   onSelect={(e) => {

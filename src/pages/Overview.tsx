@@ -5,8 +5,7 @@ import {
   DollarSign,
   ShoppingCart,
   Users,
-  Target,
-  Calendar,
+  Wallet,
   ArrowRight,
   Package,
   RefreshCw,
@@ -19,7 +18,8 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAnalyticsStore, useOrderStore, useProductStore, useStoreStore } from '@/store';
 import { SalesChart } from '@/components/features/SalesChart';
-import { CategoryChart } from '@/components/features/CategoryChart';
+import { TopProductsList } from '@/components/features/TopProductsList';
+import { DateRangePicker } from '@/components/features/DateRangePicker';
 import { OrderStatusBadge } from '@/components/orders/OrderStatusBadge';
 import { MobileOrderDetailSheet } from '@/components/orders/MobileOrderDetailSheet';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -33,14 +33,6 @@ import {
 import type { Order } from '@/types';
 import { toast } from 'sonner';
 import { getOrderErrorMessage } from '@/services/orders.service';
-
-const dateRanges = [
-  { label: 'Today', value: 'today' },
-  { label: 'Yesterday', value: 'yesterday' },
-  { label: 'Last 7 days', value: '7d' },
-  { label: 'Last 30 days', value: '30d' },
-  { label: 'Custom', value: 'custom' },
-];
 
 interface MetricCardProps {
   title: string;
@@ -102,7 +94,7 @@ function MetricCard({ title, value, change, changeType, icon: Icon, isLoading }:
 }
 
 export function Overview() {
-  const { metrics, salesData, dateRange, setDateRange, fetchAnalytics, isLoading } = useAnalyticsStore();
+  const { metrics, salesData, topProducts, dateRange, setDateRange, fetchAnalytics, isLoading, notReady } = useAnalyticsStore();
   const { orders, fetchOrders, isLoading: isOrderLoading, fetchOrderById } = useOrderStore();
   const { fetchProducts } = useProductStore();
   const { currentStore } = useStoreStore();
@@ -112,11 +104,16 @@ export function Overview() {
   const [orderSheetOpen, setOrderSheetOpen] = useState(false);
   const [isDetailLoading, setIsDetailLoading] = useState(isOrderLoading);
 
+  // Re-runs whenever the selected date range changes (fetchAnalytics is
+  // re-memoized on range change in the store).
   useEffect(() => {
     fetchAnalytics();
+  }, [fetchAnalytics]);
+
+  useEffect(() => {
     fetchOrders({ limit: 5 });
     fetchProducts();
-  }, [fetchAnalytics, fetchOrders, fetchProducts]);
+  }, [fetchOrders, fetchProducts]);
 
 
   const handleViewDetails = async (order: Order) => {
@@ -176,18 +173,43 @@ export function Overview() {
           )}
         </div>
 
+        {/* Date range */}
+        <div className="flex justify-end">
+          <DateRangePicker value={dateRange} onChange={setDateRange} />
+        </div>
+
+        {/* Data-not-ready notice (backend 503 AGGREGATION_NOT_READY) */}
+        {notReady && !isLoading && (
+          <Card className="border-amber-200 bg-amber-50">
+            <CardContent className="flex items-center gap-3 p-4 text-amber-800">
+              <AlertCircle className="w-5 h-5 flex-shrink-0" />
+              <p className="text-sm">
+                Analytics for this period aren&apos;t ready yet. Please check back shortly.
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Total sales card with sparkline */}
         <Card>
           <CardContent className="p-4">
             <div className="flex justify-between items-start mb-3">
               <div>
-                <p className="text-xs text-muted-foreground">Total sales · Last 7 days</p>
+                <p className="text-xs text-muted-foreground">Total sales · {dateRange.label}</p>
                 <p className="text-3xl font-bold mt-1">
                   {formatCurrency(metrics.totalSales.value)}
                 </p>
               </div>
-              <span className="text-xs text-green-600 font-medium">
-                ↗ +{metrics.totalSales.change}%
+              <span
+                className={cn(
+                  'text-xs font-medium',
+                  metrics.totalSales.changeType === 'increase' && 'text-green-600',
+                  metrics.totalSales.changeType === 'decrease' && 'text-red-600',
+                  metrics.totalSales.changeType === 'neutral' && 'text-muted-foreground'
+                )}
+              >
+                {metrics.totalSales.changeType === 'increase' ? '↗ +' : metrics.totalSales.changeType === 'decrease' ? '↘ ' : ''}
+                {metrics.totalSales.change}%
               </span>
             </div>
             {salesData.length > 0 && (
@@ -221,7 +243,17 @@ export function Overview() {
             <CardContent className="p-4">
               <p className="text-xs text-muted-foreground">Orders</p>
               <p className="text-2xl font-bold mt-1">{metrics.totalOrders.value}</p>
-              <p className="text-xs text-green-600 mt-1">↗ +{metrics.totalOrders.change}%</p>
+              <p
+                className={cn(
+                  'text-xs mt-1',
+                  metrics.totalOrders.changeType === 'increase' && 'text-green-600',
+                  metrics.totalOrders.changeType === 'decrease' && 'text-red-600',
+                  metrics.totalOrders.changeType === 'neutral' && 'text-muted-foreground'
+                )}
+              >
+                {metrics.totalOrders.changeType === 'increase' ? '↗ +' : metrics.totalOrders.changeType === 'decrease' ? '↘ ' : ''}
+                {metrics.totalOrders.change}%
+              </p>
             </CardContent>
           </Card>
           <Card>
@@ -230,9 +262,46 @@ export function Overview() {
               <p className="text-2xl font-bold mt-1">
                 {formatCurrency(metrics.averageOrderValue.value)}
               </p>
-              <p className="text-xs text-green-600 mt-1">
-                ↗ +{metrics.averageOrderValue.change}%
+              <p
+                className={cn(
+                  'text-xs mt-1',
+                  metrics.averageOrderValue.changeType === 'increase' && 'text-green-600',
+                  metrics.averageOrderValue.changeType === 'decrease' && 'text-red-600',
+                  metrics.averageOrderValue.changeType === 'neutral' && 'text-muted-foreground'
+                )}
+              >
+                {metrics.averageOrderValue.changeType === 'increase' ? '↗ +' : metrics.averageOrderValue.changeType === 'decrease' ? '↘ ' : ''}
+                {metrics.averageOrderValue.change}%
               </p>
+            </CardContent>
+          </Card>
+          <Card className="col-span-2">
+            <CardContent className="p-4">
+              <p className="text-xs text-muted-foreground">Net revenue</p>
+              <p className="text-2xl font-bold mt-1">
+                {formatCurrency(metrics.netRevenue.value)}
+              </p>
+              <p
+                className={cn(
+                  'text-xs mt-1',
+                  metrics.netRevenue.changeType === 'increase' && 'text-green-600',
+                  metrics.netRevenue.changeType === 'decrease' && 'text-red-600',
+                  metrics.netRevenue.changeType === 'neutral' && 'text-muted-foreground'
+                )}
+              >
+                {metrics.netRevenue.changeType === 'increase' ? '↗ +' : metrics.netRevenue.changeType === 'decrease' ? '↘ ' : ''}
+                {metrics.netRevenue.change}%
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Top products */}
+        <div>
+          <h2 className="font-semibold mb-2">Top products</h2>
+          <Card>
+            <CardContent className="p-2">
+              <TopProductsList products={topProducts} isLoading={isLoading} />
             </CardContent>
           </Card>
         </div>
@@ -296,26 +365,21 @@ export function Overview() {
             Welcome back! Here&apos;s what&apos;s happening with your store.
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          {dateRanges.map((range) => (
-            <button
-              key={range.value}
-              onClick={() => setDateRange({ ...dateRange, label: range.label })}
-              className={cn(
-                'px-3 py-1.5 text-sm font-medium rounded-full border transition-colors',
-                dateRange.label === range.label
-                  ? 'bg-black text-white border-black'
-                  : 'bg-background text-foreground border-border hover:bg-muted'
-              )}
-            >
-              {range.label}
-            </button>
-          ))}
-          <Button variant="outline" size="icon">
-            <Calendar className="w-4 h-4" />
-          </Button>
-        </div>
+        <DateRangePicker value={dateRange} onChange={setDateRange} />
       </div>
+
+      {/* Data-not-ready notice (backend 503 AGGREGATION_NOT_READY) */}
+      {notReady && !isLoading && (
+        <Card className="border-amber-200 bg-amber-50">
+          <CardContent className="flex items-center gap-3 p-4 text-amber-800">
+            <AlertCircle className="w-5 h-5 flex-shrink-0" />
+            <p className="text-sm">
+              Analytics for this period aren&apos;t ready yet. Data is aggregated daily — please
+              check back shortly.
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       {/* KPI cards — 4 columns */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -336,11 +400,11 @@ export function Overview() {
           isLoading={isLoading}
         />
         <MetricCard
-          title="Conversion Rate"
-          value={`${metrics.conversionRate.value}%`}
-          change={metrics.conversionRate.change}
-          changeType={metrics.conversionRate.changeType}
-          icon={Target}
+          title="Net Revenue"
+          value={formatCurrency(metrics.netRevenue.value)}
+          change={metrics.netRevenue.change}
+          changeType={metrics.netRevenue.changeType}
+          icon={Wallet}
           isLoading={isLoading}
         />
         <MetricCard
@@ -379,11 +443,11 @@ export function Overview() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Sales by Category</CardTitle>
-            <CardDescription>Revenue breakdown by product category</CardDescription>
+            <CardTitle>Top Products</CardTitle>
+            <CardDescription>Best sellers by revenue this period</CardDescription>
           </CardHeader>
           <CardContent>
-            <CategoryChart />
+            <TopProductsList products={topProducts} isLoading={isLoading} />
           </CardContent>
         </Card>
       </div>

@@ -1,14 +1,25 @@
 import { createContext, useContext, useState, useCallback } from 'react';
 import type {
   User, Store, Product, Order, Vendor,
-  AnalyticsMetrics, DateRange
+  AnalyticsMetrics, MetricWithChange, SalesDataPoint, TopProduct,
+  CustomerMetrics, BookingMetrics, DateRange
 } from '@/types';
 import type { VendorNotification, NotificationListParams } from '@/types/notifications.types';
 import {
   mockUsers, mockStores,
   mockVendors,
-  mockAnalytics, mockSalesData, mockCategoryBreakdown
 } from '@/data/mockData';
+import {
+  fetchDashboard,
+  fetchSalesDaily,
+  fetchTopProducts,
+  fetchCustomerMetrics,
+  previousRange,
+  toISODate,
+  isAggregationNotReady,
+  getAnalyticsErrorMessage,
+  type DashboardMetrics,
+} from '@/services/analytics.service';
 import {
   fetchNotifications as apiFetchNotifications,
   markNotificationRead as apiMarkNotificationRead,
@@ -28,6 +39,31 @@ import {
   updateProductStatus as apiUpdateProductStatus,
 } from '@/services/products.service';
 import type { ProductListItem, ProductListMeta, ProductsQueryParams } from '@/types/product.types';
+
+// ─── Analytics helpers ──────────────────────────────────────────────────────
+
+const EMPTY_METRIC: MetricWithChange = { value: 0, change: 0, changeType: 'neutral' };
+
+const EMPTY_METRICS: AnalyticsMetrics = {
+  totalSales: EMPTY_METRIC,
+  totalOrders: EMPTY_METRIC,
+  netRevenue: EMPTY_METRIC,
+  averageOrderValue: EMPTY_METRIC,
+};
+
+/**
+ * Build a MetricWithChange from the current value and the previous period's
+ * value. When no baseline exists (undefined or zero), the delta is reported as
+ * neutral 0% rather than a misleading +100%.
+ */
+function computeChange(current: number, previous: number | undefined): MetricWithChange {
+  if (previous === undefined || previous === 0) {
+    return { value: current, change: 0, changeType: 'neutral' };
+  }
+  const pct = Math.round(((current - previous) / previous) * 1000) / 10;
+  const changeType = pct > 0 ? 'increase' : pct < 0 ? 'decrease' : 'neutral';
+  return { value: current, change: pct, changeType };
+}
 
 // Auth Store Context
 interface AuthState {
@@ -130,10 +166,14 @@ const NotificationStoreContext = createContext<NotificationState | null>(null);
 // Analytics Store Context
 interface AnalyticsState {
   metrics: AnalyticsMetrics;
-  salesData: typeof mockSalesData;
-  categoryBreakdown: typeof mockCategoryBreakdown;
+  salesData: SalesDataPoint[];
+  topProducts: TopProduct[];
+  customerMetrics: CustomerMetrics | null;
+  bookings: BookingMetrics | null;
   dateRange: DateRange;
   isLoading: boolean;
+  /** True when the backend has no aggregated data for the range yet (503). */
+  notReady: boolean;
   fetchAnalytics: () => Promise<void>;
   setDateRange: (range: DateRange) => void;
 }
@@ -377,21 +417,74 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // Analytics State
-  const [analyticsMetrics] = useState<AnalyticsMetrics>(mockAnalytics);
-  const [salesData] = useState<typeof mockSalesData>(mockSalesData);
-  const [categoryBreakdown] = useState<typeof mockCategoryBreakdown>(mockCategoryBreakdown);
+  const [analyticsMetrics, setAnalyticsMetrics] = useState<AnalyticsMetrics>(EMPTY_METRICS);
+  const [salesData, setSalesData] = useState<SalesDataPoint[]>([]);
+  const [topProducts, setTopProducts] = useState<TopProduct[]>([]);
+  const [customerMetrics, setCustomerMetrics] = useState<CustomerMetrics | null>(null);
+  const [bookings, setBookings] = useState<BookingMetrics | null>(null);
   const [analyticsDateRange, setAnalyticsDateRange] = useState<DateRange>({
-    from: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+    from: new Date(Date.now() - 6 * 24 * 60 * 60 * 1000),
     to: new Date(),
     label: 'Last 7 days',
   });
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [analyticsNotReady, setAnalyticsNotReady] = useState(false);
 
   const fetchAnalytics = useCallback(async () => {
     setAnalyticsLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 800));
-    setAnalyticsLoading(false);
-  }, []);
+    setAnalyticsNotReady(false);
+
+    const range = {
+      from: toISODate(analyticsDateRange.from),
+      to: toISODate(analyticsDateRange.to),
+    };
+    const prev = previousRange(analyticsDateRange.from, analyticsDateRange.to);
+    const prevRange = { from: toISODate(prev.from), to: toISODate(prev.to) };
+
+    try {
+      const [dashboard, salesDaily, products, customers] = await Promise.all([
+        fetchDashboard(range),
+        fetchSalesDaily(range),
+        fetchTopProducts(range, 5),
+        fetchCustomerMetrics(range),
+      ]);
+
+      // Previous period is best-effort — deltas fall back to neutral if it's
+      // unavailable (e.g. a new vendor with no prior data).
+      let prevDash: DashboardMetrics | null = null;
+      try {
+        prevDash = await fetchDashboard(prevRange);
+      } catch {
+        prevDash = null;
+      }
+
+      const s = dashboard.sales;
+      const p = prevDash?.sales;
+      setAnalyticsMetrics({
+        totalSales: computeChange(s.gmv, p?.gmv),
+        totalOrders: computeChange(s.orderCount, p?.orderCount),
+        netRevenue: computeChange(s.netRevenue, p?.netRevenue),
+        averageOrderValue: computeChange(s.aov, p?.aov),
+      });
+      setSalesData(salesDaily);
+      setTopProducts(products.topByRevenue);
+      setCustomerMetrics(customers);
+      setBookings(dashboard.bookings);
+    } catch (err) {
+      if (isAggregationNotReady(err)) {
+        setAnalyticsNotReady(true);
+        setAnalyticsMetrics(EMPTY_METRICS);
+        setSalesData([]);
+        setTopProducts([]);
+        setCustomerMetrics(null);
+        setBookings(null);
+      } else {
+        toast.error(getAnalyticsErrorMessage(err));
+      }
+    } finally {
+      setAnalyticsLoading(false);
+    }
+  }, [analyticsDateRange]);
 
   return (
     <AuthStoreContext.Provider value={{
@@ -461,9 +554,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
                   <AnalyticsStoreContext.Provider value={{
                     metrics: analyticsMetrics,
                     salesData,
-                    categoryBreakdown,
+                    topProducts,
+                    customerMetrics,
+                    bookings,
                     dateRange: analyticsDateRange,
                     isLoading: analyticsLoading,
+                    notReady: analyticsNotReady,
                     fetchAnalytics,
                     setDateRange: setAnalyticsDateRange
                   }}>

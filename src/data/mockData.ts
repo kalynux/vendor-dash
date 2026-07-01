@@ -1,6 +1,5 @@
 import type {
   User, Store, Product, Order, Vendor,
-  AnalyticsMetrics, SalesDataPoint, CategoryBreakdown,
   Notification, Customer, Entitlement
 } from '@/types';
 
@@ -749,48 +748,8 @@ export const mockVendors: Vendor[] = [
   }
 ];
 
-// Mock Analytics
-export const mockAnalytics: AnalyticsMetrics = {
-  totalSales: {
-    value: 74613.46,
-    change: 23.5,
-    changeType: 'increase'
-  },
-  totalOrders: {
-    value: 390,
-    change: 15.2,
-    changeType: 'increase'
-  },
-  conversionRate: {
-    value: 3.24,
-    change: 0.8,
-    changeType: 'increase'
-  },
-  averageOrderValue: {
-    value: 191.32,
-    change: 7.2,
-    changeType: 'increase'
-  }
-};
-
-// Mock Sales Chart Data
-export const mockSalesData: SalesDataPoint[] = [
-  { date: '2024-03-08', sales: 3200, orders: 18 },
-  { date: '2024-03-09', sales: 4100, orders: 22 },
-  { date: '2024-03-10', sales: 3800, orders: 20 },
-  { date: '2024-03-11', sales: 5200, orders: 28 },
-  { date: '2024-03-12', sales: 6100, orders: 32 },
-  { date: '2024-03-13', sales: 4500, orders: 24 },
-  { date: '2024-03-14', sales: 5800, orders: 30 }
-];
-
-// Mock Category Breakdown
-export const mockCategoryBreakdown: CategoryBreakdown[] = [
-  { category: 'Electronics', sales: 42345.67, percentage: 56.8 },
-  { category: 'Fashion', sales: 18923.45, percentage: 25.4 },
-  { category: 'Home', sales: 9876.34, percentage: 13.2 },
-  { category: 'Other', sales: 3468.00, percentage: 4.6 }
-];
+// Analytics is now served from the real API (see src/services/analytics.service.ts);
+// its mock fixtures were removed.
 
 // Mock Notifications
 export const mockNotifications: Notification[] = [

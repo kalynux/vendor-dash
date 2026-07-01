@@ -290,13 +290,19 @@ export interface VendorDocument {
 }
 
 // Analytics Types
+// All fields are derived from GET /api/vendor/analytics/* (see api-doc/vendor/analytics.md).
 export interface AnalyticsMetrics {
-  totalSales: MetricWithChange;
-  totalOrders: MetricWithChange;
-  conversionRate: MetricWithChange;
-  averageOrderValue: MetricWithChange;
+  totalSales: MetricWithChange;        // sales.gmv
+  totalOrders: MetricWithChange;       // sales.orderCount
+  netRevenue: MetricWithChange;        // sales.netRevenue (gmv - refunds)
+  averageOrderValue: MetricWithChange; // sales.aov
 }
 
+/**
+ * A metric value plus its period-over-period delta. `change`/`changeType` are
+ * computed on the frontend by comparing the current range with the immediately
+ * preceding equal-length range (the backend returns absolute values only).
+ */
 export interface MetricWithChange {
   value: number;
   change: number;
@@ -305,14 +311,31 @@ export interface MetricWithChange {
 
 export interface SalesDataPoint {
   date: string;
-  sales: number;
-  orders: number;
+  sales: number;  // daily gmv
+  orders: number; // daily orderCount
 }
 
-export interface CategoryBreakdown {
-  category: string;
-  sales: number;
-  percentage: number;
+/** A top-performing variant from GET /vendor/analytics/products. */
+export interface TopProduct {
+  variantId: string;
+  sku: string;
+  productTitle: string;
+  variantTitle: string;
+  revenue: number;
+  quantity: number;
+}
+
+/** Customer acquisition/retention from GET /vendor/analytics/customers. */
+export interface CustomerMetrics {
+  total: number;
+  repeat: number;
+  repeatRate: number;
+}
+
+/** Booking totals from the dashboard endpoint (data.bookings). */
+export interface BookingMetrics {
+  count: number;
+  revenue: number;
 }
 
 // Notification Types
