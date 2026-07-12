@@ -1,83 +1,79 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Loader2, Save, Trash2, Building2, ShieldCheck, MapPin } from 'lucide-react';
+import { Loader2, Building2, ShieldCheck, MapPin } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { useOnboarding } from '@/onboarding/store/onboarding.store';
 import { onboardingService } from '@/services/onboarding.service';
-import { AgencyBrowser } from '@/components/vendor-settings/delivery/AgencyBrowser';
+import { AgencyConnectionBrowser } from '@/components/delivery/AgencyConnectionBrowser';
+import { ConnectionsList } from '@/components/delivery/ConnectionsList';
 import { mapProfileError } from '@/components/vendor-settings/errors';
-import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { type DeliveryAgency } from '@/types/api';
 
 export function DeliverySettings() {
-    const { session, setDeliveryAgency, clearDeliveryAgency } = useOnboarding();
+    const { session, setDeliveryAgency } = useOnboarding();
     const roleEntity = session?.role_entity;
     const currentId = roleEntity?.default_delivery_agency_id ?? null;
 
-    const [selectedId, setSelectedId] = useState<string | null>(currentId);
+    const [tab, setTab] = useState<'connections' | 'browse'>('connections');
     const [current, setCurrent] = useState<DeliveryAgency | null>(null);
     const [loadingCurrent, setLoadingCurrent] = useState(true);
-    const [saving, setSaving] = useState(false);
-    const [clearing, setClearing] = useState(false);
+    const [settingDefaultAgencyId, setSettingDefaultAgencyId] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
+    // Bumped after any successful connection mutation so the "current default"
+    // summary self-corrects (e.g. a first-ever approval silently sets
+    // default_delivery_agency_id with no signal in the mutation response).
+    const [refreshKey, setRefreshKey] = useState(0);
 
-    // Keep local selection in sync with the latest stored value.
-    useEffect(() => {
-        setSelectedId(currentId);
-    }, [currentId]);
-
-    // Load the current agency's display details.
-    useEffect(() => {
-        let active = true;
+    const loadCurrent = useCallback(() => {
         setLoadingCurrent(true);
-        onboardingService
+        return onboardingService
             .getDefaultDeliveryAgency()
-            .then((res) => { if (active) setCurrent(res.data); })
-            .catch(() => { if (active) setCurrent(null); })
-            .finally(() => { if (active) setLoadingCurrent(false); });
-        return () => { active = false; };
-    }, [currentId]);
+            .then((res) => setCurrent(res.data))
+            .catch(() => setCurrent(null))
+            .finally(() => setLoadingCurrent(false));
+    }, []);
 
-    const handleSave = useCallback(async () => {
-        if (!selectedId) return;
-        setSaving(true);
-        setError(null);
-        try {
-            await setDeliveryAgency(selectedId);
-            toast.success('Delivery agency updated');
-        } catch (err) {
-            setError(mapProfileError(err));
-        } finally {
-            setSaving(false);
-        }
-    }, [selectedId, setDeliveryAgency]);
+    useEffect(() => {
+        loadCurrent();
+    }, [loadCurrent, currentId, refreshKey]);
 
-    const handleClear = useCallback(async () => {
-        setClearing(true);
-        setError(null);
-        try {
-            await clearDeliveryAgency();
-            setSelectedId(null);
-            setCurrent(null);
-            toast.success('Delivery agency cleared');
-        } catch (err) {
-            setError(mapProfileError(err));
-        } finally {
-            setClearing(false);
-        }
-    }, [clearDeliveryAgency]);
+    const handleConnectionChange = useCallback(() => {
+        setRefreshKey((k) => k + 1);
+    }, []);
+
+    const handleSetDefault = useCallback(
+        async (agencyId: string) => {
+            setSettingDefaultAgencyId(agencyId);
+            setError(null);
+            try {
+                const { message, reassignedOrderItems } = await setDeliveryAgency(agencyId);
+                toast.success(
+                    message ??
+                        (reassignedOrderItems > 0
+                            ? `Default agency updated — ${reassignedOrderItems} order item(s) reassigned.`
+                            : 'Default agency updated'),
+                );
+                setRefreshKey((k) => k + 1);
+            } catch (err) {
+                setError(mapProfileError(err));
+            } finally {
+                setSettingDefaultAgencyId(null);
+            }
+        },
+        [setDeliveryAgency],
+    );
 
     if (!roleEntity) return null;
-
-    const dirty = selectedId !== null && selectedId !== currentId;
 
     return (
         <Card>
             <CardHeader>
                 <CardTitle>Delivery</CardTitle>
                 <CardDescription>
-                    The default delivery agency that fulfils your physical-product orders.
+                    Manage delivery-agency connections and choose the default that fulfils your
+                    physical-product orders.
                 </CardDescription>
             </CardHeader>
             <CardContent className="space-y-5">
@@ -120,37 +116,43 @@ export function DeliverySettings() {
                                     </p>
                                 )}
                             </div>
-                            <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={handleClear}
-                                disabled={clearing || saving}
-                                className="ml-auto gap-1.5 text-destructive hover:text-destructive"
-                            >
-                                {clearing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
-                                Clear
-                            </Button>
                         </div>
                     ) : (
                         <p className="text-sm text-muted-foreground">
-                            No delivery agency set. Service-only vendors can leave this empty.
+                            No delivery agency set. Your first approved connection automatically becomes
+                            your default — service-only vendors can leave this empty.
                         </p>
                     )}
                 </div>
 
-                {/* Browser */}
-                <div className="space-y-2">
-                    <p className="text-sm font-medium">Choose a delivery agency</p>
-                    <AgencyBrowser selectedId={selectedId} onSelect={setSelectedId} listHeightClass="h-[48vh] min-h-[200px]" />
-                </div>
+                <Tabs value={tab} onValueChange={(v) => setTab(v as 'connections' | 'browse')}>
+                    <TabsList>
+                        <TabsTrigger value="connections">Connections</TabsTrigger>
+                        <TabsTrigger value="browse">Browse</TabsTrigger>
+                    </TabsList>
 
-                <div className="flex justify-end border-t pt-4">
-                    <Button type="button" onClick={handleSave} disabled={!dirty || saving} className="gap-2">
-                        {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                        Save Changes
-                    </Button>
-                </div>
+                    <TabsContent value="connections" className="space-y-2 pt-4">
+                        <p className="text-sm font-medium">Your connections</p>
+                        <p className="text-xs text-muted-foreground">
+                            Your first active connection becomes the default automatically — switch it
+                            at any time with "Set as default" below.
+                        </p>
+                        <ConnectionsList
+                            onConnectionChange={handleConnectionChange}
+                            defaultAgencyId={currentId}
+                            onSetDefault={handleSetDefault}
+                            settingDefaultAgencyId={settingDefaultAgencyId}
+                        />
+                    </TabsContent>
+
+                    <TabsContent value="browse" className="space-y-2 pt-4">
+                        <p className="text-sm font-medium">Search agencies &amp; request a connection</p>
+                        <AgencyConnectionBrowser
+                            onConnectionChange={handleConnectionChange}
+                            listHeightClass="h-[48vh] min-h-[200px]"
+                        />
+                    </TabsContent>
+                </Tabs>
             </CardContent>
         </Card>
     );

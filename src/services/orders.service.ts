@@ -1,6 +1,6 @@
 import { api } from './api';
 import { ApiError } from '@/types/api';
-import type { Order, OrderItem, Customer, OrderTimelineEvent, Entitlement, TimelineEventType, DisputeHold } from '@/types';
+import type { Order, OrderItem, Customer, OrderTimelineEvent, Entitlement, TimelineEventType, DisputeHold, OrderItemDelivery, OrderDeliveryTimelineEntry, VendorSettableStatus } from '@/types';
 
 // ─── Error Handling ────────────────────────────────────────────────────────────
 
@@ -19,6 +19,9 @@ export const ORDER_ERROR_LABELS: Record<string, string> = {
   ORDER_DISPUTE_HOLD: "This order is frozen by an open payment dispute and can't be advanced until it settles.",
   ORDER_NOT_FOUND: 'This order could no longer be found.',
   ORDER_DELIVERY_AGENCY_NOT_FOUND: 'No delivery agency is assigned to this order.',
+  // item-level delivery-agency reassignment (PATCH /vendor/orders/:id/delivery-agency)
+  ORDER_ITEM_NOT_FOUND: 'This item could no longer be found on the order.',
+  ORDER_ITEM_NOT_REASSIGNABLE: "This item has already been dispatched and can't be reassigned to a different agency.",
   // entitlements (revoke/restore)
   DIGITAL_ENTITLEMENT_NOT_FOUND: 'This entitlement could no longer be found.',
   DIGITAL_ENTITLEMENT_ALREADY_REVOKED: 'This entitlement has already been revoked.',
@@ -52,12 +55,24 @@ interface ApiOrderDelivery {
   deliveryStatus?: string;
   shipmentId?: string;
   trackingNumber?: string | null;
+  /** Snapshot of the product's `delivery.freeDelivery` flag at checkout time. */
+  freeDelivery?: boolean;
   agent?: {
     id: string;
     name: string;
     phone?: string;
     avatarUrl?: string;
   } | null;
+}
+
+/** One entry in the merged, per-agency shipment status history returned as `deliveryTimeline`. */
+interface ApiDeliveryTimelineEntry {
+  shipmentId: string;
+  agencyId: string;
+  agencyName: string;
+  status: string;
+  changedAt: string;
+  changedByRole: string;
 }
 
 interface ApiOrderListItem {
@@ -130,6 +145,8 @@ interface ApiOrderDetail {
   currency: string;
   /** Order-level shipment overview (one entry per agency/shipment). Null for digital orders. */
   deliveries?: ApiOrderDelivery[] | null;
+  /** Merged, per-agency shipment status history, sorted chronologically. Empty for digital orders. */
+  deliveryTimeline?: ApiDeliveryTimelineEntry[];
   notes?: Array<{
     id: string;
     message: string;
@@ -214,6 +231,41 @@ interface UpdateStatusResponse {
   message: string;
 }
 
+interface DispatchOrderResponse {
+  success: boolean;
+  data: ApiOrderDetail & { dispatchedShipments: number };
+  message: string;
+}
+
+interface ReassignDeliveryAgencyResponse {
+  success: boolean;
+  data: ApiOrderDetail;
+  message: string;
+}
+
+/** One rejected order within a bulk status/dispatch call. */
+export interface BulkActionFailure {
+  orderId: string;
+  code: string;
+  reason: string;
+}
+
+interface BulkStatusResponse {
+  success: boolean;
+  data: { total: number; succeeded: string[]; failed: BulkActionFailure[] };
+  message: string;
+}
+
+interface BulkDispatchResponse {
+  success: boolean;
+  data: {
+    total: number;
+    succeeded: { orderId: string; dispatchedShipments: number }[];
+    failed: BulkActionFailure[];
+  };
+  message: string;
+}
+
 interface AddNoteResponse {
   success: boolean;
   data: { id: string; message: string; authorId: string; createdAt: string };
@@ -258,8 +310,43 @@ function adaptPaymentStatus(status: string): Order['paymentStatus'] {
 }
 
 function adaptFulfillmentStatus(status: string): Order['status'] {
-  const valid: Order['status'][] = ['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'fulfilled', 'cancelled', 'refunded', 'returned'];
+  const valid: Order['status'][] = [
+    'pending',
+    'processing',
+    'partially_shipped',
+    'shipped',
+    'partially_delivered',
+    'delivered',
+    'fulfilled',
+    'cancelled',
+    'returned',
+  ];
   return (valid as string[]).includes(status) ? (status as Order['status']) : 'pending';
+}
+
+/** Adapts the shared per-shipment delivery shape (used for both `items[].delivery` and `deliveries[]`). */
+function adaptOrderDelivery(delivery: ApiOrderDelivery): OrderItemDelivery {
+  return {
+    agencyId: delivery.agencyId,
+    agencyName: delivery.agencyName,
+    agencyPhone: delivery.agencyPhone,
+    deliveryStatus: delivery.deliveryStatus,
+    shipmentId: delivery.shipmentId,
+    trackingNumber: delivery.trackingNumber,
+    freeDelivery: delivery.freeDelivery,
+    agent: delivery.agent,
+  };
+}
+
+function adaptDeliveryTimelineEntry(entry: ApiDeliveryTimelineEntry): OrderDeliveryTimelineEntry {
+  return {
+    shipmentId: entry.shipmentId,
+    agencyId: entry.agencyId,
+    agencyName: entry.agencyName,
+    status: entry.status,
+    changedAt: entry.changedAt,
+    changedByRole: entry.changedByRole,
+  };
 }
 
 function adaptDisputeHold(hold?: ApiDisputeHold | null): DisputeHold | undefined {
@@ -333,6 +420,7 @@ function adaptDetailToOrder(detail: ApiOrderDetail): Order {
     quantity: item.quantity,
     price: item.price,
     total: item.subtotal,
+    delivery: item.delivery ? adaptOrderDelivery(item.delivery) : undefined,
   }));
 
   const customer: Customer = {
@@ -378,14 +466,9 @@ function adaptDetailToOrder(detail: ApiOrderDetail): Order {
     currency: detail.currency,
     customer,
     items,
-    // An order can now be split across several shipments (deliveries[]); surface the
-    // first as the primary agency/agent to preserve the existing single-agency UI.
-    deliveryAgency: detail.deliveries?.[0]?.agencyName
-      ? { name: detail.deliveries[0].agencyName, address: detail.deliveries[0].agencyPhone ?? '' }
-      : undefined,
-    assignedAgent: detail.deliveries?.[0]?.agent
-      ? { name: detail.deliveries[0].agent.name }
-      : undefined,
+    // An order can be split across several shipments — one entry per agency/shipment.
+    deliveries: detail.deliveries?.map(adaptOrderDelivery) ?? null,
+    deliveryTimeline: detail.deliveryTimeline?.map(adaptDeliveryTimelineEntry) ?? [],
     createdAt: detail.createdAt,
     updatedAt: detail.updatedAt,
     tags: [],
@@ -490,9 +573,52 @@ export async function fetchOrderById(id: string): Promise<Order> {
   return order;
 }
 
-export async function updateOrderStatus(id: string, status: string): Promise<Order> {
+export async function updateOrderStatus(id: string, status: VendorSettableStatus): Promise<Order> {
   const res = await api.patch<UpdateStatusResponse>(`/vendor/orders/${id}/status`, { status });
   return adaptDetailToOrder(res.data);
+}
+
+/**
+ * The vendor's explicit review/approval step before a physical order reaches its
+ * delivery agency — advances every `pending` shipment to `assigned`. Harmless no-op
+ * if there's nothing pending (already dispatched, or auto-redirect handled it).
+ */
+export async function dispatchOrder(
+  id: string,
+): Promise<{ order: Order; dispatchedShipments: number; message: string }> {
+  const res = await api.post<DispatchOrderResponse>(`/vendor/orders/${id}/dispatch`, undefined);
+  const { dispatchedShipments, ...detail } = res.data;
+  return { order: adaptDetailToOrder(detail), dispatchedShipments, message: res.message };
+}
+
+/** Reassign a single order item to a different delivery agency. */
+export async function reassignItemDeliveryAgency(
+  orderId: string,
+  itemId: string,
+  deliveryAgencyId: string,
+): Promise<Order> {
+  const res = await api.patch<ReassignDeliveryAgencyResponse>(`/vendor/orders/${orderId}/delivery-agency`, {
+    itemId,
+    deliveryAgencyId,
+  });
+  return adaptDetailToOrder(res.data);
+}
+
+/** Update the fulfilment status of up to 50 orders in one call. Per-order results — a well-formed request always resolves. */
+export async function bulkUpdateOrderStatus(
+  orderIds: string[],
+  status: VendorSettableStatus,
+): Promise<{ total: number; succeeded: string[]; failed: BulkActionFailure[]; message: string }> {
+  const res = await api.post<BulkStatusResponse>('/vendor/orders/bulk/status', { orderIds, status });
+  return { ...res.data, message: res.message };
+}
+
+/** Dispatch up to 50 reviewed, paid physical orders to their delivery agency in one call. */
+export async function bulkDispatchOrders(
+  orderIds: string[],
+): Promise<{ total: number; succeeded: { orderId: string; dispatchedShipments: number }[]; failed: BulkActionFailure[]; message: string }> {
+  const res = await api.post<BulkDispatchResponse>('/vendor/orders/bulk/dispatch', { orderIds });
+  return { ...res.data, message: res.message };
 }
 
 export async function addNote(orderId: string, message: string): Promise<AddNoteResponse['data']> {

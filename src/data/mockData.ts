@@ -403,8 +403,7 @@ export const mockOrders: Order[] = [
     ],
     riskLevel: 'low',
     notes: 'Please leave at the front door if no one is home. Ring the bell twice.',
-    deliveryAgency: { name: 'FedEx Express', address: '1 FedEx Way, Memphis, TN 38116' },
-    assignedAgent: { name: 'James Carter' }
+    deliveries: [{ agencyName: 'FedEx Express', agencyPhone: '1 FedEx Way, Memphis, TN 38116', agent: { id: 'a1', name: 'James Carter' } }],
   },
   {
     id: '2',

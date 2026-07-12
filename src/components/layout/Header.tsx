@@ -70,7 +70,7 @@ export function Header() {
   const roleEntity = useOnboarding().session?.role_entity;
 
   const storeName = roleEntity?.display_name || roleEntity?.business_name || 'My Store';
-  const storeLogo = roleEntity?.branding?.logo_url || null;
+  const storeLogo = roleEntity?.branding?.logo?.url || null;
   const storeEmail = roleEntity?.email ?? '';
 
   const toggleSearch = () => setIsSearchOpen((v) => !v);

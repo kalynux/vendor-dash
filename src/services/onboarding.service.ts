@@ -64,6 +64,22 @@ export const onboardingService = {
         return api.patch<ChangePasswordResponse>('/vendor/profile/password', payload);
     },
 
+    /**
+     * Upload supporting policy documents (PDFs, max 5MB each, max 2 files).
+     * Returns the resulting URLs — pass them through in `policies.documents` on the
+     * next `updateProfile`/`submitPolicySetup` call (full-replace semantics).
+     */
+    uploadPolicyDocuments(
+        files: File[],
+    ): Promise<{ success: boolean; data: { urls: string[] }; message?: string }> {
+        const fd = new FormData();
+        files.forEach((f) => fd.append('documents', f));
+        return api.postFormData<{ success: boolean; data: { urls: string[] }; message?: string }>(
+            '/vendor/profile/policy-documents',
+            fd,
+        );
+    },
+
     /** Current default delivery agency (or null). */
     getDefaultDeliveryAgency(): Promise<{ success: boolean; data: DeliveryAgency | null }> {
         return api.get<{ success: boolean; data: DeliveryAgency | null }>(
@@ -71,21 +87,32 @@ export const onboardingService = {
         );
     },
 
-    /** Set/update the default delivery agency outside the onboarding flow. */
+    /**
+     * Set/update the default delivery agency outside the onboarding flow.
+     * There is no route to clear it — a vendor's default only becomes unset if the
+     * underlying agency itself is deactivated by an admin. `meta` reports any
+     * in-flight order items that were auto-reassigned from the old default.
+     */
     setDefaultDeliveryAgency(
         agencyId: string,
-    ): Promise<{ success: boolean; data: DeliveryAgency; message?: string }> {
-        return api.put<{ success: boolean; data: DeliveryAgency; message?: string }>(
-            '/vendor/profile/default-delivery-agency',
-            { agencyId },
-        );
-    },
-
-    /** Clear the default delivery agency. */
-    clearDefaultDeliveryAgency(): Promise<{ success: boolean; message?: string }> {
-        return api.delete<{ success: boolean; message?: string }>(
-            '/vendor/profile/default-delivery-agency',
-        );
+    ): Promise<{
+        success: boolean;
+        data: DeliveryAgency;
+        meta?: {
+            reassignedOrderItems: number;
+            skippedOrderItems: { orderId: string; itemId: string; reason: string }[];
+        };
+        message?: string;
+    }> {
+        return api.put<{
+            success: boolean;
+            data: DeliveryAgency;
+            meta?: {
+                reassignedOrderItems: number;
+                skippedOrderItems: { orderId: string; itemId: string; reason: string }[];
+            };
+            message?: string;
+        }>('/vendor/profile/default-delivery-agency', { agencyId });
     },
 
     // ─── Order automation settings ──────────────────────────────────────────────
@@ -124,7 +151,12 @@ export const onboardingService = {
         );
     },
 
-    /** List delivery agencies available for step 2 selection. */
+    /**
+     * Browse-only agency listing (no connection awareness). No remaining UI
+     * consumer as of the Agency Connections rework — kept for API parity since
+     * the endpoint itself still exists; prefer `browseAgencyConnections` from
+     * agency-connections.service.ts for anywhere agency selection happens.
+     */
     listAgencies(params?: {
         page?: number;
         limit?: number;

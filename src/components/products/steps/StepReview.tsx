@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { validateActivation } from '@/components/products/schemas/product.schemas';
 import { AgencySelector } from '@/components/products/review/AgencySelector';
-import type { WizardState, VendorAgencyListItemDto } from '@/types/product.types';
+import type { WizardState, VendorAgencyListItemDto, ApiPickupLocation } from '@/types/product.types';
 import { getProductFileCount } from '@/types/product.types';
 
 interface StepReviewProps {
@@ -18,6 +18,8 @@ interface StepReviewProps {
   onSaveDraft: (values: { vectorisationEnabled: boolean }) => void;
   onBack: () => void;
   onAgencyChange: (agencyId: string | null) => Promise<void> | void;
+  onFreeDeliveryChange: (freeDelivery: boolean) => Promise<void> | void;
+  onPickupLocationChange: (pickupLocation: ApiPickupLocation | null) => Promise<void> | void;
 }
 
 export function StepReview({
@@ -28,6 +30,8 @@ export function StepReview({
   onSaveDraft,
   onBack,
   onAgencyChange,
+  onFreeDeliveryChange,
+  onPickupLocationChange,
 }: StepReviewProps) {
   const product = serverData.serverProduct;
   const variants = serverData.serverVariants ?? [];
@@ -57,10 +61,15 @@ export function StepReview({
   const liveFormatCount = variants.filter((v) => v.status === 'active').length;
 
   const productAgencyId = product?.delivery?.agencyId ?? null;
+  const productFreeDelivery = product?.delivery?.freeDelivery ?? false;
+  const productPickupLocation = product?.delivery?.pickupLocation ?? null;
   const effectiveAgencyId = productAgencyId ?? defaultAgency?.id ?? null;
   const physicalNeedsAgency = isPhysical && !effectiveAgencyId;
   if (physicalNeedsAgency) {
     activationErrors.push('A delivery agency must be assigned before publishing');
+  }
+  if (isPhysical && !physicalNeedsAgency && !productPickupLocation) {
+    activationErrors.push('A pickup location must be set before publishing');
   }
 
   const canPublish = activationErrors.length === 0;
@@ -172,6 +181,10 @@ export function StepReview({
           productAgencyId={productAgencyId}
           isSaving={isSaving || isLockedForVectorisation}
           onAgencyChange={onAgencyChange}
+          freeDelivery={productFreeDelivery}
+          onFreeDeliveryChange={onFreeDeliveryChange}
+          pickupLocation={productPickupLocation}
+          onPickupLocationChange={onPickupLocationChange}
           onAvailabilityResolved={({ defaultAgency: d }) => setDefaultAgency(d)}
         />
       )}

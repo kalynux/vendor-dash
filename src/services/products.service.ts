@@ -32,6 +32,7 @@ import type { ServiceConfig } from '@/types/services.types';
 import { ApiError } from '@/types/api';
 import { validateActivation } from '@/components/products/schemas/product.schemas';
 import { fetchDefaultDeliveryAgency } from '@/services/agencies.service';
+import { AGENCY_CONNECTION_ERROR_LABELS } from '@/services/agency-connections.service';
 
 // ─── Adapters ─────────────────────────────────────────────────────────────────
 
@@ -85,9 +86,12 @@ export async function createProduct(payload: CreateProductPayload): Promise<ApiP
   return res.data;
 }
 
-export async function updateProduct(id: string, payload: UpdateProductPayload): Promise<ApiProduct> {
+export async function updateProduct(
+  id: string,
+  payload: UpdateProductPayload,
+): Promise<{ data: ApiProduct; message?: string }> {
   const res = await api.patch<{ success: boolean; data: ApiProduct; message?: string }>(`/vendor/products/${id}`, payload);
-  return res.data;
+  return { data: res.data, message: res.message };
 }
 
 export async function updateProductStatus(id: string, status: ApiProductStatus): Promise<ApiProduct> {
@@ -368,12 +372,25 @@ export const ACTIVATION_ERROR_MAP: Record<string, string> = {
   CATALOG_VARIANT_NO_DIGITAL_ASSET: 'Upload a file for each format before publishing',
   CATALOG_DIGITAL_VARIANT_LIMIT_EXCEEDED: 'A digital product can have at most 5 formats',
   CATALOG_PRODUCT_NO_DELIVERY_AGENCY:
-    'A delivery agency must be assigned to this product or set as your default',
+    'Your default delivery agency must be active, and this product must have an active delivery agency assigned (its own override or your default)',
+  CATALOG_PRODUCT_NO_PICKUP_LOCATION: 'A pickup location is required for physical products',
+  CATALOG_PRODUCT_INVALID_PICKUP_LOCATION:
+    "This pickup location isn't valid for the assigned delivery agency, or its business address no longer exists",
   CATALOG_PRODUCT_VECTORISATION_PENDING:
     'This product is currently processing background operations. Please try again in a few seconds.',
   CATALOG_PRODUCT_VECTORISATION_NOT_ELIGIBLE:
     'Product is not eligible for vectorisation. It must be active, vectorisation enabled, and have a title, description, and category.',
 };
+
+// Combines the activation error map with agency-connection error labels for
+// use when saving delivery.agencyId / delivery.pickupLocation directly (not
+// just at activation time) — e.g. CONNECTION_NOT_ACTIVE on either write.
+export function getDeliveryErrorMessage(err: unknown): string {
+  if (err instanceof ApiError) {
+    return ACTIVATION_ERROR_MAP[err.code] ?? AGENCY_CONNECTION_ERROR_LABELS[err.code] ?? err.message;
+  }
+  return 'Something went wrong. Please try again.';
+}
 
 // ─── Status Flow ──────────────────────────────────────────────────────────────
 // Allowed transitions per the vendor product status flow doc. Driving the UI
@@ -482,10 +499,15 @@ export async function runActivationPreflight(productId: string): Promise<string[
     defaultVariantId: product.defaultVariantId,
   });
 
-  if (product.type === 'physical' && !product.delivery?.agencyId) {
-    const defaultAgency = await fetchDefaultDeliveryAgency();
-    if (!defaultAgency) {
-      errors.push(ACTIVATION_ERROR_MAP.CATALOG_PRODUCT_NO_DELIVERY_AGENCY);
+  if (product.type === 'physical') {
+    if (!product.delivery?.agencyId) {
+      const defaultAgency = await fetchDefaultDeliveryAgency();
+      if (!defaultAgency) {
+        errors.push(ACTIVATION_ERROR_MAP.CATALOG_PRODUCT_NO_DELIVERY_AGENCY);
+      }
+    }
+    if (!product.delivery?.pickupLocation) {
+      errors.push(ACTIVATION_ERROR_MAP.CATALOG_PRODUCT_NO_PICKUP_LOCATION);
     }
   }
 

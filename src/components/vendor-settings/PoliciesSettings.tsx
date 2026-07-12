@@ -33,6 +33,7 @@ export function PoliciesSettings() {
                         return_policy: enabled.return ? values.return_policy : null,
                         cancellation_policy: enabled.cancellation ? values.cancellation_policy : null,
                         support_policy: enabled.support ? values.support_policy : null,
+                        documents: values.documents ?? [],
                     },
                 });
                 toast.success('Policies updated');

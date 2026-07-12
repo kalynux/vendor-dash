@@ -13,6 +13,7 @@ export function buildPolicyDefaults(existingPolicies: {
     return_policy?: ReturnPolicy | null;
     cancellation_policy?: CancellationPolicy | null;
     support_policy?: SupportPolicy | null;
+    documents?: string[] | null;
 } | null | undefined): Step4FormValues {
     return {
         return_policy: existingPolicies?.return_policy
@@ -65,5 +66,6 @@ export function buildPolicyDefaults(existingPolicies: {
                 availability_description: '',
                 languages: [],
             },
+        documents: existingPolicies?.documents ?? [],
     };
 }

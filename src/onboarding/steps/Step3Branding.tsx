@@ -22,6 +22,7 @@ export function Step3Branding() {
         if (draft?.business_addresses?.length) return draft.business_addresses;
         if (roleEntity?.business_addresses?.length) {
             return roleEntity.business_addresses.map((a) => ({
+                _id: a._id,
                 label: a.label ?? '',
                 address_line1: a.address_line1,
                 address_line2: a.address_line2 ?? '',
@@ -33,8 +34,8 @@ export function Step3Branding() {
     };
 
     const defaultValues: Step3FormValues = {
-        logo_url: draft?.logo_url ?? roleEntity?.branding?.logo_url ?? '',
-        cover_image_url: draft?.cover_image_url ?? roleEntity?.branding?.cover_image_url ?? '',
+        logo_file_id: draft?.logo_file_id ?? roleEntity?.branding?.logo?.id ?? null,
+        cover_image_file_id: draft?.cover_image_file_id ?? roleEntity?.branding?.coverImage?.id ?? null,
         business_addresses: defaultAddresses(),
     };
 
@@ -47,8 +48,8 @@ export function Step3Branding() {
                 await submitBranding({
                     skip: false,
                     branding: {
-                        logo_url: values.logo_url || null,
-                        cover_image_url: values.cover_image_url || null,
+                        logo_file_id: values.logo_file_id ?? null,
+                        cover_image_file_id: values.cover_image_file_id ?? null,
                     },
                     business_addresses: values.business_addresses?.filter(
                         (a) => a.address_line1.trim().length > 0,
@@ -151,7 +152,13 @@ export function Step3Branding() {
                 </div>
             )}
 
-            <BrandingFields formId="step3-form" defaultValues={defaultValues} onSubmit={handleSave} />
+            <BrandingFields
+                formId="step3-form"
+                defaultValues={defaultValues}
+                onSubmit={handleSave}
+                logoPreviewUrl={roleEntity?.branding?.logo?.url ?? null}
+                coverPreviewUrl={roleEntity?.branding?.coverImage?.url ?? null}
+            />
         </OnboardingLayout>
     );
 }

@@ -1,11 +1,13 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { useForm, useFieldArray, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import type { z } from 'zod';
-import { Plus, Trash2, RotateCcw, Ban, HeadphonesIcon, Info } from 'lucide-react';
+import { Plus, Trash2, RotateCcw, Ban, HeadphonesIcon, Info, FileText, Upload, X, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
 
 import { step4Schema, type Step4FormValues } from '@/onboarding/schemas/onboarding.schemas';
 import { type PolicyEnabled } from '@/components/vendor-settings/forms/policies.helpers';
+import { onboardingService } from '@/services/onboarding.service';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -175,6 +177,29 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
     const availability = useWatch({ control, name: 'support_policy.availability' });
     const requiredInfo = useWatch({ control, name: 'support_policy.required_info' }) ?? [];
     const languages = useWatch({ control, name: 'support_policy.languages' }) ?? [];
+    const documents = useWatch({ control, name: 'documents' }) ?? [];
+    const [uploadingDoc, setUploadingDoc] = useState(false);
+    const docInputRef = useRef<HTMLInputElement>(null);
+
+    const handleDocUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        e.target.value = '';
+        if (!file || documents.length >= 2) return;
+        setUploadingDoc(true);
+        try {
+            const res = await onboardingService.uploadPolicyDocuments([file]);
+            setValue('documents', [...documents, ...res.data.urls]);
+        } catch {
+            toast.error('Could not upload document. Please try again.');
+        } finally {
+            setUploadingDoc(false);
+        }
+    }, [documents, setValue]);
+
+    const handleRemoveDoc = useCallback(
+        (url: string) => setValue('documents', documents.filter((d) => d !== url)),
+        [documents, setValue],
+    );
 
     const { fields: channelFields, append: appendChannel, remove: removeChannel } = useFieldArray({
         control,
@@ -782,6 +807,66 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
                     <FieldError message={errors.support_policy?.eligibility_notes?.message} />
                 </div>
             </PolicySection>
+
+            {/* ── Policy Documents ── */}
+            <div className="rounded-lg border p-4 space-y-3">
+                <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-muted text-muted-foreground flex items-center justify-center">
+                        <FileText className="w-4 h-4" />
+                    </div>
+                    <div>
+                        <p className="text-sm font-semibold">Policy Documents</p>
+                        <p className="text-xs text-muted-foreground">Optional supporting PDFs (max 2, 5MB each)</p>
+                    </div>
+                </div>
+
+                {documents.length > 0 && (
+                    <div className="space-y-1.5">
+                        {documents.map((url) => (
+                            <div
+                                key={url}
+                                className="flex items-center justify-between gap-2 rounded-md border bg-muted/30 px-3 py-2"
+                            >
+                                <a
+                                    href={url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="text-xs truncate hover:underline"
+                                >
+                                    {decodeURIComponent(url.split('/').pop() ?? url)}
+                                </a>
+                                <button
+                                    type="button"
+                                    onClick={() => handleRemoveDoc(url)}
+                                    aria-label="Remove document"
+                                    className="text-muted-foreground hover:text-destructive transition-colors shrink-0"
+                                >
+                                    <X className="w-3.5 h-3.5" />
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                )}
+
+                <input
+                    ref={docInputRef}
+                    type="file"
+                    accept="application/pdf"
+                    className="hidden"
+                    onChange={handleDocUpload}
+                />
+                <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={documents.length >= 2 || uploadingDoc}
+                    onClick={() => docInputRef.current?.click()}
+                    className="h-8 gap-1.5 text-xs"
+                >
+                    {uploadingDoc ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />}
+                    Upload document
+                </Button>
+            </div>
 
         </form>
     );

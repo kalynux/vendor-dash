@@ -108,8 +108,14 @@ entry is filtered out.
 | `credits` | Credits granted (top-up) or the magnitude of a credit move |
 | `description` | Human-readable label |
 | `gateway` | Payment gateway, for billing rows |
-| `source` | `{ type, id }` of the originating entity (plan code, pack code, order/booking id, etc.) |
+| `source` | `{ type, id }` of the originating entity (plan code, pack code, order/booking id, `cod_collection` id, etc.) |
 | `createdAt` | ISO timestamp (feed is sorted by this, desc) |
+
+> **Cash-on-delivery earnings** appear as ordinary `earning_hold`/`earning_release` rows, but with
+> `source.type: "cod_collection"` — one per COD **shipment** (the cash handoff), rather than one
+> per order. Their release additionally waits for the physical cash to be remitted up the delivery
+> chain, so COD earnings can sit in `hold` longer than online ones (see
+> [orders.md — Cash-on-delivery orders](./orders.md)).
 
 **How to render a "Transactions" tab:**
 - Group/colour by `category`; show a sign from `direction` (`out` = debit, `in` = credit).

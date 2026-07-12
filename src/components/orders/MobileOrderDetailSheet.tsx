@@ -20,6 +20,7 @@ import {
   ChevronDown,
   Loader2,
   AlertTriangle,
+  PackageCheck,
 } from 'lucide-react';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { Badge } from '@/components/ui/badge';
@@ -43,12 +44,17 @@ import {
 import { Input } from '@/components/ui/input';
 import { OrderStatusBadge } from './OrderStatusBadge';
 import { PaymentStatusBadge } from './PaymentStatusBadge';
+import { DeliveryStatusBadge } from './DeliveryStatusBadge';
+import { ReassignAgencyPopover } from './ReassignAgencyPopover';
 import { cn } from '@/lib/utils';
 import { useOrderStore } from '@/store';
-import { addNote, revokeEntitlement, restoreEntitlement, fetchNote, getOrderErrorMessage, isOrderFrozen } from '@/services/orders.service';
+import { addNote, revokeEntitlement, restoreEntitlement, fetchNote, dispatchOrder, getOrderErrorMessage, isOrderFrozen } from '@/services/orders.service';
+import { getNextStatuses, STATUS_LABELS, canDispatchOrder } from '@/lib/orderStatus';
 import { ApiError } from '@/types/api';
 import { toast } from 'sonner';
-import type { Order, Entitlement, OrderTimelineEvent } from '@/types';
+import type { Order, Entitlement, OrderTimelineEvent, VendorSettableStatus } from '@/types';
+
+const REASSIGNABLE_DELIVERY_STATUSES = ['pending', 'assigned', 'pending_agency_reassignment'];
 
 type TabId = 'details' | 'items' | 'timeline' | 'payment' | 'entitlements';
 
@@ -80,23 +86,6 @@ function formatDate(dateStr: string) {
   });
 }
 
-function getNextStatuses(status: string, orderType: 'physical' | 'digital'): string[] {
-  switch (status) {
-    case 'pending': return ['processing', 'cancelled'];
-    case 'processing': return orderType === 'digital' ? ['fulfilled', 'cancelled'] : ['shipped', 'cancelled'];
-    case 'shipped': return ['delivered', 'cancelled'];
-    default: return [];
-  }
-}
-
-const STATUS_LABELS: Record<string, string> = {
-  processing: 'Mark as Processing',
-  shipped: 'Mark as Shipped',
-  delivered: 'Mark as Delivered',
-  fulfilled: 'Mark as Fulfilled',
-  cancelled: 'Cancel Order',
-};
-
 interface Props {
   order: Order | null;
   open: boolean;
@@ -121,6 +110,7 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
   const [statusLoading, setStatusLoading] = useState(false);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [cancelConfirmationText, setCancelConfirmationText] = useState('');
+  const [dispatchLoading, setDispatchLoading] = useState(false);
 
   // Entitlement action dialog
   const [actionDialog, setActionDialog] = useState<{
@@ -143,7 +133,8 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
   const isDigital = order.orderType === 'digital';
   const hasEntitlements = (order.entitlements?.length ?? 0) > 0;
   const frozen = isOrderFrozen(order);
-  const nextStatuses = frozen ? [] : getNextStatuses(order.status, order.orderType);
+  const nextStatuses = frozen ? [] : getNextStatuses(order.status);
+  const canDispatch = canDispatchOrder(order);
 
   const TABS = hasEntitlements
     ? [...BASE_TABS, { id: 'entitlements' as TabId, label: 'Access' }]
@@ -164,7 +155,7 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
 
   // ─── Handlers ──────────────────────────────────────────────────────────────
 
-  const handleStatusUpdate = async (status: string) => {
+  const handleStatusUpdate = async (status: VendorSettableStatus) => {
     if (status === 'cancelled') {
       setCancelConfirmationText('');
       setShowCancelConfirm(true);
@@ -202,6 +193,23 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
     } finally {
       setStatusLoading(false);
     }
+  };
+
+  const handleDispatch = async () => {
+    setDispatchLoading(true);
+    try {
+      const { order: updated, message } = await dispatchOrder(order.id);
+      setOrder(updated);
+      toast.success(message);
+    } catch (err) {
+      toast.error(getOrderErrorMessage(err));
+    } finally {
+      setDispatchLoading(false);
+    }
+  };
+
+  const handleItemReassigned = (updated: Order) => {
+    setOrder(updated);
   };
 
   const handleAddNote = async () => {
@@ -425,27 +433,29 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                       </div>
                     )}
 
-                    {/* Delivery agency (physical only) */}
-                    {isPhysical && (order.deliveryAgency || order.assignedAgent) && (
+                    {/* Shipments (physical, multi-agency) */}
+                    {isPhysical && order.deliveries && order.deliveries.length > 0 && (
                       <div className="bg-card rounded-xl border p-4">
                         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3 flex items-center gap-1.5">
-                          <Truck className="w-3.5 h-3.5" /> Delivery
+                          <Truck className="w-3.5 h-3.5" />
+                          Shipments {order.deliveries.length > 1 && `(${order.deliveries.length} agencies)`}
                         </p>
-                        {order.deliveryAgency && (
-                          <div className="mb-2">
+                        {order.deliveries.map((shipment, i) => (
+                          <div key={shipment.shipmentId ?? i} className={cn(i > 0 && 'pt-2 border-t mt-2')}>
                             <p className="text-xs text-muted-foreground">Agency</p>
-                            <p className="text-sm font-medium">{order.deliveryAgency.name}</p>
-                            {order.deliveryAgency.address && (
-                              <p className="text-xs text-muted-foreground mt-0.5">{order.deliveryAgency.address}</p>
+                            <p className="text-sm font-medium">{shipment.agencyName ?? '—'}</p>
+                            {shipment.agencyPhone && (
+                              <p className="text-xs text-muted-foreground mt-0.5">{shipment.agencyPhone}</p>
+                            )}
+                            <div className="mt-1.5"><DeliveryStatusBadge status={shipment.deliveryStatus} size="xs" /></div>
+                            {shipment.agent && (
+                              <p className="text-xs text-muted-foreground mt-1.5">Agent: <span className="font-medium text-foreground">{shipment.agent.name}</span></p>
+                            )}
+                            {shipment.trackingNumber && (
+                              <p className="text-xs text-muted-foreground mt-0.5">Tracking: {shipment.trackingNumber}</p>
                             )}
                           </div>
-                        )}
-                        {order.assignedAgent && (
-                          <div className={cn(order.deliveryAgency && 'pt-2 border-t mt-2')}>
-                            <p className="text-xs text-muted-foreground">Assigned Agent</p>
-                            <p className="text-sm font-medium">{order.assignedAgent.name}</p>
-                          </div>
-                        )}
+                        ))}
                       </div>
                     )}
 
@@ -489,24 +499,55 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                 {activeTab === 'items' && (
                   <div className="p-4 space-y-3">
                     {order.items.map((item) => (
-                      <div key={item.id} className="bg-card rounded-xl border p-3 flex items-center gap-3">
-                        {item.image && (
-                          <img src={item.image} alt={item.name} className="w-14 h-14 rounded-lg object-cover flex-shrink-0" />
-                        )}
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-sm truncate">{item.name}</p>
-                          {item.sku && <p className="text-xs text-muted-foreground">{item.sku}</p>}
-                          {isDigital && (
-                            <Badge variant="outline" className="mt-1 text-xs gap-1 border-violet-300 text-violet-700 bg-violet-50">
-                              <Download className="w-2.5 h-2.5" />Digital
-                            </Badge>
+                      <div key={item.id} className="bg-card rounded-xl border p-3 space-y-2">
+                        <div className="flex items-center gap-3">
+                          {item.image && (
+                            <img src={item.image} alt={item.name} className="w-14 h-14 rounded-lg object-cover flex-shrink-0" />
                           )}
-                          <p className="text-xs text-muted-foreground mt-0.5">Qty: {item.quantity}</p>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-sm truncate">{item.name}</p>
+                            {item.sku && <p className="text-xs text-muted-foreground">{item.sku}</p>}
+                            {(isDigital || item.delivery?.freeDelivery) && (
+                              <div className="flex items-center gap-1.5 mt-1">
+                                {isDigital && (
+                                  <Badge variant="outline" className="text-xs gap-1 border-violet-300 text-violet-700 bg-violet-50">
+                                    <Download className="w-2.5 h-2.5" />Digital
+                                  </Badge>
+                                )}
+                                {item.delivery?.freeDelivery && (
+                                  <Badge variant="outline" className="text-xs gap-1 border-green-300 text-green-700 bg-green-50">
+                                    <Truck className="w-2.5 h-2.5" />Free delivery
+                                  </Badge>
+                                )}
+                              </div>
+                            )}
+                            <p className="text-xs text-muted-foreground mt-0.5">Qty: {item.quantity}</p>
+                          </div>
+                          <div className="text-right flex-shrink-0">
+                            <p className="font-semibold text-sm">{formatCurrency(item.total, order.currency)}</p>
+                            <p className="text-xs text-muted-foreground">{formatCurrency(item.price, order.currency)} each</p>
+                          </div>
                         </div>
-                        <div className="text-right flex-shrink-0">
-                          <p className="font-semibold text-sm">{formatCurrency(item.total, order.currency)}</p>
-                          <p className="text-xs text-muted-foreground">{formatCurrency(item.price, order.currency)} each</p>
-                        </div>
+                        {isPhysical && item.delivery && (
+                          <div className="pt-2 border-t space-y-1.5">
+                            <div className="flex items-center gap-1.5 flex-wrap text-xs">
+                              <Truck className="w-3 h-3 text-muted-foreground" />
+                              <span className="font-medium">{item.delivery.agencyName ?? 'No agency assigned'}</span>
+                              <DeliveryStatusBadge status={item.delivery.deliveryStatus} size="xs" />
+                            </div>
+                            {item.delivery.trackingNumber && (
+                              <p className="text-xs text-muted-foreground">Tracking: {item.delivery.trackingNumber}</p>
+                            )}
+                            {item.delivery.deliveryStatus && REASSIGNABLE_DELIVERY_STATUSES.includes(item.delivery.deliveryStatus) && (
+                              <ReassignAgencyPopover
+                                orderId={order.id}
+                                itemId={item.id}
+                                currentAgencyId={item.delivery.agencyId}
+                                onReassigned={handleItemReassigned}
+                              />
+                            )}
+                          </div>
+                        )}
                       </div>
                     ))}
                     <div className="h-4" />
@@ -571,6 +612,41 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                         </Button>
                       </div>
                     </div>
+
+                    {/* Delivery Timeline (physical, multi-agency shipment history) */}
+                    {isPhysical && order.deliveryTimeline && order.deliveryTimeline.length > 0 && (
+                      <div className="mt-4 pt-4 border-t">
+                        <p className="font-medium text-sm mb-3 flex items-center gap-1.5">
+                          <Truck className="w-3.5 h-3.5" /> Delivery Timeline
+                        </p>
+                        <div className="space-y-4">
+                          {order.deliveryTimeline.map((entry, index) => {
+                            const isLast = index === order.deliveryTimeline!.length - 1;
+                            return (
+                              <div key={`${entry.shipmentId}-${entry.changedAt}-${index}`} className="flex gap-3">
+                                <div className="flex flex-col items-center">
+                                  <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                                    <Truck className="w-4 h-4 text-primary" />
+                                  </div>
+                                  {!isLast && <div className="w-0.5 flex-1 bg-border mt-2" />}
+                                </div>
+                                <div className="flex-1 pb-4 rounded-lg p-2">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <p className="font-medium text-sm">{entry.agencyName}</p>
+                                    <DeliveryStatusBadge status={entry.status} size="xs" />
+                                  </div>
+                                  <div className="flex items-center gap-1.5 mt-0.5 text-xs text-muted-foreground capitalize">
+                                    <span>{entry.changedByRole}</span>
+                                    <span>·</span>
+                                    <span>{formatDate(entry.changedAt)}</span>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                     <div className="h-4" />
                   </div>
                 )}
@@ -718,7 +794,13 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
               </div>
 
               {/* Action footer */}
-              <div className="px-4 py-3 border-t flex-shrink-0">
+              <div className="px-4 py-3 border-t flex-shrink-0 space-y-2">
+                {canDispatch && (
+                  <Button variant="outline" className="w-full gap-2" disabled={dispatchLoading} onClick={handleDispatch}>
+                    {dispatchLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <PackageCheck className="w-4 h-4" />}
+                    Dispatch to Agency
+                  </Button>
+                )}
                 {nextStatuses.length > 0 ? (
                   <DropdownMenu modal={false}>
                     <DropdownMenuTrigger asChild>

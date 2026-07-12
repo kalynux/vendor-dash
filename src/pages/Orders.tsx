@@ -8,16 +8,13 @@ import {
   ChevronRight,
   Download,
   Package,
-  Truck,
-  CheckCircle,
-  XCircle,
   Eye,
   Calendar,
   CreditCard,
   Plus,
   Loader2,
-  PackageSearch,
   AlertTriangle,
+  PackageCheck,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -47,7 +44,25 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { useOrderStore } from '@/store';
-import { fetchOrders as apiFetchOrders, getOrderErrorMessage, isOrderFrozen } from '@/services/orders.service';
+import {
+  fetchOrders as apiFetchOrders,
+  dispatchOrder,
+  bulkUpdateOrderStatus,
+  bulkDispatchOrders,
+  getOrderErrorMessage,
+  isOrderFrozen,
+  ORDER_ERROR_LABELS,
+  type BulkActionFailure,
+} from '@/services/orders.service';
+import {
+  getNextStatuses,
+  STATUS_LABELS,
+  STATUS_ICONS,
+  ORDER_STATUS_FILTER_OPTIONS,
+  canDispatchOrder,
+  getCommonNextStatuses,
+  canBulkDispatch,
+} from '@/lib/orderStatus';
 import { toast } from 'sonner';
 import { OrderDetails } from '@/components/features/OrderDetails';
 import { OrderStatusBadge } from '@/components/orders/OrderStatusBadge';
@@ -58,47 +73,26 @@ import { useInfiniteList } from '@/hooks/use-infinite-list';
 import { useScrollRestoration } from '@/hooks/use-scroll-restoration';
 import { MobilePageHeader } from '@/components/layout/MobilePageHeader';
 import { MobileListFooter } from '@/components/layout/MobileListFooter';
-import type { Order } from '@/types';
+import type { Order, VendorSettableStatus } from '@/types';
 import { cn } from '@/lib/utils';
 
-const statusOptions = [
-  { value: 'pending', label: 'Pending', color: 'bg-yellow-500' },
-  { value: 'confirmed', label: 'Confirmed', color: 'bg-blue-500' },
-  { value: 'processing', label: 'Processing', color: 'bg-purple-500' },
-  { value: 'shipped', label: 'Shipped', color: 'bg-indigo-500' },
-  { value: 'delivered', label: 'Delivered', color: 'bg-green-500' },
-  { value: 'cancelled', label: 'Cancelled', color: 'bg-red-500' },
-  { value: 'returned', label: 'Returned', color: 'bg-rose-500' },
-  { value: 'refunded', label: 'Refunded', color: 'bg-gray-500' },
-];
-
-// Valid next statuses based on current status and order type
-export function getNextStatuses(status: string, orderType: 'physical' | 'digital'): string[] {
-  switch (status) {
-    case 'pending': return ['processing', 'cancelled'];
-    case 'processing': return orderType === 'digital' ? ['fulfilled', 'cancelled'] : ['shipped', 'cancelled'];
-    case 'shipped': return ['delivered', 'cancelled'];
-    default: return []; // delivered, fulfilled, cancelled are terminal
-  }
-}
-
-export const STATUS_LABELS: Record<string, string> = {
-  processing: 'Mark as Processing',
-  shipped: 'Mark as Shipped',
-  delivered: 'Mark as Delivered',
-  fulfilled: 'Mark as Fulfilled',
-  cancelled: 'Cancel Order',
-};
-
-const STATUS_ICONS: Record<string, React.ReactNode> = {
-  processing: <PackageSearch className="w-4 h-4" />,
-  shipped: <Truck className="w-4 h-4" />,
-  delivered: <CheckCircle className="w-4 h-4" />,
-  fulfilled: <CheckCircle className="w-4 h-4" />,
-  cancelled: <XCircle className="w-4 h-4 text-destructive" />,
-};
-
 const mobileFilterPills = ['All', 'Pending', 'Shipped', 'Delivered'];
+
+// Doc-enforced cap on orderIds per bulk/status and bulk/dispatch call.
+const MAX_BULK_SIZE = 50;
+
+/** Short toast-friendly summary of a bulk action's per-order failures. */
+function summarizeBulkFailures(failed: BulkActionFailure[]): string {
+  if (failed.length === 1) {
+    return ORDER_ERROR_LABELS[failed[0].code] ?? failed[0].reason;
+  }
+  const codes = new Set(failed.map((f) => f.code));
+  if (codes.size === 1) {
+    const [code] = codes;
+    return `${failed.length} order(s) failed: ${ORDER_ERROR_LABELS[code] ?? code}`;
+  }
+  return `${failed.length} order(s) couldn't be updated — see each order for details.`;
+}
 
 export function Orders() {
   const { orders, selectedOrders, isLoading, pagination, fetchOrders, fetchOrderById, toggleOrderSelection, selectAllOrders, updateOrderStatus } = useOrderStore();
@@ -116,7 +110,20 @@ export function Orders() {
   const [actionsSheetOrder, setActionsSheetOrder] = useState<Order | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
 
+  // Bulk actions (desktop selection bar + mobile long-press selection)
+  const [bulkActionLoading, setBulkActionLoading] = useState(false);
+  const [showBulkCancelConfirm, setShowBulkCancelConfirm] = useState(false);
+  const [bulkCancelConfirmationText, setBulkCancelConfirmationText] = useState('');
+  const [selectionMode, setSelectionMode] = useState(false);
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressTriggered = useRef(false);
+
   useScrollRestoration('orders');
+
+  // Exit mobile selection mode automatically once the last item is deselected.
+  useEffect(() => {
+    if (selectionMode && selectedOrders.length === 0) setSelectionMode(false);
+  }, [selectionMode, selectedOrders]);
 
   // Deep-link from a notification (`/dashboard/orders?view=<id>`): open that
   // order's detail directly, then strip the param so a refresh/back doesn't
@@ -191,7 +198,7 @@ export function Orders() {
     return matchesSearch && matchesStatus && (isMobile ? matchesMobilePill : true);
   });
 
-  const handleStatusUpdate = async (order: Order, status: string) => {
+  const handleStatusUpdate = async (order: Order, status: VendorSettableStatus) => {
     if (status === 'cancelled') {
       setCancelConfirmationText('');
       setOrderToCancel(order);
@@ -230,6 +237,80 @@ export function Orders() {
       toast.error(getOrderErrorMessage(err));
     } finally {
       setStatusLoading(null);
+    }
+  };
+
+  // Single-row "Dispatch to Agency" (per-row desktop dropdown item / mobile "…" sheet action).
+  const handleDispatch = async (order: Order) => {
+    setStatusLoading('dispatch');
+    try {
+      const { message } = await dispatchOrder(order.id);
+      if (isMobile) infinite.reload();
+      else fetchOrders({ page: pagination?.page ?? 1 });
+      toast.success(message);
+    } catch (err) {
+      toast.error(getOrderErrorMessage(err));
+    } finally {
+      setStatusLoading(null);
+    }
+  };
+
+  // Bulk actions don't return updated order objects (only ids/counts), so the
+  // simplest correct way to reflect the real post-action state is a refetch.
+  const refreshAfterBulkAction = () => {
+    if (isMobile) infinite.reload();
+    else fetchOrders({ page: pagination?.page ?? 1 });
+  };
+
+  const handleBulkStatusUpdate = async (status: VendorSettableStatus) => {
+    if (status === 'cancelled') {
+      setBulkCancelConfirmationText('');
+      setShowBulkCancelConfirm(true);
+      return;
+    }
+    setBulkActionLoading(true);
+    try {
+      const { message, failed } = await bulkUpdateOrderStatus(selectedOrders, status);
+      toast.success(message);
+      if (failed.length > 0) toast.error(summarizeBulkFailures(failed));
+      selectAllOrders([]);
+      refreshAfterBulkAction();
+    } catch (err) {
+      toast.error(getOrderErrorMessage(err));
+    } finally {
+      setBulkActionLoading(false);
+    }
+  };
+
+  const confirmBulkCancel = async () => {
+    setShowBulkCancelConfirm(false);
+    setBulkCancelConfirmationText('');
+    setBulkActionLoading(true);
+    try {
+      const { message, failed } = await bulkUpdateOrderStatus(selectedOrders, 'cancelled');
+      toast.success(message);
+      if (failed.length > 0) toast.error(summarizeBulkFailures(failed));
+      selectAllOrders([]);
+      refreshAfterBulkAction();
+    } catch (err) {
+      toast.error(getOrderErrorMessage(err));
+    } finally {
+      setBulkActionLoading(false);
+    }
+  };
+
+  const handleBulkDispatch = async () => {
+    setBulkActionLoading(true);
+    try {
+      const { message, failed } = await bulkDispatchOrders(selectedOrders);
+      toast.success(message);
+      if (failed.length > 0) toast.error(summarizeBulkFailures(failed));
+      selectAllOrders([]);
+      refreshAfterBulkAction();
+    } catch (err) {
+      toast.error(getOrderErrorMessage(err));
+    } finally {
+      setBulkActionLoading(false);
     }
   };
 
@@ -280,6 +361,42 @@ export function Orders() {
     } finally {
       setIsDetailLoading(false);
     }
+  };
+
+  // ─── Mobile long-press → multi-select ───────────────────────────────────────
+  const LONG_PRESS_MS = 500;
+
+  const startLongPress = (order: Order) => {
+    longPressTriggered.current = false;
+    longPressTimer.current = setTimeout(() => {
+      longPressTriggered.current = true;
+      setSelectionMode(true);
+      toggleOrderSelection(order.id);
+    }, LONG_PRESS_MS);
+  };
+
+  const cancelLongPress = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  };
+
+  // Fires on tap (the click synthesized right after touchend). If a long-press
+  // just triggered selection mode, this tap is swallowed instead of also
+  // opening the detail sheet.
+  const handleCardTap = (order: Order) => {
+    if (longPressTriggered.current) {
+      longPressTriggered.current = false;
+      return;
+    }
+    if (selectionMode) toggleOrderSelection(order.id);
+    else handleViewDetails(order);
+  };
+
+  const exitSelectionMode = () => {
+    setSelectionMode(false);
+    selectAllOrders([]);
   };
 
   const allSelected = filteredOrders.length > 0 && selectedOrders.length === filteredOrders.length;
@@ -336,52 +453,177 @@ export function Orders() {
     </Dialog>
   );
 
-  // ─── Mobile Layout ────────────────────────────────────────────────────────
-  if (isMobile) {
-    return (
-      <div className="-mx-6 -mt-6">
-        <MobilePageHeader
-          title="Orders"
-          actions={
-            <button
-              type="button"
-              onClick={() => {/* create order */ }}
-              aria-label="Create order"
-              className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-accent transition-colors"
-            >
-              <Plus className="w-5 h-5" />
-            </button>
-          }
-          subheader={
-            <div className="space-y-3">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+  const bulkCancelDialog = (
+    <Dialog open={showBulkCancelConfirm} onOpenChange={(open) => {
+      if (!open) {
+        setShowBulkCancelConfirm(false);
+        setBulkCancelConfirmationText('');
+      }
+    }}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center text-red-600 flex-shrink-0">
+              <AlertTriangle className="w-5 h-5" />
+            </div>
+            <DialogTitle>Cancel {selectedOrders.length} Orders?</DialogTitle>
+          </div>
+          <DialogDescription className="pt-3 space-y-3" asChild>
+            <div>
+              <p className="text-foreground">
+                Are you sure you want to cancel <span className="font-semibold text-foreground">{selectedOrders.length} selected order(s)</span>? This action cannot be undone and will notify each customer.
+              </p>
+              <div className="space-y-2 pt-2">
+                <label htmlFor="bulk-cancel-confirm-input" className="text-xs font-semibold text-muted-foreground block">
+                  Please type <span className="font-bold text-destructive">cancel</span> to confirm:
+                </label>
                 <Input
-                  placeholder="Search orders"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10"
+                  id="bulk-cancel-confirm-input"
+                  placeholder='Type "cancel"'
+                  value={bulkCancelConfirmationText}
+                  onChange={(e) => setBulkCancelConfirmationText(e.target.value)}
+                  className="h-9 border-red-200 focus-visible:ring-red-500"
+                  autoComplete="off"
                 />
               </div>
-              <div className="-mx-1 flex gap-2 overflow-x-auto px-1 scrollbar-none">
-                {mobileFilterPills.map((pill) => (
-                  <button
-                    key={pill}
-                    onClick={() => setMobilePillFilter(pill)}
-                    className={cn(
-                      'flex-shrink-0 px-4 py-1.5 rounded-full text-sm font-medium transition-colors border',
-                      mobilePillFilter === pill
-                        ? 'bg-black text-white border-black'
-                        : 'bg-background border-border'
-                    )}
-                  >
-                    {pill}
-                  </button>
-                ))}
-              </div>
             </div>
-          }
-        />
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter className="flex sm:justify-end gap-2 pt-2">
+          <DialogClose asChild>
+            <Button variant="outline">Keep Orders</Button>
+          </DialogClose>
+          <Button
+            className="bg-red-600 hover:bg-red-700 text-white font-medium focus:ring-red-500"
+            disabled={bulkCancelConfirmationText.trim().toLowerCase() !== 'cancel'}
+            onClick={confirmBulkCancel}
+          >
+            Yes, Cancel {selectedOrders.length} Orders
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+
+  // ─── Mobile Layout ────────────────────────────────────────────────────────
+  if (isMobile) {
+    const selectedOrderObjects = infinite.items.filter((o) => selectedOrders.includes(o.id));
+    const bulkCommonStatuses = getCommonNextStatuses(selectedOrderObjects);
+    const bulkDispatchable = canBulkDispatch(selectedOrderObjects);
+    const bulkOverLimit = selectedOrders.length > MAX_BULK_SIZE;
+    const hasBulkActions = !bulkOverLimit && (bulkDispatchable || bulkCommonStatuses.length > 0);
+
+    return (
+      <div className="-mx-6 -mt-6">
+        {selectionMode ? (
+          <MobilePageHeader
+            title={`${selectedOrders.length} selected`}
+            onBack={exitSelectionMode}
+            actions={
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => selectAllOrders(infinite.items.map((o) => o.id))}
+                  className="px-3 h-9 flex items-center justify-center rounded-full hover:bg-accent transition-colors text-sm font-medium"
+                >
+                  Select all
+                </button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      disabled={selectedOrders.length === 0 || bulkActionLoading}
+                      aria-label="Bulk actions"
+                      className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-accent transition-colors disabled:opacity-40 disabled:pointer-events-none"
+                    >
+                      {bulkActionLoading ? (
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                      ) : (
+                        <MoreHorizontal className="w-5 h-5" />
+                      )}
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-60">
+                    {bulkOverLimit ? (
+                      <div className="px-2 py-1.5 text-xs text-destructive">
+                        Select up to {MAX_BULK_SIZE} orders to act in bulk.
+                      </div>
+                    ) : hasBulkActions ? (
+                      <>
+                        {bulkDispatchable && (
+                          <DropdownMenuItem onClick={handleBulkDispatch}>
+                            <PackageCheck className="w-4 h-4" />
+                            Dispatch
+                          </DropdownMenuItem>
+                        )}
+                        {bulkCommonStatuses.map((s) => {
+                          const Icon = STATUS_ICONS[s];
+                          return (
+                            <DropdownMenuItem
+                              key={s}
+                              onClick={() => handleBulkStatusUpdate(s)}
+                              className={s === 'cancelled' ? 'text-destructive' : ''}
+                            >
+                              <Icon className="w-4 h-4" />
+                              {STATUS_LABELS[s] ?? s}
+                            </DropdownMenuItem>
+                          );
+                        })}
+                      </>
+                    ) : (
+                      <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                        No common action available for this selection.
+                      </div>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            }
+          />
+        ) : (
+          <MobilePageHeader
+            title="Orders"
+            actions={
+              <button
+                type="button"
+                onClick={() => {/* create order */ }}
+                aria-label="Create order"
+                className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-accent transition-colors"
+              >
+                <Plus className="w-5 h-5" />
+              </button>
+            }
+            subheader={
+              <div className="space-y-3">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search orders"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
+                <div className="-mx-1 flex gap-2 overflow-x-auto px-1 scrollbar-none">
+                  {mobileFilterPills.map((pill) => (
+                    <button
+                      key={pill}
+                      onClick={() => setMobilePillFilter(pill)}
+                      className={cn(
+                        'flex-shrink-0 px-4 py-1.5 rounded-full text-sm font-medium transition-colors border',
+                        mobilePillFilter === pill
+                          ? 'bg-black text-white border-black'
+                          : 'bg-background border-border'
+                      )}
+                    >
+                      {pill}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            }
+          />
+        )}
 
         {/* Order cards */}
         <div className="pb-28">
@@ -413,25 +655,51 @@ export function Orders() {
                   key={order.id}
                   role="button"
                   tabIndex={0}
-                  onClick={() => handleViewDetails(order)}
+                  onTouchStart={() => startLongPress(order)}
+                  onTouchEnd={cancelLongPress}
+                  onTouchMove={cancelLongPress}
+                  onTouchCancel={cancelLongPress}
+                  onClick={() => handleCardTap(order)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault();
-                      handleViewDetails(order);
+                      handleCardTap(order);
                     }
                   }}
-                  className="w-full px-4 py-3 border-b hover:bg-muted/30 transition-colors text-left cursor-pointer"
+                  className={cn(
+                    'w-full px-4 py-3 border-b hover:bg-muted/30 transition-colors text-left cursor-pointer',
+                    selectionMode && selectedOrders.includes(order.id) && 'bg-primary/5',
+                  )}
                 >
                   <div className="flex items-start gap-3">
+                    {selectionMode && (
+                      <Checkbox
+                        checked={selectedOrders.includes(order.id)}
+                        onClick={(e) => e.stopPropagation()}
+                        onCheckedChange={() => toggleOrderSelection(order.id)}
+                        className="mt-2 flex-shrink-0"
+                      />
+                    )}
                     <img
                       src={order.customer.avatar || `https://i.pravatar.cc/150?u=${order.customer.id}`}
                       alt={order.customer.name}
                       className="w-10 h-10 rounded-full flex-shrink-0 object-cover"
                     />
                     <div className="flex-1 min-w-0">
-                      <div className="flex justify-between">
-                        <p className="font-semibold text-sm">{order.orderNumber}</p>
-                        <p className="font-semibold text-sm">{formatCurrency(order.total)}</p>
+                      <div className="flex justify-between items-center gap-2">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <p className="font-semibold text-sm truncate">{order.orderNumber}</p>
+                          <span
+                            className={cn(
+                              'w-1.5 h-1.5 rounded-full flex-shrink-0',
+                              order.orderType === 'digital' ? 'bg-violet-500' : 'bg-blue-500',
+                            )}
+                          />
+                          <span className="text-[11px] font-medium text-muted-foreground flex-shrink-0">
+                            {order.orderType === 'digital' ? 'Digital' : 'Physical'}
+                          </span>
+                        </div>
+                        <p className="font-semibold text-sm flex-shrink-0">{formatCurrency(order.total)}</p>
                       </div>
                       <div className="flex justify-between mt-0.5">
                         <p className="text-xs text-muted-foreground">{order.customer.name}</p>
@@ -439,31 +707,25 @@ export function Orders() {
                       </div>
                       <div className="flex items-center justify-between mt-2">
                         <div className="flex items-center gap-1.5">
-                          <OrderStatusBadge status={order.status} />
-                          {order.orderType === 'digital' ? (
-                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-violet-300 text-violet-700 bg-violet-50 gap-1">
-                              <Download className="w-2.5 h-2.5" />Digital
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-blue-300 text-blue-700 bg-blue-50 gap-1">
-                              <Package className="w-2.5 h-2.5" />Physical
-                            </Badge>
-                          )}
+                          <OrderStatusBadge status={order.status} size="xs" />
+                          <PaymentStatusBadge status={order.paymentStatus} size="xs" />
                         </div>
                         <p className="text-xs text-muted-foreground">{order.items.length} items</p>
                       </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setActionsSheetOrder(order);
-                      }}
-                      className="w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-full hover:bg-accent transition-colors -mr-1 -mt-1"
-                      aria-label="Order actions"
-                    >
-                      <MoreHorizontal className="w-5 h-5 text-muted-foreground" />
-                    </button>
+                    {!selectionMode && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setActionsSheetOrder(order);
+                        }}
+                        className="w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-full hover:bg-accent transition-colors -mr-1 -mt-1"
+                        aria-label="Order actions"
+                      >
+                        <MoreHorizontal className="w-5 h-5 text-muted-foreground" />
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -498,7 +760,7 @@ export function Orders() {
             {actionsSheetOrder && (() => {
               const o = actionsSheetOrder;
               const frozen = isOrderFrozen(o);
-              const nexts = frozen ? [] : getNextStatuses(o.status, o.orderType);
+              const nexts = frozen ? [] : getNextStatuses(o.status);
               const close = () => setActionsSheetOrder(null);
               return (
                 <>
@@ -511,18 +773,19 @@ export function Orders() {
                       label="View Details"
                       onClick={() => { close(); handleViewDetails(o); }}
                     />
+                    {canDispatchOrder(o) && (
+                      <SheetActionButton
+                        icon={<PackageCheck className="w-5 h-5" />}
+                        label="Dispatch to Agency"
+                        onClick={() => { close(); handleDispatch(o); }}
+                      />
+                    )}
                     {nexts.map((s) => {
-                      const icons: Record<string, React.ReactNode> = {
-                        processing: <PackageSearch className="w-5 h-5" />,
-                        shipped: <Truck className="w-5 h-5" />,
-                        delivered: <CheckCircle className="w-5 h-5" />,
-                        fulfilled: <CheckCircle className="w-5 h-5" />,
-                        cancelled: <XCircle className="w-5 h-5" />,
-                      };
+                      const Icon = STATUS_ICONS[s];
                       return (
                         <SheetActionButton
                           key={s}
-                          icon={icons[s]}
+                          icon={<Icon className="w-5 h-5" />}
                           label={STATUS_LABELS[s] ?? s}
                           destructive={s === 'cancelled'}
                           onClick={() => { close(); handleStatusUpdate(o, s); }}
@@ -549,6 +812,7 @@ export function Orders() {
         </Sheet>
 
         {cancelOrderDialog}
+        {bulkCancelDialog}
       </div>
     );
   }
@@ -607,7 +871,7 @@ export function Orders() {
                   <div>
                     <h4 className="text-sm font-medium mb-3">Order Status</h4>
                     <div className="space-y-2">
-                      {statusOptions.map((status) => (
+                      {ORDER_STATUS_FILTER_OPTIONS.map((status) => (
                         <label key={status.value} className="flex items-center gap-2 cursor-pointer">
                           <Checkbox
                             checked={statusFilter.includes(status.value)}
@@ -628,26 +892,51 @@ export function Orders() {
       {/* Orders Table */}
       <Card>
         <CardContent className="p-0">
-          {selectedOrders.length > 0 && (
-            <div className="flex items-center gap-2 p-4 bg-muted/50 border-b">
-              <span className="text-sm text-muted-foreground">
-                {selectedOrders.length} selected
-              </span>
-              <div className="flex-1" />
-              <Button variant="outline" size="sm" className="gap-2">
-                <Truck className="w-4 h-4" />
-                Mark as Shipped
-              </Button>
-              <Button variant="outline" size="sm" className="gap-2">
-                <CheckCircle className="w-4 h-4" />
-                Mark as Delivered
-              </Button>
-              <Button variant="destructive" size="sm" className="gap-2">
-                <XCircle className="w-4 h-4" />
-                Cancel
-              </Button>
-            </div>
-          )}
+          {selectedOrders.length > 0 && (() => {
+            const selectedOrderObjects = orders.filter((o) => selectedOrders.includes(o.id));
+            const commonStatuses = getCommonNextStatuses(selectedOrderObjects);
+            const bulkDispatchable = canBulkDispatch(selectedOrderObjects);
+            const overLimit = selectedOrders.length > MAX_BULK_SIZE;
+            return (
+              <div className="flex items-center gap-2 p-4 bg-muted/50 border-b flex-wrap">
+                <span className="text-sm text-muted-foreground">
+                  {selectedOrders.length} selected
+                </span>
+                {overLimit && (
+                  <span className="text-xs text-destructive">Select up to {MAX_BULK_SIZE} orders to act in bulk</span>
+                )}
+                <div className="flex-1" />
+                <Button variant="ghost" size="sm" onClick={() => selectAllOrders([])}>
+                  Clear
+                </Button>
+                {!overLimit && bulkDispatchable && (
+                  <Button variant="outline" size="sm" className="gap-2" disabled={bulkActionLoading} onClick={handleBulkDispatch}>
+                    {bulkActionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <PackageCheck className="w-4 h-4" />}
+                    Dispatch to Agency
+                  </Button>
+                )}
+                {!overLimit && commonStatuses.map((s) => {
+                  const Icon = STATUS_ICONS[s];
+                  return (
+                    <Button
+                      key={s}
+                      variant={s === 'cancelled' ? 'destructive' : 'outline'}
+                      size="sm"
+                      className="gap-2"
+                      disabled={bulkActionLoading}
+                      onClick={() => handleBulkStatusUpdate(s)}
+                    >
+                      <Icon className="w-4 h-4" />
+                      {STATUS_LABELS[s] ?? s}
+                    </Button>
+                  );
+                })}
+                {!overLimit && !bulkDispatchable && commonStatuses.length === 0 && (
+                  <span className="text-xs text-muted-foreground">No common action available for this selection.</span>
+                )}
+              </div>
+            );
+          })()}
 
           <div className="overflow-x-auto">
             <table className="w-full">
@@ -699,9 +988,17 @@ export function Orders() {
                   filteredOrders.map((order: Order) => (
                     <tr
                       key={order.id}
-                      className="border-b hover:bg-muted/50 transition-colors"
+                      tabIndex={0}
+                      onClick={() => handleViewDetails(order)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          handleViewDetails(order);
+                        }
+                      }}
+                      className="border-b hover:bg-muted/50 transition-colors cursor-pointer"
                     >
-                      <td className="p-4">
+                      <td className="p-4" onClick={(e) => e.stopPropagation()}>
                         <Checkbox
                           checked={selectedOrders.includes(order.id)}
                           onCheckedChange={() => toggleOrderSelection(order.id)}
@@ -757,7 +1054,7 @@ export function Orders() {
                       <td className="p-4 text-right font-medium">
                         {formatCurrency(order.total)}
                       </td>
-                      <td className="p-4">
+                      <td className="p-4" onClick={(e) => e.stopPropagation()}>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button variant="ghost" size="icon">
@@ -769,21 +1066,30 @@ export function Orders() {
                               <Eye className="w-4 h-4" />
                               View Details
                             </DropdownMenuItem>
+                            {canDispatchOrder(order) && (
+                              <DropdownMenuItem onClick={() => handleDispatch(order)}>
+                                <PackageCheck className="w-4 h-4" />
+                                Dispatch to Agency
+                              </DropdownMenuItem>
+                            )}
                             {isOrderFrozen(order) ? (
                               <DropdownMenuItem disabled className="text-orange-600">
                                 <AlertTriangle className="w-4 h-4" />
                                 Frozen — payment disputed
                               </DropdownMenuItem>
-                            ) : getNextStatuses(order.status, order.orderType).map((s) => (
-                              <DropdownMenuItem
-                                key={s}
-                                onClick={() => handleStatusUpdate(order, s)}
-                                className={s === 'cancelled' ? 'text-destructive' : ''}
-                              >
-                                {STATUS_ICONS[s]}
-                                {statusLoading == order.status ? <Loader2 className="w-4 h-4 animate-spin" /> : STATUS_LABELS[s] ?? s}
-                              </DropdownMenuItem>
-                            ))}
+                            ) : getNextStatuses(order.status).map((s) => {
+                              const Icon = STATUS_ICONS[s];
+                              return (
+                                <DropdownMenuItem
+                                  key={s}
+                                  onClick={() => handleStatusUpdate(order, s)}
+                                  className={s === 'cancelled' ? 'text-destructive' : ''}
+                                >
+                                  <Icon className="w-4 h-4" />
+                                  {statusLoading == order.status ? <Loader2 className="w-4 h-4 animate-spin" /> : STATUS_LABELS[s] ?? s}
+                                </DropdownMenuItem>
+                              );
+                            })}
                           </DropdownMenuContent>
 
                         </DropdownMenu>

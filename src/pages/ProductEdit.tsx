@@ -34,8 +34,10 @@ import {
   renameOptionValue,
   reorderOptions,
 } from '@/services/products.service';
-import { ACTIVATION_ERROR_MAP } from '@/services/products.service';
+import { ACTIVATION_ERROR_MAP, getDeliveryErrorMessage } from '@/services/products.service';
+import { getAgencyConnectionErrorMessage } from '@/services/agency-connections.service';
 import { getUploadErrorMessage } from '@/lib/uploadErrors';
+import { ApiError } from '@/types/api';
 import type {
   WizardState,
   WizardAction,
@@ -43,6 +45,7 @@ import type {
   ApiProductType,
   DigitalFormatRow,
   ApiFileDetail,
+  ApiPickupLocation,
 } from '@/types/product.types';
 import { getProductFileCount } from '@/types/product.types';
 import type { BasicInfoFormValues } from '@/components/products/schemas/product.schemas';
@@ -226,7 +229,7 @@ export function ProductEdit() {
 
       dispatch({ type: 'SET_SAVING', value: true });
       try {
-        const updated = await updateProduct(productId, {
+        const { data: updated } = await updateProduct(productId, {
           title: values.title,
           category: values.category,
           description: values.description,
@@ -257,7 +260,7 @@ export function ProductEdit() {
 
       dispatch({ type: 'SET_SAVING', value: true });
       try {
-        const updated = await updateProduct(productId, { fileIds });
+        const { data: updated } = await updateProduct(productId, { fileIds });
         toast.success('Media saved.');
         advance({ serverProduct: updated });
       } catch (err: unknown) {
@@ -575,14 +578,52 @@ export function ProductEdit() {
       if (!productId) return;
       dispatch({ type: 'SET_SAVING', value: true });
       try {
-        await updateProduct(productId, { delivery: { agencyId } });
+        const { message } = await updateProduct(productId, { delivery: { agencyId } });
         const updated = await fetchProductById(productId);
         dispatch({ type: 'SAVE_COMPLETE', updates: { serverProduct: updated } });
         toast.success(
-          agencyId ? 'Delivery agency updated.' : 'Using your default delivery agency.',
+          message ?? (agencyId ? 'Delivery agency updated.' : 'Using your default delivery agency.'),
         );
       } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : 'Could not update delivery agency.';
+        const msg = err instanceof ApiError ? getAgencyConnectionErrorMessage(err) : 'Could not update delivery agency.';
+        dispatch({ type: 'SET_STEP_ERROR', error: msg });
+        toast.error(msg);
+      }
+    },
+    [state.productId],
+  );
+
+  const handleFreeDeliveryChange = useCallback(
+    async (freeDelivery: boolean) => {
+      const productId = state.productId;
+      if (!productId) return;
+      dispatch({ type: 'SET_SAVING', value: true });
+      try {
+        await updateProduct(productId, { delivery: { freeDelivery } });
+        const updated = await fetchProductById(productId);
+        dispatch({ type: 'SAVE_COMPLETE', updates: { serverProduct: updated } });
+        toast.success(freeDelivery ? 'Free delivery enabled.' : 'Free delivery disabled.');
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'Could not update free delivery.';
+        dispatch({ type: 'SET_STEP_ERROR', error: msg });
+        toast.error(msg);
+      }
+    },
+    [state.productId],
+  );
+
+  const handlePickupLocationChange = useCallback(
+    async (pickupLocation: ApiPickupLocation | null) => {
+      const productId = state.productId;
+      if (!productId) return;
+      dispatch({ type: 'SET_SAVING', value: true });
+      try {
+        await updateProduct(productId, { delivery: { pickupLocation } });
+        const updated = await fetchProductById(productId);
+        dispatch({ type: 'SAVE_COMPLETE', updates: { serverProduct: updated } });
+        toast.success('Pickup location updated.');
+      } catch (err: unknown) {
+        const msg = getDeliveryErrorMessage(err);
         dispatch({ type: 'SET_STEP_ERROR', error: msg });
         toast.error(msg);
       }
@@ -702,6 +743,8 @@ export function ProductEdit() {
             onPublish={handlePublish}
             onSaveDraft={handleSaveDraft}
             onAgencyChange={handleAgencyChange}
+            onFreeDeliveryChange={handleFreeDeliveryChange}
+            onPickupLocationChange={handlePickupLocationChange}
           />
         );
       default:

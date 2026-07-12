@@ -16,6 +16,7 @@ import {
   ChevronDown,
   Loader2,
   AlertTriangle,
+  PackageCheck,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -39,12 +40,17 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { useOrderStore } from '@/store';
-import { addNote, fetchNote, revokeEntitlement, restoreEntitlement, getOrderErrorMessage, isOrderFrozen } from '@/services/orders.service';
+import { addNote, fetchNote, revokeEntitlement, restoreEntitlement, dispatchOrder, getOrderErrorMessage, isOrderFrozen } from '@/services/orders.service';
 import { PaymentStatusBadge } from '@/components/orders/PaymentStatusBadge';
+import { OrderStatusBadge } from '@/components/orders/OrderStatusBadge';
+import { DeliveryStatusBadge } from '@/components/orders/DeliveryStatusBadge';
+import { ReassignAgencyPopover } from '@/components/orders/ReassignAgencyPopover';
 import { ApiError } from '@/types/api';
 import { toast } from 'sonner';
-import type { Order, Entitlement, OrderTimelineEvent } from '@/types';
-import { getNextStatuses, STATUS_LABELS } from "@/pages/Orders";
+import type { Order, Entitlement, OrderTimelineEvent, VendorSettableStatus } from '@/types';
+import { getNextStatuses, STATUS_LABELS, canDispatchOrder } from '@/lib/orderStatus';
+
+const REASSIGNABLE_DELIVERY_STATUSES = ['pending', 'assigned', 'pending_agency_reassignment'];
 
 interface OrderDetailsProps {
   order: Order;
@@ -92,6 +98,7 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
   const [statusLoading, setStatusLoading] = useState(false);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [cancelConfirmationText, setCancelConfirmationText] = useState('');
+  const [dispatchLoading, setDispatchLoading] = useState(false);
 
   // Entitlement action dialog
   const [actionDialog, setActionDialog] = useState<{
@@ -106,7 +113,8 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
   const hasEntitlements = (currentOrder.entitlements?.length ?? 0) > 0;
   const frozen = isOrderFrozen(currentOrder);
   // A frozen (disputed) order can't be advanced — the status PATCH returns 423.
-  const nextStatuses = frozen ? [] : getNextStatuses(currentOrder.status, currentOrder.orderType);
+  const nextStatuses = frozen ? [] : getNextStatuses(currentOrder.status);
+  const canDispatch = canDispatchOrder(currentOrder);
 
   const formatCurrency = (value: number) =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency: currentOrder.currency || 'USD' }).format(value);
@@ -118,7 +126,7 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
 
   // ─── Handlers ───────────────────────────────────────────────────────────────
 
-  const handleStatusUpdate = async (status: string) => {
+  const handleStatusUpdate = async (status: VendorSettableStatus) => {
     if (status === 'cancelled') {
       setCancelConfirmationText('');
       setShowCancelConfirm(true);
@@ -164,6 +172,25 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
     } finally {
       setStatusLoading(false);
     }
+  };
+
+  const handleDispatch = async () => {
+    setDispatchLoading(true);
+    try {
+      const { order: updated, message } = await dispatchOrder(currentOrder.id);
+      setCurrentOrder(updated);
+      onOrderUpdated?.(updated);
+      toast.success(message);
+    } catch (err) {
+      toast.error(getOrderErrorMessage(err));
+    } finally {
+      setDispatchLoading(false);
+    }
+  };
+
+  const handleItemReassigned = (updated: Order) => {
+    setCurrentOrder(updated);
+    onOrderUpdated?.(updated);
   };
 
   const handleAddNote = async () => {
@@ -264,17 +291,7 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
         <div>
           <div className="flex items-center gap-2 flex-wrap">
             <h2 className="text-xl font-bold">{currentOrder.orderNumber}</h2>
-            <Badge
-              variant={
-                currentOrder.status === 'delivered' || currentOrder.status === 'fulfilled' ? 'default'
-                  : currentOrder.status === 'pending' ? 'secondary'
-                    : currentOrder.status === 'cancelled' ? 'destructive'
-                      : 'outline'
-              }
-              className="capitalize"
-            >
-              {currentOrder.status}
-            </Badge>
+            <OrderStatusBadge status={currentOrder.status} />
             {isDigital ? (
               <Badge variant="outline" className="gap-1 border-violet-300 text-violet-700 bg-violet-50">
                 <Download className="w-3 h-3" />Digital
@@ -294,6 +311,12 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
             <Printer className="w-4 h-4" />
             Print
           </Button>
+          {canDispatch && (
+            <Button variant="outline" size="sm" className="gap-2" disabled={dispatchLoading} onClick={handleDispatch}>
+              {dispatchLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <PackageCheck className="w-4 h-4" />}
+              Dispatch to Agency
+            </Button>
+          )}
           {nextStatuses.length > 0 ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -442,30 +465,42 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
             )}
           </div>
 
-          {/* Delivery agency (physical only) */}
-          {isPhysical && (currentOrder.deliveryAgency || currentOrder.assignedAgent) && (
+          {/* Shipments (physical, multi-agency) */}
+          {isPhysical && currentOrder.deliveries && currentOrder.deliveries.length > 0 && (
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm font-medium flex items-center gap-2">
-                  <Truck className="w-4 h-4 text-muted-foreground" /> Delivery
+                  <Truck className="w-4 h-4 text-muted-foreground" />
+                  Shipments {currentOrder.deliveries.length > 1 && `(${currentOrder.deliveries.length} agencies)`}
                 </CardTitle>
               </CardHeader>
-              <CardContent className="grid grid-cols-2 gap-4 text-xs">
-                {currentOrder.deliveryAgency && (
-                  <div>
-                    <p className="text-muted-foreground text-[10px] uppercase tracking-wider font-semibold mb-1">Agency</p>
-                    <p className="font-semibold text-sm text-foreground">{currentOrder.deliveryAgency.name}</p>
-                    {currentOrder.deliveryAgency.address && (
-                      <p className="text-muted-foreground mt-0.5">{currentOrder.deliveryAgency.address}</p>
-                    )}
+              <CardContent className="space-y-3">
+                {currentOrder.deliveries.map((shipment, i) => (
+                  <div
+                    key={shipment.shipmentId ?? i}
+                    className={i > 0 ? 'pt-3 border-t grid grid-cols-2 gap-4 text-xs' : 'grid grid-cols-2 gap-4 text-xs'}
+                  >
+                    <div>
+                      <p className="text-muted-foreground text-[10px] uppercase tracking-wider font-semibold mb-1">Agency</p>
+                      <p className="font-semibold text-sm text-foreground">{shipment.agencyName ?? '—'}</p>
+                      {shipment.agencyPhone && (
+                        <p className="text-muted-foreground mt-0.5">{shipment.agencyPhone}</p>
+                      )}
+                      <div className="mt-1.5"><DeliveryStatusBadge status={shipment.deliveryStatus} size="xs" /></div>
+                    </div>
+                    <div>
+                      {shipment.agent && (
+                        <>
+                          <p className="text-muted-foreground text-[10px] uppercase tracking-wider font-semibold mb-1">Assigned Agent</p>
+                          <p className="font-semibold text-sm text-foreground">{shipment.agent.name}</p>
+                        </>
+                      )}
+                      {shipment.trackingNumber && (
+                        <p className="text-muted-foreground mt-1">Tracking: {shipment.trackingNumber}</p>
+                      )}
+                    </div>
                   </div>
-                )}
-                {currentOrder.assignedAgent && (
-                  <div>
-                    <p className="text-muted-foreground text-[10px] uppercase tracking-wider font-semibold mb-1">Assigned Agent</p>
-                    <p className="font-semibold text-sm text-foreground">{currentOrder.assignedAgent.name}</p>
-                  </div>
-                )}
+                ))}
               </CardContent>
             </Card>
           )}
@@ -513,36 +548,69 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
           <div className="space-y-3">
             {currentOrder.items.map((item) => (
               <Card key={item.id} className="hover:shadow-sm transition-shadow">
-                <CardContent className="p-4 flex items-center justify-between gap-4">
-                  {/* Product Details (Left) */}
-                  <div className="flex items-center gap-4 min-w-0">
-                    {item.image ? (
-                      <img src={item.image} alt={item.name} className="w-14 h-14 rounded-lg object-cover flex-shrink-0 border" />
-                    ) : (
-                      <div className="w-14 h-14 rounded-lg bg-primary/10 text-primary flex items-center justify-center flex-shrink-0 font-bold border">
-                        {item.name.charAt(0)}
-                      </div>
-                    )}
-                    <div className="min-w-0">
-                      <p className="font-semibold text-sm text-foreground truncate">{item.name}</p>
-                      <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground flex-wrap">
-                        {item.sku && <span>SKU: <span className="font-medium text-foreground">{item.sku}</span></span>}
-                        {item.sku && <span>•</span>}
-                        <span>Qty: <span className="font-semibold text-foreground">{item.quantity}</span></span>
-                      </div>
-                      {isDigital && (
-                        <Badge variant="outline" className="mt-1.5 text-[10px] px-1.5 py-0 h-4 border-violet-300 text-violet-700 bg-violet-50 gap-1 font-semibold">
-                          <Download className="w-2.5 h-2.5" />Digital
-                        </Badge>
+                <CardContent className="p-4 space-y-3">
+                  <div className="flex items-center justify-between gap-4">
+                    {/* Product Details (Left) */}
+                    <div className="flex items-center gap-4 min-w-0">
+                      {item.image ? (
+                        <img src={item.image} alt={item.name} className="w-14 h-14 rounded-lg object-cover flex-shrink-0 border" />
+                      ) : (
+                        <div className="w-14 h-14 rounded-lg bg-primary/10 text-primary flex items-center justify-center flex-shrink-0 font-bold border">
+                          {item.name.charAt(0)}
+                        </div>
                       )}
+                      <div className="min-w-0">
+                        <p className="font-semibold text-sm text-foreground truncate">{item.name}</p>
+                        <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground flex-wrap">
+                          {item.sku && <span>SKU: <span className="font-medium text-foreground">{item.sku}</span></span>}
+                          {item.sku && <span>•</span>}
+                          <span>Qty: <span className="font-semibold text-foreground">{item.quantity}</span></span>
+                        </div>
+                        {(isDigital || item.delivery?.freeDelivery) && (
+                          <div className="flex items-center gap-1.5 mt-1.5">
+                            {isDigital && (
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-violet-300 text-violet-700 bg-violet-50 gap-1 font-semibold">
+                                <Download className="w-2.5 h-2.5" />Digital
+                              </Badge>
+                            )}
+                            {item.delivery?.freeDelivery && (
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-green-300 text-green-700 bg-green-50 gap-1 font-semibold">
+                                <Truck className="w-2.5 h-2.5" />Free delivery
+                              </Badge>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Pricing (Right) */}
+                    <div className="text-right flex-shrink-0">
+                      <p className="font-bold text-sm text-foreground">{formatCurrency(item.total)}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{formatCurrency(item.price)} each</p>
                     </div>
                   </div>
 
-                  {/* Pricing (Right) */}
-                  <div className="text-right flex-shrink-0">
-                    <p className="font-bold text-sm text-foreground">{formatCurrency(item.total)}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">{formatCurrency(item.price)} each</p>
-                  </div>
+                  {/* Per-item delivery (physical only) */}
+                  {isPhysical && item.delivery && (
+                    <div className="flex items-center justify-between gap-3 pt-3 border-t flex-wrap">
+                      <div className="flex items-center gap-2 flex-wrap text-xs">
+                        <Truck className="w-3.5 h-3.5 text-muted-foreground" />
+                        <span className="font-medium text-foreground">{item.delivery.agencyName ?? 'No agency assigned'}</span>
+                        <DeliveryStatusBadge status={item.delivery.deliveryStatus} size="xs" />
+                        {item.delivery.trackingNumber && (
+                          <span className="text-muted-foreground">Tracking: {item.delivery.trackingNumber}</span>
+                        )}
+                      </div>
+                      {item.delivery.deliveryStatus && REASSIGNABLE_DELIVERY_STATUSES.includes(item.delivery.deliveryStatus) && (
+                        <ReassignAgencyPopover
+                          orderId={currentOrder.id}
+                          itemId={item.id}
+                          currentAgencyId={item.delivery.agencyId}
+                          onReassigned={handleItemReassigned}
+                        />
+                      )}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             ))}
@@ -609,6 +677,45 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
               </div>
             </CardContent>
           </Card>
+
+          {/* Delivery Timeline (physical, multi-agency shipment history) */}
+          {isPhysical && currentOrder.deliveryTimeline && currentOrder.deliveryTimeline.length > 0 && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                  <Truck className="w-4 h-4 text-muted-foreground" /> Delivery Timeline
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-6 pt-0">
+                <div className="space-y-2">
+                  {currentOrder.deliveryTimeline.map((entry, index) => {
+                    const isLast = index === currentOrder.deliveryTimeline!.length - 1;
+                    return (
+                      <div key={`${entry.shipmentId}-${entry.changedAt}-${index}`} className="flex gap-1">
+                        <div className="flex flex-col items-center">
+                          <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                            <Truck className="w-5 h-5 text-primary" />
+                          </div>
+                          {!isLast && <div className="w-0.5 flex-1 bg-border mt-2" />}
+                        </div>
+                        <div className="flex-1 pb-6 rounded-lg p-2">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="font-medium">{entry.agencyName}</p>
+                            <DeliveryStatusBadge status={entry.status} size="xs" />
+                          </div>
+                          <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground capitalize">
+                            <span>{entry.changedByRole}</span>
+                            <span>•</span>
+                            <span>{formatDate(entry.changedAt)}</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         {/* ── Payment tab ── */}

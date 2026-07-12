@@ -1,9 +1,5 @@
 import { z } from 'zod';
 
-// ─── Common ───────────────────────────────────────────────────────────────────
-
-const urlSchema = z.string().url('Must be a valid URL').or(z.literal(''));
-
 // ─── Payout details (one entry in the array) ──────────────────────────────────
 
 const mobileMoneySchema = z.object({
@@ -54,13 +50,12 @@ export const step1Schema = z.object({
 export type Step1FormValues = z.infer<typeof step1Schema>;
 
 // ─── Step 2: Delivery Linking ─────────────────────────────────────────────────
-// Skip state is managed imperatively in the component (not via schema),
-// since the backend accepts either { default_delivery_agency_id } or { skip: true }.
+// Agency assignment no longer happens on this step — it's a pure step-advance.
+// The only thing worth persisting across back-navigation is which branch
+// (physical vs service-only) the vendor picked.
 
 export const step2Schema = z.object({
-    default_delivery_agency_id: z
-        .string()
-        .min(1, 'Please select a delivery agency'),
+    productType: z.enum(['physical', 'service']).nullable(),
 });
 
 export type Step2FormValues = z.infer<typeof step2Schema>;
@@ -68,6 +63,13 @@ export type Step2FormValues = z.infer<typeof step2Schema>;
 // ─── Step 3: Branding (skippable) ─────────────────────────────────────────────
 
 export const businessAddressSchema = z.object({
+    /**
+     * Existing address's Mongo id — omit for a brand-new address. Must be
+     * echoed back unchanged on resubmit (full-replace endpoint), otherwise a
+     * fresh id is generated and any product's pickupLocation pointing at the
+     * old one is demoted to draft. Never shown to the vendor.
+     */
+    _id: z.string().optional(),
     /** Required by the backend — identifies the location (e.g. "Main Office", "Warehouse"). */
     label: z.string().min(1, 'Label is required').max(50, 'Label must be 50 characters or fewer'),
     address_line1: z.string().min(1, 'Address is required').max(200, 'Address too long'),
@@ -77,8 +79,8 @@ export const businessAddressSchema = z.object({
 });
 
 export const step3Schema = z.object({
-    logo_url: urlSchema.optional(),
-    cover_image_url: urlSchema.optional(),
+    logo_file_id: z.string().nullable().optional(),
+    cover_image_file_id: z.string().nullable().optional(),
     business_addresses: z.array(businessAddressSchema).optional(),
 });
 
@@ -163,6 +165,7 @@ export const step4Schema = z.object({
     return_policy: returnPolicySchema.optional(),
     cancellation_policy: cancellationPolicySchema.optional(),
     support_policy: supportPolicySchema.optional(),
+    documents: z.array(z.string()).max(2, 'Maximum 2 documents').optional(),
 });
 
 export type Step4FormValues = z.infer<typeof step4Schema>;

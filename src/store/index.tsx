@@ -2,7 +2,7 @@ import { createContext, useContext, useState, useCallback } from 'react';
 import type {
   User, Store, Product, Order, Vendor,
   AnalyticsMetrics, MetricWithChange, SalesDataPoint, TopProduct,
-  CustomerMetrics, BookingMetrics, DateRange
+  CustomerMetrics, BookingMetrics, DateRange, VendorSettableStatus
 } from '@/types';
 import type { VendorNotification, NotificationListParams } from '@/types/notifications.types';
 import {
@@ -128,7 +128,7 @@ interface OrderState {
   };
   fetchOrders: ({ page, limit }: { page?: number, limit?: number }) => Promise<void>;
   fetchOrderById: (id: string) => Promise<Order>;
-  updateOrderStatus: (id: string, status: string) => Promise<void>;
+  updateOrderStatus: (id: string, status: VendorSettableStatus) => Promise<void>;
   toggleOrderSelection: (id: string) => void;
   selectAllOrders: (ids: string[]) => void;
   clearSelection: () => void;
@@ -298,7 +298,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     return apiFetchOrderById(id);
   }, []);
 
-  const updateOrderStatus = useCallback(async (id: string, status: string) => {
+  const updateOrderStatus = useCallback(async (id: string, status: VendorSettableStatus) => {
     const updated = await apiUpdateOrderStatus(id, status);
     setOrders(prev => prev.map(o => o.id === id ? updated : o));
   }, []);

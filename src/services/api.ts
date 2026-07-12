@@ -1,4 +1,4 @@
-import { ApiError, type ApiErrorDetail, type UploadViolation } from '@/types/api';
+import { ApiError, type ApiErrorDetail, type UploadViolation, type BlockedAddress } from '@/types/api';
 
 export const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8022/api';
 
@@ -65,17 +65,22 @@ async function buildApiError(res: Response): Promise<ApiError> {
     const requestId = (body.requestId as string) ?? undefined;
 
     // `error.details` shape varies by code:
-    //  - VALIDATION_ERROR        → an array of { field, message }
-    //  - UPLOAD_POLICY_VIOLATION → an object { violations: [...] }
-    // Keep the array path as `details`; lift `violations` out separately.
+    //  - VALIDATION_ERROR                 → an array of { field, message }
+    //  - UPLOAD_POLICY_VIOLATION          → an object { violations: [...] }
+    //  - VENDOR_BUSINESS_ADDRESS_IN_USE   → an object { blockedAddresses: [...] }
+    // Keep the array path as `details`; lift the object-shaped payloads out separately.
     const rawDetails = error.details;
     const details = Array.isArray(rawDetails) ? (rawDetails as ApiErrorDetail[]) : undefined;
     const violations =
         rawDetails && typeof rawDetails === 'object' && Array.isArray((rawDetails as Record<string, unknown>).violations)
             ? ((rawDetails as Record<string, unknown>).violations as UploadViolation[])
             : undefined;
+    const blockedAddresses =
+        rawDetails && typeof rawDetails === 'object' && Array.isArray((rawDetails as Record<string, unknown>).blockedAddresses)
+            ? ((rawDetails as Record<string, unknown>).blockedAddresses as BlockedAddress[])
+            : undefined;
 
-    return new ApiError(res.status, code, message, details, requestId, violations);
+    return new ApiError(res.status, code, message, details, requestId, violations, blockedAddresses);
 }
 
 // ─── Core request function ────────────────────────────────────────────────────

@@ -138,8 +138,10 @@ export interface Order {
   tags: string[];
   timeline: OrderTimelineEvent[];
   riskLevel: 'low' | 'medium' | 'high';
-  deliveryAgency?: { name: string; address: string };
-  assignedAgent?: { name: string };
+  /** Order-level shipment overview — one entry per agency/shipment handling the order. `null`/absent for digital orders. */
+  deliveries?: OrderItemDelivery[] | null;
+  /** Merged, per-agency shipment status history, sorted chronologically. Empty for digital orders. */
+  deliveryTimeline?: OrderDeliveryTimelineEntry[];
   entitlements?: Entitlement[];
   /**
    * Set when a card payment is under dispute (chargeback). While `active` is true the
@@ -158,9 +160,67 @@ export interface DisputeHold {
   reason?: string | null;
 }
 
-export type OrderStatus = 'pending' | 'confirmed' | 'processing' | 'shipped' | 'delivered' | 'fulfilled' | 'cancelled' | 'refunded' | 'returned';
+export type OrderStatus =
+  | 'pending'
+  | 'processing'
+  | 'partially_shipped'
+  | 'shipped'
+  | 'partially_delivered'
+  | 'delivered'
+  | 'fulfilled'
+  | 'cancelled'
+  | 'returned';
+
+/** The only fulfilment statuses a vendor can set directly via PATCH — everything else is system-computed. */
+export type VendorSettableStatus = 'pending' | 'processing' | 'cancelled';
+
 export type PaymentStatus = 'pending' | 'authorized' | 'paid' | 'partially_refunded' | 'refunded' | 'failed' | 'disputed';
 export type FulfillmentStatus = 'unfulfilled' | 'partial' | 'fulfilled' | 'restocked';
+
+/**
+ * Per-item delivery status. Kept loose (`string`) at the type level in
+ * `OrderItemDelivery`/`OrderDeliveryTimelineEntry` so an unrecognized future
+ * value from the API doesn't break typing — this union documents the known set.
+ */
+export type DeliveryStatus =
+  | 'pending'
+  | 'assigned'
+  | 'picked_up'
+  | 'in_transit'
+  | 'agent_delivered'
+  | 'delivered'
+  | 'failed'
+  | 'returned'
+  | 'rejected'
+  | 'pending_agency_reassignment';
+
+/** A single shipment's delivery info — shared shape for `items[].delivery` and order-level `deliveries[]`. */
+export interface OrderItemDelivery {
+  agencyId?: string;
+  agencyName?: string;
+  agencyPhone?: string;
+  deliveryStatus?: string;
+  shipmentId?: string;
+  trackingNumber?: string | null;
+  /** Snapshot of the product's `delivery.freeDelivery` flag at checkout time. */
+  freeDelivery?: boolean;
+  agent?: {
+    id: string;
+    name: string;
+    phone?: string;
+    avatarUrl?: string;
+  } | null;
+}
+
+/** One entry in the merged, per-agency shipment status history (`Order.deliveryTimeline`). */
+export interface OrderDeliveryTimelineEntry {
+  shipmentId: string;
+  agencyId: string;
+  agencyName: string;
+  status: string;
+  changedAt: string;
+  changedByRole: string;
+}
 
 export interface OrderItem {
   id: string;
@@ -173,6 +233,8 @@ export interface OrderItem {
   total: number;
   image?: string;
   productType?: ProductType;
+  /** Authoritative per-item delivery info — an order can be split across several agencies (one per item). `undefined` for digital items. */
+  delivery?: OrderItemDelivery;
 }
 
 export interface Entitlement {

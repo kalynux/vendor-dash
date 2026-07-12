@@ -10,9 +10,26 @@ export interface ApiUser {
 
 // ─── Vendor Role Entity ───────────────────────────────────────────────────────
 
+/** Populated file reference returned for a branding image slot. */
+export interface BrandingFileRef {
+  id: string;
+  key: string;
+  url: string;
+  mimeType: string;
+  size: number;
+  originalName?: string;
+}
+
+/** Read shape — `GET /vendor/profile` and every onboarding step response. */
 export interface Branding {
-  logo_url: string | null;
-  cover_image_url: string | null;
+  logo: BrandingFileRef | null;
+  coverImage: BrandingFileRef | null;
+}
+
+/** Write shape — `PATCH /vendor/profile` and the onboarding branding step. */
+export interface BrandingWritePayload {
+  logo_file_id?: string | null;
+  cover_image_file_id?: string | null;
 }
 
 export interface KycDetails {
@@ -27,6 +44,15 @@ export interface SocialLinks {
 }
 
 export interface BusinessAddress {
+  /**
+   * Mongo subdocument id. Omit when adding a new address (a fresh one is
+   * generated); echo back the existing value when resubmitting an existing
+   * address, otherwise a new id is generated and any physical product whose
+   * `delivery.pickupLocation` pointed at the old one is demoted to draft.
+   * Not remapped to `id` like the outer profile object — kept as `_id` to
+   * match the backend's pass-through serialization.
+   */
+  _id?: string;
   label?: string;
   address_line1: string;
   address_line2?: string | null;
@@ -141,6 +167,8 @@ export interface VendorPolicies {
   return_policy?: ReturnPolicy | null;
   cancellation_policy?: CancellationPolicy | null;
   support_policy?: SupportPolicy | null;
+  /** Supporting policy documents (PDFs). Max 2 URLs. Full-replace — cleared if omitted. */
+  documents?: string[] | null;
   version?: number;
 }
 
@@ -174,14 +202,16 @@ export interface BasicSetupPayload {
   version?: number;
 }
 
-// Step 2 — Delivery Linking (skippable)
-export type DeliveryLinkingPayload =
-  | { default_delivery_agency_id: string; skip?: false; version?: number }
-  | { skip: true };
+// Step 2 — Delivery Linking
+// No longer accepts `default_delivery_agency_id` — agency assignment now happens
+// entirely through Agency Connections (see agency-connection.types.ts), async and
+// independent of onboarding progress. This step is a pure advance; `skip` is kept
+// only for backward compatibility with older clients and is otherwise ignored.
+export type DeliveryLinkingPayload = Record<string, never> | { skip: true };
 
 // Step 3 — Branding (skippable)
 export type BrandingPayload =
-  | { skip?: false; branding?: Partial<Branding>; business_addresses?: BusinessAddress[]; version?: number }
+  | { skip?: false; branding?: BrandingWritePayload; business_addresses?: BusinessAddress[]; version?: number }
   | { skip: true };
 
 // Step 4 — Policy Setup (skippable; all three sub-policies are independently optional)
@@ -192,6 +222,7 @@ export type PolicySetupPayload =
       return_policy?: ReturnPolicy;
       cancellation_policy?: CancellationPolicy;
       support_policy?: SupportPolicy;
+      documents?: string[] | null;
       version?: number;
     };
 
@@ -225,13 +256,14 @@ export interface VendorProfileUpdatePayload {
   /** Language for rendered notifications (en | fr | pt | es | ar). */
   preferred_language?: string;
   payout_details?: PayoutDetails[];
-  branding?: Partial<Branding>;
+  branding?: BrandingWritePayload;
   business_addresses?: BusinessAddress[];
   social_links?: Partial<SocialLinks>;
   policies?: {
     return_policy?: ReturnPolicy | null;
     cancellation_policy?: CancellationPolicy | null;
     support_policy?: SupportPolicy | null;
+    documents?: string[] | null;
   } | null;
   notificationPreferences?: { email?: boolean; whatsapp?: boolean; phone?: boolean };
   /** Required — optimistic-locking guard. Pass the version from the last profile load. */
@@ -337,6 +369,13 @@ export interface UploadViolation {
   metadata?: Record<string, unknown> & { originalName?: string; detectedMimeType?: string };
 }
 
+/** One entry of `error.details.blockedAddresses` on a `VENDOR_BUSINESS_ADDRESS_IN_USE`. */
+export interface BlockedAddress {
+  addressId: string;
+  label: string;
+  productCount: number;
+}
+
 export class ApiError extends Error {
   readonly status: number;
   readonly code: string;
@@ -344,6 +383,8 @@ export class ApiError extends Error {
   readonly requestId?: string;
   /** Populated for `UPLOAD_POLICY_VIOLATION` — per-file upload failure reasons. */
   readonly violations?: UploadViolation[];
+  /** Populated for `VENDOR_BUSINESS_ADDRESS_IN_USE` — which addresses blocked the update. */
+  readonly blockedAddresses?: BlockedAddress[];
 
   constructor(
     status: number,
@@ -352,6 +393,7 @@ export class ApiError extends Error {
     details?: ApiErrorDetail[],
     requestId?: string,
     violations?: UploadViolation[],
+    blockedAddresses?: BlockedAddress[],
   ) {
     super(message);
     this.name = 'ApiError';
@@ -360,6 +402,7 @@ export class ApiError extends Error {
     this.details = details;
     this.requestId = requestId;
     this.violations = violations;
+    this.blockedAddresses = blockedAddresses;
   }
 
   get isUnauthorized() {
@@ -385,5 +428,11 @@ export class ApiError extends Error {
   /** True when a concurrent write was detected (OCC version mismatch). */
   get isConcurrentModification() {
     return this.status === 409 && this.code === 'VENDOR_ONBOARDING_CONCURRENT_MODIFICATION';
+  }
+
+  /** True when a `business_addresses` update was rejected because one or more
+   *  addresses are still in use as a product's pickup location. */
+  get isBusinessAddressInUse() {
+    return this.status === 409 && this.code === 'VENDOR_BUSINESS_ADDRESS_IN_USE';
   }
 }

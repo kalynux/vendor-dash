@@ -52,7 +52,7 @@ export function Sidebar() {
   const roleEntity = useOnboarding().session?.role_entity;
 
   const storeName = roleEntity?.display_name || roleEntity?.business_name || 'My Store';
-  const storeLogo = roleEntity?.branding?.logo_url || null;
+  const storeLogo = roleEntity?.branding?.logo?.url || null;
 
   // Per-item manual expand overrides; otherwise a group auto-opens when a child
   // is active. Works for any item with children.

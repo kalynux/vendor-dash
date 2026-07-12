@@ -1,10 +1,10 @@
-import { useState, useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { Loader2, ChevronRight, Package, Wrench } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { OnboardingLayout } from '@/onboarding/OnboardingLayout';
 import { useOnboarding } from '@/onboarding/store/onboarding.store';
-import { AgencyBrowser } from '@/components/vendor-settings/delivery/AgencyBrowser';
+import { AgencyConnectionBrowser } from '@/components/delivery/AgencyConnectionBrowser';
 import { Button } from '@/components/ui/button';
 import { ApiError } from '@/types/api';
 import { cn } from '@/lib/utils';
@@ -94,6 +94,24 @@ function ServiceOnlyConfirmation() {
     );
 }
 
+// ─── Physical: optional connection browser ────────────────────────────────────
+
+function PhysicalDeliveryPanel() {
+    return (
+        <div className="mt-4 space-y-3">
+            <div className="rounded-xl border border-border bg-muted/40 p-4">
+                <p className="text-sm font-semibold">Get a head start (optional)</p>
+                <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                    Delivery agencies now require an agreement — request a connection now so
+                    approval time overlaps with the rest of setup, or skip this and do it later
+                    from Settings → Delivery. Either way, you don't need one to continue.
+                </p>
+            </div>
+            <AgencyConnectionBrowser listHeightClass="h-[38vh] min-h-[160px]" />
+        </div>
+    );
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function Step2DeliveryLinking() {
@@ -102,17 +120,11 @@ export function Step2DeliveryLinking() {
     const roleEntity = session?.role_entity;
     const draft = drafts.deliveryLinking;
 
-    const existingAgencyId =
-        draft?.default_delivery_agency_id ?? roleEntity?.default_delivery_agency_id ?? null;
-
     const [productType, setProductType] = useState<ProductType>(
-        existingAgencyId ? 'physical' : null,
+        draft?.productType ?? (roleEntity?.default_delivery_agency_id ? 'physical' : null),
     );
 
-    const [selectedId, setSelectedId] = useState<string | null>(existingAgencyId);
-
     const [submitError, setSubmitError] = useState<string | null>(null);
-    const [isSkipping, setIsSkipping] = useState(false);
 
     // ── Product type choice ───────────────────────────────────────────────────
 
@@ -123,44 +135,30 @@ export function Step2DeliveryLinking() {
 
     const handleChooseService = () => {
         setProductType('service');
-        setSelectedId(null);
         setSubmitError(null);
     };
 
     // ── Submission ────────────────────────────────────────────────────────────
+    // Agency assignment no longer happens on this step — the backend call is now
+    // identical regardless of which branch the vendor picked, so there's a single
+    // handler and Continue is never gated on a selection.
 
-    const handleSubmitAgency = useCallback(async () => {
-        if (!selectedId) return;
+    const handleContinue = useCallback(async () => {
         setSubmitError(null);
-        saveDraft(2, { default_delivery_agency_id: selectedId });
+        saveDraft(2, { productType });
         try {
-            await submitDeliveryLinking({ default_delivery_agency_id: selectedId });
-            toast.success('Delivery agency linked!');
+            await submitDeliveryLinking({});
+            toast.success('Step complete!');
         } catch (err) {
             setSubmitError(
                 err instanceof ApiError
                     ? err.isServer
                         ? 'A server error occurred. Please try again.'
                         : err.message
-                    : 'Submission failed. Please try again.',
+                    : 'Could not continue. Please try again.',
             );
         }
-    }, [selectedId, submitDeliveryLinking, saveDraft]);
-
-    const handleSkip = useCallback(async () => {
-        setSubmitError(null);
-        setIsSkipping(true);
-        try {
-            await submitDeliveryLinking({ skip: true });
-            toast.success('Step skipped.');
-        } catch (err) {
-            setSubmitError(
-                err instanceof ApiError ? err.message : 'Could not continue. Please try again.',
-            );
-        } finally {
-            setIsSkipping(false);
-        }
-    }, [submitDeliveryLinking]);
+    }, [productType, submitDeliveryLinking, saveDraft]);
 
     // ── CTA slot ──────────────────────────────────────────────────────────────
 
@@ -171,14 +169,14 @@ export function Step2DeliveryLinking() {
             <div className="space-y-2">
                 <Button
                     type="button"
-                    onClick={handleSubmitAgency}
-                    disabled={!selectedId || isSubmitting || isSkipping}
+                    onClick={handleContinue}
+                    disabled={isSubmitting}
                     className="w-full h-12 text-base font-semibold gap-2"
                 >
-                    {isSubmitting && !isSkipping ? (
+                    {isSubmitting ? (
                         <>
                             <Loader2 className="w-4 h-4 animate-spin" />
-                            Linking…
+                            Continuing…
                         </>
                     ) : (
                         <>
@@ -190,7 +188,7 @@ export function Step2DeliveryLinking() {
                 <button
                     type="button"
                     onClick={handleChooseService}
-                    disabled={isSubmitting || isSkipping}
+                    disabled={isSubmitting}
                     className="w-full text-sm text-muted-foreground hover:text-foreground transition-colors py-2 disabled:opacity-50"
                 >
                     I only sell services — skip this step
@@ -202,11 +200,11 @@ export function Step2DeliveryLinking() {
             <div className="space-y-2">
                 <Button
                     type="button"
-                    onClick={handleSkip}
-                    disabled={isSubmitting || isSkipping}
+                    onClick={handleContinue}
+                    disabled={isSubmitting}
                     className="w-full h-12 text-base font-semibold gap-2"
                 >
-                    {isSkipping ? (
+                    {isSubmitting ? (
                         <>
                             <Loader2 className="w-4 h-4 animate-spin" />
                             Continuing…
@@ -221,7 +219,7 @@ export function Step2DeliveryLinking() {
                 <button
                     type="button"
                     onClick={handleChoosePhysical}
-                    disabled={isSubmitting || isSkipping}
+                    disabled={isSubmitting}
                     className="w-full text-sm text-muted-foreground hover:text-foreground transition-colors py-2 disabled:opacity-50"
                 >
                     Actually, I do sell physical products
@@ -240,7 +238,7 @@ export function Step2DeliveryLinking() {
                     {productType === null
                         ? 'Do you sell physical products that need to be shipped?'
                         : productType === 'physical'
-                          ? 'Select the delivery agency that will handle your orders.'
+                          ? 'Delivery agencies are connected independently of setup — this is optional.'
                           : 'No delivery needed for your business.'}
                 </p>
             </div>
@@ -262,10 +260,8 @@ export function Step2DeliveryLinking() {
                 />
             )}
 
-            {/* ── Physical: agency browser ── */}
-            {productType === 'physical' && (
-                <AgencyBrowser selectedId={selectedId} onSelect={setSelectedId} />
-            )}
+            {/* ── Physical: optional connection browser ── */}
+            {productType === 'physical' && <PhysicalDeliveryPanel />}
 
             {/* ── Service-only confirmation ── */}
             {productType === 'service' && <ServiceOnlyConfirmation />}

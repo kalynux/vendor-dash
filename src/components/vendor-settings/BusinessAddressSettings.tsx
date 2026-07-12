@@ -45,9 +45,10 @@ export function BusinessAddressSettings() {
     if (!roleEntity) return null;
 
     const defaultValues: Step3FormValues = {
-        logo_url: '',
-        cover_image_url: '',
+        logo_file_id: null,
+        cover_image_file_id: null,
         business_addresses: (roleEntity.business_addresses ?? []).map((a) => ({
+            _id: a._id,
             label: a.label ?? '',
             address_line1: a.address_line1,
             address_line2: a.address_line2 ?? '',

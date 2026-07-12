@@ -1,12 +1,25 @@
-import { useForm, useFieldArray } from 'react-hook-form';
+import { useState } from 'react';
+import { useForm, useFieldArray, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Plus, Trash2, Image as ImageIcon } from 'lucide-react';
 
 import { step3Schema, type Step3FormValues } from '@/onboarding/schemas/onboarding.schemas';
+import { BrandingImageUpload } from '@/components/vendor-settings/forms/BrandingImageUpload';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { cn } from '@/lib/utils';
+import type { ApiFile } from '@/types/file.types';
 
 // ─── Shared Branding & Addresses form body ────────────────────────────────────
 // Renders just the <form> with fields. Submit is driven externally via a button
@@ -20,6 +33,12 @@ export interface BrandingFieldsProps {
     showBranding?: boolean;
     /** Render the business-addresses block. Default true (onboarding shows both). */
     showAddresses?: boolean;
+    /** Currently-persisted preview urls for the logo/cover (from `branding.logo?.url` / `coverImage?.url`). */
+    logoPreviewUrl?: string | null;
+    coverPreviewUrl?: string | null;
+    /** Fires whenever the vendor uploads/removes a branding image, with the full
+     *  uploaded file — the caller uses this to build an optimistic `Branding` object. */
+    onBrandingFileChange?: (which: 'logo' | 'cover', file: ApiFile | null) => void;
 }
 
 export function BrandingFields({
@@ -28,6 +47,9 @@ export function BrandingFields({
     onSubmit,
     showBranding = true,
     showAddresses = true,
+    logoPreviewUrl = null,
+    coverPreviewUrl = null,
+    onBrandingFileChange,
 }: BrandingFieldsProps) {
     const {
         register,
@@ -44,6 +66,11 @@ export function BrandingFields({
         name: 'business_addresses',
     });
 
+    // Existing (already-saved) addresses get a confirmation before removal — the
+    // backend hard-rejects the whole update if the address is still in use as a
+    // product's pickup location, so this is a heads-up, not a guarantee.
+    const [confirmRemoveIndex, setConfirmRemoveIndex] = useState<number | null>(null);
+
     return (
         <form id={formId} onSubmit={handleSubmit(onSubmit)} className="space-y-6" noValidate>
             {/* Branding */}
@@ -54,42 +81,39 @@ export function BrandingFields({
                     <h2 className="font-semibold text-sm">Branding</h2>
                 </div>
 
-                <div className="space-y-2">
-                    <Label htmlFor="logo_url">Logo URL</Label>
-                    <Input
-                        id="logo_url"
-                        type="url"
-                        placeholder="https://cdn.example.com/logo.png"
-                        className={cn('h-11', errors.logo_url && 'border-destructive')}
-                        aria-invalid={!!errors.logo_url}
-                        {...register('logo_url')}
-                    />
-                    {errors.logo_url && (
-                        <p className="text-sm text-destructive" role="alert">
-                            {errors.logo_url.message}
-                        </p>
+                <Controller
+                    control={control}
+                    name="logo_file_id"
+                    render={({ field }) => (
+                        <BrandingImageUpload
+                            label="Logo"
+                            hint="Square image, min 200×200px recommended"
+                            fileId={field.value}
+                            previewUrl={logoPreviewUrl}
+                            onChange={(fileId, file) => {
+                                field.onChange(fileId);
+                                onBrandingFileChange?.('logo', file);
+                            }}
+                        />
                     )}
-                    <p className="text-xs text-muted-foreground">
-                        Publicly accessible image URL (square, min 200×200px recommended)
-                    </p>
-                </div>
+                />
 
-                <div className="space-y-2">
-                    <Label htmlFor="cover_image_url">Cover Image URL</Label>
-                    <Input
-                        id="cover_image_url"
-                        type="url"
-                        placeholder="https://cdn.example.com/cover.png"
-                        className={cn('h-11', errors.cover_image_url && 'border-destructive')}
-                        aria-invalid={!!errors.cover_image_url}
-                        {...register('cover_image_url')}
-                    />
-                    {errors.cover_image_url && (
-                        <p className="text-sm text-destructive" role="alert">
-                            {errors.cover_image_url.message}
-                        </p>
+                <Controller
+                    control={control}
+                    name="cover_image_file_id"
+                    render={({ field }) => (
+                        <BrandingImageUpload
+                            label="Cover Image"
+                            aspect="wide"
+                            fileId={field.value}
+                            previewUrl={coverPreviewUrl}
+                            onChange={(fileId, file) => {
+                                field.onChange(fileId);
+                                onBrandingFileChange?.('cover', file);
+                            }}
+                        />
                     )}
-                </div>
+                />
             </div>
             )}
 
@@ -125,7 +149,7 @@ export function BrandingFields({
                             >
                                 <button
                                     type="button"
-                                    onClick={() => remove(index)}
+                                    onClick={() => (field._id ? setConfirmRemoveIndex(index) : remove(index))}
                                     aria-label="Remove address"
                                     className="absolute top-3 right-3 text-muted-foreground hover:text-destructive transition-colors"
                                 >
@@ -223,6 +247,30 @@ export function BrandingFields({
                 )}
             </div>
             )}
+
+            <AlertDialog open={confirmRemoveIndex !== null} onOpenChange={(open) => !open && setConfirmRemoveIndex(null)}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Remove this address?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            If it&apos;s still set as a pickup location on a product, saving will be
+                            blocked until you reassign that product.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel type="button">Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                            type="button"
+                            onClick={() => {
+                                if (confirmRemoveIndex !== null) remove(confirmRemoveIndex);
+                                setConfirmRemoveIndex(null);
+                            }}
+                        >
+                            Remove
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </form>
     );
 }

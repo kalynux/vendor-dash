@@ -39,6 +39,7 @@ export function Step4PolicySetup() {
                     ...(enabled.return && values.return_policy ? { return_policy: values.return_policy } : {}),
                     ...(enabled.cancellation && values.cancellation_policy ? { cancellation_policy: values.cancellation_policy } : {}),
                     ...(enabled.support && values.support_policy ? { support_policy: values.support_policy } : {}),
+                    documents: values.documents ?? [],
                     version: roleEntity?.version,
                 });
                 toast.success('Setup complete! Welcome to your dashboard.');

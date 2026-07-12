@@ -16,8 +16,18 @@ export type ApiProductStatus =
 
 export type ApiVectorisationStatus = 'not_started' | 'pending' | 'completed' | 'failed';
 
+export type PickupLocationSource = 'vendor_address' | 'agency_storage';
+
+export interface ApiPickupLocation {
+  source: PickupLocationSource;
+  /** Required (must match a business_addresses._id) when source is 'vendor_address'; null/omitted for 'agency_storage'. */
+  vendorAddressId: string | null;
+}
+
 export interface ApiProductDelivery {
   agencyId: string | null;
+  freeDelivery: boolean;
+  pickupLocation?: ApiPickupLocation | null;
 }
 
 // ─── API Response Shapes ──────────────────────────────────────────────────────
@@ -229,8 +239,12 @@ export interface UpdateProductPayload {
     isActive?: boolean;
   };
   vectorisationEnabled?: boolean;
+  // Any sub-field may be sent alone — the backend merges against the
+  // existing value rather than replacing the whole object.
   delivery?: {
     agencyId?: string | null;
+    freeDelivery?: boolean;
+    pickupLocation?: ApiPickupLocation | null;
   };
 }
 

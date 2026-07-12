@@ -17,6 +17,7 @@ import type {
     BasicSetupPayload,
     DeliveryLinkingPayload,
     BrandingPayload,
+    Branding,
     PolicySetupPayload,
     OnboardingStepResponse,
     VendorOnboardingStep,
@@ -104,14 +105,23 @@ export interface OnboardingState {
      * Post-onboarding edit (Settings). PATCH /vendor/profile with a partial patch.
      * Merges the submitted fields into session.role_entity and bumps version.
      * Use for payout, branding, addresses, policies, country/timezone.
+     *
+     * `brandingPreview` is a local-only escape hatch: the PATCH response doesn't echo
+     * back populated file objects for `branding`, so when `patch.branding` is present
+     * the caller must supply the read-shape `Branding` it already has in hand (from the
+     * upload responses) to replace `role_entity.branding` with. Stripped before the
+     * network call.
      */
-    updateVendorProfile: (patch: Omit<VendorProfileUpdatePayload, 'version'>) => Promise<void>;
+    updateVendorProfile: (
+        patch: Omit<VendorProfileUpdatePayload, 'version'> & { brandingPreview?: Branding },
+    ) => Promise<void>;
 
-    /** Post-onboarding: set the default delivery agency (dedicated route). */
-    setDeliveryAgency: (agencyId: string) => Promise<void>;
-
-    /** Post-onboarding: clear the default delivery agency (dedicated route). */
-    clearDeliveryAgency: () => Promise<void>;
+    /**
+     * Post-onboarding: set the default delivery agency (dedicated route). There is
+     * no route to clear it once set. Resolves with the backend's message and the
+     * count of in-flight order items that were auto-reassigned from the old default.
+     */
+    setDeliveryAgency: (agencyId: string) => Promise<{ message?: string; reassignedOrderItems: number }>;
 
     /** Navigate to the previous step (no-op when already on step 1). */
     goBack: () => void;
@@ -288,13 +298,14 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     );
 
     const updateVendorProfile = useCallback(
-        async (patch: Omit<VendorProfileUpdatePayload, 'version'>) => {
+        async (patch: Omit<VendorProfileUpdatePayload, 'version'> & { brandingPreview?: Branding }) => {
             setIsSubmitting(true);
             setError(null);
+            const { brandingPreview, ...writePatch } = patch;
             try {
                 const currentVersion = session?.role_entity.version ?? 0;
                 const res = await onboardingService.updateProfile({
-                    ...patch,
+                    ...writePatch,
                     version: currentVersion,
                 });
                 const nextVersion = res.data?.version ?? currentVersion + 1;
@@ -309,17 +320,21 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
                         ...prev,
                         role_entity: {
                             ...re,
-                            ...(patch.country !== undefined ? { country: patch.country } : {}),
-                            ...(patch.timezone !== undefined ? { timezone: patch.timezone } : {}),
-                            ...(patch.preferred_language !== undefined ? { preferred_language: patch.preferred_language } : {}),
-                            ...(patch.payout_details !== undefined ? { payout_details: patch.payout_details } : {}),
-                            ...(patch.business_addresses !== undefined ? { business_addresses: patch.business_addresses } : {}),
-                            ...(patch.branding !== undefined ? { branding: { ...re.branding, ...patch.branding } } : {}),
-                            ...(patch.social_links !== undefined ? { social_links: { ...re.social_links, ...patch.social_links } } : {}),
-                            ...(patch.policies !== undefined ? { policies: patch.policies } : {}),
-                            ...(patch.displayName !== undefined ? { display_name: patch.displayName } : {}),
-                            ...(patch.businessDescription !== undefined ? { business_description: patch.businessDescription } : {}),
-                            ...(patch.phone !== undefined ? { phone: patch.phone } : {}),
+                            ...(writePatch.country !== undefined ? { country: writePatch.country } : {}),
+                            ...(writePatch.timezone !== undefined ? { timezone: writePatch.timezone } : {}),
+                            ...(writePatch.preferred_language !== undefined ? { preferred_language: writePatch.preferred_language } : {}),
+                            ...(writePatch.payout_details !== undefined ? { payout_details: writePatch.payout_details } : {}),
+                            ...(writePatch.business_addresses !== undefined ? { business_addresses: writePatch.business_addresses } : {}),
+                            // `writePatch.branding` (if present) is the write shape
+                            // ({logo_file_id, cover_image_file_id}) — it can't be spread
+                            // into the read-shape `branding` object. Use the caller-supplied
+                            // preview instead; fall back to leaving branding untouched.
+                            ...(brandingPreview !== undefined ? { branding: brandingPreview } : {}),
+                            ...(writePatch.social_links !== undefined ? { social_links: { ...re.social_links, ...writePatch.social_links } } : {}),
+                            ...(writePatch.policies !== undefined ? { policies: writePatch.policies } : {}),
+                            ...(writePatch.displayName !== undefined ? { display_name: writePatch.displayName } : {}),
+                            ...(writePatch.businessDescription !== undefined ? { business_description: writePatch.businessDescription } : {}),
+                            ...(writePatch.phone !== undefined ? { phone: writePatch.phone } : {}),
                             version: nextVersion,
                         },
                     };
@@ -342,39 +357,18 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
         setIsSubmitting(true);
         setError(null);
         try {
-            await onboardingService.setDefaultDeliveryAgency(agencyId);
+            const res = await onboardingService.setDefaultDeliveryAgency(agencyId);
             setSession((prev) =>
                 prev
                     ? { ...prev, role_entity: { ...prev.role_entity, default_delivery_agency_id: agencyId } }
                     : prev,
             );
+            return { message: res.message, reassignedOrderItems: res.meta?.reassignedOrderItems ?? 0 };
         } catch (err) {
             const apiErr =
                 err instanceof ApiError
                     ? err
                     : new ApiError(500, 'UPDATE_FAILED', 'Could not set delivery agency');
-            setError(apiErr);
-            throw apiErr;
-        } finally {
-            setIsSubmitting(false);
-        }
-    }, []);
-
-    const clearDeliveryAgency = useCallback(async () => {
-        setIsSubmitting(true);
-        setError(null);
-        try {
-            await onboardingService.clearDefaultDeliveryAgency();
-            setSession((prev) =>
-                prev
-                    ? { ...prev, role_entity: { ...prev.role_entity, default_delivery_agency_id: null } }
-                    : prev,
-            );
-        } catch (err) {
-            const apiErr =
-                err instanceof ApiError
-                    ? err
-                    : new ApiError(500, 'UPDATE_FAILED', 'Could not clear delivery agency');
             setError(apiErr);
             throw apiErr;
         } finally {
@@ -441,7 +435,6 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
                 submitPolicySetup,
                 updateVendorProfile,
                 setDeliveryAgency,
-                clearDeliveryAgency,
                 goBack,
                 logout,
                 clearError,
