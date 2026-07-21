@@ -13,6 +13,8 @@ import {
   CircleDollarSign,
   CheckCircle2,
   HardDrive,
+  Handshake,
+  Wallet,
   ShieldCheck,
   ShieldAlert,
   type LucideIcon,
@@ -123,6 +125,9 @@ const EVENTS: EventMeta[] = [
   { key: 'paymentReceivedPartial', label: 'Partial payment', description: 'When a partial payment is received', Icon: CircleDollarSign },
   { key: 'paymentReceivedFull', label: 'Full payment', description: 'When a payment is completed in full', Icon: CheckCircle2 },
   { key: 'storageAlert', label: 'Storage alert', description: 'When media storage crosses 80% / 90% / 100%', Icon: HardDrive },
+  { key: 'connectionUpdated', label: 'Agency connections', description: 'When an agency request, approval, rejection, or re-approval happens', Icon: Handshake },
+  { key: 'payoutUpdates', label: 'Payout updates', description: 'When your payout request is created, paid, or rejected', Icon: Wallet },
+  { key: 'shipmentRejected', label: 'Shipment rejected', description: 'When a delivery agency declines a shipment and its items need rerouting', Icon: PackageX },
 ];
 
 const LANGUAGES: { value: PreferredLanguage; label: string }[] = [

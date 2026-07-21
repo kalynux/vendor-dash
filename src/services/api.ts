@@ -1,6 +1,23 @@
-import { ApiError, type ApiErrorDetail, type UploadViolation, type BlockedAddress } from '@/types/api';
+import { ApiError, type ApiErrorDetail, type UploadViolation, type BlockedAddress, type ApiRowError } from '@/types/api';
 
 export const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8022/api';
+
+/**
+ * Unwrap the standard `{ success, data }` envelope, tolerating the pre-envelope
+ * bare payload.
+ *
+ * The 2026-07-17 breaking change moved auth and the Telegram/WhatsApp link-status
+ * endpoints onto the platform-standard envelope (see api-doc/README.md). A few
+ * per-feature docs still show the older bare payload, so — to be correct under
+ * either documented shape — this returns `res.data` when the response looks
+ * enveloped and the response as-is otherwise.
+ */
+export function unwrapEnvelope<T>(res: unknown): T {
+    if (res && typeof res === 'object' && 'success' in res && 'data' in res) {
+        return (res as { data: T }).data;
+    }
+    return res as T;
+}
 
 // ─── Refresh queue ────────────────────────────────────────────────────────────
 // Ensures only one token refresh is in-flight at a time.
@@ -80,7 +97,17 @@ async function buildApiError(res: Response): Promise<ApiError> {
             ? ((rawDetails as Record<string, unknown>).blockedAddresses as BlockedAddress[])
             : undefined;
 
-    return new ApiError(res.status, code, message, details, requestId, violations, blockedAddresses);
+    // All-or-nothing bulk ops (e.g. inventory bulk-update) return per-row failures.
+    // Confirmed shape is a top-level `errors` array; the older
+    // `error.details.rowErrors` shape is also tolerated.
+    const topLevelErrors = Array.isArray(body.errors) ? (body.errors as ApiRowError[]) : undefined;
+    const detailRowErrors =
+        rawDetails && typeof rawDetails === 'object' && Array.isArray((rawDetails as Record<string, unknown>).rowErrors)
+            ? ((rawDetails as Record<string, unknown>).rowErrors as ApiRowError[])
+            : undefined;
+    const rowErrors = topLevelErrors ?? detailRowErrors;
+
+    return new ApiError(res.status, code, message, details, requestId, violations, blockedAddresses, rowErrors);
 }
 
 // ─── Core request function ────────────────────────────────────────────────────
@@ -147,7 +174,7 @@ async function request<T>(
 
 async function requestFormData<T>(
     path: string,
-    method: 'POST' | 'PUT',
+    method: 'POST' | 'PUT' | 'PATCH',
     body: FormData,
     isRetry = false,
 ): Promise<T> {
@@ -238,5 +265,9 @@ export const api = {
 
     putFormData<T>(path: string, body: FormData): Promise<T> {
         return requestFormData<T>(path, 'PUT', body);
+    },
+
+    patchFormData<T>(path: string, body: FormData): Promise<T> {
+        return requestFormData<T>(path, 'PATCH', body);
     },
 };

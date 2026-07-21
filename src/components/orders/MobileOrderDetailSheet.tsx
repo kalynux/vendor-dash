@@ -21,6 +21,7 @@ import {
   Loader2,
   AlertTriangle,
   PackageCheck,
+  Banknote,
 } from 'lucide-react';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { Badge } from '@/components/ui/badge';
@@ -45,6 +46,7 @@ import { Input } from '@/components/ui/input';
 import { OrderStatusBadge } from './OrderStatusBadge';
 import { PaymentStatusBadge } from './PaymentStatusBadge';
 import { DeliveryStatusBadge } from './DeliveryStatusBadge';
+import { DeliveryRejectionNotice } from './DeliveryRejectionNotice';
 import { ReassignAgencyPopover } from './ReassignAgencyPopover';
 import { cn } from '@/lib/utils';
 import { useOrderStore } from '@/store';
@@ -330,6 +332,11 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                       <Package className="w-3 h-3" />Physical
                     </Badge>
                   )}
+                  {order.paymentMethod === 'cash_on_delivery' && (
+                    <Badge variant="outline" className="gap-1 text-xs border-amber-300 text-amber-700 bg-amber-50">
+                      <Banknote className="w-3 h-3" />COD
+                    </Badge>
+                  )}
                   <Button variant="outline" size="sm" className="gap-1.5 h-7 px-2.5 text-xs ml-auto">
                     <Printer className="w-3.5 h-3.5" />Print
                   </Button>
@@ -538,6 +545,9 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                             {item.delivery.trackingNumber && (
                               <p className="text-xs text-muted-foreground">Tracking: {item.delivery.trackingNumber}</p>
                             )}
+                            {item.delivery.rejection && (
+                              <DeliveryRejectionNotice rejection={item.delivery.rejection} size="xs" />
+                            )}
                             {item.delivery.deliveryStatus && REASSIGNABLE_DELIVERY_STATUSES.includes(item.delivery.deliveryStatus) && (
                               <ReassignAgencyPopover
                                 orderId={order.id}
@@ -662,6 +672,12 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                         <div>
                           <p className="text-xs text-muted-foreground mb-1">Status</p>
                           <PaymentStatusBadge status={order.paymentStatus} size="xs" />
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground mb-1">Payment Method</p>
+                          <p className="text-sm font-medium">
+                            {order.paymentMethod === 'cash_on_delivery' ? 'Cash on Delivery' : 'Online'}
+                          </p>
                         </div>
                         <div>
                           <p className="text-xs text-muted-foreground mb-1">Order Type</p>

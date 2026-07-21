@@ -59,6 +59,7 @@ import { useRouter } from '@/App';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useInfiniteList } from '@/hooks/use-infinite-list';
 import { useScrollRestoration } from '@/hooks/use-scroll-restoration';
+import { getListCache, setListCache } from '@/lib/listCache';
 import { MobilePageHeader } from '@/components/layout/MobilePageHeader';
 import { MobileListFooter } from '@/components/layout/MobileListFooter';
 import {
@@ -188,6 +189,11 @@ function VectorisationBadge({
   );
 }
 
+// Persist the desktop view-mode toggle across tab switches (mirrors the Media
+// Library's listCache usage) — otherwise returning to this page always resets
+// to grid since viewMode is local component state.
+const PRODUCTS_VIEW_KEY = 'products-view-mode';
+
 export function Products() {
   const {
     products,
@@ -204,7 +210,13 @@ export function Products() {
   const isMobile = useIsMobile();
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [viewMode, setViewModeState] = useState<'grid' | 'list'>(
+    () => getListCache<'grid' | 'list'>(PRODUCTS_VIEW_KEY) ?? 'grid',
+  );
+  const setViewMode = useCallback((mode: 'grid' | 'list') => {
+    setViewModeState(mode);
+    setListCache(PRODUCTS_VIEW_KEY, mode);
+  }, []);
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
   const [actionsSheetProduct, setActionsSheetProduct] = useState<ProductListItem | null>(null);
   const [productToDelete, setProductToDelete] = useState<ProductListItem | null>(null);

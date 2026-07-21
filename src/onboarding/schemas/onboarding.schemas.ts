@@ -62,6 +62,33 @@ export type Step2FormValues = z.infer<typeof step2Schema>;
 
 // ─── Step 3: Branding (skippable) ─────────────────────────────────────────────
 
+// Canonical geospatial address attached to a business address (see api-doc/geo/README.md).
+// `resolved_at` is deliberately OMITTED — it is server-assigned, and leaving it
+// out of the schema means zod strips it from submitted values automatically.
+const geoPointFormSchema = z.object({
+    type: z.literal('Point'),
+    coordinates: z.tuple([z.number(), z.number()]),
+});
+
+export const geoAddressFormSchema = z.object({
+    formatted_address: z.string(),
+    coordinates: geoPointFormSchema,
+    provider: z.string().nullish(),
+    provider_place_id: z.string().nullish(),
+    components: z
+        .object({
+            street: z.string().nullish(),
+            neighbourhood: z.string().nullish(),
+            city: z.string().nullish(),
+            region: z.string().nullish(),
+            country: z.string().nullish(),
+            country_code: z.string().nullish(),
+            postal_code: z.string().nullish(),
+        })
+        .nullish(),
+    raw_input: z.string().optional(),
+});
+
 export const businessAddressSchema = z.object({
     /**
      * Existing address's Mongo id — omit for a brand-new address. Must be
@@ -76,6 +103,8 @@ export const businessAddressSchema = z.object({
     address_line2: z.string().max(200, 'Address too long').optional().or(z.literal('')),
     city: z.string().min(1, 'City is required').max(100, 'City name too long'),
     state: z.string().max(100, 'State/region too long').optional().or(z.literal('')),
+    /** Canonical geospatial address from the search box. Preserved on resubmit. */
+    geo: geoAddressFormSchema.nullish(),
 });
 
 export const step3Schema = z.object({

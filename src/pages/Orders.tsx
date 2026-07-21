@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Search,
@@ -15,6 +15,9 @@ import {
   Loader2,
   AlertTriangle,
   PackageCheck,
+  Banknote,
+  Check,
+  X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -59,10 +62,21 @@ import {
   STATUS_LABELS,
   STATUS_ICONS,
   ORDER_STATUS_FILTER_OPTIONS,
+  PAYMENT_METHOD_FILTER_OPTIONS,
+  PAYMENT_STATUS_FILTER_OPTIONS,
+  ORDER_TYPE_FILTER_OPTIONS,
   canDispatchOrder,
   getCommonNextStatuses,
   canBulkDispatch,
 } from '@/lib/orderStatus';
+import {
+  parseOrderFilters,
+  parseOrderPage,
+  orderFiltersToQuery,
+  countActiveFilters,
+  type OrderFilters,
+} from '@/lib/orderFilters';
+import { OrderDateRangeFilter } from '@/components/orders/OrderDateRangeFilter';
 import { toast } from 'sonner';
 import { OrderDetails } from '@/components/features/OrderDetails';
 import { OrderStatusBadge } from '@/components/orders/OrderStatusBadge';
@@ -73,13 +87,21 @@ import { useInfiniteList } from '@/hooks/use-infinite-list';
 import { useScrollRestoration } from '@/hooks/use-scroll-restoration';
 import { MobilePageHeader } from '@/components/layout/MobilePageHeader';
 import { MobileListFooter } from '@/components/layout/MobileListFooter';
-import type { Order, VendorSettableStatus } from '@/types';
+import type { Order, OrderStatus, VendorSettableStatus } from '@/types';
 import { cn } from '@/lib/utils';
 
 const mobileFilterPills = ['All', 'Pending', 'Shipped', 'Delivered'];
 
+/** Maps a mobile quick-pill to its `status` filter value (`All` clears it). */
+function pillToStatus(pill: string): OrderStatus | undefined {
+  return pill === 'All' ? undefined : (pill.toLowerCase() as OrderStatus);
+}
+
 // Doc-enforced cap on orderIds per bulk/status and bulk/dispatch call.
 const MAX_BULK_SIZE = 50;
+
+// Desktop page-number pagination size (mobile uses viewport-derived infinite scroll).
+const DESKTOP_PAGE_LIMIT = 20;
 
 /** Short toast-friendly summary of a bulk action's per-order failures. */
 function summarizeBulkFailures(failed: BulkActionFailure[]): string {
@@ -94,21 +116,178 @@ function summarizeBulkFailures(failed: BulkActionFailure[]): string {
   return `${failed.length} order(s) couldn't be updated — see each order for details.`;
 }
 
+// ─── Filter UI (shared by desktop + mobile sheets) ──────────────────────────
+
+function labelFor<T extends string>(options: { value: T; label: string }[], value?: T): string {
+  return options.find((o) => o.value === value)?.label ?? String(value ?? '');
+}
+
+function formatChipDateRange(from?: string, to?: string): string {
+  const f = (iso?: string) => (iso ? new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : null);
+  const a = f(from);
+  const b = f(to);
+  if (a && b) return a === b ? a : `${a} – ${b}`;
+  return a ?? b ?? '';
+}
+
+function FilterOptionRow({ label, selected, onClick }: { label: string; selected: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        'flex w-full items-center justify-between rounded-md px-3 py-2 text-sm text-left transition-colors',
+        selected ? 'bg-primary/10 font-medium text-foreground' : 'hover:bg-muted',
+      )}
+    >
+      <span className="capitalize">{label}</span>
+      {selected && <Check className="h-4 w-4 text-primary flex-shrink-0" />}
+    </button>
+  );
+}
+
+function FilterGroup<T extends string>({
+  title,
+  value,
+  options,
+  onChange,
+}: {
+  title: string;
+  value: T | undefined;
+  options: { value: T; label: string }[];
+  onChange: (v: T | undefined) => void;
+}) {
+  return (
+    <div>
+      <h4 className="text-sm font-medium mb-2">{title}</h4>
+      <div className="space-y-0.5">
+        <FilterOptionRow label="Any" selected={!value} onClick={() => onChange(undefined)} />
+        {options.map((o) => (
+          <FilterOptionRow key={o.value} label={o.label} selected={value === o.value} onClick={() => onChange(o.value)} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Single-select filter groups + optional date range. Emits URL patches via `onChange`. */
+function OrdersFilterPanel({
+  filters,
+  onChange,
+}: {
+  filters: OrderFilters;
+  onChange: (patch: Partial<OrderFilters>) => void;
+}) {
+  return (
+    <div className="space-y-6">
+      <FilterGroup title="Order Status" value={filters.status} options={ORDER_STATUS_FILTER_OPTIONS} onChange={(v) => onChange({ status: v })} />
+      <FilterGroup title="Payment Status" value={filters.paymentStatus} options={PAYMENT_STATUS_FILTER_OPTIONS} onChange={(v) => onChange({ paymentStatus: v })} />
+      <FilterGroup title="Payment Method" value={filters.paymentMethod} options={PAYMENT_METHOD_FILTER_OPTIONS} onChange={(v) => onChange({ paymentMethod: v })} />
+      <FilterGroup title="Order Type" value={filters.orderType} options={ORDER_TYPE_FILTER_OPTIONS} onChange={(v) => onChange({ orderType: v })} />
+      <div>
+        <h4 className="text-sm font-medium mb-2">Order Date</h4>
+        <OrderDateRangeFilter
+          from={filters.dateFrom}
+          to={filters.dateTo}
+          onApply={(from, to) => onChange({ dateFrom: from, dateTo: to })}
+        />
+      </div>
+    </div>
+  );
+}
+
+/** Removable chips summarising the active filters (excluding the search box). */
+function OrdersActiveFilterChips({
+  filters,
+  orders,
+  onClear,
+}: {
+  filters: OrderFilters;
+  orders: Order[];
+  onClear: (patch: Partial<OrderFilters>) => void;
+}) {
+  const chips: { key: string; label: string; clear: Partial<OrderFilters> }[] = [];
+  if (filters.status) chips.push({ key: 'status', label: `Status: ${labelFor(ORDER_STATUS_FILTER_OPTIONS, filters.status)}`, clear: { status: undefined } });
+  if (filters.paymentStatus) chips.push({ key: 'paymentStatus', label: `Payment: ${labelFor(PAYMENT_STATUS_FILTER_OPTIONS, filters.paymentStatus)}`, clear: { paymentStatus: undefined } });
+  if (filters.paymentMethod) chips.push({ key: 'paymentMethod', label: `Method: ${labelFor(PAYMENT_METHOD_FILTER_OPTIONS, filters.paymentMethod)}`, clear: { paymentMethod: undefined } });
+  if (filters.orderType) chips.push({ key: 'orderType', label: `Type: ${labelFor(ORDER_TYPE_FILTER_OPTIONS, filters.orderType)}`, clear: { orderType: undefined } });
+  if (filters.dateFrom || filters.dateTo) chips.push({ key: 'date', label: `Date: ${formatChipDateRange(filters.dateFrom, filters.dateTo)}`, clear: { dateFrom: undefined, dateTo: undefined } });
+  if (filters.customerId) {
+    const name = orders.find((o) => o.customer.id === filters.customerId)?.customer.name;
+    chips.push({ key: 'customerId', label: `Customer: ${name ?? filters.customerId}`, clear: { customerId: undefined } });
+  }
+  if (chips.length === 0) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      {chips.map((c) => (
+        <button
+          key={c.key}
+          type="button"
+          onClick={() => onClear(c.clear)}
+          className="inline-flex items-center gap-1 rounded-full border bg-muted/50 px-3 py-1 text-xs hover:bg-muted transition-colors"
+        >
+          <span className="max-w-[180px] truncate">{c.label}</span>
+          <X className="h-3 w-3 flex-shrink-0" />
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function Orders() {
   const { orders, selectedOrders, isLoading, pagination, fetchOrders, fetchOrderById, toggleOrderSelection, selectAllOrders, updateOrderStatus } = useOrderStore();
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const isMobile = useIsMobile();
+
+  // ─── URL-backed filter state (single source of truth) ──────────────────────
+  // Filters live in the query string so they're shareable, survive back/forward,
+  // and the `?customerId=` deep-link from the Customers tab works for free.
+  const filters = useMemo(() => parseOrderFilters(searchParams), [searchParams]);
+  const page = parseOrderPage(searchParams);
+  const activeFilterCount = countActiveFilters(filters);
+
+  const [searchQuery, setSearchQuery] = useState(() => searchParams.get('q') ?? '');
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [isDetailLoading, setIsDetailLoading] = useState(false);
-  const [statusFilter, setStatusFilter] = useState<string[]>([]);
-  const [mobilePillFilter, setMobilePillFilter] = useState('All');
-  const isMobile = useIsMobile();
+  const [filterSheetOpen, setFilterSheetOpen] = useState(false);
 
   const [statusLoading, setStatusLoading] = useState<string | null>(null);
   const [orderToCancel, setOrderToCancel] = useState<Order | null>(null);
   const [cancelConfirmationText, setCancelConfirmationText] = useState('');
   const [actionsSheetOrder, setActionsSheetOrder] = useState<Order | null>(null);
-  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Merge a filter patch into the URL and reset to page 1. Non-filter params
+  // (e.g. `view`) are preserved.
+  const updateFilters = useCallback((patch: Partial<OrderFilters>) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      for (const [key, value] of Object.entries(patch)) {
+        if (value === undefined || value === null || value === '') next.delete(key);
+        else next.set(key, String(value));
+      }
+      next.delete('page');
+      return next;
+    }, { replace: true });
+  }, [setSearchParams]);
+
+  const clearAllFilters = useCallback(() => {
+    setSearchQuery('');
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      ['status', 'paymentStatus', 'paymentMethod', 'orderType', 'dateFrom', 'dateTo', 'customerId', 'q', 'page'].forEach((k) => next.delete(k));
+      return next;
+    }, { replace: true });
+  }, [setSearchParams]);
+
+  const goToPage = useCallback((p: number) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (p <= 1) next.delete('page');
+      else next.set('page', String(p));
+      return next;
+    }, { replace: true });
+  }, [setSearchParams]);
 
   // Bulk actions (desktop selection bar + mobile long-press selection)
   const [bulkActionLoading, setBulkActionLoading] = useState(false);
@@ -147,16 +326,9 @@ export function Orders() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
-  // Desktop uses the store + page-number pagination; mobile uses infinite scroll.
-  // Only fetch on mount when the store is empty so returning to the tab (or back
-  // from a detail) doesn't reload data that's already there.
-  useEffect(() => {
-    if (!isMobile && orders.length === 0) fetchOrders({ page: 1 });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isMobile]);
-
-  // Debounce search for the mobile server-side fetch.
-  const [debouncedSearch, setDebouncedSearch] = useState('');
+  // Debounce the search box, then push it into the URL `q` param — the single
+  // source of truth both desktop and mobile fetch from.
+  const [debouncedSearch, setDebouncedSearch] = useState(() => (searchParams.get('q') ?? '').trim());
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -164,38 +336,61 @@ export function Orders() {
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [searchQuery]);
 
+  useEffect(() => {
+    const current = searchParams.get('q') ?? '';
+    if (debouncedSearch === current) return;
+    updateFilters({ q: debouncedSearch || undefined });
+  }, [debouncedSearch, searchParams, updateFilters]);
+
+  // Desktop: fetch whenever the URL-derived query (filters + search + page)
+  // changes. Mobile is driven by useInfiniteList below instead.
+  const query = useMemo(
+    () => orderFiltersToQuery(filters, page, DESKTOP_PAGE_LIMIT),
+    [filters, page],
+  );
+  const queryKey = JSON.stringify(query);
+  useEffect(() => {
+    if (isMobile) return;
+    fetchOrders(query);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMobile, queryKey]);
+
+  // Stale selections must not carry across a changed result set (a bulk action
+  // could target rows no longer shown). Filter/search changes clear the
+  // selection; plain pagination keeps it.
+  const filterSelectionKey = JSON.stringify(filters);
+  const selectionResetMounted = useRef(false);
+  useEffect(() => {
+    if (!selectionResetMounted.current) {
+      selectionResetMounted.current = true;
+      return;
+    }
+    selectAllOrders([]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterSelectionKey]);
+
   const fetchOrdersPage = useCallback(
-    (page: number, limit: number) =>
-      apiFetchOrders({
-        page,
-        limit,
-        q: debouncedSearch || undefined,
-        status: mobilePillFilter === 'All' ? undefined : mobilePillFilter.toLowerCase(),
-      }).then((r) => ({ items: r.data, total: r.meta.total, totalPages: r.meta.pages })),
-    [debouncedSearch, mobilePillFilter],
+    (pageArg: number, limit: number) =>
+      apiFetchOrders(orderFiltersToQuery(filters, pageArg, limit))
+        .then((r) => ({ items: r.data, total: r.meta.total, totalPages: r.meta.pages })),
+    [filters],
   );
 
   const infinite = useInfiniteList<Order>({
     fetchPage: fetchOrdersPage,
     rowHeight: 84,
     enabled: isMobile,
-    deps: [debouncedSearch, mobilePillFilter],
+    deps: [
+      filters.status,
+      filters.paymentStatus,
+      filters.paymentMethod,
+      filters.orderType,
+      filters.dateFrom,
+      filters.dateTo,
+      filters.customerId,
+      filters.q,
+    ],
     cacheKey: 'orders',
-  });
-
-  const filteredOrders = orders.filter((order: Order) => {
-    const matchesSearch =
-      order.orderNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      order.customer.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      order.customer.email.toLowerCase().includes(searchQuery.toLowerCase());
-
-    const matchesStatus = statusFilter.length === 0 || statusFilter.includes(order.status);
-
-    const matchesMobilePill =
-      mobilePillFilter === 'All' ||
-      order.status.toLowerCase() === mobilePillFilter.toLowerCase();
-
-    return matchesSearch && matchesStatus && (isMobile ? matchesMobilePill : true);
   });
 
   const handleStatusUpdate = async (order: Order, status: VendorSettableStatus) => {
@@ -246,7 +441,7 @@ export function Orders() {
     try {
       const { message } = await dispatchOrder(order.id);
       if (isMobile) infinite.reload();
-      else fetchOrders({ page: pagination?.page ?? 1 });
+      else fetchOrders(query);
       toast.success(message);
     } catch (err) {
       toast.error(getOrderErrorMessage(err));
@@ -259,7 +454,7 @@ export function Orders() {
   // simplest correct way to reflect the real post-action state is a refetch.
   const refreshAfterBulkAction = () => {
     if (isMobile) infinite.reload();
-    else fetchOrders({ page: pagination?.page ?? 1 });
+    else fetchOrders(query);
   };
 
   const handleBulkStatusUpdate = async (status: VendorSettableStatus) => {
@@ -312,14 +507,6 @@ export function Orders() {
     } finally {
       setBulkActionLoading(false);
     }
-  };
-
-  const toggleStatusFilter = (status: string) => {
-    setStatusFilter((prev) =>
-      prev.includes(status)
-        ? prev.filter((s) => s !== status)
-        : [...prev, status]
-    );
   };
 
   const formatCurrency = (value: number) => {
@@ -399,7 +586,7 @@ export function Orders() {
     selectAllOrders([]);
   };
 
-  const allSelected = filteredOrders.length > 0 && selectedOrders.length === filteredOrders.length;
+  const allSelected = orders.length > 0 && selectedOrders.length === orders.length;
 
   const cancelOrderDialog = (
     <Dialog open={!!orderToCancel} onOpenChange={(open) => {
@@ -584,14 +771,29 @@ export function Orders() {
           <MobilePageHeader
             title="Orders"
             actions={
-              <button
-                type="button"
-                onClick={() => {/* create order */ }}
-                aria-label="Create order"
-                className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-accent transition-colors"
-              >
-                <Plus className="w-5 h-5" />
-              </button>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setFilterSheetOpen(true)}
+                  aria-label="Filter orders"
+                  className="relative flex h-9 w-9 items-center justify-center rounded-full hover:bg-accent transition-colors"
+                >
+                  <Filter className="w-5 h-5" />
+                  {activeFilterCount > 0 && (
+                    <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground">
+                      {activeFilterCount}
+                    </span>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {/* create order */ }}
+                  aria-label="Create order"
+                  className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-accent transition-colors"
+                >
+                  <Plus className="w-5 h-5" />
+                </button>
+              </div>
             }
             subheader={
               <div className="space-y-3">
@@ -605,20 +807,23 @@ export function Orders() {
                   />
                 </div>
                 <div className="-mx-1 flex gap-2 overflow-x-auto px-1 scrollbar-none">
-                  {mobileFilterPills.map((pill) => (
-                    <button
-                      key={pill}
-                      onClick={() => setMobilePillFilter(pill)}
-                      className={cn(
-                        'flex-shrink-0 px-4 py-1.5 rounded-full text-sm font-medium transition-colors border',
-                        mobilePillFilter === pill
-                          ? 'bg-black text-white border-black'
-                          : 'bg-background border-border'
-                      )}
-                    >
-                      {pill}
-                    </button>
-                  ))}
+                  {mobileFilterPills.map((pill) => {
+                    const active = pill === 'All' ? !filters.status : filters.status === pillToStatus(pill);
+                    return (
+                      <button
+                        key={pill}
+                        onClick={() => updateFilters({ status: pillToStatus(pill) })}
+                        className={cn(
+                          'flex-shrink-0 px-4 py-1.5 rounded-full text-sm font-medium transition-colors border',
+                          active
+                            ? 'bg-black text-white border-black'
+                            : 'bg-background border-border'
+                        )}
+                      >
+                        {pill}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             }
@@ -706,9 +911,14 @@ export function Orders() {
                         <p className="text-xs text-muted-foreground">{timeAgo(order.createdAt)}</p>
                       </div>
                       <div className="flex items-center justify-between mt-2">
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           <OrderStatusBadge status={order.status} size="xs" />
                           <PaymentStatusBadge status={order.paymentStatus} size="xs" />
+                          {order.paymentMethod === 'cash_on_delivery' && (
+                            <Badge variant="outline" className="gap-1 text-[10px] px-1.5 py-0 h-4 border-amber-300 text-amber-700 bg-amber-50">
+                              <Banknote className="w-2.5 h-2.5" />COD
+                            </Badge>
+                          )}
                         </div>
                         <p className="text-xs text-muted-foreground">{order.items.length} items</p>
                       </div>
@@ -811,6 +1021,24 @@ export function Orders() {
           </SheetContent>
         </Sheet>
 
+        {/* Mobile filter sheet */}
+        <Sheet open={filterSheetOpen} onOpenChange={setFilterSheetOpen}>
+          <SheetContent side="bottom" className="flex max-h-[85vh] flex-col p-0">
+            <SheetHeader className="border-b p-4 text-left">
+              <SheetTitle>Filter Orders</SheetTitle>
+            </SheetHeader>
+            <div className="flex-1 overflow-y-auto p-4">
+              <OrdersFilterPanel filters={filters} onChange={updateFilters} />
+            </div>
+            <div className="flex justify-between gap-2 border-t p-4">
+              <Button variant="ghost" onClick={clearAllFilters} disabled={activeFilterCount === 0 && !searchQuery}>
+                Clear all
+              </Button>
+              <Button onClick={() => setFilterSheetOpen(false)}>Done</Button>
+            </div>
+          </SheetContent>
+        </Sheet>
+
         {cancelOrderDialog}
         {bulkCancelDialog}
       </div>
@@ -840,7 +1068,7 @@ export function Orders() {
 
       {/* Search + Filters */}
       <Card className="border-none shadow-none">
-        <CardContent className="border-none p-0">
+        <CardContent className="border-none p-0 space-y-3">
           <div className="flex flex-col sm:flex-row gap-4">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -851,41 +1079,38 @@ export function Orders() {
                 className="pl-10"
               />
             </div>
-            <Sheet>
+            <Sheet open={filterSheetOpen} onOpenChange={setFilterSheetOpen}>
               <SheetTrigger asChild>
                 <Button variant="outline" className="gap-2">
                   <Filter className="w-4 h-4" />
                   Filters
-                  {statusFilter.length > 0 && (
+                  {activeFilterCount > 0 && (
                     <span className="ml-1 w-5 h-5 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center">
-                      {statusFilter.length}
+                      {activeFilterCount}
                     </span>
                   )}
                 </Button>
               </SheetTrigger>
-              <SheetContent>
-                <SheetHeader className="border-b-2">
+              <SheetContent className="flex flex-col p-0">
+                <SheetHeader className="border-b-2 p-4">
                   <SheetTitle>Filter Orders</SheetTitle>
                 </SheetHeader>
-                <div className="space-y-6 p-4">
-                  <div>
-                    <h4 className="text-sm font-medium mb-3">Order Status</h4>
-                    <div className="space-y-2">
-                      {ORDER_STATUS_FILTER_OPTIONS.map((status) => (
-                        <label key={status.value} className="flex items-center gap-2 cursor-pointer">
-                          <Checkbox
-                            checked={statusFilter.includes(status.value)}
-                            onCheckedChange={() => toggleStatusFilter(status.value)}
-                          />
-                          <span className="capitalize">{status.label}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
+                <div className="flex-1 overflow-y-auto p-4">
+                  <OrdersFilterPanel filters={filters} onChange={updateFilters} />
+                </div>
+                <div className="border-t p-4 flex justify-between gap-2">
+                  <Button variant="ghost" onClick={clearAllFilters} disabled={activeFilterCount === 0 && !searchQuery}>
+                    Clear all
+                  </Button>
+                  <Button onClick={() => setFilterSheetOpen(false)}>Done</Button>
                 </div>
               </SheetContent>
             </Sheet>
           </div>
+
+          {activeFilterCount > 0 && (
+            <OrdersActiveFilterChips filters={filters} orders={orders} onClear={updateFilters} />
+          )}
         </CardContent>
       </Card>
 
@@ -947,7 +1172,7 @@ export function Orders() {
                       checked={allSelected}
                       onCheckedChange={(checked) => {
                         if (checked) {
-                          selectAllOrders(filteredOrders.map((o: Order) => o.id));
+                          selectAllOrders(orders.map((o: Order) => o.id));
                         } else {
                           selectAllOrders([]);
                         }
@@ -972,20 +1197,22 @@ export function Orders() {
                       </td>
                     </tr>
                   ))
-                ) : filteredOrders.length === 0 ? (
+                ) : orders.length === 0 ? (
                   <tr>
                     <td colSpan={8} className="p-8 text-center">
                       <div className="flex flex-col items-center gap-3">
                         <Package className="w-12 h-12 text-muted-foreground" />
                         <p className="text-muted-foreground">No orders found</p>
-                        <Button variant="outline" onClick={() => { setSearchQuery(''); setStatusFilter([]); }}>
-                          Clear filters
-                        </Button>
+                        {(activeFilterCount > 0 || searchQuery) && (
+                          <Button variant="outline" onClick={clearAllFilters}>
+                            Clear filters
+                          </Button>
+                        )}
                       </div>
                     </td>
                   </tr>
                 ) : (
-                  filteredOrders.map((order: Order) => (
+                  orders.map((order: Order) => (
                     <tr
                       key={order.id}
                       tabIndex={0}
@@ -1046,9 +1273,14 @@ export function Orders() {
                         <OrderStatusBadge status={order.status} />
                       </td>
                       <td className="p-4">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <CreditCard className="w-4 h-4 text-muted-foreground" />
                           <PaymentStatusBadge status={order.paymentStatus} />
+                          {order.paymentMethod === 'cash_on_delivery' && (
+                            <Badge variant="outline" className="gap-1 text-[10px] px-1.5 py-0 h-4 border-amber-300 text-amber-700 bg-amber-50">
+                              <Banknote className="w-2.5 h-2.5" />COD
+                            </Badge>
+                          )}
                         </div>
                       </td>
                       <td className="p-4 text-right font-medium">
@@ -1106,7 +1338,7 @@ export function Orders() {
             <p className="text-sm text-muted-foreground">
               {pagination
                 ? `Showing ${orders.length} of ${pagination.total} orders`
-                : `Showing ${filteredOrders.length} orders`}
+                : `Showing ${orders.length} orders`}
             </p>
             {pagination && pagination.pages > 1 && (
               <div className="flex items-center gap-2">
@@ -1114,7 +1346,7 @@ export function Orders() {
                   variant="outline"
                   size="sm"
                   disabled={pagination.page <= 1 || isLoading}
-                  onClick={() => fetchOrders({ page: pagination.page - 1 })}
+                  onClick={() => goToPage(pagination.page - 1)}
                 >
                   <ChevronLeft className="w-4 h-4" />
                 </Button>
@@ -1125,7 +1357,7 @@ export function Orders() {
                     size="sm"
                     disabled={isLoading}
                     className={p === pagination.page ? 'bg-primary text-primary-foreground' : ''}
-                    onClick={() => fetchOrders({ page: p })}
+                    onClick={() => goToPage(p)}
                   >
                     {p}
                   </Button>
@@ -1134,7 +1366,7 @@ export function Orders() {
                   variant="outline"
                   size="sm"
                   disabled={pagination.page >= pagination.pages || isLoading}
-                  onClick={() => fetchOrders({ page: pagination.page + 1 })}
+                  onClick={() => goToPage(pagination.page + 1)}
                 >
                   <ChevronRight className="w-4 h-4" />
                 </Button>

@@ -1,46 +1,3 @@
-// User & Authentication Types
-export interface User {
-  id: string;
-  email: string;
-  name: string;
-  avatar?: string;
-  role: 'admin' | 'store_owner' | 'staff';
-  storeIds: string[];
-  permissions: Permission[];
-  telegramConnected?: boolean;
-  whatsappConnected?: boolean;
-}
-
-export interface Permission {
-  resource: string;
-  actions: ('create' | 'read' | 'update' | 'delete')[];
-}
-
-export interface AuthState {
-  user: User | null;
-  isAuthenticated: boolean;
-  isLoading: boolean;
-}
-
-// Store Types
-export interface Store {
-  id: string;
-  name: string;
-  domain: string;
-  logo?: string;
-  status: 'active' | 'inactive' | 'pending';
-  plan: 'basic' | 'professional' | 'enterprise';
-  vendorId: string;
-  createdAt: string;
-  settings: StoreSettings;
-}
-
-export interface StoreSettings {
-  currency: string;
-  timezone: string;
-  language: string;
-}
-
 // Product Types - Legacy (for backward compatibility)
 export interface Product {
   id: string;
@@ -117,6 +74,8 @@ export interface DigitalAsset {
 }
 
 // Order Types
+export type PaymentMethod = 'online' | 'cash_on_delivery';
+
 export interface Order {
   id: string;
   orderNumber: string;
@@ -125,6 +84,7 @@ export interface Order {
   items: OrderItem[];
   status: OrderStatus;
   paymentStatus: PaymentStatus;
+  paymentMethod: PaymentMethod;
   fulfillmentStatus: FulfillmentStatus;
   subtotal: number;
   tax: number;
@@ -174,7 +134,12 @@ export type OrderStatus =
 /** The only fulfilment statuses a vendor can set directly via PATCH — everything else is system-computed. */
 export type VendorSettableStatus = 'pending' | 'processing' | 'cancelled';
 
-export type PaymentStatus = 'pending' | 'authorized' | 'paid' | 'partially_refunded' | 'refunded' | 'failed' | 'disputed';
+/**
+ * Mirrors the backend's order payment-status enum exactly (see orders.md). Note
+ * `AWAITING_PAYMENT` is upper-cased on the wire — kept as-is here rather than
+ * normalized, so it round-trips unchanged through the adapter.
+ */
+export type PaymentStatus = 'pending' | 'AWAITING_PAYMENT' | 'partially_paid' | 'paid' | 'disputed' | 'failed' | 'refunded';
 export type FulfillmentStatus = 'unfulfilled' | 'partial' | 'fulfilled' | 'restocked';
 
 /**
@@ -194,6 +159,23 @@ export type DeliveryStatus =
   | 'rejected'
   | 'pending_agency_reassignment';
 
+/**
+ * Per-item shipment rejection detail — set when a delivery agency **declines** the
+ * item's shipment (the item then moves to `pending_agency_reassignment` and must be
+ * rerouted). A `shipment.rejected` notification also fires. See orders.md.
+ */
+export interface DeliveryRejection {
+  /**
+   * Why the agency declined. Known values: `out_of_coverage_area`, `capacity_exceeded`,
+   * `invalid_address`, `vendor_item_not_ready`, `other`. Kept loose (`string`) for
+   * forward-compat with future reasons.
+   */
+  reason: string;
+  /** Agency's free-text explanation. Always present when `reason` is `other`, else may be `null`. */
+  note: string | null;
+  rejectedAt: string;
+}
+
 /** A single shipment's delivery info — shared shape for `items[].delivery` and order-level `deliveries[]`. */
 export interface OrderItemDelivery {
   agencyId?: string;
@@ -204,6 +186,8 @@ export interface OrderItemDelivery {
   trackingNumber?: string | null;
   /** Snapshot of the product's `delivery.freeDelivery` flag at checkout time. */
   freeDelivery?: boolean;
+  /** Set only on `items[].delivery` when the agency declined the item's shipment; `null` otherwise. */
+  rejection?: DeliveryRejection | null;
   agent?: {
     id: string;
     name: string;
@@ -310,47 +294,6 @@ export interface OrderTimelineEvent {
 }
 
 
-// Vendor Types
-export interface Vendor {
-  id: string;
-  name: string;
-  email: string;
-  phone?: string;
-  logo?: string;
-  status: 'active' | 'inactive' | 'pending_approval' | 'suspended';
-  commissionRate: number;
-  stores: Store[];
-  performance: VendorPerformance;
-  payoutInfo: PayoutInfo;
-  createdAt: string;
-  documents: VendorDocument[];
-  riskLevel: 'low' | 'medium' | 'high';
-}
-
-export interface VendorPerformance {
-  totalSales: number;
-  totalOrders: number;
-  averageRating: number;
-  responseTime: number;
-  fulfillmentRate: number;
-  returnRate: number;
-}
-
-export interface PayoutInfo {
-  method: 'bank_transfer' | 'paypal' | 'stripe';
-  accountDetails: string;
-  lastPayout?: string;
-  pendingAmount: number;
-}
-
-export interface VendorDocument {
-  id: string;
-  type: 'identity' | 'business_license' | 'tax_document' | 'bank_statement';
-  status: 'pending' | 'approved' | 'rejected';
-  url: string;
-  uploadedAt: string;
-}
-
 // Analytics Types
 // All fields are derived from GET /api/vendor/analytics/* (see api-doc/vendor/analytics.md).
 export interface AnalyticsMetrics {
@@ -398,17 +341,6 @@ export interface CustomerMetrics {
 export interface BookingMetrics {
   count: number;
   revenue: number;
-}
-
-// Notification Types
-export interface Notification {
-  id: string;
-  type: 'order' | 'product' | 'customer' | 'system' | 'alert';
-  title: string;
-  message: string;
-  read: boolean;
-  createdAt: string;
-  actionUrl?: string;
 }
 
 // UI Types

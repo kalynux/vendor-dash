@@ -2,6 +2,7 @@ import {
   LayoutDashboard,
   ShoppingCart,
   Package,
+  Boxes,
   Users,
   BarChart3,
   Settings,
@@ -61,6 +62,7 @@ export const PRIMARY_NAV: NavItem[] = [
   { name: 'Overview', path: '/dashboard', icon: LayoutDashboard },
   { name: 'Orders', path: '/dashboard/orders', icon: ShoppingCart, badge: 'orders' },
   { name: 'Products', path: '/dashboard/products', icon: Package },
+  { name: 'Inventory', path: '/dashboard/inventory', icon: Boxes },
   {
     name: 'Bookings',
     path: '/dashboard/services',

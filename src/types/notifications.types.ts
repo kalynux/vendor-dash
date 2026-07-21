@@ -1,7 +1,7 @@
 // Notification settings — mirrors `GET/PATCH /api/vendor/notification-preferences`.
 // See api-doc/vendor/notifications.md.
 
-/** The seven subscribable events (`preferences.*` keys). */
+/** The ten subscribable events (`preferences.*` keys). See api-doc/vendor/notifications.md. */
 export type NotificationEventKey =
   | 'orderCreated'
   | 'orderCancelled'
@@ -9,7 +9,10 @@ export type NotificationEventKey =
   | 'bookingCancelled'
   | 'paymentReceivedPartial'
   | 'paymentReceivedFull'
-  | 'storageAlert';
+  | 'storageAlert'
+  | 'connectionUpdated'
+  | 'payoutUpdates'
+  | 'shipmentRejected';
 
 export type NotificationEventPreferences = Record<NotificationEventKey, boolean>;
 
@@ -54,7 +57,10 @@ export type PreferredLanguage = 'en' | 'fr' | 'pt' | 'es' | 'ar';
 // The runtime notifications returned by `GET /api/vendor/notifications`.
 // Distinct from the *preferences* types above.
 
-/** Notification `type` discriminator (maps 1:1 to the subscribable events). */
+/**
+ * Notification `type` discriminator. Each subscribable event maps to one or more
+ * types — `connectionUpdated` and `payoutUpdates` each fan out to several.
+ */
 export type NotificationType =
   | 'order.created'
   | 'order.cancelled'
@@ -62,10 +68,26 @@ export type NotificationType =
   | 'booking.cancelled'
   | 'payment.received.partial'
   | 'payment.received.full'
-  | 'storage.alert';
+  | 'storage.alert'
+  | 'connection.request_received'
+  | 'connection.approved'
+  | 'connection.rejected'
+  | 'connection.reapproval_needed'
+  | 'payout.requested'
+  | 'payout.paid'
+  | 'payout.rejected'
+  // A delivery agency declined a shipment; its items move to
+  // `pending_agency_reassignment` and must be rerouted. `aggregateType` is `order`.
+  | 'shipment.rejected';
 
 /** Entity kind a notification points at, for deep-linking. */
-export type NotificationAggregateType = 'order' | 'booking' | 'payment' | 'storage';
+export type NotificationAggregateType =
+  | 'order'
+  | 'booking'
+  | 'payment'
+  | 'storage'
+  | 'connection'
+  | 'payout';
 
 /** Channels a notification was actually delivered on. */
 export type DeliveredVia = 'in-app' | 'push' | 'telegram' | 'email' | 'whatsapp';
@@ -150,6 +172,11 @@ export interface TelegramStatus {
   chatId?: string;
   firstName?: string;
   connectedAt?: string;
+}
+
+/** `POST /api/webhooks/telegram/toggle` — returns only the new active state. */
+export interface TelegramToggleResult {
+  is_active: boolean;
 }
 
 /** `POST /api/auth/request-wa-verification` */

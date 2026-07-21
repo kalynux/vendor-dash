@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { useForm, useFieldArray, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Plus, Trash2, Image as ImageIcon } from 'lucide-react';
+import { Plus, Trash2, Image as ImageIcon, MapPin } from 'lucide-react';
 
 import { step3Schema, type Step3FormValues } from '@/onboarding/schemas/onboarding.schemas';
 import { BrandingImageUpload } from '@/components/vendor-settings/forms/BrandingImageUpload';
+import { AddressSearch } from '@/components/features/AddressSearch';
+import type { GeoAddressCandidate } from '@/types/geo.types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -33,6 +35,8 @@ export interface BrandingFieldsProps {
     showBranding?: boolean;
     /** Render the business-addresses block. Default true (onboarding shows both). */
     showAddresses?: boolean;
+    /** ISO-2 country to bias address search (e.g. the vendor's country). */
+    addressCountryBias?: string | null;
     /** Currently-persisted preview urls for the logo/cover (from `branding.logo?.url` / `coverImage?.url`). */
     logoPreviewUrl?: string | null;
     coverPreviewUrl?: string | null;
@@ -47,6 +51,7 @@ export function BrandingFields({
     onSubmit,
     showBranding = true,
     showAddresses = true,
+    addressCountryBias = null,
     logoPreviewUrl = null,
     coverPreviewUrl = null,
     onBrandingFileChange,
@@ -55,6 +60,8 @@ export function BrandingFields({
         register,
         handleSubmit,
         control,
+        setValue,
+        watch,
         formState: { errors },
     } = useForm<Step3FormValues>({
         resolver: zodResolver(step3Schema),
@@ -65,6 +72,19 @@ export function BrandingFields({
         control,
         name: 'business_addresses',
     });
+
+    // Fill the loose fields from a picked search candidate and stash the canonical
+    // `geo` (candidate + raw query). The loose fields stay editable afterward.
+    const applyCandidate = (index: number, candidate: GeoAddressCandidate, rawInput: string) => {
+        const c = candidate.components ?? {};
+        setValue(`business_addresses.${index}.address_line1`, c.street || candidate.formatted_address, {
+            shouldDirty: true,
+            shouldValidate: true,
+        });
+        if (c.city) setValue(`business_addresses.${index}.city`, c.city, { shouldDirty: true, shouldValidate: true });
+        if (c.region) setValue(`business_addresses.${index}.state`, c.region, { shouldDirty: true });
+        setValue(`business_addresses.${index}.geo`, { ...candidate, raw_input: rawInput }, { shouldDirty: true });
+    };
 
     // Existing (already-saved) addresses get a confirmation before removal — the
     // backend hard-rejects the whole update if the address is still in use as a
@@ -127,7 +147,7 @@ export function BrandingFields({
                         variant="outline"
                         size="sm"
                         onClick={() =>
-                            append({ label: '', address_line1: '', address_line2: '', city: '', state: '' })
+                            append({ label: '', address_line1: '', address_line2: '', city: '', state: '', geo: null })
                         }
                         className="h-8 gap-1.5 text-xs"
                     >
@@ -155,6 +175,25 @@ export function BrandingFields({
                                 >
                                     <Trash2 className="w-4 h-4" />
                                 </button>
+
+                                {/* Address search — fills the fields below and captures geo coordinates */}
+                                <div className="space-y-1.5 pr-6">
+                                    <Label>Find address</Label>
+                                    <AddressSearch
+                                        countryBias={addressCountryBias}
+                                        placeholder="Search a street, area, or city…"
+                                        onSelect={(candidate, raw) => applyCandidate(index, candidate, raw)}
+                                    />
+                                    {watch(`business_addresses.${index}.geo`) ? (
+                                        <p className="inline-flex items-center gap-1 text-xs text-emerald-600">
+                                            <MapPin className="w-3 h-3" /> Location pinned on map
+                                        </p>
+                                    ) : (
+                                        <p className="text-xs text-muted-foreground">
+                                            Search to pin the exact location, or fill the fields manually.
+                                        </p>
+                                    )}
+                                </div>
 
                                 {/* Label — required by backend */}
                                 <div className="space-y-2">

@@ -9,7 +9,7 @@ import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { QUICK_ACTIONS, type QuickAction } from '@/config/quickActions';
 
 type LegacyRoute = 'overview' | 'orders' | 'products' | 'product-upload' | 'customers'
-  | 'analytics' | 'vendors' | 'notifications' | 'settings' | 'media' | 'tickets'
+  | 'analytics' | 'notifications' | 'settings' | 'media' | 'tickets'
   | 'services' | 'login' | 'transactions';
 
 interface TabButtonProps {

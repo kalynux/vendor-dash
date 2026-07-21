@@ -1,3 +1,5 @@
+import type { GeoAddress } from './geo.types';
+
 // ─── API User ────────────────────────────────────────────────────────────────
 
 export interface ApiUser {
@@ -62,6 +64,12 @@ export interface BusinessAddress {
     type: 'Point';
     coordinates: [number, number]; // [longitude, latitude]
   } | null;
+  /**
+   * Canonical geospatial address (see api-doc/geo/README.md). Set from the
+   * address-search box; the loose fields above are kept for back-compat. Echo it
+   * back on resubmit (full-replace) or it's cleared.
+   */
+  geo?: GeoAddress | null;
 }
 
 export interface MobileMoneyDetails {
@@ -376,6 +384,24 @@ export interface BlockedAddress {
   productCount: number;
 }
 
+/**
+ * One per-row failure from an all-or-nothing bulk operation (e.g. inventory
+ * `PATCH /vendor/inventory/bulk-update`). Backend returns the confirmed shape
+ * `{ success: false, errors: [{ row, variantId, error, message }] }`; the older
+ * `error.details.rowErrors` shape (row + error only) is also tolerated, so
+ * `variantId`/`message` are optional.
+ */
+export interface ApiRowError {
+  /** 1-indexed row number of the failing item. */
+  row?: number;
+  /** The variant that failed. */
+  variantId?: string;
+  /** Machine-readable error code (or the message text in the legacy shape). */
+  error: string;
+  /** Human-readable reason. Absent in the legacy `details.rowErrors` shape. */
+  message?: string;
+}
+
 export class ApiError extends Error {
   readonly status: number;
   readonly code: string;
@@ -385,6 +411,8 @@ export class ApiError extends Error {
   readonly violations?: UploadViolation[];
   /** Populated for `VENDOR_BUSINESS_ADDRESS_IN_USE` — which addresses blocked the update. */
   readonly blockedAddresses?: BlockedAddress[];
+  /** Populated for all-or-nothing bulk operations — per-row validation failures. */
+  readonly rowErrors?: ApiRowError[];
 
   constructor(
     status: number,
@@ -394,6 +422,7 @@ export class ApiError extends Error {
     requestId?: string,
     violations?: UploadViolation[],
     blockedAddresses?: BlockedAddress[],
+    rowErrors?: ApiRowError[],
   ) {
     super(message);
     this.name = 'ApiError';
@@ -403,6 +432,7 @@ export class ApiError extends Error {
     this.requestId = requestId;
     this.violations = violations;
     this.blockedAddresses = blockedAddresses;
+    this.rowErrors = rowErrors;
   }
 
   get isUnauthorized() {

@@ -1,14 +1,14 @@
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
-import { createContext, useContext, useCallback, useState } from 'react';
+import { createContext, useContext, useCallback, useState, useEffect } from 'react';
 import { Toaster } from '@/components/ui/sonner';
 
 // Dashboard pages
 import { Overview } from '@/pages/Overview';
 import { Orders } from '@/pages/Orders';
 import { Products } from '@/pages/Products';
+import { Inventory } from '@/pages/Inventory';
 import { Customers } from '@/pages/Customers';
 import { Analytics } from '@/pages/Analytics';
-import { Vendors } from '@/pages/Vendors';
 import { Notifications } from '@/pages/Notifications';
 import { Settings } from '@/pages/Settings';
 import { Account } from '@/pages/Account';
@@ -35,8 +35,8 @@ import { OnboardingGuard } from '@/onboarding/OnboardingGuard';
 import { OnboardingRouter } from '@/onboarding/OnboardingRouter';
 import { OnboardingErrorBoundary } from '@/onboarding/OnboardingErrorBoundary';
 
-// UIStore (kept for sidebar + theme)
-import { useUIStore } from '@/store';
+// UIStore (kept for sidebar + theme); StoreStore for the vendor's storefront profile
+import { useUIStore, useStoreStore } from '@/store';
 
 // ─── Sidebar collapse context (preserved for Sidebar/Header compatibility) ────
 
@@ -79,8 +79,8 @@ export const useAuth = () => useContext(LegacyAuthContext);
 // real URL paths.
 
 type LegacyRoute =
-  | 'overview' | 'orders' | 'products' | 'product-upload' | 'customers'
-  | 'analytics' | 'vendors' | 'notifications' | 'settings' | 'media' | 'tickets'
+  | 'overview' | 'orders' | 'products' | 'product-upload' | 'inventory' | 'customers'
+  | 'analytics' | 'notifications' | 'settings' | 'media' | 'tickets'
   | 'services' | 'service-upload' | 'login' | 'transactions' | 'account';
 
 const LEGACY_ROUTE_MAP: Record<LegacyRoute, string> = {
@@ -88,9 +88,9 @@ const LEGACY_ROUTE_MAP: Record<LegacyRoute, string> = {
   orders: '/dashboard/orders',
   products: '/dashboard/products',
   'product-upload': '/dashboard/product-upload',
+  inventory: '/dashboard/inventory',
   customers: '/dashboard/customers',
   analytics: '/dashboard/analytics',
-  vendors: '/dashboard/vendors',
   notifications: '/dashboard/notifications',
   settings: '/dashboard/settings',
   account: '/dashboard/account',
@@ -141,6 +141,11 @@ export const useRouter = () => useContext(LegacyRouterContext);
 function DashboardShell() {
   const { sidebarCollapsed } = useUI();
   const isMobile = useIsMobile();
+  const { fetchStore } = useStoreStore();
+
+  useEffect(() => {
+    fetchStore();
+  }, [fetchStore]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -158,11 +163,11 @@ function DashboardShell() {
             <Route index element={<Overview />} />
             <Route path="orders" element={<Orders />} />
             <Route path="products" element={<Products />} />
+            <Route path="inventory" element={<Inventory />} />
             <Route path="product-upload" element={<ProductUpload />} />
             <Route path="product-edit/:id" element={<ProductEdit />} />
             <Route path="customers" element={<Customers />} />
             <Route path="analytics" element={<Analytics />} />
-            <Route path="vendors" element={<Vendors />} />
             <Route path="notifications" element={<Notifications />} />
             <Route path="account" element={<Navigate to="/dashboard/account/profile" replace />} />
             <Route path="account/:tab" element={<Account />} />

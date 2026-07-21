@@ -17,6 +17,7 @@ import {
   Loader2,
   AlertTriangle,
   PackageCheck,
+  Banknote,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -44,6 +45,7 @@ import { addNote, fetchNote, revokeEntitlement, restoreEntitlement, dispatchOrde
 import { PaymentStatusBadge } from '@/components/orders/PaymentStatusBadge';
 import { OrderStatusBadge } from '@/components/orders/OrderStatusBadge';
 import { DeliveryStatusBadge } from '@/components/orders/DeliveryStatusBadge';
+import { DeliveryRejectionNotice } from '@/components/orders/DeliveryRejectionNotice';
 import { ReassignAgencyPopover } from '@/components/orders/ReassignAgencyPopover';
 import { ApiError } from '@/types/api';
 import { toast } from 'sonner';
@@ -299,6 +301,11 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
             ) : (
               <Badge variant="outline" className="gap-1 border-blue-300 text-blue-700 bg-blue-50">
                 <Package className="w-3 h-3" />Physical
+              </Badge>
+            )}
+            {currentOrder.paymentMethod === 'cash_on_delivery' && (
+              <Badge variant="outline" className="gap-1 border-amber-300 text-amber-700 bg-amber-50">
+                <Banknote className="w-3 h-3" />Cash on Delivery
               </Badge>
             )}
           </div>
@@ -592,22 +599,27 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
 
                   {/* Per-item delivery (physical only) */}
                   {isPhysical && item.delivery && (
-                    <div className="flex items-center justify-between gap-3 pt-3 border-t flex-wrap">
-                      <div className="flex items-center gap-2 flex-wrap text-xs">
-                        <Truck className="w-3.5 h-3.5 text-muted-foreground" />
-                        <span className="font-medium text-foreground">{item.delivery.agencyName ?? 'No agency assigned'}</span>
-                        <DeliveryStatusBadge status={item.delivery.deliveryStatus} size="xs" />
-                        {item.delivery.trackingNumber && (
-                          <span className="text-muted-foreground">Tracking: {item.delivery.trackingNumber}</span>
+                    <div className="pt-3 border-t space-y-2">
+                      <div className="flex items-center justify-between gap-3 flex-wrap">
+                        <div className="flex items-center gap-2 flex-wrap text-xs">
+                          <Truck className="w-3.5 h-3.5 text-muted-foreground" />
+                          <span className="font-medium text-foreground">{item.delivery.agencyName ?? 'No agency assigned'}</span>
+                          <DeliveryStatusBadge status={item.delivery.deliveryStatus} size="xs" />
+                          {item.delivery.trackingNumber && (
+                            <span className="text-muted-foreground">Tracking: {item.delivery.trackingNumber}</span>
+                          )}
+                        </div>
+                        {item.delivery.deliveryStatus && REASSIGNABLE_DELIVERY_STATUSES.includes(item.delivery.deliveryStatus) && (
+                          <ReassignAgencyPopover
+                            orderId={currentOrder.id}
+                            itemId={item.id}
+                            currentAgencyId={item.delivery.agencyId}
+                            onReassigned={handleItemReassigned}
+                          />
                         )}
                       </div>
-                      {item.delivery.deliveryStatus && REASSIGNABLE_DELIVERY_STATUSES.includes(item.delivery.deliveryStatus) && (
-                        <ReassignAgencyPopover
-                          orderId={currentOrder.id}
-                          itemId={item.id}
-                          currentAgencyId={item.delivery.agencyId}
-                          onReassigned={handleItemReassigned}
-                        />
+                      {item.delivery.rejection && (
+                        <DeliveryRejectionNotice rejection={item.delivery.rejection} />
                       )}
                     </div>
                   )}
@@ -731,6 +743,12 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
                 <div>
                   <p className="text-muted-foreground mb-1">Payment Status</p>
                   <PaymentStatusBadge status={currentOrder.paymentStatus} />
+                </div>
+                <div>
+                  <p className="text-muted-foreground mb-1">Payment Method</p>
+                  <p className="font-medium">
+                    {currentOrder.paymentMethod === 'cash_on_delivery' ? 'Cash on Delivery' : 'Online'}
+                  </p>
                 </div>
                 <div>
                   <p className="text-muted-foreground mb-1">Order Type</p>

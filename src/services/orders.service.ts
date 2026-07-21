@@ -1,6 +1,6 @@
 import { api } from './api';
 import { ApiError } from '@/types/api';
-import type { Order, OrderItem, Customer, OrderTimelineEvent, Entitlement, TimelineEventType, DisputeHold, OrderItemDelivery, OrderDeliveryTimelineEntry, VendorSettableStatus } from '@/types';
+import type { Order, OrderItem, Customer, OrderTimelineEvent, Entitlement, TimelineEventType, DisputeHold, OrderItemDelivery, OrderDeliveryTimelineEntry, VendorSettableStatus, PaymentMethod } from '@/types';
 
 // ─── Error Handling ────────────────────────────────────────────────────────────
 
@@ -57,6 +57,12 @@ interface ApiOrderDelivery {
   trackingNumber?: string | null;
   /** Snapshot of the product's `delivery.freeDelivery` flag at checkout time. */
   freeDelivery?: boolean;
+  /** Set only on `items[].delivery` when the agency declined the item's shipment; `null` otherwise. */
+  rejection?: {
+    reason: string;
+    note?: string | null;
+    rejectedAt: string;
+  } | null;
   agent?: {
     id: string;
     name: string;
@@ -81,6 +87,7 @@ interface ApiOrderListItem {
   orderType: 'physical' | 'digital';
   fulfillmentStatus: string;
   paymentStatus: string;
+  paymentMethod: string;
   dispute_hold?: ApiDisputeHold | null;
   customer: {
     id: string;
@@ -103,6 +110,7 @@ interface ApiOrderDetail {
   orderType: 'physical' | 'digital';
   fulfillmentStatus: string;
   paymentStatus: string;
+  paymentMethod: string;
   paymentIntentId?: string;
   dispute_hold?: ApiDisputeHold | null;
   customer: {
@@ -289,6 +297,7 @@ interface RestoreEntitlementResponse {
 export interface OrdersQueryParams {
   status?: string;
   paymentStatus?: string;
+  paymentMethod?: PaymentMethod;
   orderType?: 'physical' | 'digital';
   /** Scope the list to a single customer (used by the Customers tab). */
   customerId?: string;
@@ -304,9 +313,12 @@ export interface OrdersQueryParams {
 // ─── Adapters ──────────────────────────────────────────────────────────────────
 
 function adaptPaymentStatus(status: string): Order['paymentStatus'] {
-  if (status === 'AWAITING_PAYMENT') return 'pending';
-  const valid: Order['paymentStatus'][] = ['pending', 'authorized', 'paid', 'partially_refunded', 'refunded', 'failed', 'disputed'];
+  const valid: Order['paymentStatus'][] = ['pending', 'AWAITING_PAYMENT', 'partially_paid', 'paid', 'disputed', 'failed', 'refunded'];
   return (valid as string[]).includes(status) ? (status as Order['paymentStatus']) : 'pending';
+}
+
+function adaptPaymentMethod(method: string): PaymentMethod {
+  return method === 'cash_on_delivery' ? 'cash_on_delivery' : 'online';
 }
 
 function adaptFulfillmentStatus(status: string): Order['status'] {
@@ -334,6 +346,13 @@ function adaptOrderDelivery(delivery: ApiOrderDelivery): OrderItemDelivery {
     shipmentId: delivery.shipmentId,
     trackingNumber: delivery.trackingNumber,
     freeDelivery: delivery.freeDelivery,
+    rejection: delivery.rejection
+      ? {
+          reason: delivery.rejection.reason,
+          note: delivery.rejection.note ?? null,
+          rejectedAt: delivery.rejection.rejectedAt,
+        }
+      : null,
     agent: delivery.agent,
   };
 }
@@ -376,6 +395,7 @@ function adaptListItemToOrder(item: ApiOrderListItem): Order {
     orderType: item.orderType,
     status: adaptFulfillmentStatus(item.fulfillmentStatus),
     paymentStatus: adaptPaymentStatus(item.paymentStatus),
+    paymentMethod: adaptPaymentMethod(item.paymentMethod),
     disputeHold: adaptDisputeHold(item.dispute_hold),
     fulfillmentStatus: 'unfulfilled',
     total: item.total,
@@ -456,6 +476,7 @@ function adaptDetailToOrder(detail: ApiOrderDetail): Order {
     orderType: detail.orderType,
     status: adaptFulfillmentStatus(detail.fulfillmentStatus),
     paymentStatus: adaptPaymentStatus(detail.paymentStatus),
+    paymentMethod: adaptPaymentMethod(detail.paymentMethod),
     disputeHold: adaptDisputeHold(detail.dispute_hold),
     fulfillmentStatus: 'unfulfilled',
     total: detail.totalAmount,
@@ -538,6 +559,7 @@ export async function fetchOrders(
   const query = new URLSearchParams();
   if (params.status) query.set('status', params.status);
   if (params.paymentStatus) query.set('paymentStatus', params.paymentStatus);
+  if (params.paymentMethod) query.set('paymentMethod', params.paymentMethod);
   if (params.orderType) query.set('orderType', params.orderType);
   if (params.customerId) query.set('customerId', params.customerId);
   if (params.dateFrom) query.set('dateFrom', params.dateFrom);

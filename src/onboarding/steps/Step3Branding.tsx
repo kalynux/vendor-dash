@@ -28,6 +28,7 @@ export function Step3Branding() {
                 address_line2: a.address_line2 ?? '',
                 city: a.city,
                 state: a.state ?? '',
+                geo: a.geo ?? null,
             }));
         }
         return [];
@@ -156,6 +157,7 @@ export function Step3Branding() {
                 formId="step3-form"
                 defaultValues={defaultValues}
                 onSubmit={handleSave}
+                addressCountryBias={roleEntity?.country}
                 logoPreviewUrl={roleEntity?.branding?.logo?.url ?? null}
                 coverPreviewUrl={roleEntity?.branding?.coverImage?.url ?? null}
             />

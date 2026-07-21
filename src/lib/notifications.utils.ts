@@ -7,6 +7,10 @@ import {
   CircleDollarSign,
   CheckCircle2,
   HardDrive,
+  Handshake,
+  Wallet,
+  AlertTriangle,
+  XCircle,
   type LucideIcon,
 } from 'lucide-react';
 import type {
@@ -39,6 +43,14 @@ export function notificationRoute(
       return '/dashboard/transactions';
     case 'storage':
       return '/dashboard/media';
+    case 'connection':
+      // Agency connections are managed under Settings → Delivery.
+      return '/dashboard/settings/delivery';
+    case 'payout':
+      // A payout request is tracked as a ticket, but the notification's
+      // aggregateId is the PayoutRequest id (not the ticket id), so land on the
+      // payout screen rather than trying to build a ticket deep-link.
+      return '/dashboard/account/payout';
     default:
       return '/dashboard/notifications';
   }
@@ -50,6 +62,8 @@ const AGGREGATE_ACTION_LABEL: Record<NotificationAggregateType, string> = {
   booking: 'View booking',
   payment: 'View transaction',
   storage: 'View storage',
+  connection: 'View connections',
+  payout: 'View payout',
 };
 
 /**
@@ -74,6 +88,16 @@ const TYPE_VISUALS: Record<NotificationType, Visual> = {
   'payment.received.partial': { Icon: CircleDollarSign, iconWrap: 'bg-amber-100 text-amber-600', dot: 'bg-amber-500' },
   'payment.received.full': { Icon: CheckCircle2, iconWrap: 'bg-green-100 text-green-600', dot: 'bg-green-500' },
   'storage.alert': { Icon: HardDrive, iconWrap: 'bg-orange-100 text-orange-600', dot: 'bg-orange-500' },
+  'connection.request_received': { Icon: Handshake, iconWrap: 'bg-indigo-100 text-indigo-600', dot: 'bg-indigo-500' },
+  'connection.approved': { Icon: Handshake, iconWrap: 'bg-green-100 text-green-600', dot: 'bg-green-500' },
+  'connection.rejected': { Icon: XCircle, iconWrap: 'bg-red-100 text-red-600', dot: 'bg-red-500' },
+  'connection.reapproval_needed': { Icon: AlertTriangle, iconWrap: 'bg-amber-100 text-amber-600', dot: 'bg-amber-500' },
+  'payout.requested': { Icon: Wallet, iconWrap: 'bg-blue-100 text-blue-600', dot: 'bg-blue-500' },
+  'payout.paid': { Icon: Wallet, iconWrap: 'bg-green-100 text-green-600', dot: 'bg-green-500' },
+  'payout.rejected': { Icon: Wallet, iconWrap: 'bg-red-100 text-red-600', dot: 'bg-red-500' },
+  // Orange (not red) to match the "Needs Reassignment" delivery badge — this is an
+  // action-required event: the vendor must reroute the declined item to another agency.
+  'shipment.rejected': { Icon: PackageX, iconWrap: 'bg-orange-100 text-orange-600', dot: 'bg-orange-500' },
 };
 
 const AGGREGATE_FALLBACK: Record<NotificationAggregateType, Visual> = {
@@ -81,6 +105,8 @@ const AGGREGATE_FALLBACK: Record<NotificationAggregateType, Visual> = {
   booking: { Icon: CalendarPlus, iconWrap: 'bg-violet-100 text-violet-600', dot: 'bg-violet-500' },
   payment: { Icon: CircleDollarSign, iconWrap: 'bg-amber-100 text-amber-600', dot: 'bg-amber-500' },
   storage: { Icon: HardDrive, iconWrap: 'bg-orange-100 text-orange-600', dot: 'bg-orange-500' },
+  connection: { Icon: Handshake, iconWrap: 'bg-indigo-100 text-indigo-600', dot: 'bg-indigo-500' },
+  payout: { Icon: Wallet, iconWrap: 'bg-blue-100 text-blue-600', dot: 'bg-blue-500' },
 };
 
 const DEFAULT_VISUAL: Visual = { Icon: Bell, iconWrap: 'bg-gray-100 text-gray-600', dot: 'bg-gray-500' };

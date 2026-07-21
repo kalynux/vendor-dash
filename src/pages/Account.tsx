@@ -5,6 +5,8 @@ import { ProfileSettings } from '@/components/vendor-settings/ProfileSettings';
 import { SecuritySettings } from '@/components/vendor-settings/SecuritySettings';
 import { BrandingSettings } from '@/components/vendor-settings/BrandingSettings';
 import { PayoutSetupSettings } from '@/components/vendor-settings/PayoutSetupSettings';
+import { EarningsSummaryCard } from '@/components/vendor-settings/EarningsSummaryCard';
+import { StorefrontSettings } from '@/components/vendor-settings/StorefrontSettings';
 import { StoreRegionFields } from '@/components/vendor-settings/StoreRegionFields';
 import { BusinessAddressSettings } from '@/components/vendor-settings/BusinessAddressSettings';
 
@@ -34,6 +36,7 @@ export function Account() {
         </TabsContent>
 
         <TabsContent value="store" className="space-y-6">
+          <StorefrontSettings />
           <StoreRegionFields />
           <BusinessAddressSettings />
         </TabsContent>
@@ -51,6 +54,7 @@ export function Account() {
         </TabsContent>
 
         <TabsContent value="payout" className="space-y-6">
+          <EarningsSummaryCard />
           <PayoutSetupSettings />
         </TabsContent>
       </Tabs>

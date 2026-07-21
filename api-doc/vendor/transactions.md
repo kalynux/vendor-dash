@@ -4,7 +4,8 @@ A single, unified feed of every money/credit movement on the vendor's account â€
 plan purchases, credit top-ups, credit usage, and sales earnings. **This replaces
 the old separate histories**: `GET /credits/ledger`, `GET /credits/topups`,
 `GET /plan-purchases`, and `GET /earnings/ledger` (all removed). Balance and
-current-state endpoints (`GET /credits`, `GET /plan`, `GET /earnings`) are unchanged.
+current-state endpoints (`GET /credits`, `GET /plan`, `GET /earnings`) are unchanged
+â€” see [**Vendor Earnings API**](./earnings.md) for how the `/earnings` balance is computed.
 
 ## Base Path
 ```

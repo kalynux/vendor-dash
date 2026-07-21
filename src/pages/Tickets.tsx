@@ -86,11 +86,16 @@ export function Tickets() {
   const location = useLocation();
   const reactNavigate = useNavigate();
 
-  // Open the create sheet when arrived via a "New Ticket" quick action
-  // (navigated with router state { create: true }), then clear the state.
+  // Open the create sheet when arrived via a "New Ticket" quick action, or the
+  // detail sheet for a specific ticket (e.g. from the Earnings payout-request
+  // card), via router state — then clear the state.
   useEffect(() => {
-    if ((location.state as { create?: boolean } | null)?.create) {
+    const state = location.state as { create?: boolean; openTicketId?: string } | null;
+    if (state?.create) {
       setCreateOpen(true);
+      reactNavigate(location.pathname, { replace: true, state: null });
+    } else if (state?.openTicketId) {
+      setDetailId(state.openTicketId);
       reactNavigate(location.pathname, { replace: true, state: null });
     }
   }, [location.state, location.pathname, reactNavigate]);

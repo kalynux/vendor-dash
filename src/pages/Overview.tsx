@@ -10,13 +10,14 @@ import {
   Package,
   RefreshCw,
   AlertCircle,
+  AlertTriangle,
   ExternalLink,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useAnalyticsStore, useOrderStore, useProductStore, useStoreStore } from '@/store';
+import { useAnalyticsStore, useOrderStore, useStoreStore } from '@/store';
 import { SalesChart } from '@/components/features/SalesChart';
 import { TopProductsList } from '@/components/features/TopProductsList';
 import { DateRangePicker } from '@/components/features/DateRangePicker';
@@ -31,8 +32,10 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import type { Order } from '@/types';
+import type { StockAlert } from '@/types/inventory.types';
 import { toast } from 'sonner';
 import { getOrderErrorMessage } from '@/services/orders.service';
+import { fetchStockAlerts } from '@/services/inventory.service';
 
 interface MetricCardProps {
   title: string;
@@ -93,11 +96,91 @@ function MetricCard({ title, value, change, changeType, icon: Icon, isLoading }:
   );
 }
 
+// ─── Low-stock widget ─────────────────────────────────────────────────────────
+// Self-contained: pulls the first page of low-stock alerts and links to the full
+// Inventory page. Non-critical, so load errors fail quietly (Inventory surfaces them).
+
+const LOW_STOCK_PREVIEW = 5;
+
+function LowStockWidget() {
+  const { navigate } = useRouter();
+  const [alerts, setAlerts] = useState<StockAlert[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const res = await fetchStockAlerts({ page: 1, limit: LOW_STOCK_PREVIEW });
+        if (!active) return;
+        setAlerts(res.data);
+        setTotal(res.meta.total);
+      } catch {
+        if (active) setAlerts([]);
+      } finally {
+        if (active) setLoading(false);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0">
+        <div>
+          <CardTitle className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-amber-500" /> Low Stock
+          </CardTitle>
+          <CardDescription>Variants at or below their threshold</CardDescription>
+        </div>
+        {total > 0 && <Badge variant="destructive">{total}</Badge>}
+      </CardHeader>
+      <CardContent>
+        {loading ? (
+          <div className="space-y-2">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <Skeleton key={i} className="h-10 w-full" />
+            ))}
+          </div>
+        ) : alerts.length === 0 ? (
+          <p className="py-6 text-center text-sm text-muted-foreground">
+            All variants are above their stock thresholds.
+          </p>
+        ) : (
+          <div className="space-y-0">
+            {alerts.map((a) => {
+              const out = a.availableStock <= 0;
+              return (
+                <div key={a.variantId} className="flex items-center justify-between gap-3 py-2.5 border-b last:border-0">
+                  <div className="min-w-0">
+                    <p className="font-medium text-sm truncate">{a.productTitle}</p>
+                    <p className="text-xs font-mono text-muted-foreground truncate">{a.sku}</p>
+                  </div>
+                  <Badge variant={out ? 'destructive' : 'secondary'} className={cn('flex-shrink-0', !out && 'text-amber-600')}>
+                    {out ? 'Out of stock' : `${a.availableStock} left`}
+                  </Badge>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        {!loading && (
+          <Button variant="outline" size="sm" className="w-full mt-3 gap-1" onClick={() => navigate('inventory')}>
+            Manage inventory <ArrowRight className="w-3.5 h-3.5" />
+          </Button>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export function Overview() {
   const { metrics, salesData, topProducts, dateRange, setDateRange, fetchAnalytics, isLoading, notReady } = useAnalyticsStore();
   const { orders, fetchOrders, isLoading: isOrderLoading, fetchOrderById } = useOrderStore();
-  const { fetchProducts } = useProductStore();
-  const { currentStore } = useStoreStore();
+  const { store } = useStoreStore();
   const { navigate } = useRouter();
   const isMobile = useIsMobile();
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
@@ -112,8 +195,7 @@ export function Overview() {
 
   useEffect(() => {
     fetchOrders({ limit: 5 });
-    fetchProducts();
-  }, [fetchOrders, fetchProducts]);
+  }, [fetchOrders]);
 
 
   const handleViewDetails = async (order: Order) => {
@@ -148,21 +230,21 @@ export function Overview() {
         {/* Greeting */}
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
-            {currentStore?.logo ? (
+            {store?.logoUrl ? (
               <img
-                src={currentStore.logo}
-                alt={currentStore.name}
+                src={store.logoUrl}
+                alt={store.name}
                 className="w-10 h-10 rounded-full object-cover flex-shrink-0 border"
               />
             ) : null}
             <div className="min-w-0">
               <p className="text-sm text-muted-foreground">Welcome back</p>
-              <h1 className="text-xl font-bold truncate">{currentStore?.name ?? "Lena's Store"}</h1>
+              <h1 className="text-xl font-bold truncate">{store?.name ?? 'My Store'}</h1>
             </div>
           </div>
-          {currentStore?.domain && (
+          {store?.publicUrl && (
             <a
-              href={`https://${currentStore.domain}`}
+              href={store.publicUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="flex-shrink-0 flex items-center gap-1.5 text-xs font-medium border rounded-full px-3 py-1.5 bg-background hover:bg-accent transition-colors"
@@ -343,6 +425,7 @@ export function Overview() {
         </div>
 
         {/* Low Stock Alert */}
+        <LowStockWidget />
 
         <MobileOrderDetailSheet
           order={selectedOrder}
@@ -536,6 +619,8 @@ export function Overview() {
             </CardContent>
           </Card>
 
+          {/* Low Stock */}
+          <LowStockWidget />
         </div>
       </div>
     </div>

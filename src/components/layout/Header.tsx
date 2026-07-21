@@ -66,7 +66,7 @@ export function Header() {
   const { navigate } = useRouter();
   const reactNavigate = useNavigate();
   const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotificationStore();
-  const { currentStore } = useStoreStore();
+  const { store } = useStoreStore();
   const roleEntity = useOnboarding().session?.role_entity;
 
   const storeName = roleEntity?.display_name || roleEntity?.business_name || 'My Store';
@@ -233,10 +233,10 @@ export function Header() {
                   <User className="w-4 h-4" />
                   Profile
                 </DropdownMenuItem>
-                {currentStore?.domain && (
+                {store?.publicUrl && (
                   <DropdownMenuItem asChild className="gap-2">
                     <a
-                      href={`https://${currentStore.domain}`}
+                      href={store.publicUrl}
                       target="_blank"
                       rel="noopener noreferrer"
                     >

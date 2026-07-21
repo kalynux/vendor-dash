@@ -54,6 +54,7 @@ export function BusinessAddressSettings() {
             address_line2: a.address_line2 ?? '',
             city: a.city,
             state: a.state ?? '',
+            geo: a.geo ?? null,
         })),
     };
 
@@ -80,6 +81,7 @@ export function BusinessAddressSettings() {
                     defaultValues={defaultValues}
                     onSubmit={onSubmit}
                     showBranding={false}
+                    addressCountryBias={roleEntity.country}
                 />
 
                 <div className="flex justify-end border-t pt-4">

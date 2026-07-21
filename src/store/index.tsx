@@ -1,14 +1,12 @@
 import { createContext, useContext, useState, useCallback } from 'react';
 import type {
-  User, Store, Product, Order, Vendor,
+  Product, Order,
   AnalyticsMetrics, MetricWithChange, SalesDataPoint, TopProduct,
   CustomerMetrics, BookingMetrics, DateRange, VendorSettableStatus
 } from '@/types';
 import type { VendorNotification, NotificationListParams } from '@/types/notifications.types';
-import {
-  mockUsers, mockStores,
-  mockVendors,
-} from '@/data/mockData';
+import type { VendorStore } from '@/types/store.types';
+import { fetchStore as apiFetchStore } from '@/services/store.service';
 import {
   fetchDashboard,
   fetchSalesDaily,
@@ -31,6 +29,7 @@ import {
   updateOrderStatus as apiUpdateOrderStatus,
   getOrderErrorMessage,
   type PaginationMeta,
+  type OrdersQueryParams,
 } from '@/services/orders.service';
 import { toast } from 'sonner';
 import { ApiError } from '@/types/api';
@@ -65,18 +64,6 @@ function computeChange(current: number, previous: number | undefined): MetricWit
   return { value: current, change: pct, changeType };
 }
 
-// Auth Store Context
-interface AuthState {
-  user: User | null;
-  isAuthenticated: boolean;
-  isLoading: boolean;
-  login: (email: string, password: string) => Promise<boolean>;
-  logout: () => void;
-  setUser: (user: User | null) => void;
-}
-
-const AuthStoreContext = createContext<AuthState | null>(null);
-
 // UI Store Context
 interface UIState {
   sidebarCollapsed: boolean;
@@ -87,12 +74,13 @@ interface UIState {
 
 const UIStoreContext = createContext<UIState | null>(null);
 
-// Store Store Context
+// Store Store Context — the vendor's single storefront profile (GET /api/vendor/store).
 interface StoreState {
-  stores: Store[];
-  currentStore: Store | null;
-  setCurrentStore: (store: Store | null) => void;
-  fetchStores: () => Promise<void>;
+  store: VendorStore | null;
+  isLoading: boolean;
+  fetchStore: () => Promise<void>;
+  /** Replace the cached store after a successful save (avoids a re-fetch). */
+  applyStore: (store: VendorStore) => void;
 }
 
 const StoreStoreContext = createContext<StoreState | null>(null);
@@ -126,7 +114,7 @@ interface OrderState {
     dateRange?: DateRange;
     search?: string;
   };
-  fetchOrders: ({ page, limit }: { page?: number, limit?: number }) => Promise<void>;
+  fetchOrders: (params?: OrdersQueryParams) => Promise<void>;
   fetchOrderById: (id: string) => Promise<Order>;
   updateOrderStatus: (id: string, status: VendorSettableStatus) => Promise<void>;
   toggleOrderSelection: (id: string) => void;
@@ -136,18 +124,6 @@ interface OrderState {
 }
 
 const OrderStoreContext = createContext<OrderState | null>(null);
-
-// Vendor Store Context
-interface VendorState {
-  vendors: Vendor[];
-  isLoading: boolean;
-  fetchVendors: () => Promise<void>;
-  approveVendor: (id: string) => Promise<void>;
-  suspendVendor: (id: string) => Promise<void>;
-  updateCommission: (id: string, rate: number) => Promise<void>;
-}
-
-const VendorStoreContext = createContext<VendorState | null>(null);
 
 // Notification Store Context
 interface NotificationState {
@@ -186,28 +162,6 @@ const AnalyticsStoreContext = createContext<AnalyticsState | null>(null);
 
 // Provider Component
 export function StoreProvider({ children }: { children: React.ReactNode }) {
-  // Auth State
-  const [authUser, setAuthUser] = useState<User | null>(null);
-  const [authLoading, setAuthLoading] = useState(false);
-
-  const login = useCallback(async (email: string, password: string): Promise<boolean> => {
-    setAuthLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 1000));
-
-    const user = mockUsers.find(u => u.email === email);
-    if (user && password === 'password') {
-      setAuthUser(user);
-      setAuthLoading(false);
-      return true;
-    }
-    setAuthLoading(false);
-    return false;
-  }, []);
-
-  const logout = useCallback(() => {
-    setAuthUser(null);
-  }, []);
-
   // UI State
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [theme, setTheme] = useState<'light' | 'dark' | 'system'>('light');
@@ -216,13 +170,23 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     setSidebarCollapsed(prev => !prev);
   }, []);
 
-  // Store State
-  const [stores] = useState<Store[]>(mockStores);
-  const [currentStore, setCurrentStore] = useState<Store | null>(mockStores[0]);
+  // Store State — the vendor's single storefront profile.
+  const [store, setStore] = useState<VendorStore | null>(null);
+  const [storeLoading, setStoreLoading] = useState(false);
 
-  const fetchStores = useCallback(async () => {
-    await new Promise(resolve => setTimeout(resolve, 500));
+  const fetchStore = useCallback(async () => {
+    setStoreLoading(true);
+    try {
+      const result = await apiFetchStore();
+      setStore(result);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Failed to load store.');
+    } finally {
+      setStoreLoading(false);
+    }
   }, []);
+
+  const applyStore = useCallback((next: VendorStore) => setStore(next), []);
 
   // Product State
   const [products, setProducts] = useState<ProductListItem[]>([]);
@@ -281,10 +245,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [orderPagination, setOrderPagination] = useState<PaginationMeta | null>(null);
   const [orderFilters, setOrderFilters] = useState<OrderState['filters']>({});
 
-  const fetchOrders = useCallback(async ({ page = 1, limit = 20 }) => {
+  const fetchOrders = useCallback(async (params: OrdersQueryParams = {}) => {
     setOrderLoading(true);
     try {
-      const result = await apiFetchOrders({ page, limit });
+      const result = await apiFetchOrders({ page: 1, limit: 20, ...params });
       setOrders(result.data);
       setOrderPagination(result.meta);
     } catch (err) {
@@ -319,43 +283,6 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   const setFilters = useCallback((filters: Partial<OrderState['filters']>) => {
     setOrderFilters(prev => ({ ...prev, ...filters }));
-  }, []);
-
-  // Vendor State
-  const [vendors, setVendors] = useState<Vendor[]>(mockVendors);
-  const [vendorLoading, setVendorLoading] = useState(false);
-
-  const fetchVendors = useCallback(async () => {
-    setVendorLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 500));
-    setVendorLoading(false);
-  }, []);
-
-  const approveVendor = useCallback(async (id: string) => {
-    setVendorLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 500));
-    setVendors(prev => prev.map(v =>
-      v.id === id ? { ...v, status: 'active' as const } : v
-    ));
-    setVendorLoading(false);
-  }, []);
-
-  const suspendVendor = useCallback(async (id: string) => {
-    setVendorLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 500));
-    setVendors(prev => prev.map(v =>
-      v.id === id ? { ...v, status: 'suspended' as const } : v
-    ));
-    setVendorLoading(false);
-  }, []);
-
-  const updateCommission = useCallback(async (id: string, rate: number) => {
-    setVendorLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 500));
-    setVendors(prev => prev.map(v =>
-      v.id === id ? { ...v, commissionRate: rate } : v
-    ));
-    setVendorLoading(false);
   }, []);
 
   // Notification State — real data from GET /vendor/notifications.
@@ -487,101 +414,77 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   }, [analyticsDateRange]);
 
   return (
-    <AuthStoreContext.Provider value={{
-      user: authUser,
-      isAuthenticated: !!authUser,
-      isLoading: authLoading,
-      login,
-      logout,
-      setUser: setAuthUser
+    <UIStoreContext.Provider value={{
+      sidebarCollapsed,
+      theme,
+      toggleSidebar,
+      setTheme
     }}>
-      <UIStoreContext.Provider value={{
-        sidebarCollapsed,
-        theme,
-        toggleSidebar,
-        setTheme
+      <StoreStoreContext.Provider value={{
+        store,
+        isLoading: storeLoading,
+        fetchStore,
+        applyStore
       }}>
-        <StoreStoreContext.Provider value={{
-          stores,
-          currentStore,
-          setCurrentStore,
-          fetchStores
+        <ProductStoreContext.Provider value={{
+          products,
+          selectedProducts,
+          isLoading: productLoading,
+          pagination: productPagination,
+          fetchProducts,
+          createProduct,
+          updateProduct,
+          deleteProduct,
+          toggleProductSelection,
+          selectAllProducts,
+          clearSelection: clearProductSelection
         }}>
-          <ProductStoreContext.Provider value={{
-            products,
-            selectedProducts,
-            isLoading: productLoading,
-            pagination: productPagination,
-            fetchProducts,
-            createProduct,
-            updateProduct,
-            deleteProduct,
-            toggleProductSelection,
-            selectAllProducts,
-            clearSelection: clearProductSelection
+          <OrderStoreContext.Provider value={{
+            orders,
+            selectedOrders,
+            isLoading: orderLoading,
+            pagination: orderPagination,
+            filters: orderFilters,
+            fetchOrders,
+            fetchOrderById,
+            updateOrderStatus,
+            toggleOrderSelection,
+            selectAllOrders,
+            clearSelection: clearOrderSelection,
+            setFilters,
           }}>
-            <OrderStoreContext.Provider value={{
-              orders,
-              selectedOrders,
-              isLoading: orderLoading,
-              pagination: orderPagination,
-              filters: orderFilters,
-              fetchOrders,
-              fetchOrderById,
-              updateOrderStatus,
-              toggleOrderSelection,
-              selectAllOrders,
-              clearSelection: clearOrderSelection,
-              setFilters,
+            <NotificationStoreContext.Provider value={{
+              notifications,
+              unreadCount,
+              isLoading: notificationsLoading,
+              fetchNotifications,
+              markAsRead,
+              markAllAsRead,
+              prependNotification
             }}>
-              <VendorStoreContext.Provider value={{
-                vendors,
-                isLoading: vendorLoading,
-                fetchVendors,
-                approveVendor,
-                suspendVendor,
-                updateCommission
+              <AnalyticsStoreContext.Provider value={{
+                metrics: analyticsMetrics,
+                salesData,
+                topProducts,
+                customerMetrics,
+                bookings,
+                dateRange: analyticsDateRange,
+                isLoading: analyticsLoading,
+                notReady: analyticsNotReady,
+                fetchAnalytics,
+                setDateRange: setAnalyticsDateRange
               }}>
-                <NotificationStoreContext.Provider value={{
-                  notifications,
-                  unreadCount,
-                  isLoading: notificationsLoading,
-                  fetchNotifications,
-                  markAsRead,
-                  markAllAsRead,
-                  prependNotification
-                }}>
-                  <AnalyticsStoreContext.Provider value={{
-                    metrics: analyticsMetrics,
-                    salesData,
-                    topProducts,
-                    customerMetrics,
-                    bookings,
-                    dateRange: analyticsDateRange,
-                    isLoading: analyticsLoading,
-                    notReady: analyticsNotReady,
-                    fetchAnalytics,
-                    setDateRange: setAnalyticsDateRange
-                  }}>
-                    {children}
-                  </AnalyticsStoreContext.Provider>
-                </NotificationStoreContext.Provider>
-              </VendorStoreContext.Provider>
-            </OrderStoreContext.Provider>
-          </ProductStoreContext.Provider>
-        </StoreStoreContext.Provider>
-      </UIStoreContext.Provider>
-    </AuthStoreContext.Provider>
+                {children}
+              </AnalyticsStoreContext.Provider>
+            </NotificationStoreContext.Provider>
+          </OrderStoreContext.Provider>
+        </ProductStoreContext.Provider>
+      </StoreStoreContext.Provider>
+    </UIStoreContext.Provider>
   );
 }
 
 // Hooks
-export function useAuthStore() {
-  const context = useContext(AuthStoreContext);
-  if (!context) throw new Error('useAuthStore must be used within StoreProvider');
-  return context;
-}
-
 export function useUIStore() {
   const context = useContext(UIStoreContext);
   if (!context) throw new Error('useUIStore must be used within StoreProvider');
@@ -603,12 +506,6 @@ export function useProductStore() {
 export function useOrderStore() {
   const context = useContext(OrderStoreContext);
   if (!context) throw new Error('useOrderStore must be used within StoreProvider');
-  return context;
-}
-
-export function useVendorStore() {
-  const context = useContext(VendorStoreContext);
-  if (!context) throw new Error('useVendorStore must be used within StoreProvider');
   return context;
 }
 
