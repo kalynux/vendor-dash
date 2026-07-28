@@ -52,11 +52,11 @@ const baseCreateTicketSchema = z.object({
  */
 export function makeCreateTicketSchema(requiredInfo: string[] = []) {
   return baseCreateTicketSchema.superRefine((val, ctx) => {
-    const isOrder = val.entityType === 'order';
-    const isProduct = val.entityType === 'product';
+    const isOrder = val.entityType === 'ORDER';
+    const isProduct = val.entityType === 'PRODUCT';
 
-    // entityId is required for every entity type except `other`.
-    if (val.entityType !== 'other' && !val.entityId.trim()) {
+    // entityId is required for every entity type except `OTHER`.
+    if (val.entityType !== 'OTHER' && !val.entityId.trim()) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['entityId'],

@@ -1,8 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useUI } from '@/App';
-import { useNotificationStore } from '@/store';
-import { useOnboarding } from '@/onboarding/store/onboarding.store';
+import { useNotificationStore, useStoreStore } from '@/store';
 import {
   ChevronLeft,
   ChevronRight,
@@ -43,20 +42,82 @@ function isPathActive(itemPath: string, pathname: string): boolean {
 const rowBase =
   'relative w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground';
 
+// Footer nav geometry — keep in sync with the wrapper's `py-3` and the rows'
+// `space-y-1`. Used to floor the drag at exactly the two main rows.
+const FOOTER_PAD_Y = 24; // py-3 top + bottom
+const ROW_GAP = 4; // space-y-1
+
 export function Sidebar() {
   const { sidebarCollapsed, toggleSidebar } = useUI();
   const { unreadCount } = useNotificationStore();
   const navigate = useNavigate();
   const location = useLocation();
   const pathname = normalizePath(location.pathname);
-  const roleEntity = useOnboarding().session?.role_entity;
+  const { store } = useStoreStore();
 
-  const storeName = roleEntity?.display_name || roleEntity?.business_name || 'My Store';
-  const storeLogo = roleEntity?.branding?.logo?.url || null;
+  const storeName = store?.name || 'My Store';
+  const storeDescription = store?.description || null;
+  const storeLogo = store?.logo?.url || null;
 
   // Per-item manual expand overrides; otherwise a group auto-opens when a child
   // is active. Works for any item with children.
   const [manualExpanded, setManualExpanded] = useState<Record<string, boolean>>({});
+
+  // ─── Resizable footer nav ───────────────────────────────────────────────────
+  // The footer group has a draggable top edge. `footerHeight` is the user-chosen
+  // height (null = natural/auto). `contentHeight` tracks the group's full natural
+  // height (grows/shrinks as sub-menus expand) so we can clamp and avoid gaps.
+  const footerContentRef = useRef<HTMLElement>(null);
+  const [footerHeight, setFooterHeight] = useState<number | null>(null);
+  const [contentHeight, setContentHeight] = useState(0);
+
+  useEffect(() => {
+    const el = footerContentRef.current;
+    if (!el) return;
+    const update = () => setContentHeight(el.offsetHeight);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // Drag the top edge: up grows the footer (down to the natural full height),
+  // down shrinks it (floor = the two main rows). Bounds are read fresh on each
+  // grab so an expand/collapse in between is respected.
+  const startFooterResize = (e: React.PointerEvent) => {
+    if (sidebarCollapsed) return;
+    e.preventDefault();
+    const contentEl = footerContentRef.current;
+    const naturalH = contentEl?.offsetHeight ?? 0;
+    const rowH =
+      (contentEl?.querySelector('button') as HTMLElement | null)?.offsetHeight ?? 40;
+    const minH = FOOTER_PAD_Y + rowH * 2 + ROW_GAP;
+    const startY = e.clientY;
+    const startH = footerHeight ?? naturalH;
+
+    document.body.style.userSelect = 'none';
+    document.body.style.cursor = 'row-resize';
+
+    const onMove = (ev: PointerEvent) => {
+      const delta = startY - ev.clientY; // drag up → positive → taller
+      setFooterHeight(Math.min(Math.max(startH + delta, minH), naturalH));
+    };
+    const onUp = () => {
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  };
+
+  // Never taller than the content needs (avoids empty space when sub-menus close)
+  // and only applied in the expanded sidebar.
+  const footerStyle =
+    !sidebarCollapsed && footerHeight != null
+      ? { height: Math.min(footerHeight, contentHeight || footerHeight) }
+      : undefined;
 
   const getBadgeCount = (badge?: NavBadge) => {
     if (badge === 'notifications') return unreadCount;
@@ -173,7 +234,7 @@ export function Sidebar() {
         sidebarCollapsed ? 'w-20' : 'w-64'
       )}
     >
-      {/* Top — store / business name */}
+      {/* Top — store name + description */}
       <div className="h-16 flex items-center gap-2 px-4 border-b flex-shrink-0">
         <div className="w-8 h-8 rounded-lg overflow-hidden bg-[#22C55E] flex items-center justify-center flex-shrink-0">
           {storeLogo ? (
@@ -183,7 +244,14 @@ export function Sidebar() {
           )}
         </div>
         {!sidebarCollapsed && (
-          <span className="font-bold text-base truncate">{storeName}</span>
+          <div className="flex-1 min-w-0">
+            <p className="font-bold text-sm leading-tight truncate">{storeName}</p>
+            {storeDescription && (
+              <p className="text-xs text-muted-foreground leading-tight truncate">
+                {storeDescription}
+              </p>
+            )}
+          </div>
         )}
       </div>
 
@@ -194,10 +262,29 @@ export function Sidebar() {
         </nav>
       </ScrollArea>
 
-      {/* Footer navigation — Account + Settings, pinned just above Platform Status */}
-      <nav className="space-y-1 px-2 py-3 border-t flex-shrink-0">
-        {FOOTER_NAV.map(renderItem)}
-      </nav>
+      {/* Footer navigation — Account + Settings, resizable from the top edge and
+          pinned just above Platform Status */}
+      <div
+        className={cn('relative border-t flex-shrink-0', footerStyle && 'overflow-hidden')}
+        style={footerStyle}
+      >
+        {!sidebarCollapsed && (
+          <div
+            role="separator"
+            aria-orientation="horizontal"
+            onPointerDown={startFooterResize}
+            title="Drag to resize"
+            className="group absolute -top-1.5 left-0 right-0 z-10 flex h-3 cursor-row-resize items-center justify-center"
+          >
+            <span className="h-2 w-12 rounded-full bg-border transition-colors group-hover:bg-primary/50" />
+          </div>
+        )}
+        <ScrollArea className={cn('h-full', footerStyle && 'overflow-y-auto')}>
+          <nav ref={footerContentRef} className="space-y-1 px-2 py-4">
+            {FOOTER_NAV.map(renderItem)}
+          </nav>
+        </ScrollArea>
+      </div>
 
       {/* Footer — JoviMall platform + health, then the collapse toggle */}
       <div className="border-t flex-shrink-0">

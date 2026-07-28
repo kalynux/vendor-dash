@@ -11,7 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 
-// Mirror the backend password policy (see api-doc/vendor/profile.md).
+// Mirror the backend password policy (see api-doc/me/password.md).
 function passwordIssue(pw: string): string | null {
   if (pw.length < 8) return 'At least 8 characters';
   if (!/[A-Z]/.test(pw)) return 'At least one uppercase letter';

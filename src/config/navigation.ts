@@ -7,6 +7,7 @@ import {
   BarChart3,
   Settings,
   Store,
+  MapPin,
   Bell,
   Shield,
   User,
@@ -18,6 +19,8 @@ import {
   CalendarCheck,
   Wallet,
   Truck,
+  Link2,
+  Search,
   ScrollText,
   Receipt,
   SlidersHorizontal,
@@ -79,6 +82,15 @@ export const PRIMARY_NAV: NavItem[] = [
   { name: 'Analytics', path: '/dashboard/analytics', icon: BarChart3 },
   { name: 'Notifications', path: '/dashboard/notifications', icon: Bell, badge: 'notifications' },
   { name: 'Tickets', path: '/dashboard/tickets', icon: Ticket },
+  {
+    name: 'Agency',
+    path: '/dashboard/agency',
+    icon: Truck,
+    children: [
+      { name: 'Connection', path: '/dashboard/agency/connections', icon: Link2 },
+      { name: 'Browse', path: '/dashboard/agency/browse', icon: Search },
+    ],
+  },
 ];
 
 // ─── Bottom group (pinned above Platform Status) ──────────────────────────────
@@ -91,7 +103,7 @@ export const FOOTER_NAV: NavItem[] = [
     children: [
       { name: 'Profile', path: '/dashboard/account/profile', icon: User },
       { name: 'Store', path: '/dashboard/account/store', icon: Store },
-      { name: 'Branding', path: '/dashboard/account/branding', icon: ImageIcon },
+      { name: 'Addresses', path: '/dashboard/account/addresses', icon: MapPin },
       { name: 'Security', path: '/dashboard/account/security', icon: Shield, disabled: false },
       { name: 'Billing', path: '/dashboard/account/billing', icon: CreditCard },
       { name: 'Payout Setup', path: '/dashboard/account/payout', icon: Wallet },
@@ -102,7 +114,6 @@ export const FOOTER_NAV: NavItem[] = [
     path: '/dashboard/settings',
     icon: Settings,
     children: [
-      { name: 'Delivery', path: '/dashboard/settings/delivery', icon: Truck },
       { name: 'Policies', path: '/dashboard/settings/policies', icon: ScrollText },
       { name: 'Notifications', path: '/dashboard/settings/notifications', icon: Bell },
       { name: 'Preferences', path: '/dashboard/settings/preferences', icon: SlidersHorizontal },

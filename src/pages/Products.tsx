@@ -22,7 +22,6 @@ import {
   Send,
   Pencil,
   ArchiveRestore,
-  Undo2,
   TriangleAlert,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -69,6 +68,7 @@ import {
   updateProductStatus,
   runActivationPreflight,
   getAllowedStatusTransitions,
+  bulkArchiveProducts,
   ACTIVATION_ERROR_MAP,
   type StatusTransition,
   type StatusTransitionIntent,
@@ -110,12 +110,6 @@ const STATUS_TRANSITION_META: Record<
     defaultConfirm:
       'Restore this product from archive? It will be set back to draft so you can edit it.',
     confirmCta: 'Restore',
-  },
-  cancel_review: {
-    Icon: Undo2,
-    defaultConfirm:
-      'Cancel the pending review and move this product back to draft for editing?',
-    confirmCta: 'Cancel review',
   },
   archive: {
     Icon: Trash2,
@@ -203,11 +197,18 @@ export function Products() {
     fetchProducts,
     toggleProductSelection,
     selectAllProducts,
+    clearSelection,
     deleteProduct,
   } = useProductStore();
   const { navigate: legacyNavigate } = useRouter();
   const navigate = useNavigate();
   const isMobile = useIsMobile();
+
+  // Desktop: has the first fetch settled yet? Seeded true when the store already
+  // has products (cached), so returning to the tab shows them with no skeleton.
+  // Gating the skeleton on this stops the empty state from flashing for one
+  // frame before loading starts.
+  const [didInitialLoad, setDidInitialLoad] = useState(() => products.length > 0);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewModeState] = useState<'grid' | 'list'>(
@@ -230,7 +231,15 @@ export function Products() {
   // Debounced server-side search
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const didSearchInit = useRef(false);
+  // Last search term the debounce effect has acted on. Comparing the *value*
+  // (rather than flipping a boolean on first run) keeps the "skip initial load"
+  // guard idempotent under StrictMode's double-invoked effects — a boolean flag
+  // gets flipped true by the first setup and then treats StrictMode's second
+  // setup as a real change, scheduling a spurious refetch. `null` = never run.
+  const lastHandledSearch = useRef<string | null>(null);
+  // Guards the mount fetch against StrictMode's double setup so we don't fire
+  // two identical initial requests.
+  const didInitialFetch = useRef(false);
 
   useScrollRestoration('products');
 
@@ -238,21 +247,41 @@ export function Products() {
   // Only fetch on mount when the store is empty so returning to the tab (or back
   // from product-edit) doesn't reload data that's already there.
   useEffect(() => {
-    if (!isMobile && products.length === 0) fetchProducts();
+    if (isMobile) return;
+    // StrictMode invokes this effect twice on mount; the ref makes the fetch
+    // fire only once (still re-runs the initial load if the viewport later
+    // crosses into desktop, since the ref is only set here).
+    if (didInitialFetch.current) {
+      setDidInitialLoad(true);
+      return;
+    }
+    didInitialFetch.current = true;
+    if (products.length === 0) {
+      fetchProducts().finally(() => setDidInitialLoad(true));
+    } else {
+      setDidInitialLoad(true);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isMobile]);
 
   useEffect(() => {
-    // Skip the initial run — the mount effect handles the first load; this only
-    // reacts to subsequent search changes (so returning to the page is no-reload).
-    if (!didSearchInit.current) {
-      didSearchInit.current = true;
+    const q = searchQuery.trim();
+    // First run: record the baseline query and don't fetch — the mount effect
+    // handles the initial load. (StrictMode re-invokes this with the same value,
+    // which the equality check below then no-ops.)
+    if (lastHandledSearch.current === null) {
+      lastHandledSearch.current = q;
       return;
     }
+    // No real change — e.g. StrictMode's second setup, or isMobile toggling
+    // without the query changing. Skip so we don't schedule a spurious refetch.
+    if (lastHandledSearch.current === q) return;
+    lastHandledSearch.current = q;
+
     if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
     searchTimerRef.current = setTimeout(() => {
-      setDebouncedSearch(searchQuery.trim());
-      if (!isMobile) fetchProducts({ q: searchQuery || undefined });
+      setDebouncedSearch(q);
+      if (!isMobile) fetchProducts({ q: q || undefined });
     }, 400);
     return () => {
       if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
@@ -302,6 +331,32 @@ export function Products() {
     await deleteProduct(id);
     if (isMobile) infinite.reload();
   }, [productToDelete, deleteProduct, isMobile, infinite]);
+
+  // Bulk archive through the backend bulk endpoint — it archives draft/active
+  // products and skips the rest (suspended/pending_review/archived), reporting
+  // counts instead of failing per-item 422s.
+  const [isBulkArchiving, setIsBulkArchiving] = useState(false);
+  const handleBulkArchive = useCallback(async () => {
+    if (isBulkArchiving || selectedProducts.length === 0) return;
+    if (!confirm(`Archive ${selectedProducts.length} product(s)?`)) return;
+    setIsBulkArchiving(true);
+    try {
+      const result = await bulkArchiveProducts(selectedProducts);
+      if (result.failed > 0) {
+        toast.warning(
+          `Archived ${result.success} of ${result.total} product(s) — ${result.failed} skipped (only draft or active products can be archived).`,
+        );
+      } else {
+        toast.success(`Archived ${result.success} product(s).`);
+      }
+      clearSelection();
+      reloadList();
+    } catch (err: unknown) {
+      toast.error(err instanceof ApiError ? err.message : 'Could not archive products.');
+    } finally {
+      setIsBulkArchiving(false);
+    }
+  }, [isBulkArchiving, selectedProducts, clearSelection, reloadList]);
 
   const requestStatusTransition = useCallback(
     async (product: ProductListItem, transition: StatusTransition) => {
@@ -398,6 +453,11 @@ export function Products() {
 
   const allSelected =
     filteredProducts.length > 0 && selectedProducts.length === filteredProducts.length;
+
+  // First-load skeleton gate (desktop). `isLoading` covers later fetches
+  // (search, pagination, status changes); `!didInitialLoad` covers the initial
+  // frame before the mount fetch flips loading on.
+  const showListSkeleton = isLoading || !didInitialLoad;
 
   // ─── Mobile ─────────────────────────────────────────────────────────────────
 
@@ -843,13 +903,14 @@ export function Products() {
             variant="destructive"
             size="sm"
             className="gap-2"
-            onClick={() => {
-              if (confirm(`Archive ${selectedProducts.length} product(s)?`)) {
-                selectedProducts.forEach((id) => deleteProduct(id));
-              }
-            }}
+            disabled={isBulkArchiving}
+            onClick={handleBulkArchive}
           >
-            <Trash2 className="w-4 h-4" />
+            {isBulkArchiving ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Trash2 className="w-4 h-4" />
+            )}
             Archive selected
           </Button>
         </div>
@@ -858,7 +919,7 @@ export function Products() {
       {/* Grid view */}
       {viewMode === 'grid' ? (
         <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {isLoading
+          {showListSkeleton
             ? Array.from({ length: 8 }).map((_, i) => (
               <Card key={i} className="overflow-hidden">
                 <Skeleton className="aspect-square" />
@@ -921,7 +982,7 @@ export function Products() {
                 </tr>
               </thead>
               <tbody>
-                {isLoading
+                {showListSkeleton
                   ? Array.from({ length: 5 }).map((_, i) => (
                     <tr key={i} className="border-b">
                       <td colSpan={6} className="p-4">

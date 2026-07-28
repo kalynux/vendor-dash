@@ -205,6 +205,12 @@ export function ProductEdit() {
   const isLockedForVectorisation =
     state.serverProduct?.vectorisationStatus === 'pending';
 
+  // archived/pending_review products reject content updates with
+  // CATALOG_PRODUCT_INVALID_STATE; suspended products stay editable (editing
+  // the delivery agency is the way out of suspension). See products.md.
+  const productStatus = state.serverProduct?.status ?? null;
+  const isReadOnlyStatus = productStatus === 'archived' || productStatus === 'pending_review';
+
   function advance(updates: Partial<WizardState> = {}) {
     const next = nextStep(state.currentStep, state.productType);
     dispatch({
@@ -637,6 +643,10 @@ export function ProductEdit() {
     async ({ vectorisationEnabled }: { vectorisationEnabled: boolean }) => {
       const productId = state.productId;
       if (!productId) return;
+      // Activation is only vendor-triggerable from draft (allowed-transitions
+      // table in products.md) — the Review step hides Publish otherwise; this
+      // is a backstop.
+      if (state.serverProduct && state.serverProduct.status !== 'draft') return;
 
       dispatch({ type: 'SET_SAVING', value: true });
       try {
@@ -658,7 +668,7 @@ export function ProductEdit() {
         }
       }
     },
-    [state.productId, navigate],
+    [state.productId, state.serverProduct, navigate],
   );
 
   const handleSaveDraft = useCallback(
@@ -791,11 +801,38 @@ export function ProductEdit() {
         </div>
       )}
 
+      {/* Status banners — the Review step renders its own (like the
+          vectorisation lock), so these only show on the other steps. */}
+      {isReadOnlyStatus && state.currentStep !== 'review' && (
+        <div className="px-4 sm:px-0">
+          <Alert>
+            <AlertCircle className="w-4 h-4" />
+            <AlertDescription>
+              {productStatus === 'archived'
+                ? 'This product is archived and read-only. Restore it to draft from the products list to edit or publish it.'
+                : 'This product is awaiting admin review and is read-only until moderation completes.'}
+            </AlertDescription>
+          </Alert>
+        </div>
+      )}
+      {productStatus === 'suspended' && state.currentStep !== 'review' && (
+        <div className="px-4 sm:px-0">
+          <Alert>
+            <AlertCircle className="w-4 h-4" />
+            <AlertDescription>
+              This product is suspended because of a delivery-agency issue. You can
+              still edit it — assigning a working delivery agency on the Review step
+              restores it automatically.
+            </AlertDescription>
+          </Alert>
+        </div>
+      )}
+
       <Card className="rounded-none border-x-0 sm:rounded-xl sm:border">
         <CardContent className="p-4 sm:p-6">
           <div
             className={
-              isLockedForVectorisation && state.currentStep !== 'review'
+              (isLockedForVectorisation || isReadOnlyStatus) && state.currentStep !== 'review'
                 ? 'pointer-events-none opacity-60'
                 : ''
             }

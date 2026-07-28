@@ -50,6 +50,22 @@ export function resolveFileUrl(file: Pick<ApiFile, 'url' | 'key'>): string {
   return `${base}/${key}`;
 }
 
+/**
+ * Normalize a file-reference field into a displayable URL, or `null` when unset.
+ *
+ * Read endpoints now return a populated file object `{ id, key, url, … }` for every
+ * single-file slot (avatars, logos, banners, covers — the same shape product images
+ * use). This accepts that object, a bare URL string (legacy / not-yet-migrated
+ * fields), or `null`/`undefined`, and always yields a URL string or `null`.
+ */
+export function fileRefUrl(
+  ref: string | Pick<ApiFile, 'url' | 'key'> | null | undefined,
+): string | null {
+  if (!ref) return null;
+  if (typeof ref === 'string') return ref;
+  return resolveFileUrl(ref);
+}
+
 /** Coarse UI category from a MIME type. */
 export function kindFromMime(mimeType: string): FileKind {
   if (mimeType.startsWith('image/')) return 'image';

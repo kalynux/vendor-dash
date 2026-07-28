@@ -7,6 +7,7 @@ import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { cn } from '@/lib/utils';
+import { fileRefUrl } from '@/services/files.service';
 import type { VendorAgencyListItemDto } from '@/types/product.types';
 
 function PolicyRow({ label, value }: { label: string; value: ReactNode }) {
@@ -31,6 +32,7 @@ export function AgencyDetailSheet({ agency, open, onOpenChange, footerSlot }: Ag
 
     const hq = agency.headquartersAddress;
     const p = agency.policies;
+    const logoUrl = fileRefUrl(agency.logo);
 
     const returnsPayer: Record<string, string> = {
         vendor: 'Vendor bears cost',
@@ -49,9 +51,9 @@ export function AgencyDetailSheet({ agency, open, onOpenChange, footerSlot }: Ag
                 <SheetHeader className="px-5 pb-2 flex-shrink-0">
                     <div className="flex items-start gap-3">
                         <div className="w-14 h-14 rounded-xl bg-muted flex items-center justify-center flex-shrink-0 overflow-hidden border border-border">
-                            {agency.logoUrl ? (
+                            {logoUrl ? (
                                 <img
-                                    src={agency.logoUrl}
+                                    src={logoUrl}
                                     alt={agency.agencyName}
                                     className="w-full h-full object-cover"
                                 />

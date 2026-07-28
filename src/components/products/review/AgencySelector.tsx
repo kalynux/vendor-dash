@@ -202,7 +202,7 @@ export function AgencySelector({
             You have no active delivery-agency connections yet.
           </p>
           <Button asChild size="sm" variant="outline">
-            <Link to="/dashboard/settings/delivery">Go to Settings &rarr; Delivery</Link>
+            <Link to="/dashboard/agency/connections">Go to Agency &rarr; Connection</Link>
           </Button>
         </div>
       ) : (
@@ -312,7 +312,7 @@ export function AgencySelector({
                       You have no business addresses yet.
                     </p>
                     <Button asChild size="sm" variant="outline">
-                      <Link to="/dashboard/account/store">Go to Settings &rarr; Store</Link>
+                      <Link to="/dashboard/account/addresses">Go to Account &rarr; Addresses</Link>
                     </Button>
                   </div>
                 ) : (

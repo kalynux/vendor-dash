@@ -379,6 +379,8 @@ export const BOOKING_ERROR_MAP: Record<string, string> = {
 };
 
 export const SERVICE_ACTIVATION_ERROR_MAP: Record<string, string> = {
+  CATALOG_PRODUCT_INVALID_STATE:
+    "This status change isn't allowed from the service's current status.",
   CATALOG_PRODUCT_NO_DESCRIPTION: 'A service description is required.',
   CATALOG_PRODUCT_NO_VARIANTS: 'Set a price before publishing.',
   CATALOG_PRODUCT_VARIANT_ZERO_PRICE: 'The booking price must be greater than 0.',

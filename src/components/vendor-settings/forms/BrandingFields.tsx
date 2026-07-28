@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useForm, useFieldArray, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Plus, Trash2, Image as ImageIcon, MapPin } from 'lucide-react';
+import { toast } from 'sonner';
 
 import { step3Schema, type Step3FormValues } from '@/onboarding/schemas/onboarding.schemas';
 import { BrandingImageUpload } from '@/components/vendor-settings/forms/BrandingImageUpload';
@@ -61,6 +62,8 @@ export function BrandingFields({
         handleSubmit,
         control,
         setValue,
+        setError,
+        clearErrors,
         watch,
         formState: { errors },
     } = useForm<Step3FormValues>({
@@ -84,6 +87,63 @@ export function BrandingFields({
         if (c.city) setValue(`business_addresses.${index}.city`, c.city, { shouldDirty: true, shouldValidate: true });
         if (c.region) setValue(`business_addresses.${index}.state`, c.region, { shouldDirty: true });
         setValue(`business_addresses.${index}.geo`, { ...candidate, raw_input: rawInput }, { shouldDirty: true });
+        // The address now has a pinned location — drop any "geo required" error.
+        clearErrors(`business_addresses.${index}.geo`);
+    };
+
+    // Backend rule (ADDRESS_GEO_REQUIRED / ADDRESS_COUNTRY_MISMATCH): every NEW or
+    // EDITED business address must carry a geocoded `geo` that resolves inside the
+    // vendor's country. Addresses echoed back byte-identical are grandfathered, so
+    // legacy plain-text entries keep working until the vendor touches them.
+    const requiredCountry = addressCountryBias?.toUpperCase() ?? null;
+
+    type AddressValue = NonNullable<Step3FormValues['business_addresses']>[number];
+    const looseFieldsChanged = (initial: AddressValue, current: AddressValue) =>
+        (initial.label ?? '') !== (current.label ?? '') ||
+        (initial.address_line1 ?? '') !== (current.address_line1 ?? '') ||
+        (initial.address_line2 ?? '') !== (current.address_line2 ?? '') ||
+        (initial.city ?? '') !== (current.city ?? '') ||
+        (initial.state ?? '') !== (current.state ?? '');
+
+    // Runs after zod validation passes; blocks submit until geo rules are satisfied.
+    const submitWithGeoGuard = (values: Step3FormValues) => {
+        const addresses = values.business_addresses ?? [];
+        addresses.forEach((_, index) => clearErrors(`business_addresses.${index}.geo`));
+
+        let hasGeoError = false;
+        addresses.forEach((addr, index) => {
+            const initial = addr._id
+                ? defaultValues.business_addresses?.find((a) => a._id === addr._id)
+                : undefined;
+            // No matching saved entry → brand-new (or a regenerated id): needs geo.
+            const isNewOrEdited = !initial || looseFieldsChanged(initial, addr);
+
+            if (isNewOrEdited && !addr.geo) {
+                setError(`business_addresses.${index}.geo`, {
+                    type: 'manual',
+                    message: 'Search and select this address so we can pin it on the map.',
+                });
+                hasGeoError = true;
+                return;
+            }
+
+            if (addr.geo && requiredCountry) {
+                const cc = addr.geo.components?.country_code?.toUpperCase() ?? null;
+                if (cc && cc !== requiredCountry) {
+                    setError(`business_addresses.${index}.geo`, {
+                        type: 'manual',
+                        message: `This address must be in your registered country (${requiredCountry}). Search for it again within ${requiredCountry}.`,
+                    });
+                    hasGeoError = true;
+                }
+            }
+        });
+
+        if (hasGeoError) {
+            toast.error('Some addresses need a valid pinned location before saving.');
+            return;
+        }
+        return onSubmit(values);
     };
 
     // Existing (already-saved) addresses get a confirmation before removal — the
@@ -92,7 +152,7 @@ export function BrandingFields({
     const [confirmRemoveIndex, setConfirmRemoveIndex] = useState<number | null>(null);
 
     return (
-        <form id={formId} onSubmit={handleSubmit(onSubmit)} className="space-y-6" noValidate>
+        <form id={formId} onSubmit={handleSubmit(submitWithGeoGuard)} className="space-y-6" noValidate>
             {/* Branding */}
             {showBranding && (
             <div className="space-y-4">
@@ -184,13 +244,17 @@ export function BrandingFields({
                                         placeholder="Search a street, area, or city…"
                                         onSelect={(candidate, raw) => applyCandidate(index, candidate, raw)}
                                     />
-                                    {watch(`business_addresses.${index}.geo`) ? (
+                                    {errors.business_addresses?.[index]?.geo?.message ? (
+                                        <p className="text-sm text-destructive" role="alert">
+                                            {errors.business_addresses[index]?.geo?.message}
+                                        </p>
+                                    ) : watch(`business_addresses.${index}.geo`) ? (
                                         <p className="inline-flex items-center gap-1 text-xs text-emerald-600">
                                             <MapPin className="w-3 h-3" /> Location pinned on map
                                         </p>
                                     ) : (
                                         <p className="text-xs text-muted-foreground">
-                                            Search to pin the exact location, or fill the fields manually.
+                                            Search to pin the exact location, required before saving.
                                         </p>
                                     )}
                                 </div>

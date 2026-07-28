@@ -7,6 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { useAgencyConnectionActions } from '@/hooks/useAgencyConnectionActions';
 import { listAgencyConnections, resolveAgencyDisplayForConnections } from '@/services/agency-connections.service';
+import { fileRefUrl } from '@/services/files.service';
 import { ApiError } from '@/types/api';
 import type { AgencyBrowseItemDto, ConnectionDto, ConnectionStatus } from '@/types/agency-connection.types';
 
@@ -307,6 +308,7 @@ export function ConnectionsList({
                 <div className="space-y-2">
                     {filtered.map((connection) => {
                         const agency = agencyDisplay.get(connection.agencyId);
+                        const logoUrl = fileRefUrl(agency?.logo);
                         return (
                             <div
                                 key={connection.id}
@@ -314,8 +316,8 @@ export function ConnectionsList({
                             >
                                 <div className="flex items-center gap-3 min-w-0">
                                     <div className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center flex-shrink-0 overflow-hidden">
-                                        {agency?.logoUrl ? (
-                                            <img src={agency.logoUrl} alt={agency.agencyName} className="w-full h-full object-cover" />
+                                        {logoUrl ? (
+                                            <img src={logoUrl} alt={agency?.agencyName} className="w-full h-full object-cover" />
                                         ) : (
                                             <Building2 className="w-4 h-4 text-muted-foreground" />
                                         )}

@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useForm, useFieldArray, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import type { z } from 'zod';
@@ -145,11 +145,13 @@ export interface PoliciesFieldsProps {
     defaultValues: Step4FormValues;
     defaultEnabled: PolicyEnabled;
     onSubmit: (values: Step4FormValues, enabled: PolicyEnabled) => void | Promise<void>;
+    /** Reports whether the form differs from its initial values (drives a floating save bar). */
+    onDirtyChange?: (dirty: boolean) => void;
 }
 
 // ─── Shared Policies form body ────────────────────────────────────────────────
 
-export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit }: PoliciesFieldsProps) {
+export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit, onDirtyChange }: PoliciesFieldsProps) {
     const [langInput, setLangInput] = useState('');
     const [enableReturn, setEnableReturn] = useState(defaultEnabled.return);
     const [enableCancellation, setEnableCancellation] = useState(defaultEnabled.cancellation);
@@ -160,11 +162,23 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
         handleSubmit,
         control,
         setValue,
-        formState: { errors },
+        formState: { errors, isDirty },
     } = useForm<z.input<typeof step4Schema>, unknown, Step4FormValues>({
         resolver: zodResolver(step4Schema),
         defaultValues,
     });
+
+    // Dirty = any field edited (RHF) OR an enabled-section toggle flipped. Reported
+    // up so the parent can show a single floating save bar. The parent remounts
+    // this component (via `key`) after a successful save or discard to reset it.
+    const enabledDirty =
+        enableReturn !== defaultEnabled.return ||
+        enableCancellation !== defaultEnabled.cancellation ||
+        enableSupport !== defaultEnabled.support;
+    const dirty = isDirty || enabledDirty;
+    useEffect(() => {
+        onDirtyChange?.(dirty);
+    }, [dirty, onDirtyChange]);
 
     // All watched values at top level (rules of hooks)
     const refundType = useWatch({ control, name: 'return_policy.refund_type' });
@@ -188,7 +202,7 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
         setUploadingDoc(true);
         try {
             const res = await onboardingService.uploadPolicyDocuments([file]);
-            setValue('documents', [...documents, ...res.data.urls]);
+            setValue('documents', [...documents, ...res.data.urls], { shouldDirty: true });
         } catch {
             toast.error('Could not upload document. Please try again.');
         } finally {
@@ -197,7 +211,7 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
     }, [documents, setValue]);
 
     const handleRemoveDoc = useCallback(
-        (url: string) => setValue('documents', documents.filter((d) => d !== url)),
+        (url: string) => setValue('documents', documents.filter((d) => d !== url), { shouldDirty: true }),
         [documents, setValue],
     );
 
@@ -214,12 +228,12 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
     const handleAddLanguage = useCallback(() => {
         const trimmed = langInput.trim();
         if (!trimmed || languages.includes(trimmed) || languages.length >= 20) return;
-        setValue('support_policy.languages', [...languages, trimmed]);
+        setValue('support_policy.languages', [...languages, trimmed], { shouldDirty: true });
         setLangInput('');
     }, [langInput, languages, setValue]);
 
     const handleRemoveLanguage = useCallback((lang: string) => {
-        setValue('support_policy.languages', languages.filter((l) => l !== lang));
+        setValue('support_policy.languages', languages.filter((l) => l !== lang), { shouldDirty: true });
     }, [languages, setValue]);
 
     const toggleRequiredInfo = useCallback(
@@ -228,6 +242,7 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
             setValue(
                 'support_policy.required_info',
                 checked ? [...current, value] : current.filter((v) => v !== value),
+                { shouldDirty: true },
             );
         },
         [requiredInfo, setValue],
@@ -268,7 +283,7 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
                     </div>
                     <Switch
                         checked={returnEligible ?? true}
-                        onCheckedChange={(v) => setValue('return_policy.return_eligible', v)}
+                        onCheckedChange={(v) => setValue('return_policy.return_eligible', v, { shouldDirty: true })}
                     />
                 </div>
 
@@ -302,7 +317,7 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
                             </FieldLabel>
                             <Select
                                 value={refundType ?? 'full'}
-                                onValueChange={(v) => setValue('return_policy.refund_type', v as 'full' | 'partial' | 'none')}
+                                onValueChange={(v) => setValue('return_policy.refund_type', v as 'full' | 'partial' | 'none', { shouldDirty: true })}
                             >
                                 <SelectTrigger className="h-11 w-full">
                                     <SelectValue />
@@ -347,7 +362,7 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
                             </FieldLabel>
                             <Select
                                 value={returnShippingPayer ?? 'customer'}
-                                onValueChange={(v) => setValue('return_policy.return_shipping_payer', v as 'vendor' | 'customer' | 'customer_reimbursed_if_defect')}
+                                onValueChange={(v) => setValue('return_policy.return_shipping_payer', v as 'vendor' | 'customer' | 'customer_reimbursed_if_defect', { shouldDirty: true })}
                             >
                                 <SelectTrigger className="h-11 w-full">
                                     <SelectValue />
@@ -432,7 +447,7 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
                     </div>
                     <Switch
                         checked={cancellable ?? true}
-                        onCheckedChange={(v) => setValue('cancellation_policy.cancellable', v)}
+                        onCheckedChange={(v) => setValue('cancellation_policy.cancellable', v, { shouldDirty: true })}
                     />
                 </div>
 
@@ -447,7 +462,7 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
                             </FieldLabel>
                             <Select
                                 value={cancellationDeadline ?? ''}
-                                onValueChange={(v) => setValue('cancellation_policy.cancellation_deadline', v || null)}
+                                onValueChange={(v) => setValue('cancellation_policy.cancellation_deadline', v || null, { shouldDirty: true })}
                             >
                                 <SelectTrigger className="h-11 w-full">
                                     <SelectValue placeholder="Select a deadline…" />
@@ -493,7 +508,7 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
                             </FieldLabel>
                             <Select
                                 value={feeType ?? 'none'}
-                                onValueChange={(v) => setValue('cancellation_policy.cancellation_fee_type', v as 'none' | 'fixed' | 'percentage' | 'full_non_refundable')}
+                                onValueChange={(v) => setValue('cancellation_policy.cancellation_fee_type', v as 'none' | 'fixed' | 'percentage' | 'full_non_refundable', { shouldDirty: true })}
                             >
                                 <SelectTrigger className="h-11 w-full">
                                     <SelectValue />
@@ -545,6 +560,7 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
                                 onValueChange={(v) => setValue(
                                     'cancellation_policy.late_cancellation_refund_type',
                                     (v || null) as 'fixed' | 'percentage' | 'full_non_refundable' | null,
+                                    { shouldDirty: true },
                                 )}
                             >
                                 <SelectTrigger className="h-11 w-full">
@@ -704,7 +720,7 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
                     </FieldLabel>
                     <Select
                         value={availability ?? ''}
-                        onValueChange={(v) => setValue('support_policy.availability', (v || null) as '24_7' | 'business_hours' | 'limited' | null)}
+                        onValueChange={(v) => setValue('support_policy.availability', (v || null) as '24_7' | 'business_hours' | 'limited' | null, { shouldDirty: true })}
                     >
                         <SelectTrigger className="h-11 w-full">
                             <SelectValue placeholder="Select availability…" />

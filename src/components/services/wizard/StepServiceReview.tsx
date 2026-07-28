@@ -50,6 +50,14 @@ export function StepServiceReview({
 
   const isLockedForVectorisation = service?.vectorisationStatus === 'pending';
 
+  // Vendor-triggered activation is only allowed from draft (allowed-transitions
+  // table in api-doc/vendor/products.md). archived/pending_review services also
+  // reject content updates (CATALOG_PRODUCT_INVALID_STATE).
+  const serviceStatus = service?.status ?? null;
+  const isReadOnlyStatus = serviceStatus === 'archived' || serviceStatus === 'pending_review';
+  const showPublish = serviceStatus === 'draft' || !service;
+  const showSaveChanges = serviceStatus === 'active' || serviceStatus === 'suspended';
+
   const activationErrors = service
     ? validateServiceActivation({
         description: service.description,
@@ -84,6 +92,34 @@ export function StepServiceReview({
           <AlertCircle className="w-4 h-4" />
           <AlertDescription>
             This service is being indexed for AI search. Editing is temporarily disabled.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {serviceStatus === 'archived' && (
+        <Alert>
+          <AlertCircle className="w-4 h-4" />
+          <AlertDescription>
+            This service is archived and read-only. Restore it to draft from the
+            services list to edit or publish it.
+          </AlertDescription>
+        </Alert>
+      )}
+      {serviceStatus === 'pending_review' && (
+        <Alert>
+          <AlertCircle className="w-4 h-4" />
+          <AlertDescription>
+            This service is awaiting admin review and is read-only until moderation
+            completes.
+          </AlertDescription>
+        </Alert>
+      )}
+      {serviceStatus === 'suspended' && (
+        <Alert>
+          <AlertCircle className="w-4 h-4" />
+          <AlertDescription>
+            This service is suspended. You can still edit it — it is restored
+            automatically once the cause is resolved.
           </AlertDescription>
         </Alert>
       )}
@@ -163,7 +199,7 @@ export function StepServiceReview({
               <Switch
                 checked={vectorisationEnabled}
                 onCheckedChange={setVectorisationEnabled}
-                disabled={isSaving || isLockedForVectorisation}
+                disabled={isSaving || isLockedForVectorisation || isReadOnlyStatus}
                 aria-label="Enable AI vectorisation"
               />
             </div>
@@ -208,21 +244,33 @@ export function StepServiceReview({
               Keep as draft
             </Button>
           )}
-          <Button
-            type="button"
-            onClick={() => onPublish({ vectorisationEnabled })}
-            disabled={isSaving || !canPublish || isLockedForVectorisation}
-            className="gap-1.5"
-          >
-            {isSaving ? (
-              'Publishing…'
-            ) : (
-              <>
-                <Globe className="w-4 h-4" />
-                Publish
-              </>
-            )}
-          </Button>
+          {showPublish && (
+            <Button
+              type="button"
+              onClick={() => onPublish({ vectorisationEnabled })}
+              disabled={isSaving || !canPublish || isLockedForVectorisation}
+              className="gap-1.5"
+            >
+              {isSaving ? (
+                'Publishing…'
+              ) : (
+                <>
+                  <Globe className="w-4 h-4" />
+                  Publish
+                </>
+              )}
+            </Button>
+          )}
+          {showSaveChanges && (
+            <Button
+              type="button"
+              onClick={() => onSaveDraft({ vectorisationEnabled })}
+              disabled={isSaving || isLockedForVectorisation}
+              className="gap-1.5"
+            >
+              {isSaving ? 'Saving…' : 'Save changes'}
+            </Button>
+          )}
         </div>
       </div>
     </div>

@@ -59,9 +59,13 @@ export const onboardingService = {
         return api.patch<VendorProfileUpdateResponse>('/vendor/profile', payload);
     },
 
-    /** Change the vendor's password. Requires the current password. */
+    /**
+     * Change the account password. Requires the current password.
+     * Role-agnostic endpoint — the deprecated `/vendor/profile/password` alias
+     * routes to the same handler (see api-doc/me/password.md).
+     */
     changePassword(payload: ChangePasswordPayload): Promise<ChangePasswordResponse> {
-        return api.patch<ChangePasswordResponse>('/vendor/profile/password', payload);
+        return api.patch<ChangePasswordResponse>('/me/password', payload);
     },
 
     /**

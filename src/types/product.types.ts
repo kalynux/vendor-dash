@@ -1,6 +1,6 @@
 // ─── Product Types & Status ───────────────────────────────────────────────────
 
-import type { ApiFile } from '@/types/file.types';
+import type { ApiFile, FileRef } from '@/types/file.types';
 // Service variants carry serviceConfig. Type-only import (erased at compile) —
 // no runtime circular dependency with services.types.
 import type { ServiceConfig } from '@/types/services.types';
@@ -389,6 +389,21 @@ export interface ArchiveResponse {
   message: string;
 }
 
+/** Aggregated result of POST /vendor/products/bulk/archive (partial success). */
+export interface BulkArchiveResult {
+  /** Number of products archived. */
+  success: number;
+  /** Number skipped — only draft/active products can be archived. */
+  failed: number;
+  total: number;
+}
+
+export interface BulkArchiveResponse {
+  success: boolean;
+  data: BulkArchiveResult;
+  message?: string;
+}
+
 // ─── Wizard UI Types ──────────────────────────────────────────────────────────
 
 export type PhysicalStep = 'type' | 'basic-info' | 'media' | 'options-variants' | 'review';
@@ -495,7 +510,8 @@ export interface VendorAgencyPolicySummaryDto {
 export interface VendorAgencyListItemDto {
   id: string;
   agencyName: string;
-  logoUrl: string | null;
+  /** Agency logo as a resolved file object (`{ id, key, url, … }`), or `null` if unset. */
+  logo: FileRef | null;
   kycVerified: boolean;
   headquartersAddress: VendorAgencyHQAddressDto | null;
   coverageAreas: string[];

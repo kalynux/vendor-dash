@@ -2,8 +2,8 @@
 // Enterprise, Spotify-style media manager driven entirely by the backend File
 // Management Service (api-doc/vendor/file-management.md). Files are FLAT (no
 // folders). A persistent inspector resolves exactly where each file is attached
-// (product / variant / digital asset) from the `usage` references — never from
-// `usageCount`.
+// (product, variant, digital asset, ticket, or a logo/banner/avatar slot) from
+// the `usage` references — never from `usageCount`.
 
 import {
   useCallback,
@@ -38,6 +38,13 @@ import {
   ChevronRight,
   Inbox,
   ExternalLink,
+  Store,
+  Building2,
+  User,
+  UserCircle,
+  ShieldCheck,
+  LifeBuoy,
+  Paperclip,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -100,6 +107,7 @@ import type {
   ApiFileDetail,
   FileKind,
   FilePagination,
+  FileReference,
   StorageProvider,
   StorageUsage,
 } from '@/types/file.types';
@@ -162,6 +170,65 @@ function statusBadgeClass(status?: string): string {
     default:
       return 'bg-muted text-muted-foreground border-transparent';
   }
+}
+
+// ─── Usage references ─────────────────────────────────────────────────────────
+// Map a `usage.references[]` entry (any entity type / slot) to an icon + label
+// so files backing a logo, banner, avatar or ticket read as "used" too — not
+// just catalog media. Falls back to a generic row for a future entity type.
+
+function describeReference(ref: FileReference): { Icon: typeof Package; typeLabel: string } {
+  // The visual slot (field) wins for branding-style attachments, since that is
+  // what the vendor recognises ("Store logo") over the raw entity type.
+  switch (ref.field) {
+    case 'avatar':
+      return { Icon: UserCircle, typeLabel: 'Profile avatar' };
+    case 'logo':
+      return { Icon: Store, typeLabel: 'Store logo' };
+    case 'banner':
+    case 'cover':
+      return { Icon: ImageIcon, typeLabel: ref.field === 'cover' ? 'Cover image' : 'Store banner' };
+    case 'attachment':
+      return { Icon: Paperclip, typeLabel: 'Ticket attachment' };
+  }
+  switch (ref.entityType) {
+    case 'product':
+      return { Icon: Package, typeLabel: 'Product' };
+    case 'variant':
+      return { Icon: Tag, typeLabel: 'Variant' };
+    case 'digital_asset':
+      return { Icon: FileDown, typeLabel: 'Digital asset' };
+    case 'ticket':
+      return { Icon: LifeBuoy, typeLabel: 'Support ticket' };
+    case 'store':
+      return { Icon: Store, typeLabel: 'Storefront' };
+    case 'vendor':
+      return { Icon: UserCircle, typeLabel: 'Your profile' };
+    case 'agency':
+      return { Icon: Building2, typeLabel: 'Agency' };
+    case 'customer':
+      return { Icon: User, typeLabel: 'Customer' };
+    case 'agent':
+      return { Icon: User, typeLabel: 'Agent' };
+    case 'admin':
+      return { Icon: ShieldCheck, typeLabel: 'Admin' };
+    default:
+      return { Icon: Link2, typeLabel: 'In use' };
+  }
+}
+
+// Product-edit is the only in-app destination we can route to. References carry
+// only the entity's own id, so for a variant/digital-asset we resolve its parent
+// product from the legacy arrays (which still carry `productId`).
+function referenceProductId(ref: FileReference, detail: ApiFileDetail): string | undefined {
+  if (ref.entityType === 'product') return ref.entityId;
+  if (ref.entityType === 'variant') {
+    return detail.usage.variants.find((v) => v.id === ref.entityId)?.productId;
+  }
+  if (ref.entityType === 'digital_asset') {
+    return detail.usage.digitalAssets.find((d) => d.id === ref.entityId)?.productId;
+  }
+  return undefined;
 }
 
 // ─── File artwork ─────────────────────────────────────────────────────────────
@@ -563,7 +630,7 @@ export function MediaGallery() {
     async (id: string) => {
       const detail = detailCache[id];
       if (detail && detail.usage.totalReferences > 0) {
-        toast.error('Detach this file from its products and variants before deleting it.');
+        toast.error('Detach this file from everything using it before deleting it.');
         return;
       }
       if (!confirm('Delete this file? This cannot be undone.')) return;
@@ -596,7 +663,7 @@ export function MediaGallery() {
         toast.success('File deleted.');
       } catch (err) {
         if (err instanceof ApiError && err.status === 409) {
-          toast.error('This file is still in use. Detach it from all products/variants first.');
+          toast.error('This file is still in use. Detach it from everything using it first.');
         } else {
           toast.error(err instanceof ApiError ? err.message : 'Could not delete file.');
         }
@@ -1313,7 +1380,26 @@ function InspectorBody({
             <div className="rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">
               Not attached to anything. This file can be safely deleted.
             </div>
+          ) : detail!.usage.references && detail!.usage.references.length > 0 ? (
+            // Preferred: the full reference list (covers logo/banner/avatar/tickets).
+            <div className="space-y-2">
+              {detail!.usage.references.map((ref, i) => {
+                const { Icon, typeLabel } = describeReference(ref);
+                const productId = referenceProductId(ref, detail!);
+                return (
+                  <UsageRow
+                    key={`${ref.entityType}-${ref.entityId}-${ref.field}-${i}`}
+                    file={display}
+                    icon={Icon}
+                    typeLabel={typeLabel}
+                    name={ref.label}
+                    onOpen={productId ? () => onNavigate(productId) : undefined}
+                  />
+                );
+              })}
+            </div>
           ) : (
+            // Legacy fallback: older backend without a `references` array.
             <div className="space-y-2">
               {detail!.usage.products.map((p) => (
                 <UsageRow
@@ -1365,7 +1451,7 @@ function InspectorBody({
                 </span>
               </TooltipTrigger>
               <TooltipContent side="top">
-                Detach this file from its products and variants before deleting.
+                Detach this file from everything using it before deleting.
               </TooltipContent>
             </Tooltip>
           ) : (

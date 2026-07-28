@@ -35,7 +35,7 @@ interface EntityPickerProps {
 }
 
 /** Entity types that support a searchable picker backed by an existing API. */
-const SEARCHABLE: Record<string, true> = { order: true, product: true };
+const SEARCHABLE: Record<string, true> = { ORDER: true, PRODUCT: true };
 
 /** Reference endpoints cap the page at 50 — plenty for a searchable picker. */
 const PAGE_LIMIT = 50;
@@ -45,7 +45,7 @@ export function EntityPicker({ entityType, value, onChange, onOrderSelected, inv
   if (!SEARCHABLE[entityType]) {
     return (
       <Input
-        placeholder={entityType === 'other' ? 'Optional — leave blank to use your account' : 'Enter the related entity ID'}
+        placeholder={entityType === 'OTHER' ? 'Optional — leave blank to use your account' : 'Enter the related entity ID'}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         aria-invalid={invalid}
@@ -74,6 +74,9 @@ function SearchablePicker({ entityType, value, onChange, onOrderSelected, invali
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<EntityOption | null>(null);
 
+  // Lowercased entity type for user-facing copy (values are UPPERCASE on the wire).
+  const noun = entityType.toLowerCase();
+
   // Load results (server-side search) whenever the modal is open and the query changes.
   // setState is kept inside the deferred timer / promise callbacks (not the effect body).
   useEffect(() => {
@@ -87,7 +90,7 @@ function SearchablePicker({ entityType, value, onChange, onOrderSelected, invali
         .then((opts) => active && setResults(opts))
         .catch((err) => {
           if (!active) return;
-          setError(err instanceof ApiError ? err.message : `Couldn't load ${entityType}s`);
+          setError(err instanceof ApiError ? err.message : `Couldn't load ${noun}s`);
           setResults([]);
         })
         .finally(() => active && setLoading(false));
@@ -127,7 +130,7 @@ function SearchablePicker({ entityType, value, onChange, onOrderSelected, invali
             )}
           </span>
         ) : (
-          <span>Select {entityType}…</span>
+          <span>Select {noun}…</span>
         )}
         <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
       </Button>
@@ -135,9 +138,9 @@ function SearchablePicker({ entityType, value, onChange, onOrderSelected, invali
       <ResponsiveModal
         open={open}
         onOpenChange={setOpen}
-        title={`Select ${entityType}`}
+        title={`Select ${noun}`}
         description={
-          entityType === 'product'
+          entityType === 'PRODUCT'
             ? 'Search your catalogue by name, category, or tag.'
             : 'Search your orders by order number or customer.'
         }
@@ -148,7 +151,7 @@ function SearchablePicker({ entityType, value, onChange, onOrderSelected, invali
             value={query}
             onValueChange={setQuery}
             placeholder={
-              entityType === 'product' ? 'Search by name, category, or tag…' : 'Search by order number or customer…'
+              entityType === 'PRODUCT' ? 'Search by name, category, or tag…' : 'Search by order number or customer…'
             }
           />
           <CommandList className="max-h-[55vh]">
@@ -159,10 +162,10 @@ function SearchablePicker({ entityType, value, onChange, onOrderSelected, invali
               </div>
             ) : loading && results.length === 0 ? (
               <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" /> Loading {entityType}s…
+                <Loader2 className="h-4 w-4 animate-spin" /> Loading {noun}s…
               </div>
             ) : results.length === 0 ? (
-              <div className="py-10 text-center text-sm text-muted-foreground">No {entityType}s found.</div>
+              <div className="py-10 text-center text-sm text-muted-foreground">No {noun}s found.</div>
             ) : (
               <div className="p-1">
                 {results.map((option) => {
@@ -229,7 +232,7 @@ function titleCase(value: string): string {
 }
 
 async function searchEntities(entityType: TicketEntityType, query: string): Promise<EntityOption[]> {
-  if (entityType === 'order') {
+  if (entityType === 'ORDER') {
     const { data } = await fetchReferenceOrders({ q: query || undefined, limit: PAGE_LIMIT });
     return data.map((o) => ({
       id: o.id,
@@ -247,7 +250,7 @@ async function searchEntities(entityType: TicketEntityType, query: string): Prom
         })),
     }));
   }
-  if (entityType === 'product') {
+  if (entityType === 'PRODUCT') {
     const { data } = await fetchReferenceProducts({ q: query || undefined, limit: PAGE_LIMIT });
     return data.map((p) => ({
       id: p.id,

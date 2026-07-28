@@ -9,6 +9,7 @@ import {
   HardDrive,
   Handshake,
   Wallet,
+  CalendarClock,
   AlertTriangle,
   XCircle,
   type LucideIcon,
@@ -44,13 +45,17 @@ export function notificationRoute(
     case 'storage':
       return '/dashboard/media';
     case 'connection':
-      // Agency connections are managed under Settings → Delivery.
-      return '/dashboard/settings/delivery';
+      // Agency connections are managed under Agency → Connection.
+      return '/dashboard/agency/connections';
     case 'payout':
       // A payout request is tracked as a ticket, but the notification's
       // aggregateId is the PayoutRequest id (not the ticket id), so land on the
       // payout screen rather than trying to build a ticket deep-link.
       return '/dashboard/account/payout';
+    case 'plan':
+      // Plan expiry / expired notifications land on the billing tab (plans live
+      // there). aggregateId is the vendor id, so there's no per-entity view.
+      return '/dashboard/account/billing';
     default:
       return '/dashboard/notifications';
   }
@@ -64,6 +69,7 @@ const AGGREGATE_ACTION_LABEL: Record<NotificationAggregateType, string> = {
   storage: 'View storage',
   connection: 'View connections',
   payout: 'View payout',
+  plan: 'Manage plan',
 };
 
 /**
@@ -98,6 +104,10 @@ const TYPE_VISUALS: Record<NotificationType, Visual> = {
   // Orange (not red) to match the "Needs Reassignment" delivery badge — this is an
   // action-required event: the vendor must reroute the declined item to another agency.
   'shipment.rejected': { Icon: PackageX, iconWrap: 'bg-orange-100 text-orange-600', dot: 'bg-orange-500' },
+  // Amber while the plan is merely nearing expiry (warning); red once it has
+  // actually expired (downgraded / handed over).
+  'plan.expiring': { Icon: CalendarClock, iconWrap: 'bg-amber-100 text-amber-600', dot: 'bg-amber-500' },
+  'plan.expired': { Icon: CalendarClock, iconWrap: 'bg-red-100 text-red-600', dot: 'bg-red-500' },
 };
 
 const AGGREGATE_FALLBACK: Record<NotificationAggregateType, Visual> = {
@@ -107,6 +117,7 @@ const AGGREGATE_FALLBACK: Record<NotificationAggregateType, Visual> = {
   storage: { Icon: HardDrive, iconWrap: 'bg-orange-100 text-orange-600', dot: 'bg-orange-500' },
   connection: { Icon: Handshake, iconWrap: 'bg-indigo-100 text-indigo-600', dot: 'bg-indigo-500' },
   payout: { Icon: Wallet, iconWrap: 'bg-blue-100 text-blue-600', dot: 'bg-blue-500' },
+  plan: { Icon: CalendarClock, iconWrap: 'bg-amber-100 text-amber-600', dot: 'bg-amber-500' },
 };
 
 const DEFAULT_VISUAL: Visual = { Icon: Bell, iconWrap: 'bg-gray-100 text-gray-600', dot: 'bg-gray-500' };

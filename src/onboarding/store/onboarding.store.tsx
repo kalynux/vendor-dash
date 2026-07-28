@@ -18,6 +18,7 @@ import type {
     DeliveryLinkingPayload,
     BrandingPayload,
     Branding,
+    BrandingFileRef,
     PolicySetupPayload,
     OnboardingStepResponse,
     VendorOnboardingStep,
@@ -111,9 +112,16 @@ export interface OnboardingState {
      * the caller must supply the read-shape `Branding` it already has in hand (from the
      * upload responses) to replace `role_entity.branding` with. Stripped before the
      * network call.
+     *
+     * `avatarPreview` is the same escape hatch for `avatarFileId`: pass the populated
+     * file object (or `null` when clearing) so `role_entity.avatar` reflects the new
+     * picture immediately. Stripped before the network call.
      */
     updateVendorProfile: (
-        patch: Omit<VendorProfileUpdatePayload, 'version'> & { brandingPreview?: Branding },
+        patch: Omit<VendorProfileUpdatePayload, 'version'> & {
+            brandingPreview?: Branding;
+            avatarPreview?: BrandingFileRef | null;
+        },
     ) => Promise<void>;
 
     /**
@@ -298,10 +306,15 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     );
 
     const updateVendorProfile = useCallback(
-        async (patch: Omit<VendorProfileUpdatePayload, 'version'> & { brandingPreview?: Branding }) => {
+        async (
+            patch: Omit<VendorProfileUpdatePayload, 'version'> & {
+                brandingPreview?: Branding;
+                avatarPreview?: BrandingFileRef | null;
+            },
+        ) => {
             setIsSubmitting(true);
             setError(null);
-            const { brandingPreview, ...writePatch } = patch;
+            const { brandingPreview, avatarPreview, ...writePatch } = patch;
             try {
                 const currentVersion = session?.role_entity.version ?? 0;
                 const res = await onboardingService.updateProfile({
@@ -330,6 +343,9 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
                             // into the read-shape `branding` object. Use the caller-supplied
                             // preview instead; fall back to leaving branding untouched.
                             ...(brandingPreview !== undefined ? { branding: brandingPreview } : {}),
+                            // `avatarFileId` is a write-shape id; mirror the populated
+                            // preview (or `null` on clear) into the read-shape `avatar`.
+                            ...(avatarPreview !== undefined ? { avatar: avatarPreview } : {}),
                             ...(writePatch.social_links !== undefined ? { social_links: { ...re.social_links, ...writePatch.social_links } } : {}),
                             ...(writePatch.policies !== undefined ? { policies: writePatch.policies } : {}),
                             ...(writePatch.displayName !== undefined ? { display_name: writePatch.displayName } : {}),

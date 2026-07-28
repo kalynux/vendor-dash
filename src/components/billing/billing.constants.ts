@@ -3,7 +3,7 @@
 import type {
   PaymentGateway,
   PhoneOperator,
-  VendorPlanStatus,
+  SubscriberPlanStatus,
 } from '@/types/billing.types';
 import type { PaymentMethodType } from '@/types/payment-method.types';
 import { ApiError } from '@/types/api';
@@ -106,7 +106,7 @@ export function planAccent(code: string): string {
 
 // ─── Status badge variants ───────────────────────────────────────────────────────
 
-export function vendorPlanStatusLabel(status: VendorPlanStatus): string {
+export function subscriberPlanStatusLabel(status: SubscriberPlanStatus): string {
   switch (status) {
     case 'active':
       return 'Active';

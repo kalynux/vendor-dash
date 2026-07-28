@@ -15,6 +15,7 @@ import {
   HardDrive,
   Handshake,
   Wallet,
+  CalendarClock,
   ShieldCheck,
   ShieldAlert,
   type LucideIcon,
@@ -128,6 +129,7 @@ const EVENTS: EventMeta[] = [
   { key: 'connectionUpdated', label: 'Agency connections', description: 'When an agency request, approval, rejection, or re-approval happens', Icon: Handshake },
   { key: 'payoutUpdates', label: 'Payout updates', description: 'When your payout request is created, paid, or rejected', Icon: Wallet },
   { key: 'shipmentRejected', label: 'Shipment rejected', description: 'When a delivery agency declines a shipment and its items need rerouting', Icon: PackageX },
+  { key: 'planUpdates', label: 'Plan updates', description: 'When your subscription plan is nearing expiry or has expired', Icon: CalendarClock },
 ];
 
 const LANGUAGES: { value: PreferredLanguage; label: string }[] = [

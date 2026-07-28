@@ -1,12 +1,11 @@
 import { useParams, Navigate } from 'react-router-dom';
 import { Tabs, TabsContent } from '@/components/ui/tabs';
-import { DeliverySettings } from '@/components/vendor-settings/DeliverySettings';
 import { PoliciesSettings } from '@/components/vendor-settings/PoliciesSettings';
 import { NotificationSettings } from '@/components/vendor-settings/NotificationSettings';
 import { PreferencesSettings } from '@/components/vendor-settings/PreferencesSettings';
 
-const VALID_TABS = ['delivery', 'policies', 'notifications', 'preferences'] as const;
-const DEFAULT_TAB = 'delivery';
+const VALID_TABS = ['policies', 'notifications', 'preferences'] as const;
+const DEFAULT_TAB = 'policies';
 
 export function Settings() {
   const { tab } = useParams();
@@ -21,15 +20,11 @@ export function Settings() {
       <div>
         <h1 className="text-2xl font-bold">Settings</h1>
         <p className="text-muted-foreground">
-          Configure delivery, policies, and notifications for your store
+          Configure policies, notifications, and preferences for your store
         </p>
       </div>
 
       <Tabs value={tab} className="w-full">
-        <TabsContent value="delivery" className="space-y-6">
-          <DeliverySettings />
-        </TabsContent>
-
         <TabsContent value="policies" className="space-y-6">
           <PoliciesSettings />
         </TabsContent>

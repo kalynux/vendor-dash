@@ -232,6 +232,10 @@ export function ServiceEdit() {
   const handlePublish = useCallback(
     async ({ vectorisationEnabled }: { vectorisationEnabled: boolean }) => {
       if (!id) return;
+      // Activation is only vendor-triggerable from draft (allowed-transitions
+      // table in products.md) — the Review step hides Publish otherwise; this
+      // is a backstop.
+      if (state.service && state.service.status !== 'draft') return;
       dispatch({ type: 'SET_SAVING', value: true });
       try {
         // Activate first, THEN set vectorisationEnabled: the enable flow runs an
@@ -251,7 +255,7 @@ export function ServiceEdit() {
         });
       }
     },
-    [id, navigate],
+    [id, state.service, navigate],
   );
 
   const handleSaveDraft = useCallback(

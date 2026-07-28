@@ -18,6 +18,8 @@ import type {
   DigitalAssetUploadData,
 
   ArchiveResponse,
+  BulkArchiveResult,
+  BulkArchiveResponse,
   DefaultVariantResponse,
   CreateProductPayload,
   UpdateProductPayload,
@@ -101,6 +103,25 @@ export async function updateProductStatus(id: string, status: ApiProductStatus):
 
 export async function archiveProduct(id: string): Promise<void> {
   await api.delete<ArchiveResponse>(`/vendor/products/${id}`);
+}
+
+/**
+ * Bulk archive via POST /vendor/products/bulk/archive (max 50 ids per request —
+ * larger selections are chunked). The backend only archives draft/active
+ * products; anything else is skipped and counted in `failed`.
+ */
+export async function bulkArchiveProducts(productIds: string[]): Promise<BulkArchiveResult> {
+  const CHUNK_SIZE = 50;
+  const totals: BulkArchiveResult = { success: 0, failed: 0, total: 0 };
+  for (let i = 0; i < productIds.length; i += CHUNK_SIZE) {
+    const res = await api.post<BulkArchiveResponse>('/vendor/products/bulk/archive', {
+      productIds: productIds.slice(i, i + CHUNK_SIZE),
+    });
+    totals.success += res.data.success;
+    totals.failed += res.data.failed;
+    totals.total += res.data.total;
+  }
+  return totals;
 }
 
 export async function duplicateProduct(id: string): Promise<ApiProduct> {
@@ -365,6 +386,8 @@ export async function retryVectorisation(productId: string): Promise<Vectorisati
 // Map 422 error codes from the status endpoint to human-readable messages.
 
 export const ACTIVATION_ERROR_MAP: Record<string, string> = {
+  CATALOG_PRODUCT_INVALID_STATE:
+    "This status change isn't allowed from the product's current status",
   CATALOG_PRODUCT_NO_DESCRIPTION: 'A product description is required',
   CATALOG_PRODUCT_NO_VARIANTS: 'At least one variant with a price is required',
   CATALOG_PRODUCT_VARIANT_ZERO_PRICE: 'All active variants must have a price greater than 0',
@@ -400,7 +423,6 @@ export type StatusTransitionIntent =
   | 'activate'
   | 'demote_to_draft'
   | 'restore'
-  | 'cancel_review'
   | 'archive';
 
 export interface StatusTransition {
@@ -459,23 +481,11 @@ export const STATUS_TRANSITIONS: Record<ApiProductStatus, StatusTransition[]> = 
       needsPreflight: false,
     },
   ],
-  pending_review: [
-    {
-      intent: 'cancel_review',
-      target: 'draft',
-      label: 'Cancel Review & Edit',
-      destructive: false,
-      needsPreflight: false,
-    },
-    {
-      intent: 'archive',
-      target: 'archived',
-      label: 'Archive Product',
-      destructive: true,
-      needsPreflight: false,
-      confirmMessage: 'Archive this product? It will no longer appear in your store.',
-    },
-  ],
+  // System-locked statuses — the backend rejects every vendor-triggered
+  // transition with CATALOG_PRODUCT_INVALID_STATE. pending_review clears via
+  // admin moderation; suspended clears automatically once the delivery-agency
+  // cause is fixed (the product itself stays editable).
+  pending_review: [],
   suspended: [],
 };
 

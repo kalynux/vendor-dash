@@ -77,6 +77,16 @@ export function StepReview({
   const vectorisationStatus = product?.vectorisationStatus ?? 'not_started';
   const isLockedForVectorisation = vectorisationStatus === 'pending';
 
+  // Vendor-triggered activation is only allowed from draft (see the allowed-
+  // transitions table in api-doc/vendor/products.md). archived/pending_review
+  // products also reject content updates (CATALOG_PRODUCT_INVALID_STATE);
+  // suspended products stay editable but can't change status themselves.
+  const productStatus = product?.status ?? null;
+  const isReadOnlyStatus = productStatus === 'archived' || productStatus === 'pending_review';
+  const showPublish = productStatus === 'draft' || !product;
+  const showSaveChanges = productStatus === 'active' || productStatus === 'suspended';
+  const controlsDisabled = isSaving || isLockedForVectorisation || isReadOnlyStatus;
+
   const statusColors: Record<string, string> = {
     draft: 'bg-muted text-muted-foreground',
     active: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
@@ -106,6 +116,35 @@ export function StepReview({
           <AlertCircle className="w-4 h-4" />
           <AlertDescription>
             This product is being indexed for AI search. Editing is temporarily disabled.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {productStatus === 'archived' && (
+        <Alert>
+          <AlertCircle className="w-4 h-4" />
+          <AlertDescription>
+            This product is archived and read-only. Restore it to draft from the
+            products list to edit or publish it.
+          </AlertDescription>
+        </Alert>
+      )}
+      {productStatus === 'pending_review' && (
+        <Alert>
+          <AlertCircle className="w-4 h-4" />
+          <AlertDescription>
+            This product is awaiting admin review and is read-only until moderation
+            completes.
+          </AlertDescription>
+        </Alert>
+      )}
+      {productStatus === 'suspended' && (
+        <Alert>
+          <AlertCircle className="w-4 h-4" />
+          <AlertDescription>
+            This product is suspended because of a delivery-agency issue. You can
+            still edit it — assigning a working delivery agency restores it
+            automatically.
           </AlertDescription>
         </Alert>
       )}
@@ -179,7 +218,7 @@ export function StepReview({
         <AgencySelector
           productId={product?.id ?? null}
           productAgencyId={productAgencyId}
-          isSaving={isSaving || isLockedForVectorisation}
+          isSaving={controlsDisabled}
           onAgencyChange={onAgencyChange}
           freeDelivery={productFreeDelivery}
           onFreeDeliveryChange={onFreeDeliveryChange}
@@ -206,7 +245,7 @@ export function StepReview({
               <Switch
                 checked={vectorisationEnabled}
                 onCheckedChange={setVectorisationEnabled}
-                disabled={isSaving || isLockedForVectorisation}
+                disabled={controlsDisabled}
                 aria-label="Enable AI vectorisation"
               />
             </div>
@@ -251,21 +290,33 @@ export function StepReview({
               Keep as draft
             </Button>
           )}
-          <Button
-            type="button"
-            onClick={() => onPublish({ vectorisationEnabled })}
-            disabled={isSaving || !canPublish || isLockedForVectorisation}
-            className="gap-1.5"
-          >
-            {isSaving ? (
-              'Publishing…'
-            ) : (
-              <>
-                <Globe className="w-4 h-4" />
-                Publish
-              </>
-            )}
-          </Button>
+          {showPublish && (
+            <Button
+              type="button"
+              onClick={() => onPublish({ vectorisationEnabled })}
+              disabled={isSaving || !canPublish || isLockedForVectorisation}
+              className="gap-1.5"
+            >
+              {isSaving ? (
+                'Publishing…'
+              ) : (
+                <>
+                  <Globe className="w-4 h-4" />
+                  Publish
+                </>
+              )}
+            </Button>
+          )}
+          {showSaveChanges && (
+            <Button
+              type="button"
+              onClick={() => onSaveDraft({ vectorisationEnabled })}
+              disabled={isSaving || isLockedForVectorisation}
+              className="gap-1.5"
+            >
+              {isSaving ? 'Saving…' : 'Save changes'}
+            </Button>
+          )}
         </div>
       </div>
     </div>

@@ -1,6 +1,4 @@
 import { useCallback, useState } from 'react';
-import { Loader2, Save } from 'lucide-react';
-import { toast } from 'sonner';
 
 import { useOnboarding } from '@/onboarding/store/onboarding.store';
 import { type Step4FormValues } from '@/onboarding/schemas/onboarding.schemas';
@@ -10,7 +8,7 @@ import {
     type PolicyEnabled,
 } from '@/components/vendor-settings/forms/policies.helpers';
 import { mapProfileError } from '@/components/vendor-settings/errors';
-import { Button } from '@/components/ui/button';
+import { UnsavedChangesBar } from '@/components/vendor-settings/UnsavedChangesBar';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 
 const FORM_ID = 'settings-policies-form';
@@ -20,6 +18,18 @@ export function PoliciesSettings() {
     const roleEntity = session?.role_entity;
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [dirty, setDirty] = useState(false);
+    // Bumped after a save or discard to remount PoliciesFields, resetting its
+    // internal form + enabled toggles to the latest persisted defaults.
+    const [formKey, setFormKey] = useState(0);
+
+    const onDirtyChange = useCallback((next: boolean) => setDirty(next), []);
+
+    const handleDiscard = useCallback(() => {
+        setError(null);
+        setDirty(false);
+        setFormKey((k) => k + 1);
+    }, []);
 
     const onSubmit = useCallback(
         async (values: Step4FormValues, enabled: PolicyEnabled) => {
@@ -36,7 +46,9 @@ export function PoliciesSettings() {
                         documents: values.documents ?? [],
                     },
                 });
-                toast.success('Policies updated');
+                // Reset the dirty state by remounting against the freshly-saved session.
+                setDirty(false);
+                setFormKey((k) => k + 1);
             } catch (err) {
                 setError(mapProfileError(err));
             } finally {
@@ -57,37 +69,41 @@ export function PoliciesSettings() {
     };
 
     return (
-        <Card>
-            <CardHeader>
-                <CardTitle>Policies</CardTitle>
-                <CardDescription>
-                    Your return, cancellation, and support policies. Toggle a section off to remove it.
-                </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-                {error && (
-                    <div
-                        role="alert"
-                        className="p-3 text-sm bg-destructive/10 text-destructive rounded-lg border border-destructive/20"
-                    >
-                        {error}
-                    </div>
-                )}
+        <>
+            <Card>
+                <CardHeader>
+                    <CardTitle>Policies</CardTitle>
+                    <CardDescription>
+                        Your return, cancellation, and support policies. Toggle a section off to remove it.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                    {error && (
+                        <div
+                            role="alert"
+                            className="p-3 text-sm bg-destructive/10 text-destructive rounded-lg border border-destructive/20"
+                        >
+                            {error}
+                        </div>
+                    )}
 
-                <PoliciesFields
-                    formId={FORM_ID}
-                    defaultValues={defaultValues}
-                    defaultEnabled={defaultEnabled}
-                    onSubmit={onSubmit}
-                />
+                    <PoliciesFields
+                        key={formKey}
+                        formId={FORM_ID}
+                        defaultValues={defaultValues}
+                        defaultEnabled={defaultEnabled}
+                        onSubmit={onSubmit}
+                        onDirtyChange={onDirtyChange}
+                    />
+                </CardContent>
+            </Card>
 
-                <div className="flex justify-end border-t pt-4">
-                    <Button type="submit" form={FORM_ID} disabled={saving} className="gap-2">
-                        {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                        Save Changes
-                    </Button>
-                </div>
-            </CardContent>
-        </Card>
+            <UnsavedChangesBar
+                visible={dirty || saving}
+                saving={saving}
+                onDiscard={handleDiscard}
+                formId={FORM_ID}
+            />
+        </>
     );
 }

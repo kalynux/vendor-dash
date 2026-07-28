@@ -1,5 +1,7 @@
 import { api } from './api';
 import { ApiError } from '@/types/api';
+import { fileRefUrl } from '@/services/files.service';
+import type { FileRef } from '@/types/file.types';
 import type { Order, OrderItem, Customer, OrderTimelineEvent, Entitlement, TimelineEventType, DisputeHold, OrderItemDelivery, OrderDeliveryTimelineEntry, VendorSettableStatus, PaymentMethod } from '@/types';
 
 // ─── Error Handling ────────────────────────────────────────────────────────────
@@ -67,7 +69,8 @@ interface ApiOrderDelivery {
     id: string;
     name: string;
     phone?: string;
-    avatarUrl?: string;
+    /** Populated file object (or `null`); legacy `avatarUrl` string still tolerated. */
+    avatar?: FileRef | string | null;
   } | null;
 }
 
@@ -93,7 +96,7 @@ interface ApiOrderListItem {
     id: string;
     name: string;
     email: string;
-    avatar?: string;
+    avatar?: FileRef | string | null;
   };
   subtotal: number;
   tax: number;
@@ -118,7 +121,7 @@ interface ApiOrderDetail {
     name: string;
     email: string;
     phone?: string;
-    avatar?: string;
+    avatar?: FileRef | string | null;
     orderCount: number;
     totalSpent: number;
   } | null;
@@ -353,7 +356,14 @@ function adaptOrderDelivery(delivery: ApiOrderDelivery): OrderItemDelivery {
           rejectedAt: delivery.rejection.rejectedAt,
         }
       : null,
-    agent: delivery.agent,
+    agent: delivery.agent
+      ? {
+          id: delivery.agent.id,
+          name: delivery.agent.name,
+          phone: delivery.agent.phone,
+          avatarUrl: fileRefUrl(delivery.agent.avatar) ?? undefined,
+        }
+      : null,
   };
 }
 
@@ -408,7 +418,7 @@ function adaptListItemToOrder(item: ApiOrderListItem): Order {
       id: item.customer.id,
       name: item.customer.name,
       email: item.customer.email,
-      avatar: item.customer.avatar,
+      avatar: fileRefUrl(item.customer.avatar) ?? undefined,
       addresses: [],
       orderCount: 0,
       totalSpent: 0,
@@ -448,7 +458,7 @@ function adaptDetailToOrder(detail: ApiOrderDetail): Order {
     name: detail.customer?.name ?? '',
     email: detail.customer?.email ?? '',
     phone: detail.customer?.phone,
-    avatar: detail.customer?.avatar,
+    avatar: fileRefUrl(detail.customer?.avatar) ?? undefined,
     addresses: [],
     orderCount: detail.customer?.orderCount ?? 0,
     totalSpent: detail.customer?.totalSpent ?? 0,

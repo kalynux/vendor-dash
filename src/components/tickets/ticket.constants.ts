@@ -155,14 +155,14 @@ export const IMPORTANCE_BADGE_CLASSES: Record<TicketImportance, string> = {
 
 // ─── Entity types ─────────────────────────────────────────────────────────────
 
-export const ENTITY_TYPES: TicketEntityType[] = ['order', 'product', 'booking', 'account', 'other'];
+export const ENTITY_TYPES: TicketEntityType[] = ['ORDER', 'PRODUCT', 'BOOKING', 'ACCOUNT', 'OTHER'];
 
 export const ENTITY_TYPE_LABELS: Record<TicketEntityType, string> = {
-  order: 'Order',
-  product: 'Product',
-  booking: 'Booking',
-  account: 'Account',
-  other: 'Other',
+  ORDER: 'Order',
+  PRODUCT: 'Product',
+  BOOKING: 'Booking',
+  ACCOUNT: 'Account',
+  OTHER: 'Other',
 };
 
 // ─── Ticket types (grouped, authoritative) ────────────────────────────────────

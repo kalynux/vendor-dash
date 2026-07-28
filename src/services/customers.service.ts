@@ -1,4 +1,5 @@
 import { api } from './api';
+import { fileRefUrl } from '@/services/files.service';
 import type {
   CustomerFlag,
   CreateFlagPayload,
@@ -21,6 +22,13 @@ import type {
 } from '@/types/customers.types';
 
 const BASE = '/vendor';
+
+// The `avatar` field now arrives as a populated file object `{ id, key, url, … }`
+// (the same shape product images use), though some responses may still send a bare
+// URL string. Collapse either into a plain URL so `CustomerAvatar` can render it.
+function normalizeAvatar<T extends { avatar: string | null }>(c: T): T {
+  return { ...c, avatar: fileRefUrl(c.avatar) } as T;
+}
 
 // Reuses the tickets/products query-string convention: drop empty values.
 function buildQueryString(params: Record<string, unknown>): string {
@@ -59,12 +67,12 @@ export async function fetchCustomers(
 ): Promise<{ data: CustomerListItem[]; meta: CustomerListMeta }> {
   const qs = buildQueryString(params as Record<string, unknown>);
   const res = await api.get<CustomersListResponse>(`${BASE}/customers${qs}`);
-  return { data: res.data, meta: res.meta };
+  return { data: res.data.map(normalizeAvatar), meta: res.meta };
 }
 
 export async function fetchCustomerById(id: string): Promise<CustomerDetail> {
   const res = await api.get<CustomerDetailResponse>(`${BASE}/customers/${id}`);
-  return res.data;
+  return normalizeAvatar(res.data);
 }
 
 /** Set or clear the vendor-local display name. Returns the full updated detail. */
@@ -73,7 +81,7 @@ export async function updateCustomerName(
   payload: UpdateCustomerNamePayload,
 ): Promise<CustomerDetail> {
   const res = await api.patch<CustomerDetailResponse>(`${BASE}/customers/${id}/name`, payload);
-  return res.data;
+  return normalizeAvatar(res.data);
 }
 
 /** Replace the customer's full set of assigned flags. Returns the updated detail. */
@@ -82,7 +90,7 @@ export async function updateCustomerFlags(
   payload: UpdateCustomerFlagsPayload,
 ): Promise<CustomerDetail> {
   const res = await api.put<CustomerDetailResponse>(`${BASE}/customers/${id}/flags`, payload);
-  return res.data;
+  return normalizeAvatar(res.data);
 }
 
 // ─── Refunds (live on the orders controller) ────────────────────────────────────

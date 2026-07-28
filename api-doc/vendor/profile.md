@@ -42,6 +42,14 @@ Authorization: Bearer <jwt_token>
     "phoneVerified": false,
     "businessName": "Tech Solutions Ltd",
     "displayName": "TechSol",
+    "avatar": {
+      "id": "507f1f77bcf86cd799439040",
+      "key": "vendors/avatar-xyz789.png",
+      "url": "https://cdn.example.com/vendors/avatar-xyz789.png",
+      "mimeType": "image/png",
+      "size": 15360,
+      "originalName": "me.png"
+    },
     "branding": {
       "logo": {
         "id": "507f1f77bcf86cd799439030",
@@ -91,12 +99,18 @@ Authorization: Bearer <jwt_token>
 > control (display text ≠ submitted value).
 
 > [!IMPORTANT]
-> **`branding.logo` / `branding.coverImage` are populated file objects, not URLs.** This mirrors
-> product media (see [Vendor Product Upload Reference — Media Handling](./product-upload-flow.md#media-handling)):
+> **`avatar`, `branding.logo` and `branding.coverImage` are populated file objects, not URLs.** This
+> mirrors product media (see [Vendor Product Upload Reference — Media Handling](./product-upload-flow.md#media-handling)):
 > the vendor uploads the image via `POST /api/files/upload` and gets back a file `id`; that `id` is
-> what gets submitted (as `branding.logo_file_id` / `branding.cover_image_file_id`) via `PATCH
-> /api/vendor/profile` or the onboarding branding step. Reads always resolve the stored file
+> what gets submitted (as `avatarFileId`, `branding.logo_file_id` / `branding.cover_image_file_id`) via
+> `PATCH /api/vendor/profile` or the onboarding branding step. Reads always resolve the stored file
 > reference into `{ id, key, url, mimeType, size, originalName }`, or `null` if that slot is unset.
+>
+> **`avatar` is the vendor's personal profile picture**, distinct from the **business** logo/cover in
+> `branding`. Like branding, it is a real **file reference**: while set, that file counts as *in use*
+> (it appears under `usage.references` on `GET /api/files/:id` with `entityType: "vendor", field: "avatar"`)
+> and cannot be deleted until you detach it (send `avatarFileId: null`). See
+> [File Management — the `usage` object](./file-management.md#get-apifilesid).
 
 #### Error Responses
 
@@ -165,8 +179,9 @@ Content-Type: application/json
 {
   "displayName": "TechSolutions",
   "phone": "+237698765432",
-  "country": "CM",
   "timezone": "Africa/Douala",
+  "preferred_language": "fr",
+  "avatarFileId": "507f1f77bcf86cd799439040",
   "payout_details": [
     {
       "method": "mobile_money",
@@ -194,14 +209,16 @@ All fields are **optional except `version`**. Every field below maps to a profil
 | Field | Type | Validation | Onboarding step it maps to | Notes |
 |-------|------|------------|----------------------------|-------|
 | `displayName` | `string` | 2–100 chars | — (general) | User-facing display name. |
-| `businessDescription` | `string \| null` | Max 1000 chars | — (general) | Short business description. |
+| `businessDescription` | `string \| null` | Max 1000 chars | — (general) | Short business description. *Clearable*: `null` or `""` clears. |
 | `email` | `string` | Valid email | — (general) | **Feature-gated** — rejected with `403` when `ALLOW_EMAIL_CHANGE=false`. |
 | `phone` | `string` | 8–20 chars | — (general) | Contact phone. |
-| `country` | `string` | Exactly 2 chars, ISO-2 (auto-uppercased) | Step 1 (Basic Setup) | Editable independently here (onboarding required it alongside timezone + payout). |
-| `timezone` | `string` | Min 1 char, IANA tz | Step 1 (Basic Setup) | E.g. `"Africa/Douala"`. |
+| `country` | `string` | Exactly 2 chars, ISO-2 (auto-uppercased) | Step 1 (Basic Setup) | **SET-ONCE / IMMUTABLE.** Chosen during onboarding Step 1 and locked afterwards — sending a *different* value is rejected with `403 PROFILE_COUNTRY_IMMUTABLE`. Echoing the current value back is accepted (idempotent no-op). It anchors the business-address policy below. |
+| `timezone` | `string` | Min 1 char, IANA tz | Step 1 (Basic Setup) | E.g. `"Africa/Douala"`. Freely editable — this (plus `preferred_language`) is the profile's localization surface. |
+| `preferred_language` | `string` | One of `en`, `fr`, `pt`, `es`, `ar` | — (general) | The vendor's language, stored on this profile and used for **all notifications** (in-app, email, WhatsApp templates). There is no separate "notification language" — this is it. Defaults to `en`. |
+| `avatarFileId` | `string \| null` | MongoDB ObjectId of a file uploaded via `POST /api/files/upload`, or `null` | — (general) | The vendor's **personal profile avatar** (distinct from the business `branding` logo/cover). A **file reference**: registers the file as *in use* (`entityType: "vendor", field: "avatar"`) and blocks its deletion until detached. *Clearable*: `null` or `""` detaches it. Read back as the populated `avatar` file object. |
 | `payout_details` | `object[]` | 1–3 entries, ordered (index 0 = preferred) | Step 1 (Basic Setup) | Full replace. Sub-schema (`method`, `mobile_money`, `bank`) is identical to onboarding — see [Step 1 field reference](./onboarding.md#step-1-basic-setup-required). |
 | `branding` | `object` | `logo_file_id`, `cover_image_file_id` — MongoDB ObjectIds of files uploaded via `POST /api/files/upload`, or `null` | Step 3 (Branding) | Full replace — send both sub-fields, including the one unchanged, or it's cleared. See [Step 3 field reference](./onboarding.md#step-3-branding-optional--skippable). |
-| `business_addresses` | `object[]` | See onboarding sub-schema | Step 3 (Branding) | Full replace — **include each existing address's `_id`** (from the `GET` response) to preserve its identity, or a fresh id is generated (and the "old" one is treated as removed — see below). Each entry may carry a `geo` (selected address-search result — the canonical geospatial address; see [Geospatial addresses](../geo/README.md)) alongside the loose fields. Because it is a full replace, echo `geo` back on unchanged entries or it is cleared. See [Step 3 field reference](./onboarding.md#step-3-branding-optional--skippable). |
+| `business_addresses` | `object[]` | See onboarding sub-schema | Step 3 (Branding) | Full replace — **include each existing address's `_id`** (from the `GET` response) to preserve its identity, or a fresh id is generated (and the "old" one is treated as removed — see below). These are the vendor's **physical store locations and pickup points**, so every **new or edited** entry must carry a `geo` (selected `/api/geo/search` result; see [Geospatial addresses](../geo/README.md)) that resolves **inside the profile's `country`** — otherwise `400 ADDRESS_GEO_REQUIRED` / `400 ADDRESS_COUNTRY_MISMATCH`. Entries echoed back byte-identical (same loose fields, same `geo`) are grandfathered, so legacy plain-text addresses keep working until next touched. Because it is a full replace, echo `geo` back on unchanged entries or it counts as an edit. See [Step 3 field reference](./onboarding.md#step-3-branding-optional--skippable). |
 | `operating_hours` | `object[]` | Per-day `{ day, open_time "HH:MM", close_time "HH:MM", is_closed }` | — (general) | Full replace. |
 | `policies` | `object \| null` | `{ return_policy?, cancellation_policy?, support_policy?, documents? }` (sub-policies nullable) | Step 4 (Policy Setup) | Full replace of the **whole** `policies` object — include every sub-policy you want to keep. `documents` (max 2 URLs) is cleared if omitted. See [Step 4 field reference](./onboarding.md#step-4-policy-setup-optional--skippable). |
 | `kyc_details` | `object` | `{ national_id_number }` | — (general) | `legit_verified` is **admin-only** and ignored if sent. |
@@ -210,6 +227,12 @@ All fields are **optional except `version`**. Every field below maps to a profil
 | `version` | `number` (integer) | **Required**, must match current profile `version` | — | Optimistic-locking guard. Mismatch → `409`. |
 
 > **Not editable here:** `default_delivery_agency_id` (onboarding Step 2). Use the dedicated delivery-agency routes below. `legit_verified`, `status`, and `onboarding_step` are server/admin-controlled.
+
+> **Clearable fields**: every nullable string above (`businessDescription`, `avatarFileId`,
+> `branding.*_file_id`, `social_links.*`, `kyc_details.national_id_number`, address
+> `address_line2`/`state`, policy `return_condition_notes`/`eligibility_notes`/`availability_description`)
+> accepts `null` **or `""`** to clear — both are stored and returned as `null`. Omit a key to leave it
+> unchanged. See [Conventions](../README.md#conventions).
 
 #### Response
 
@@ -226,6 +249,14 @@ All fields are **optional except `version`**. Every field below maps to a profil
     "phoneVerified": false,
     "businessName": "Tech Solutions Ltd",
     "displayName": "TechSolutions",
+    "avatar": {
+      "id": "507f1f77bcf86cd799439040",
+      "key": "vendors/avatar-xyz789.png",
+      "url": "https://cdn.example.com/vendors/avatar-xyz789.png",
+      "mimeType": "image/png",
+      "size": 15360,
+      "originalName": "me.png"
+    },
     "branding": {
       "logo": {
         "id": "507f1f77bcf86cd799439030",
@@ -309,6 +340,51 @@ All fields are **optional except `version`**. Every field below maps to a profil
 }
 ```
 
+**Country Change Rejected (403)**:
+
+> [!IMPORTANT]
+> `country` is set once (onboarding Step 1) and immutable afterwards. Echoing the current value back is accepted; sending a different one is rejected.
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "PROFILE_COUNTRY_IMMUTABLE",
+    "message": "Country cannot be changed once set. It was fixed during onboarding for tax, shipping and address policy.",
+    "details": { "currentCountry": "CM" }
+  }
+}
+```
+
+**Business Address Without Geo (400)**:
+
+> [!IMPORTANT]
+> Every **new or edited** business address must include a geocoded `geo` (a selected `/api/geo/search` result). Untouched entries echoed back unchanged are exempt.
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "ADDRESS_GEO_REQUIRED",
+    "message": "New or edited addresses must include a geocoded location (`geo`) selected from /api/geo/search.",
+    "details": { "index": 1, "label": "Warehouse" }
+  }
+}
+```
+
+**Business Address Outside Country (400)**:
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "ADDRESS_COUNTRY_MISMATCH",
+    "message": "Addresses must be located in your registered country (CM). Pick the address again from /api/geo/search within that country.",
+    "details": { "index": 1, "label": "Warehouse", "addressCountryCode": "NG", "requiredCountry": "CM" }
+  }
+}
+```
+
 **Optimistic Locking Conflict (409)**:
 
 > [!IMPORTANT]
@@ -326,7 +402,8 @@ All fields are **optional except `version`**. Every field below maps to a profil
 
 #### Notes
 
-- **Editing onboarding fields**: After onboarding completes, this endpoint is the **only** way to change values originally captured in the onboarding flow (payout, branding, policies, country/timezone). The onboarding step endpoints are locked (`409`). The exception is the default delivery agency — use its dedicated routes.
+- **Editing onboarding fields**: After onboarding completes, this endpoint is the **only** way to change values originally captured in the onboarding flow (payout, branding, policies, timezone). The onboarding step endpoints are locked (`409`). Exceptions: **`country` is immutable after onboarding** (`403 PROFILE_COUNTRY_IMMUTABLE`), and the default delivery agency has its own dedicated routes.
+- **Localization lives here, not on the store.** `timezone` and `preferred_language` are profile fields; `preferred_language` drives the language of every notification (there is no separate notification-language setting). The store has no language, address, or country of its own — see [Store Profile](./store.md).
 - **Full-replace semantics**: `payout_details`, `business_addresses`, `operating_hours`, `branding`, `social_links`, and `policies` overwrite the stored value wholesale. Always send the complete desired value, not a delta. For `business_addresses` specifically, echo back each entry's `_id` to preserve its identity — see the note above and [Update Product](./products.md#update-product) for why this matters to pickup locations.
 - **Removing an in-use business address is blocked, not applied.** If the array you send omits (or regenerates the id of) an address that's still set as one or more physical products' `delivery.pickupLocation`, the **entire** `business_addresses` update is rejected with `409 VENDOR_BUSINESS_ADDRESS_IN_USE` — nothing is partially saved. `error.details.blockedAddresses` lists each such address with how many products reference it:
   ```json
@@ -351,6 +428,9 @@ All fields are **optional except `version`**. Every field below maps to a profil
 ---
 
 ### PATCH /api/vendor/profile/password
+
+> [!WARNING]
+> **Deprecated alias.** Password change is now a shared, role-agnostic endpoint: **`PATCH /api/me/password`** — same body, same responses, works for every role. See [me/password.md](../me/password.md). This vendor path routes to the same handler and is kept only so existing frontends don't break.
 
 Change the authenticated vendor's password.
 
@@ -469,7 +549,7 @@ Returns the agency details as a vendor-safe `VendorAgencyListItemDto`. Returns `
   "data": {
     "id": "683abc1234567890abcdef01",
     "agencyName": "Swift Deliveries Cameroon",
-    "logoUrl": "https://cdn.example.com/logos/swift-deliveries.png",
+    "logo": { "id": "507f1f77bcf86cd799439030", "key": "products/2026/07/swift-logo.png", "url": "https://cdn.example.com/logos/swift-deliveries.png", "mimeType": "image/png", "size": 24576, "originalName": "logo.png" },
     "kycVerified": true,
     "headquartersAddress": {
       "region": "Littoral",
@@ -565,7 +645,7 @@ Returns the configured agency details as a vendor-safe `VendorAgencyListItemDto`
   "data": {
     "id": "683abc1234567890abcdef01",
     "agencyName": "Swift Deliveries Cameroon",
-    "logoUrl": "https://cdn.example.com/logos/swift-deliveries.png",
+    "logo": { "id": "507f1f77bcf86cd799439030", "key": "products/2026/07/swift-logo.png", "url": "https://cdn.example.com/logos/swift-deliveries.png", "mimeType": "image/png", "size": 24576, "originalName": "logo.png" },
     "kycVerified": true,
     "headquartersAddress": {
       "region": "Littoral",

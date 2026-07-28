@@ -1,7 +1,9 @@
 // ─── File Management types ──────────────────────────────────────────────────
 // Mirrors the backend File Management Service (api-doc/vendor/file-management.md).
-// Files are FLAT (no folders) and owned by the actor (vendor). Products/variants
-// /digital-assets *reference* files via fileIds — a file is never owned by them.
+// Files are FLAT (no folders) and owned by the actor (vendor). Many entities
+// *reference* files (products, variants, digital assets, tickets, and the
+// vendor/store/agency profiles via logo/banner/cover/avatar) — a file is never
+// owned by them.
 //
 // IMPORTANT: attachment is determined by the `usage` references object returned
 // by GET /files/:id — NOT by `usageCount` (which can be stale on legacy data).
@@ -34,6 +36,19 @@ export type MediaCategory =
   | 'document'
   | 'archive'
   | 'other';
+
+// Canonical "resolved file reference" — the shape every read endpoint now returns
+// for a single file slot (product media, avatar, logo, banner, cover). Mirrors the
+// product-image object `{ id, key, url, mimeType, size, originalName }`. A slot that
+// is unset reads back as `null`. Normalize to a displayable URL with `fileRefUrl`.
+export interface FileRef {
+  id: string;
+  key: string;
+  url: string;
+  mimeType: string;
+  size: number;
+  originalName?: string;
+}
 
 // List-item shape returned by GET /files. `url` is populated by the backend when
 // available; when absent we construct a public URL from `key` (see resolveFileUrl).
@@ -77,8 +92,51 @@ export interface FileUsageDigitalAsset {
   status?: string;
 }
 
+// Every entity type that can reference a file. Open-ended (`string`) so a type
+// the backend adds later still resolves to a generic row instead of breaking.
+export type FileReferenceEntityType =
+  | 'product'
+  | 'variant'
+  | 'digital_asset'
+  | 'ticket'
+  | 'vendor'
+  | 'store'
+  | 'agency'
+  | 'customer'
+  | 'agent'
+  | 'admin'
+  | (string & {});
+
+// The slot on the entity the file fills.
+export type FileReferenceField =
+  | 'media'
+  | 'logo'
+  | 'banner'
+  | 'cover'
+  | 'avatar'
+  | 'attachment'
+  | (string & {});
+
+// Preferred, future-proof usage shape (api-doc/vendor/file-management.md): one
+// entry per live reference, across ALL entity types (not just the catalog).
+export interface FileReference {
+  entityType: FileReferenceEntityType;
+  entityId: string;
+  field: FileReferenceField;
+  /** Human-readable name: product title, ticket subject, store/vendor name… */
+  label: string;
+}
+
 export interface FileUsage {
   totalReferences: number;
+  /**
+   * Preferred source of truth for "where is this used". Covers every entity
+   * type (logo/banner/avatar/ticket attachments included). Optional so an older
+   * backend that only sends the legacy arrays below still works.
+   */
+  references?: FileReference[];
+  // ── Legacy arrays (catalog-only) — kept for backward compatibility. Prefer
+  //    `references`, which is a superset. ───────────────────────────────────
   products: FileUsageProduct[];
   variants: FileUsageVariant[];
   digitalAssets: FileUsageDigitalAsset[];

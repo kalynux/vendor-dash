@@ -9,7 +9,7 @@ import {
   formatTerm,
   formatCredits,
   formatProductCap,
-  vendorPlanStatusLabel,
+  subscriberPlanStatusLabel,
 } from './billing.constants';
 
 interface CurrentPlanCardProps {
@@ -19,7 +19,7 @@ interface CurrentPlanCardProps {
 }
 
 export function CurrentPlanCard({ data, productCount }: CurrentPlanCardProps) {
-  const { plan, vendorPlan } = data.active;
+  const { plan, subscriberPlan } = data.active;
   const cap = plan.max_active_products;
   const used = productCount ?? 0;
   const pct = cap && cap > 0 ? Math.min(100, Math.round((used / cap) * 100)) : 0;
@@ -32,8 +32,8 @@ export function CurrentPlanCard({ data, productCount }: CurrentPlanCardProps) {
           <div>
             <CardTitle className="flex items-center gap-2">
               {plan.name}
-              <Badge variant={vendorPlan.status === 'active' ? 'default' : 'secondary'}>
-                {vendorPlanStatusLabel(vendorPlan.status)}
+              <Badge variant={subscriberPlan.status === 'active' ? 'default' : 'secondary'}>
+                {subscriberPlanStatusLabel(subscriberPlan.status)}
               </Badge>
             </CardTitle>
             <CardDescription>
@@ -47,7 +47,7 @@ export function CurrentPlanCard({ data, productCount }: CurrentPlanCardProps) {
           <Stat
             icon={<CalendarClock className="h-4 w-4" />}
             label="Renews / expires"
-            value={vendorPlan.expires_at ? formatDate(vendorPlan.expires_at) : 'Never expires'}
+            value={subscriberPlan.expires_at ? formatDate(subscriberPlan.expires_at) : 'Never expires'}
           />
           <Stat
             icon={<Percent className="h-4 w-4" />}
@@ -82,8 +82,8 @@ export function CurrentPlanCard({ data, productCount }: CurrentPlanCardProps) {
             </p>
             <p className="text-muted-foreground">
               Starts when your current plan ends
-              {data.pending.vendorPlan.started_at
-                ? ` on ${formatDate(data.pending.vendorPlan.started_at)}`
+              {data.pending.subscriberPlan.started_at
+                ? ` on ${formatDate(data.pending.subscriberPlan.started_at)}`
                 : ''}
               .
             </p>

@@ -1,7 +1,7 @@
 // Notification settings — mirrors `GET/PATCH /api/vendor/notification-preferences`.
 // See api-doc/vendor/notifications.md.
 
-/** The ten subscribable events (`preferences.*` keys). See api-doc/vendor/notifications.md. */
+/** The eleven subscribable events (`preferences.*` keys). See api-doc/vendor/notifications.md. */
 export type NotificationEventKey =
   | 'orderCreated'
   | 'orderCancelled'
@@ -12,7 +12,8 @@ export type NotificationEventKey =
   | 'storageAlert'
   | 'connectionUpdated'
   | 'payoutUpdates'
-  | 'shipmentRejected';
+  | 'shipmentRejected'
+  | 'planUpdates';
 
 export type NotificationEventPreferences = Record<NotificationEventKey, boolean>;
 
@@ -78,7 +79,11 @@ export type NotificationType =
   | 'payout.rejected'
   // A delivery agency declined a shipment; its items move to
   // `pending_agency_reassignment` and must be rerouted. `aggregateType` is `order`.
-  | 'shipment.rejected';
+  | 'shipment.rejected'
+  // Billing: the vendor's plan is nearing expiry or has expired (handed over to a
+  // queued plan, or downgraded to free `starter`). `aggregateType` is `plan`.
+  | 'plan.expiring'
+  | 'plan.expired';
 
 /** Entity kind a notification points at, for deep-linking. */
 export type NotificationAggregateType =
@@ -87,7 +92,8 @@ export type NotificationAggregateType =
   | 'payment'
   | 'storage'
   | 'connection'
-  | 'payout';
+  | 'payout'
+  | 'plan';
 
 /** Channels a notification was actually delivered on. */
 export type DeliveredVia = 'in-app' | 'push' | 'telegram' | 'email' | 'whatsapp';

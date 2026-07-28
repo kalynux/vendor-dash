@@ -1,4 +1,5 @@
 import type { GeoAddress } from './geo.types';
+import type { FileRef } from './file.types';
 
 // ─── API User ────────────────────────────────────────────────────────────────
 
@@ -103,6 +104,12 @@ export interface VendorRoleEntity {
   timezone: string;
   /** Language every notification is rendered in (en | fr | pt | es | ar). Default `en`. */
   preferred_language?: string | null;
+  /**
+   * The vendor's personal profile avatar (distinct from the business
+   * `branding` logo/cover). A populated file reference, or `null` when unset.
+   * Set via `avatarFileId` on PATCH /vendor/profile.
+   */
+  avatar?: BrandingFileRef | null;
   branding: Branding;
   business_addresses: BusinessAddress[];
   /** Ordered array — index 0 is the preferred payout method. */
@@ -263,6 +270,13 @@ export interface VendorProfileUpdatePayload {
   timezone?: string;
   /** Language for rendered notifications (en | fr | pt | es | ar). */
   preferred_language?: string;
+  /**
+   * Personal profile avatar. MongoDB ObjectId of a file uploaded via
+   * `POST /api/files/upload`, or `null`/`""` to detach. Registers the file as
+   * in-use (`entityType: "vendor", field: "avatar"`) so it can't be deleted
+   * until detached. Read back as the populated `avatar` object.
+   */
+  avatarFileId?: string | null;
   payout_details?: PayoutDetails[];
   branding?: BrandingWritePayload;
   business_addresses?: BusinessAddress[];
@@ -286,7 +300,7 @@ export interface VendorProfileUpdateResponse {
   data: { version?: number; [key: string]: unknown };
 }
 
-// ─── Password change (PATCH /vendor/profile/password) ──────────────────────────
+// ─── Password change (PATCH /me/password, role-agnostic) ───────────────────────
 
 export interface ChangePasswordPayload {
   oldPassword: string;
@@ -327,7 +341,8 @@ export interface DeliveryAgencyPolicies {
 export interface DeliveryAgency {
   id: string;
   agencyName: string;
-  logoUrl: string | null;
+  /** Agency logo as a resolved file object (`{ id, key, url, … }`), or `null` if unset. */
+  logo: FileRef | null;
   kycVerified: boolean;
   headquartersAddress: DeliveryAgencyHQAddress | null;
   coverageAreas: string[];

@@ -53,7 +53,7 @@ const DEFAULT_VALUES: CreateTicketFormValues = {
   description: '',
   type: '',
   importance: 'medium',
-  entityType: 'order',
+  entityType: 'ORDER',
   entityId: '',
   trackingNumber: '',
   attachments: [],
@@ -102,15 +102,15 @@ export function CreateTicketSheet({ open, onOpenChange, onCreated }: CreateTicke
   const sheet = responsiveSheetProps(isMobile);
 
   // Policy requirements are order/product-centric — enforced only on the relevant context.
-  const entityRequired = entityType !== 'other';
-  const trackingRequired = entityType === 'order' && requiredInfo.includes('tracking_number');
+  const entityRequired = entityType !== 'OTHER';
+  const trackingRequired = entityType === 'ORDER' && requiredInfo.includes('tracking_number');
   const attachmentsRequired =
-    (entityType === 'order' || entityType === 'product') &&
+    (entityType === 'ORDER' || entityType === 'PRODUCT') &&
     requiredInfo.includes('product_photo_video');
 
   // Clear tracking state whenever we leave order context.
   useEffect(() => {
-    if (entityType !== 'order') {
+    if (entityType !== 'ORDER') {
       setTrackingOptions([]);
       setTrackingManual(false);
     }
@@ -147,7 +147,7 @@ export function CreateTicketSheet({ open, onOpenChange, onCreated }: CreateTicke
     try {
       const trackingNumber = values.trackingNumber.trim();
       const entityId = values.entityId.trim();
-      const isOrder = values.entityType === 'order';
+      const isOrder = values.entityType === 'ORDER';
       const ticket = await createTicket({
         subject: values.subject,
         description: values.description,
@@ -343,7 +343,7 @@ export function CreateTicketSheet({ open, onOpenChange, onCreated }: CreateTicke
             </div>
 
             {/* Tracking number — only relevant for order tickets */}
-            {entityType === 'order' && (
+            {entityType === 'ORDER' && (
               <div className="space-y-1.5">
                 <Label htmlFor="trackingNumber">
                   Tracking number{' '}

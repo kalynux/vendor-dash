@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { Building2, Check, Info, MapPin, ShieldCheck, Truck, Warehouse } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
+import { fileRefUrl } from '@/services/files.service';
 import type { VendorAgencyListItemDto } from '@/types/product.types';
 
 export interface AgencyCardProps {
@@ -19,6 +20,7 @@ export interface AgencyCardProps {
 export function AgencyCard({ agency, selected = false, onSelect, onInfo, rightSlot }: AgencyCardProps) {
     const hq = agency.headquartersAddress;
     const p = agency.policies;
+    const logoUrl = fileRefUrl(agency.logo);
 
     const body = (
         <div className="flex items-start gap-3">
@@ -28,9 +30,9 @@ export function AgencyCard({ agency, selected = false, onSelect, onInfo, rightSl
                     selected ? 'bg-primary/10' : 'bg-muted',
                 )}
             >
-                {agency.logoUrl ? (
+                {logoUrl ? (
                     <img
-                        src={agency.logoUrl}
+                        src={logoUrl}
                         alt={agency.agencyName}
                         className="w-full h-full object-cover"
                     />

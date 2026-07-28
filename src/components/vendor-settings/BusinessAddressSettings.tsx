@@ -12,9 +12,10 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 const FORM_ID = 'settings-addresses-form';
 
 /**
- * Business pickup addresses. Lives under the Store tab (moved out of Branding).
- * Submits ONLY `business_addresses` so it never clobbers the stored branding
- * (PATCH /vendor/profile uses full-replace semantics per field).
+ * Business pickup addresses — its own Account tab. These are the vendor's
+ * physical store locations / pickup points; they live on the vendor profile
+ * (not the store), so this submits ONLY `business_addresses` and never clobbers
+ * other profile fields (PATCH /vendor/profile uses full-replace semantics per field).
  */
 export function BusinessAddressSettings() {
     const { session, updateVendorProfile } = useOnboarding();

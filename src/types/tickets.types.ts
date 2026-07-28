@@ -3,6 +3,8 @@
 // api-doc/ticket_types.txt. Responses are enriched: every *_id reference is
 // resolved into a ready-to-render actor/entity summary alongside the raw id.
 
+import type { FileRef } from '@/types/file.types';
+
 // ─── Enums / Union types ──────────────────────────────────────────────────────
 
 export type TicketStatus =
@@ -28,8 +30,8 @@ export type UpdatablePriority = 'low' | 'medium' | 'high' | 'urgent';
 /** Vendor-supplied importance at creation time. Distinct from `priority`. */
 export type TicketImportance = 'low' | 'medium' | 'high' | 'critical';
 
-/** Entity type as sent on create (lowercase). Responses echo it uppercased in `entity_type`. */
-export type TicketEntityType = 'order' | 'product' | 'booking' | 'account' | 'other';
+/** Entity type as sent on create (UPPERCASE), matching the `entity_type` echoed back in responses. */
+export type TicketEntityType = 'ORDER' | 'PRODUCT' | 'BOOKING' | 'ACCOUNT' | 'OTHER';
 
 /**
  * Authoritative ticket-type identifiers from api-doc/ticket_types.txt — the
@@ -62,7 +64,12 @@ export interface TicketActor {
   user_id: string;
   role: TicketActorRole;
   name: string;
-  avatar_url: string | null;
+  /**
+   * Profile photo / logo as a resolved file object (`{ id, key, url, … }`, the same
+   * shape product images use), or `null` when unset / the reference can't be
+   * resolved. (Previously a bare `avatar_url` string.)
+   */
+  avatar: FileRef | null;
 }
 
 /** Display-ready summary of the related entity (order/product/booking/…). */
@@ -197,11 +204,11 @@ export interface CreateTicketPayload {
   type: TicketType;
   importance: TicketImportance;
   entityType: TicketEntityType;
-  /** Optional for `other` (defaults server-side to the requester's own id); required otherwise. */
+  /** Optional for `OTHER` (defaults server-side to the requester's own id); required otherwise. */
   entityId?: string;
-  /** Required only for `order` tickets when the support policy lists `tracking_number`. Max 120. */
+  /** Required only for `ORDER` tickets when the support policy lists `tracking_number`. Max 120. */
   trackingNumber?: string;
-  /** File-reference ids. Required for `order`/`product` tickets when the policy lists `product_photo_video`. Max 5. */
+  /** File-reference ids. Required for `ORDER`/`PRODUCT` tickets when the policy lists `product_photo_video`. Max 5. */
   attachments?: string[];
 }
 

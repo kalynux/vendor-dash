@@ -12,7 +12,14 @@ export type PhoneOperator = 'MTN' | 'ORANGE' | 'MOOV';
  */
 export type PaymentStatus = 'pending' | 'paid' | 'failed' | 'reversed';
 
-export type VendorPlanStatus = 'active' | 'pending_activation' | 'expired' | 'cancelled';
+export type SubscriberPlanStatus = 'active' | 'pending_activation' | 'expired' | 'cancelled';
+
+/**
+ * The billing engine is now owner-scoped (shared by vendor/agency/agent). Records
+ * carry `owner_type` + `owner_id` instead of the old `vendor_id`. This dashboard
+ * only ever sees `vendor`, but the field is typed to the full set for accuracy.
+ */
+export type PlanOwnerType = 'vendor' | 'agency' | 'agent';
 
 // ─── Core entities ────────────────────────────────────────────────────────────
 
@@ -35,12 +42,18 @@ export interface PricingPlan {
   updated_at?: string;
 }
 
-export interface VendorPlan {
+/**
+ * A plan assignment (the owner-scoped record formerly called `VendorPlan`). The
+ * response key is now `subscriberPlan` and it carries `owner_type`/`owner_id`
+ * (was `vendor_id`). See api-doc/vendor/billing.md.
+ */
+export interface SubscriberPlan {
   _id: string;
-  vendor_id?: string;
+  owner_type?: PlanOwnerType;
+  owner_id?: string;
   plan_id?: string;
   plan_code: string;
-  status: VendorPlanStatus;
+  status: SubscriberPlanStatus;
   /** `null` while still `pending_activation`. */
   started_at: string | null;
   /** `null` for the never-expiring free plan. */
@@ -52,16 +65,31 @@ export interface VendorPlan {
   updated_at?: string;
 }
 
-/** One side of the current-plan response: the resolved catalog plan + the vendor record. */
-export interface VendorPlanSlot {
+/** One side of the current-plan response: the resolved catalog plan + the assignment record. */
+export interface SubscriberPlanSlot {
   plan: PricingPlan;
-  vendorPlan: VendorPlan;
+  subscriberPlan: SubscriberPlan;
+}
+
+/**
+ * Active plan's media-storage figures, now embedded in `GET /vendor/plan`.
+ * `limitBytes` = the active plan's `max_storage_bytes`; `usedBytes` excludes
+ * digital-product assets; `remainingBytes` is clamped at 0. For a full
+ * per-category breakdown the billing tab uses the media endpoints instead
+ * (`GET /api/files/storage`), so this is informational.
+ */
+export interface CurrentPlanStorage {
+  limitBytes: number;
+  usedBytes: number;
+  remainingBytes: number;
 }
 
 export interface CurrentPlanData {
-  active: VendorPlanSlot;
+  active: SubscriberPlanSlot;
   /** `null` when nothing is queued. */
-  pending: VendorPlanSlot | null;
+  pending: SubscriberPlanSlot | null;
+  /** Active plan's storage limit + current usage. */
+  storage?: CurrentPlanStorage;
 }
 
 export interface CreditPack {
@@ -73,7 +101,8 @@ export interface CreditPack {
 
 export interface CreditTopup {
   _id: string;
-  vendor_id?: string;
+  owner_type?: PlanOwnerType;
+  owner_id?: string;
   pack_code: string;
   credits: number;
   price: number;
@@ -88,7 +117,8 @@ export interface CreditTopup {
 
 export interface PlanPurchase {
   _id: string;
-  vendor_id?: string;
+  owner_type?: PlanOwnerType;
+  owner_id?: string;
   plan_id?: string;
   plan_code: string;
   price: number;
@@ -96,7 +126,8 @@ export interface PlanPurchase {
   status: PaymentStatus;
   gateway: PaymentGateway;
   gateway_ref?: string | null;
-  vendor_plan_id?: string | null;
+  /** The `SubscriberPlan` created once the purchase is applied (null until `paid`). */
+  subscriber_plan_id?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -182,7 +213,7 @@ export interface PlanPurchaseInitResponse {
 }
 export interface PlanPurchaseVerifyResponse {
   success: boolean;
-  data: { purchase: PlanPurchase; vendorPlan: VendorPlan | null };
+  data: { purchase: PlanPurchase; subscriberPlan: SubscriberPlan | null };
 }
 export interface BillingSettingsResponse {
   success: boolean;

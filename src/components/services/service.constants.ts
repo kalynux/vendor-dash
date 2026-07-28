@@ -374,8 +374,8 @@ export const SERVICE_STATUS_TRANSITIONS: Record<ServiceStatus, ServiceStatusTran
   archived: [
     { target: 'draft', label: 'Restore to draft', destructive: false, needsPreflight: false },
   ],
-  pending_review: [
-    { target: 'draft', label: 'Cancel review & edit', destructive: false, needsPreflight: false },
-  ],
+  // System-locked statuses — no vendor-triggered transitions allowed (backend
+  // returns CATALOG_PRODUCT_INVALID_STATE). See api-doc/vendor/products.md.
+  pending_review: [],
   suspended: [],
 };

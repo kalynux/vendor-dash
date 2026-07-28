@@ -17,6 +17,7 @@ import { MediaGallery } from '@/pages/MediaGallery';
 import { ProductUpload } from '@/pages/ProductUpload';
 import { ProductEdit } from '@/pages/ProductEdit';
 import { Tickets } from '@/pages/Tickets';
+import { Agency } from '@/pages/Agency';
 import { Services } from '@/pages/Services';
 import { ServiceUpload } from '@/pages/ServiceUpload';
 import { ServiceEdit } from '@/pages/ServiceEdit';
@@ -80,7 +81,7 @@ export const useAuth = () => useContext(LegacyAuthContext);
 
 type LegacyRoute =
   | 'overview' | 'orders' | 'products' | 'product-upload' | 'inventory' | 'customers'
-  | 'analytics' | 'notifications' | 'settings' | 'media' | 'tickets'
+  | 'analytics' | 'notifications' | 'settings' | 'media' | 'tickets' | 'agency'
   | 'services' | 'service-upload' | 'login' | 'transactions' | 'account';
 
 const LEGACY_ROUTE_MAP: Record<LegacyRoute, string> = {
@@ -96,6 +97,7 @@ const LEGACY_ROUTE_MAP: Record<LegacyRoute, string> = {
   account: '/dashboard/account',
   media: '/dashboard/media',
   tickets: '/dashboard/tickets',
+  agency: '/dashboard/agency',
   services: '/dashboard/services',
   'service-upload': '/dashboard/service-upload',
   login: '/login',
@@ -171,7 +173,9 @@ function DashboardShell() {
             <Route path="notifications" element={<Notifications />} />
             <Route path="account" element={<Navigate to="/dashboard/account/profile" replace />} />
             <Route path="account/:tab" element={<Account />} />
-            <Route path="settings" element={<Navigate to="/dashboard/settings/delivery" replace />} />
+            <Route path="agency" element={<Navigate to="/dashboard/agency/connections" replace />} />
+            <Route path="agency/:tab" element={<Agency />} />
+            <Route path="settings" element={<Navigate to="/dashboard/settings/policies" replace />} />
             <Route path="settings/:tab" element={<Settings />} />
             <Route path="transactions" element={<Transactions />} />
             <Route path="media" element={<MediaGallery />} />
