@@ -29,6 +29,13 @@ import type {
   CreateOptionPayload,
   VectorisationStatusDto,
   VectorisationActionResponse,
+  SimpleProductPayload,
+  SimpleProductUpdatePayload,
+  SimpleProductResponse,
+  SimpleProductData,
+  SimpleActivationMeta,
+  ConvertToAdvancedResponse,
+  PickupReason,
 } from '@/types/product.types';
 import type { ServiceConfig } from '@/types/services.types';
 import { ApiError } from '@/types/api';
@@ -46,6 +53,9 @@ function adaptToListItem(p: ApiProduct): ProductListItem {
     status: p.status,
     category: p.category,
     tags: p.tags,
+    // Absent on a backend build that predates simple mode — fall back to the
+    // advanced editor, which every pre-existing product belongs to anyway.
+    mode: p.mode ?? 'advanced',
     firstFileUrl: p.fileIds[0]?.url ?? null,
     hasVariants: p.hasVariants,
     defaultVariantId: p.defaultVariantId,
@@ -127,6 +137,76 @@ export async function bulkArchiveProducts(productIds: string[]): Promise<BulkArc
 export async function duplicateProduct(id: string): Promise<ApiProduct> {
   const res = await api.post<{ success: boolean; data: ApiProduct; message?: string }>(`/vendor/products/${id}/duplicate`);
   return res.data;
+}
+
+// ─── Simple mode (one-shot editor) ────────────────────────────────────────────
+// See api-doc/vendor/simple-products.md. `api.post`/`api.patch` return the whole
+// parsed body, so `meta.activation` survives as long as the generic declares it.
+
+export interface SimpleProductResult {
+  product: SimpleProductData;
+  activation: SimpleActivationMeta;
+  message?: string;
+}
+
+// A response without `meta` shouldn't happen, but the product still exists — so
+// derive the one fact the UI actually branches on rather than throwing.
+function fallbackActivation(product: SimpleProductData): SimpleActivationMeta {
+  return { attempted: false, published: product.status === 'active', blockers: [] };
+}
+
+/**
+ * Creates the product, its single variant and its delivery config in one
+ * transaction, then attempts to publish. Always 201 even when it could not
+ * publish — the outcome is in `activation`, not the status code.
+ */
+export async function createSimpleProduct(
+  payload: SimpleProductPayload,
+): Promise<SimpleProductResult> {
+  const res = await api.post<SimpleProductResponse>('/vendor/products/simple', payload);
+  return {
+    product: res.data,
+    activation: res.meta?.activation ?? fallbackActivation(res.data),
+    message: res.message,
+  };
+}
+
+/** One flat body edits both the product and its single variant. 200. */
+export async function updateSimpleProduct(
+  id: string,
+  payload: SimpleProductUpdatePayload,
+): Promise<SimpleProductResult> {
+  const res = await api.patch<SimpleProductResponse>(`/vendor/products/${id}/simple`, payload);
+  return {
+    product: res.data,
+    activation: res.meta?.activation ?? fallbackActivation(res.data),
+    message: res.message,
+  };
+}
+
+/**
+ * Unlocks the full variant/option API. Flips `mode` and nothing else — no data
+ * migration, no repair. Idempotent, and one-way (there is no convert-to-simple).
+ */
+export async function convertToAdvanced(id: string): Promise<ApiProduct> {
+  const res = await api.post<ConvertToAdvancedResponse>(
+    `/vendor/products/${id}/convert-to-advanced`,
+  );
+  return res.data;
+}
+
+/**
+ * Load path for the simple editor. `defaultVariant` is only documented on the
+ * simple create/update responses, so resolve the single variant from the
+ * variants list rather than assuming the detail response carries it.
+ */
+export async function fetchSimpleProduct(
+  id: string,
+): Promise<{ product: ApiProductDetail; variant: ApiVariant | null }> {
+  const [product, variants] = await Promise.all([fetchProductById(id), fetchVariants(id)]);
+  const variant =
+    variants.find((v) => v.id === product.defaultVariantId) ?? variants[0] ?? null;
+  return { product, variant };
 }
 
 // ─── Default Variant ──────────────────────────────────────────────────────────
@@ -413,6 +493,103 @@ export function getDeliveryErrorMessage(err: unknown): string {
     return ACTIVATION_ERROR_MAP[err.code] ?? AGENCY_CONNECTION_ERROR_LABELS[err.code] ?? err.message;
   }
   return 'Something went wrong. Please try again.';
+}
+
+// ─── Simple mode errors & guidance ────────────────────────────────────────────
+
+export const SIMPLE_MODE_ERROR_MAP: Record<string, string> = {
+  VALIDATION_ERROR: 'Some fields need attention — check the highlighted inputs.',
+  CATALOG_IMAGE_LIMIT_EXCEEDED: 'A product can have at most 7 images.',
+  // The doc guarantees the whole transaction rolls back, so the message has to
+  // say nothing was saved — otherwise vendors go hunting for a half-made product.
+  CATALOG_PRODUCT_ACCESS_DENIED:
+    'One of the selected images belongs to another account. Nothing was saved — remove it and try again.',
+  BILLING_LIMIT_EXCEEDED:
+    "You've reached your plan's limit for active products. Upgrade your plan, or archive another product, to publish this one.",
+  CATALOG_PRODUCT_NOT_FOUND: 'This product no longer exists.',
+  CATALOG_VARIANT_SKU_EXISTS:
+    'That SKU is already taken. SKUs are unique across the whole platform — choose another, or leave it blank to generate one automatically.',
+  CATALOG_PRODUCT_SIMPLE_MODE_LOCKED:
+    'This product uses the quick editor, so that action is not available. Switch it to the advanced editor first.',
+  CATALOG_PRODUCT_NOT_SIMPLE_MODE:
+    'This product uses the advanced editor. Open it in the full product editor instead.',
+  CATALOG_PRODUCT_VECTORISATION_PENDING:
+    'This product is being indexed for AI search. Please try again in a few seconds.',
+  CATALOG_PRODUCT_INVALID_PICKUP_LOCATION:
+    "That pickup location isn't valid for the delivery agency handling this product.",
+  CATALOG_PRODUCT_NO_DEFAULT_VARIANT:
+    'This product lost its variant. Open it in the advanced editor to repair it.',
+};
+
+// Chains through ACTIVATION_ERROR_MAP so blocker codes that also arrive as
+// thrown errors (e.g. from PATCH /products/:id/status) still get a sentence.
+export function getSimpleProductErrorMessage(err: unknown): string {
+  if (err instanceof ApiError) {
+    return SIMPLE_MODE_ERROR_MAP[err.code] ?? ACTIVATION_ERROR_MAP[err.code] ?? err.message;
+  }
+  return 'Something went wrong. Please try again.';
+}
+
+export type PickupGuidanceAction =
+  | { kind: 'none' }
+  | { kind: 'address_picker' }
+  | { kind: 'link'; to: string; label: string }
+  | { kind: 'retry' };
+
+export interface PickupReasonGuidance {
+  title: string;
+  body: string;
+  action: PickupGuidanceAction;
+}
+
+// What the UI should do about `meta.activation.pickupReason`. The blockers list
+// says what is wrong; this says where to go and fix it.
+export const PICKUP_REASON_GUIDANCE: Record<PickupReason, PickupReasonGuidance> = {
+  derived_single_address: { title: '', body: '', action: { kind: 'none' } },
+  derived_agency_storage: { title: '', body: '', action: { kind: 'none' } },
+  explicit: { title: '', body: '', action: { kind: 'none' } },
+
+  multiple_addresses: {
+    title: 'Which address should the courier collect from?',
+    body: 'You have several business addresses and none is set as the default, so we did not guess.',
+    action: { kind: 'address_picker' },
+  },
+  no_agency: {
+    title: 'No delivery agency yet',
+    body: 'Connect an agency and set it as your default to publish physical products.',
+    action: { kind: 'link', to: '/dashboard/agency/connections', label: 'Set up delivery' },
+  },
+  agency_inactive: {
+    title: 'Your delivery agency is not active',
+    body: 'Reactivate the connection, or connect a different agency.',
+    action: { kind: 'link', to: '/dashboard/agency/connections', label: 'Review connections' },
+  },
+  no_business_address: {
+    title: 'Add a business address',
+    body: 'Your agency only collects from a vendor address, and you have none saved.',
+    action: { kind: 'link', to: '/dashboard/account/addresses', label: 'Add an address' },
+  },
+  agency_offers_neither: {
+    title: 'This agency supports neither pickup model',
+    body: 'It offers neither collection from your address nor storage of your stock. Choose a different agency.',
+    action: {
+      kind: 'link',
+      to: '/dashboard/agency/connections',
+      label: 'Choose another agency',
+    },
+  },
+  resolution_failed: {
+    title: 'We could not work out a pickup location',
+    body: 'This is usually temporary.',
+    action: { kind: 'retry' },
+  },
+};
+
+/** Returns null for the happy paths (and unknown reasons) — nothing to render. */
+export function getPickupGuidance(reason?: string | null): PickupReasonGuidance | null {
+  if (!reason) return null;
+  const guidance = PICKUP_REASON_GUIDANCE[reason as PickupReason];
+  return guidance && guidance.action.kind !== 'none' ? guidance : null;
 }
 
 // ─── Status Flow ──────────────────────────────────────────────────────────────

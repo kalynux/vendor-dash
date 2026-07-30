@@ -7,6 +7,16 @@ import type { ServiceConfig } from '@/types/services.types';
 
 export type ApiProductType = 'physical' | 'digital';
 
+/**
+ * Which editor a product belongs to.
+ *  - `simple`   → physical · exactly one variant · zero options. Created by
+ *                 POST /vendor/products/simple. Advanced operations (adding
+ *                 variants/options, archiving the only variant, setting the
+ *                 default variant) 409 with CATALOG_PRODUCT_SIMPLE_MODE_LOCKED.
+ *  - `advanced` → everything else, and what every pre-existing product reports.
+ */
+export type ProductMode = 'simple' | 'advanced';
+
 export type ApiProductStatus =
   | 'draft'
   | 'active'
@@ -75,6 +85,12 @@ export interface ApiProduct {
   vendorId: string;
   type: ApiProductType;
   status: ApiProductStatus;
+  /**
+   * Optional on the wire on purpose: a backend build that predates simple mode
+   * omits it, and every consumer must degrade to 'advanced' rather than crash.
+   * Normalised to a required field on ProductListItem by adaptToListItem.
+   */
+  mode?: ProductMode;
   title: string;
   description: string;
   slug: string;
@@ -182,6 +198,8 @@ export interface ProductListItem {
   title: string;
   type: ApiProductType;
   status: ApiProductStatus;
+  /** Routes the Edit action to the right editor. Defaults to 'advanced'. */
+  mode: ProductMode;
   category: string;
   tags: string[];
   firstFileUrl: string | null; // URL of the first file, used for the thumbnail
@@ -246,6 +264,156 @@ export interface UpdateProductPayload {
     freeDelivery?: boolean;
     pickupLocation?: ApiPickupLocation | null;
   };
+}
+
+// ─── Simple mode (one-shot editor) ────────────────────────────────────────────
+// See api-doc/vendor/simple-products.md. These endpoints create/edit a product,
+// its single variant and its delivery config in one transaction.
+
+/**
+ * Body for POST /vendor/products/simple.
+ *
+ * `type`, `mode`, `status`, `deliveryAgencyId`, `optionValueIds`,
+ * `digitalConfig` and `serviceConfig` are rejected with 400 — each belongs to a
+ * capability this editor does not expose. Never add them here.
+ */
+export interface SimpleProductPayload {
+  title: string;              // 3–200 chars
+  description: string;        // non-empty — an empty description blocks publishing
+  category: string;           // non-empty
+  price: number;              // > 0 — zero is rejected outright
+  stock?: number;             // integer ≥ 0, default 0
+  isInfiniteStock?: boolean;  // default false
+  compareAtPrice?: number;
+  sku?: string;               // 1–100 chars; auto-generated when omitted
+  tags?: string[];            // unique, non-empty
+  fileIds?: string[];         // max 7
+  seoTitle?: string;          // max 60
+  seoDescription?: string;    // max 160
+  weight?: number;            // grams
+  length?: number;            // cm
+  width?: number;             // cm
+  height?: number;            // cm
+  freeDelivery?: boolean;     // default false
+  /**
+   * OMIT to let the backend derive it from the vendor profile + agency policy
+   * (the outcome is reported in meta.activation.pickupReason). Sending it
+   * explicitly is validated and can 422.
+   */
+  pickupLocation?: ApiPickupLocation;
+  publish?: boolean;          // default true; false saves a draft outright
+}
+
+/**
+ * Body for PATCH /vendor/products/:id/simple — one flat body edits both the
+ * product and its single variant. Every field optional; at least one required.
+ * 409 CATALOG_PRODUCT_NOT_SIMPLE_MODE on an advanced product.
+ */
+export interface SimpleProductUpdatePayload {
+  // → the product
+  title?: string;
+  description?: string;
+  category?: string;
+  tags?: string[];
+  /** FULL REPLACEMENT, same as PATCH /products/:id. Order matters (index 0 = thumbnail). */
+  fileIds?: string[];
+  seoTitle?: string;
+  seoDescription?: string;
+  freeDelivery?: boolean;
+  pickupLocation?: ApiPickupLocation | null;
+  // → its single variant
+  price?: number;
+  compareAtPrice?: number;
+  stock?: number;
+  isInfiniteStock?: boolean;
+  lowStockThreshold?: number | null;
+  allowOversell?: boolean;
+  sku?: string;
+  weight?: number;
+  length?: number;
+  width?: number;
+  height?: number;
+  /**
+   * omitted → status untouched; if the edit broke the active-state invariant the
+   *           product is demoted to draft and `blockers` explains why.
+   * true     → publish if draft, no-op if already active.
+   * false    → never publishes. To unpublish use PATCH /products/:id/status.
+   */
+  publish?: boolean;
+}
+
+/**
+ * One entry of `meta.activation.blockers`. `message` is written for a vendor to
+ * read — render it verbatim rather than remapping it through an error map.
+ */
+export interface ActivationBlocker {
+  code: string;
+  message: string;
+}
+
+/** Why the backend did (or did not) persist a pickup location. */
+export type PickupReason =
+  | 'derived_single_address'
+  | 'derived_agency_storage'
+  | 'explicit'
+  | 'multiple_addresses'
+  | 'no_agency'
+  | 'agency_inactive'
+  | 'no_business_address'
+  | 'agency_offers_neither'
+  | 'resolution_failed';
+
+export interface SimpleActivationMeta {
+  attempted: boolean;
+  published: boolean;
+  /** The COMPLETE checklist, not the first failure. Render as a to-do list. */
+  blockers: ActivationBlocker[];
+  // Widened so a reason the backend adds later doesn't break the type.
+  pickupReason?: PickupReason | (string & {});
+}
+
+/**
+ * The single variant, nested on the simple create/update response so no second
+ * fetch is needed. Only documented on those two responses — GET /products/:id
+ * is not guaranteed to include it, so the edit page loads via fetchVariants.
+ */
+export type SimpleDefaultVariant = Pick<
+  ApiVariant,
+  'id' | 'sku' | 'price' | 'stock' | 'status'
+> &
+  Partial<
+    Pick<
+      ApiVariant,
+      | 'displayName'
+      | 'compareAtPrice'
+      | 'isInfiniteStock'
+      | 'lowStockThreshold'
+      | 'allowOversell'
+      | 'weight'
+      | 'length'
+      | 'width'
+      | 'height'
+      | 'files'
+    >
+  >;
+
+export type SimpleProductData = ApiProductDetail & {
+  mode: ProductMode;
+  defaultVariant?: SimpleDefaultVariant;
+};
+
+/** 201 on create, 200 on update — identical shape. Always 201 even when it could not publish. */
+export interface SimpleProductResponse {
+  success: true;
+  data: SimpleProductData;
+  meta?: { activation: SimpleActivationMeta };
+  message?: string;
+}
+
+export interface ConvertToAdvancedResponse {
+  success: true;
+  data: ApiProduct;
+  message?: string;
 }
 
 export interface CreateVariantPayload {

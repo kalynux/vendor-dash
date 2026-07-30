@@ -107,7 +107,27 @@ async function buildApiError(res: Response): Promise<ApiError> {
             : undefined;
     const rowErrors = topLevelErrors ?? detailRowErrors;
 
-    return new ApiError(res.status, code, message, details, requestId, violations, blockedAddresses, rowErrors);
+    // Object-shaped `error.details` payloads that aren't one of the three keys
+    // special-cased above were being parsed and dropped — e.g.
+    // CATALOG_PRODUCT_SIMPLE_MODE_LOCKED's `{ mode, convertEndpoint }` and
+    // VALIDATION_ERROR's `{ fields }`. Keep the raw object so per-feature code
+    // can read it. Deliberately not exclusive with the branches above.
+    const detailsObject =
+        rawDetails && typeof rawDetails === 'object' && !Array.isArray(rawDetails)
+            ? (rawDetails as Record<string, unknown>)
+            : undefined;
+
+    return new ApiError(
+        res.status,
+        code,
+        message,
+        details,
+        requestId,
+        violations,
+        blockedAddresses,
+        rowErrors,
+        detailsObject,
+    );
 }
 
 // ─── Core request function ────────────────────────────────────────────────────

@@ -16,6 +16,7 @@ import {
   FileDigit,
   Sparkles,
   RotateCw,
+  Wand2,
   Loader2,
   CheckCircle2,
   XCircle,
@@ -61,6 +62,7 @@ import { useScrollRestoration } from '@/hooks/use-scroll-restoration';
 import { getListCache, setListCache } from '@/lib/listCache';
 import { MobilePageHeader } from '@/components/layout/MobilePageHeader';
 import { MobileListFooter } from '@/components/layout/MobileListFooter';
+import { ConvertToAdvancedDialog } from '@/components/products/simple/ConvertToAdvancedDialog';
 import {
   fetchProducts as apiFetchProducts,
   setVectorisationEnabled,
@@ -221,6 +223,7 @@ export function Products() {
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
   const [actionsSheetProduct, setActionsSheetProduct] = useState<ProductListItem | null>(null);
   const [productToDelete, setProductToDelete] = useState<ProductListItem | null>(null);
+  const [productToConvert, setProductToConvert] = useState<ProductListItem | null>(null);
   const [transitionState, setTransitionState] = useState<{
     product: ProductListItem;
     transition: StatusTransition;
@@ -319,7 +322,13 @@ export function Products() {
         toast.error('Product is being indexed, please try again later');
         return;
       }
-      navigate(`/dashboard/product-edit/${product.id}`);
+      // All four Edit entry points funnel through here, so the branch lands
+      // everywhere at once. `mode` defaults to 'advanced' in adaptToListItem.
+      navigate(
+        product.mode === 'simple'
+          ? `/dashboard/product-edit/${product.id}/simple`
+          : `/dashboard/product-edit/${product.id}`,
+      );
     },
     [navigate],
   );
@@ -557,6 +566,21 @@ export function Products() {
     );
   })();
 
+  const convertDialog = (
+    <ConvertToAdvancedDialog
+      open={!!productToConvert}
+      productId={productToConvert?.id ?? null}
+      productTitle={productToConvert?.title}
+      onOpenChange={(open) => {
+        if (!open) setProductToConvert(null);
+      }}
+      onConverted={() => {
+        setProductToConvert(null);
+        reloadList();
+      }}
+    />
+  );
+
   const archiveDialog = (
     <Dialog
       open={!!productToDelete}
@@ -749,6 +773,13 @@ export function Products() {
                       label="Preview"
                       onClick={close}
                     />
+                    {p.mode === 'simple' && (
+                      <SheetActionButton
+                        icon={<Wand2 className="w-5 h-5" />}
+                        label="Convert to advanced"
+                        onClick={() => { close(); setProductToConvert(p); }}
+                      />
+                    )}
                     {nonArchiveTransitions.map((transition) => {
                       const meta = STATUS_TRANSITION_META[transition.intent];
                       const Icon = meta.Icon;
@@ -805,6 +836,7 @@ export function Products() {
 
         {archiveDialog}
         {transitionDialog}
+        {convertDialog}
       </div>
     );
   }
@@ -956,6 +988,7 @@ export function Products() {
                   onStatusTransition={(transition) =>
                     requestStatusTransition(product, transition)
                   }
+                  onConvertToAdvanced={() => setProductToConvert(product)}
                 />
               ))}
         </div>
@@ -1051,6 +1084,7 @@ export function Products() {
                             onStatusTransition={(transition) =>
                               requestStatusTransition(product, transition)
                             }
+                            onConvertToAdvanced={() => setProductToConvert(product)}
                           />
                         </td>
                       </tr>
@@ -1063,6 +1097,7 @@ export function Products() {
 
       {archiveDialog}
       {transitionDialog}
+      {convertDialog}
 
       {/* Pagination */}
       {pagination && pagination.totalPages > 1 && (
@@ -1126,6 +1161,7 @@ interface ProductGridCardProps {
   onEdit: () => void;
   onVectorisationAction: (action: 'enable' | 'disable' | 'retry') => void;
   onStatusTransition: (transition: StatusTransition) => void;
+  onConvertToAdvanced: () => void;
 }
 
 function ProductGridCard({
@@ -1135,6 +1171,7 @@ function ProductGridCard({
   onEdit,
   onVectorisationAction,
   onStatusTransition,
+  onConvertToAdvanced,
 }: ProductGridCardProps) {
   return (
     <div className="animate-fade-in">
@@ -1182,12 +1219,18 @@ function ProductGridCard({
               onEdit={onEdit}
               onVectorisationAction={onVectorisationAction}
               onStatusTransition={onStatusTransition}
+              onConvertToAdvanced={onConvertToAdvanced}
             />
           </div>
           <div className="mt-2 flex items-center gap-1.5 flex-wrap">
             <Badge variant="outline" className="text-xs">
               {product.category}
             </Badge>
+            {product.mode === 'simple' && (
+              <Badge variant="outline" className="text-xs">
+                Quick
+              </Badge>
+            )}
             {/* {product.hasVariants && (
               <Badge variant="outline" className="text-xs">
                 Variants
@@ -1205,6 +1248,7 @@ interface ProductActionsMenuProps {
   onEdit: () => void;
   onVectorisationAction: (action: 'enable' | 'disable' | 'retry') => void;
   onStatusTransition: (transition: StatusTransition) => void;
+  onConvertToAdvanced: () => void;
 }
 
 function ProductActionsMenu({
@@ -1212,6 +1256,7 @@ function ProductActionsMenu({
   onEdit,
   onVectorisationAction,
   onStatusTransition,
+  onConvertToAdvanced,
 }: ProductActionsMenuProps) {
   const editLocked = product.vectorisationStatus === 'pending';
 
@@ -1244,6 +1289,13 @@ function ProductActionsMenu({
           <Eye className="w-4 h-4 mr-2" />
           Preview
         </DropdownMenuItem>
+
+        {product.mode === 'simple' && (
+          <DropdownMenuItem onClick={onConvertToAdvanced}>
+            <Wand2 className="w-4 h-4 mr-2" />
+            Convert to advanced
+          </DropdownMenuItem>
+        )}
 
         {nonArchiveTransitions.map((transition) => {
           const meta = STATUS_TRANSITION_META[transition.intent];

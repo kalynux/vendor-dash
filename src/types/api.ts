@@ -428,6 +428,13 @@ export class ApiError extends Error {
   readonly blockedAddresses?: BlockedAddress[];
   /** Populated for all-or-nothing bulk operations — per-row validation failures. */
   readonly rowErrors?: ApiRowError[];
+  /**
+   * The raw non-array `error.details` object, for codes whose payload is not one
+   * of the arrays lifted above — e.g. `CATALOG_PRODUCT_SIMPLE_MODE_LOCKED`'s
+   * `{ mode, convertEndpoint }` or a `VALIDATION_ERROR`'s `{ fields }`. Without
+   * this those payloads were parsed and discarded.
+   */
+  readonly detailsObject?: Record<string, unknown>;
 
   constructor(
     status: number,
@@ -438,6 +445,7 @@ export class ApiError extends Error {
     violations?: UploadViolation[],
     blockedAddresses?: BlockedAddress[],
     rowErrors?: ApiRowError[],
+    detailsObject?: Record<string, unknown>,
   ) {
     super(message);
     this.name = 'ApiError';
@@ -448,6 +456,7 @@ export class ApiError extends Error {
     this.violations = violations;
     this.blockedAddresses = blockedAddresses;
     this.rowErrors = rowErrors;
+    this.detailsObject = detailsObject;
   }
 
   get isUnauthorized() {
@@ -479,5 +488,31 @@ export class ApiError extends Error {
    *  addresses are still in use as a product's pickup location. */
   get isBusinessAddressInUse() {
     return this.status === 409 && this.code === 'VENDOR_BUSINESS_ADDRESS_IN_USE';
+  }
+
+  /** True when an advanced-only operation was attempted on a `mode: "simple"` product. */
+  get isSimpleModeLocked() {
+    return this.status === 409 && this.code === 'CATALOG_PRODUCT_SIMPLE_MODE_LOCKED';
+  }
+
+  /**
+   * `details.convertEndpoint` on a simple-mode lock. This is a DISPLAY string of
+   * the form `POST /api/vendor/products/<id>/convert-to-advanced` — it carries
+   * the verb and the `/api` prefix that BASE_URL already supplies, so never
+   * build a request from it. Call `convertToAdvanced(id)` instead.
+   */
+  get convertEndpoint(): string | null {
+    const value = this.detailsObject?.convertEndpoint;
+    return typeof value === 'string' ? value : null;
+  }
+
+  /**
+   * Field-level validation errors from either documented shape:
+   * `details: [{ field, message }]` or `details: { fields: [{ field, message }] }`.
+   */
+  get fieldErrors(): ApiErrorDetail[] {
+    if (this.details?.length) return this.details;
+    const fields = this.detailsObject?.fields;
+    return Array.isArray(fields) ? (fields as ApiErrorDetail[]) : [];
   }
 }

@@ -16,6 +16,8 @@ import { Transactions } from '@/pages/Transactions';
 import { MediaGallery } from '@/pages/MediaGallery';
 import { ProductUpload } from '@/pages/ProductUpload';
 import { ProductEdit } from '@/pages/ProductEdit';
+import { SimpleProductCreate } from '@/pages/SimpleProductCreate';
+import { SimpleProductEdit } from '@/pages/SimpleProductEdit';
 import { Tickets } from '@/pages/Tickets';
 import { Agency } from '@/pages/Agency';
 import { Services } from '@/pages/Services';
@@ -167,7 +169,11 @@ function DashboardShell() {
             <Route path="products" element={<Products />} />
             <Route path="inventory" element={<Inventory />} />
             <Route path="product-upload" element={<ProductUpload />} />
+            {/* Nested under the same prefixes so pathToLegacyRoute keeps
+                highlighting 'products' without needing a new entry. */}
+            <Route path="product-upload/simple" element={<SimpleProductCreate />} />
             <Route path="product-edit/:id" element={<ProductEdit />} />
+            <Route path="product-edit/:id/simple" element={<SimpleProductEdit />} />
             <Route path="customers" element={<Customers />} />
             <Route path="analytics" element={<Analytics />} />
             <Route path="notifications" element={<Notifications />} />

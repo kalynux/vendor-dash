@@ -6,7 +6,10 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { PageBackButton } from '@/components/layout/PageBackButton';
 import { ProductStepIndicator } from '@/components/products/ProductStepIndicator';
-import { StepTypeSelect } from '@/components/products/steps/StepTypeSelect';
+import {
+  StepProductMode,
+  type ProductCreationChoice,
+} from '@/components/products/steps/StepProductMode';
 import { StepBasicInfo } from '@/components/products/steps/StepBasicInfo';
 import { StepMedia } from '@/components/products/steps/StepMedia';
 import { StepVariants } from '@/components/products/steps/StepVariants';
@@ -175,14 +178,23 @@ export function ProductUpload() {
     });
   }
 
-  // ─── Type select ─────────────────────────────────────────────────────────────
+  // ─── Mode / type select ──────────────────────────────────────────────────────
+  // Step 0 now branches on editor as well as product type: Quick add hands off
+  // to the one-shot simple editor, the other two continue into this wizard.
 
-  const handleTypeSelect = useCallback((productType: ApiProductType) => {
-    dispatch({
-      type: 'SAVE_COMPLETE',
-      updates: { productType, currentStep: 'basic-info', completedSteps: ['type'] },
-    });
-  }, []);
+  const handleModeSelect = useCallback(
+    (choice: ProductCreationChoice) => {
+      if (choice === 'simple') {
+        navigate('/dashboard/product-upload/simple');
+        return;
+      }
+      dispatch({
+        type: 'SAVE_COMPLETE',
+        updates: { productType: choice, currentStep: 'basic-info', completedSteps: ['type'] },
+      });
+    },
+    [navigate],
+  );
 
   // ─── Basic info ──────────────────────────────────────────────────────────────
 
@@ -664,7 +676,7 @@ export function ProductUpload() {
   function renderStep() {
     switch (state.currentStep) {
       case 'type':
-        return <StepTypeSelect selectedType={state.productType} onSelect={handleTypeSelect} />;
+        return <StepProductMode onSelect={handleModeSelect} />;
       case 'basic-info':
         return <StepBasicInfo {...sharedStepProps} onSaveComplete={handleBasicInfoSave} />;
       case 'media':

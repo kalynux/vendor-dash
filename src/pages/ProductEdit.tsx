@@ -13,6 +13,8 @@ import { StepMedia } from '@/components/products/steps/StepMedia';
 import { StepVariants } from '@/components/products/steps/StepVariants';
 import { StepDigitalFormats } from '@/components/products/steps/StepDigitalFormats';
 import { StepReview } from '@/components/products/steps/StepReview';
+import { ConvertToAdvancedDialog } from '@/components/products/simple/ConvertToAdvancedDialog';
+import { useSimpleModeLock } from '@/components/products/simple/useSimpleModeLock';
 import {
   fetchProductById,
   fetchVariants,
@@ -164,6 +166,10 @@ export function ProductEdit() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [state, dispatch] = useReducer(wizardReducer, INITIAL_STATE);
+  // Safety net for the race where a product is converted (or was already simple)
+  // in another tab: the variant/option writes 409 and we offer the escape hatch
+  // the backend hands us instead of a dead-end error.
+  const simpleLock = useSimpleModeLock();
   // Session-local variant image overrides (persisted immediately server-side;
   // kept here so the matrix shows current images after a step remount).
   const [variantImageEdits, setVariantImageEdits] = useState<Record<string, ApiFileDetail[]>>({});
@@ -187,6 +193,12 @@ export function ProductEdit() {
           fetchOptions(id!),
         ]);
         if (!cancelled) {
+          // Self-healing guard: a deep link, bookmark, stale cached list row or
+          // a conversion in another tab can land a simple product here.
+          if (product.mode === 'simple') {
+            navigate(`/dashboard/product-edit/${product.id}/simple`, { replace: true });
+            return;
+          }
           dispatch({ type: 'LOAD_COMPLETE', product, variants, options });
         }
       } catch (err: unknown) {
@@ -199,7 +211,7 @@ export function ProductEdit() {
 
     load();
     return () => { cancelled = true; };
-  }, [id]);
+  }, [id, navigate]);
 
   const steps = getSteps(state.productType);
   const isLockedForVectorisation =
@@ -370,6 +382,7 @@ export function ProductEdit() {
             },
           });
         } catch (err: unknown) {
+          if (simpleLock.handleError(err, state.productId)) return;
           const msg = err instanceof Error ? err.message : 'Failed to apply option changes.';
           dispatch({ type: 'SET_STEP_ERROR', error: msg });
         }
@@ -440,6 +453,7 @@ export function ProductEdit() {
             },
           });
         } catch (err: unknown) {
+          if (simpleLock.handleError(err, state.productId)) return;
           const msg = err instanceof Error ? err.message : 'Failed to save variants.';
           dispatch({ type: 'SET_STEP_ERROR', error: msg });
         }
@@ -448,7 +462,7 @@ export function ProductEdit() {
 
       advance();
     },
-    [state.productId, state.serverProduct, state.currentStep, state.completedSteps],
+    [state.productId, state.serverProduct, state.currentStep, state.completedSteps, simpleLock],
   );
 
   // ─── Digital formats ───────────────────────────────────────────────────────
@@ -554,10 +568,11 @@ export function ProductEdit() {
         toast.success('Formats saved.');
         advance({ serverVariants: freshVariants, serverProduct });
       } catch (err: unknown) {
+        if (simpleLock.handleError(err, state.productId)) return;
         dispatch({ type: 'SET_STEP_ERROR', error: getUploadErrorMessage(err) });
       }
     },
-    [state.productId, state.serverVariants, state.serverProduct, state.currentStep, state.completedSteps],
+    [state.productId, state.serverVariants, state.serverProduct, state.currentStep, state.completedSteps, simpleLock],
   );
 
   // ─── Per-variant status toggle (digital formats) ─────────────────────────────
@@ -841,6 +856,22 @@ export function ProductEdit() {
           </div>
         </CardContent>
       </Card>
+
+      <ConvertToAdvancedDialog
+        open={!!simpleLock.lock}
+        productId={simpleLock.lock?.productId ?? null}
+        productTitle={state.serverProduct?.title}
+        convertEndpoint={simpleLock.lock?.endpoint}
+        onOpenChange={(open) => {
+          if (!open) simpleLock.dismiss();
+        }}
+        onConverted={(converted) => {
+          simpleLock.dismiss();
+          // Reload so the wizard picks up the now-advanced product cleanly.
+          navigate(`/dashboard/product-edit/${converted.id}`, { replace: true });
+          window.location.reload();
+        }}
+      />
     </div>
   );
 }
