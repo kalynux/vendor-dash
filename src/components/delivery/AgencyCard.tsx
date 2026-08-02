@@ -35,6 +35,7 @@ export function AgencyCard({ agency, selected = false, onSelect, onInfo, rightSl
                     <img
                         src={logoUrl}
                         alt={agency.agencyName}
+                        crossOrigin="use-credentials"
                         className="w-full h-full object-cover"
                     />
                 ) : (

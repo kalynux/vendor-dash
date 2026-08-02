@@ -836,6 +836,7 @@ export function Orders() {
                     <img
                       src={order.customer.avatar || `https://i.pravatar.cc/150?u=${order.customer.id}`}
                       alt={order.customer.name}
+                      crossOrigin="use-credentials"
                       className="w-10 h-10 rounded-full flex-shrink-0 object-cover"
                     />
                     <div className="flex-1 min-w-0">
@@ -1141,6 +1142,7 @@ export function Orders() {
                           <img
                             src={order.customer.avatar || `https://i.pravatar.cc/150?u=${order.customer.id}`}
                             alt={order.customer.name}
+                            crossOrigin="use-credentials"
                             className="w-8 h-8 rounded-full"
                           />
                           <div>

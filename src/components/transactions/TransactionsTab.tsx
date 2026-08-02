@@ -6,7 +6,7 @@ import {
   FilterChips,
   FilterSection,
   FilterSheet,
-  FilterTriggerButton,
+  SearchFilterBar,
 } from '@/components/filters';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -40,6 +40,7 @@ type CategoryFilter = TransactionCategory | 'all';
 export function TransactionsTab({ refreshKey = 0 }: { refreshKey?: number }) {
   const isMobile = useIsMobile();
   const [category, setCategory] = useState<CategoryFilter>('all');
+  const [search, setSearch] = useState('');
   const [filterSheetOpen, setFilterSheetOpen] = useState(false);
   const [rows, setRows] = useState<Transaction[]>([]);
   const [meta, setMeta] = useState<TransactionsListMeta | null>(null);
@@ -79,11 +80,23 @@ export function TransactionsTab({ refreshKey = 0 }: { refreshKey?: number }) {
     load(page, category);
   }, [load, page, category, refreshKey]);
 
-  // Transactions have no free-text search endpoint, so this toolbar carries the
-  // same filter button as every other list — just without a search field.
   const activeFilterCount = category === 'all' ? 0 : 1;
   const categoryLabelFor = (value: CategoryFilter) =>
     TRANSACTION_CATEGORY_TABS.find((t) => t.value === value)?.label ?? value;
+
+  // The endpoint takes no `search` param, so matching is local — it only covers
+  // the page currently loaded, which the hint below the bar spells out.
+  const query = search.trim().toLowerCase();
+  const visibleRows = query
+    ? rows.filter((tx) =>
+      [
+        tx.description,
+        categoryLabel(tx.category),
+        transactionStatusMeta(tx.status).label,
+        tx.gateway ? gatewayLabel(tx.gateway) : '',
+      ].some((field) => field.toLowerCase().includes(query)))
+    : rows;
+  const searchIsPartial = Boolean(query) && (meta?.totalPages ?? 1) > 1;
 
   const toolbar = (
     <div
@@ -94,11 +107,19 @@ export function TransactionsTab({ refreshKey = 0 }: { refreshKey?: number }) {
         isMobile && 'border-b px-4 py-3',
       )}
     >
-      <FilterTriggerButton
-        onClick={() => setFilterSheetOpen(true)}
-        activeCount={activeFilterCount}
-        label="Filter transactions"
+      <SearchFilterBar
+        value={search}
+        onChange={setSearch}
+        placeholder="Search transactions…"
+        activeFilterCount={activeFilterCount}
+        onOpenFilters={() => setFilterSheetOpen(true)}
+        filterLabel="Filter transactions"
       />
+      {searchIsPartial && (
+        <p className="text-xs text-muted-foreground">
+          Searching this page only — page {meta?.page} of {meta?.totalPages}.
+        </p>
+      )}
       <ActiveFilterChips
         chips={category === 'all'
           ? []
@@ -190,13 +211,13 @@ export function TransactionsTab({ refreshKey = 0 }: { refreshKey?: number }) {
               Retry
             </button>
           </div>
-        ) : rows.length === 0 ? (
+        ) : visibleRows.length === 0 ? (
           <p className="px-4 py-16 text-center text-sm text-muted-foreground">
-            No transactions yet.
+            {query ? 'No transactions match your search.' : 'No transactions yet.'}
           </p>
         ) : (
           <>
-            {rows.map((tx) => {
+            {visibleRows.map((tx) => {
               const amount = transactionAmount(tx);
               return (
                 <div key={tx.id} className="border-b px-4 py-3">
@@ -254,9 +275,9 @@ export function TransactionsTab({ refreshKey = 0 }: { refreshKey?: number }) {
               Retry
             </button>
           </div>
-        ) : rows.length === 0 ? (
+        ) : visibleRows.length === 0 ? (
           <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-            No transactions yet.
+            {query ? 'No transactions match your search.' : 'No transactions yet.'}
           </p>
         ) : (
           <>
@@ -271,7 +292,7 @@ export function TransactionsTab({ refreshKey = 0 }: { refreshKey?: number }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((tx) => {
+                  {visibleRows.map((tx) => {
                     const amount = transactionAmount(tx);
                     return (
                       <tr key={tx.id} className="border-b align-top last:border-0">

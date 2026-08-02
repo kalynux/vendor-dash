@@ -118,7 +118,7 @@ export function Agency() {
                 <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-lg bg-background border flex items-center justify-center overflow-hidden flex-shrink-0">
                         {fileRefUrl(current.logo) ? (
-                            <img src={fileRefUrl(current.logo)!} alt={current.agencyName} className="w-full h-full object-cover" />
+                            <img src={fileRefUrl(current.logo)!} alt={current.agencyName} crossOrigin="use-credentials" className="w-full h-full object-cover" />
                         ) : (
                             <Building2 className="w-5 h-5 text-muted-foreground" />
                         )}

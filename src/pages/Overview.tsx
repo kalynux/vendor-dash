@@ -230,6 +230,7 @@ export function Overview() {
               <img
                 src={store.logo.url}
                 alt={store.name}
+                crossOrigin="use-credentials"
                 className="w-10 h-10 rounded-full object-cover flex-shrink-0 border"
               />
             ) : null}

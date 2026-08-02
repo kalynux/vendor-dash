@@ -425,6 +425,7 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                         <img
                           src={customer.avatar || `https://i.pravatar.cc/150?u=${customer.id}`}
                           alt={customer.name}
+                          crossOrigin="use-credentials"
                           className="w-10 h-10 rounded-full object-cover flex-shrink-0"
                         />
                         <div className="min-w-0">
@@ -531,7 +532,7 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                       <div key={item.id} className="border-b px-4 py-3 space-y-2">
                         <div className="flex items-center gap-3">
                           {item.image && (
-                            <img src={item.image} alt={item.name} className="w-14 h-14 rounded-lg object-cover flex-shrink-0" />
+                            <img src={item.image} alt={item.name} crossOrigin="use-credentials" className="w-14 h-14 rounded-lg object-cover flex-shrink-0" />
                           )}
                           <div className="flex-1 min-w-0">
                             <p className="font-medium text-sm truncate">{item.name}</p>
@@ -886,6 +887,7 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                 <img
                   src={customer.avatar || `https://i.pravatar.cc/150?u=${customer.id}`}
                   alt={customer.name}
+                  crossOrigin="use-credentials"
                   className="w-14 h-14 rounded-full object-cover flex-shrink-0 border"
                 />
                 <div className="min-w-0">

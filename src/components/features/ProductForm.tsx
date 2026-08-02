@@ -305,6 +305,7 @@ export function ProductForm({ product, onClose }: ProductFormProps) {
                   <img
                     src={image}
                     alt={`Product ${index + 1}`}
+                    crossOrigin="use-credentials"
                     className="w-full aspect-square object-cover"
                   />
                   <button

@@ -246,8 +246,8 @@ function ServiceGridCard({ service, onOpen, actions }: ServiceCardProps) {
           <img
             src={service.firstFileUrl}
             alt={service.title}
-            className="absolute inset-0 h-full w-full object-cover"
             crossOrigin="use-credentials"
+            className="absolute inset-0 h-full w-full object-cover"
           />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center">
