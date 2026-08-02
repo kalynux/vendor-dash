@@ -1,5 +1,4 @@
 import { useCallback, useState } from 'react';
-import { Loader2, Save } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { useOnboarding } from '@/onboarding/store/onboarding.store';
@@ -7,8 +6,8 @@ import { type Step1FormValues } from '@/onboarding/schemas/onboarding.schemas';
 import { BasicSetupFields } from '@/components/vendor-settings/forms/BasicSetupFields';
 import { emptyMobileMoneyEntry } from '@/components/vendor-settings/forms/basicSetup.helpers';
 import { mapProfileError } from '@/components/vendor-settings/errors';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { UnsavedChangesBar } from '@/components/vendor-settings/UnsavedChangesBar';
+import { SettingsSection } from '@/components/vendor-settings/SettingsSection';
 
 const FORM_ID = 'settings-payout-form';
 
@@ -17,6 +16,18 @@ export function PayoutSetupSettings() {
     const roleEntity = session?.role_entity;
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [dirty, setDirty] = useState(false);
+    // Bumped after a save or discard to remount BasicSetupFields, resetting its
+    // internal form to the latest persisted defaults.
+    const [formKey, setFormKey] = useState(0);
+
+    const onDirtyChange = useCallback((next: boolean) => setDirty(next), []);
+
+    const handleDiscard = useCallback(() => {
+        setError(null);
+        setDirty(false);
+        setFormKey((k) => k + 1);
+    }, []);
 
     const onSubmit = useCallback(
         async (values: Step1FormValues) => {
@@ -27,6 +38,9 @@ export function PayoutSetupSettings() {
                 // are managed here.
                 await updateVendorProfile({ payout_details: values.payout_details });
                 toast.success('Payout setup updated');
+                // Reset the dirty state by remounting against the freshly-saved session.
+                setDirty(false);
+                setFormKey((k) => k + 1);
             } catch (err) {
                 setError(mapProfileError(err));
             } finally {
@@ -49,14 +63,26 @@ export function PayoutSetupSettings() {
     };
 
     return (
-        <Card>
-            <CardHeader>
-                <CardTitle>Payout Setup</CardTitle>
-                <CardDescription>
-                    How you get paid. Add up to 3 payout methods — the first is used by default.
-                </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
+        // A plain wrapper, not a fragment: on the Payout tab this sits inside a
+        // `SettingsSections` whose `divide-y` would otherwise draw a hairline
+        // across the top of the floating bar.
+        <div>
+            <SettingsSection
+                title="Payment Methods"
+                info={
+                    <div className="space-y-2">
+                        <p>
+                            Where your withdrawals are sent. Add up to 3 methods — the first one is the
+                            preferred one and is used by default; the rest are fallbacks.
+                        </p>
+                        <p>
+                            Account names must match the name registered with the provider, otherwise the
+                            transfer is rejected and the payout is sent back to your available balance.
+                        </p>
+                    </div>
+                }
+                contentClassName="space-y-6"
+            >
                 {error && (
                     <div
                         role="alert"
@@ -67,19 +93,22 @@ export function PayoutSetupSettings() {
                 )}
 
                 <BasicSetupFields
+                    key={formKey}
                     formId={FORM_ID}
                     defaultValues={defaultValues}
                     onSubmit={onSubmit}
+                    onDirtyChange={onDirtyChange}
                     showRegion={false}
+                    showMethodsHeading={false}
                 />
+            </SettingsSection>
 
-                <div className="flex justify-end border-t pt-4">
-                    <Button type="submit" form={FORM_ID} disabled={saving} className="gap-2">
-                        {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                        Save Changes
-                    </Button>
-                </div>
-            </CardContent>
-        </Card>
+            <UnsavedChangesBar
+                visible={dirty || saving}
+                saving={saving}
+                onDiscard={handleDiscard}
+                formId={FORM_ID}
+            />
+        </div>
     );
 }

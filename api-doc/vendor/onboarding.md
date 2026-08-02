@@ -264,6 +264,9 @@ Any other field (e.g. a legacy client still sending `default_delivery_agency_id`
 
 Captures the vendor's branding (logo, cover image) and business addresses. This step is optional — the user can skip it and onboarding will be marked as complete.
 
+> [!NOTE]
+> The `branding` (logo/cover) you submit here is the **business** branding and is stored on the vendor's [Store](./store.md) — its `logo` and `banner`. `business_addresses` stay on the profile. Edit branding later via `PATCH /api/vendor/store`.
+
 > [!IMPORTANT]
 > **Branding images are attached files, not raw URLs.** This mirrors product media (see
 > [Vendor Product Upload Reference — Media Handling](./product-upload-flow.md#media-handling)):

@@ -4,12 +4,11 @@
 // filtering and pagination, lets the user upload (button OR drag-and-drop from the
 // OS), and returns the chosen `ApiFile[]` to the caller.
 //
-// Responsive: a centered Dialog on desktop, a bottom Sheet on mobile. The filter
-// panel is a left drawer on desktop and a bottom sheet on mobile.
+// Responsive: a centered Dialog on desktop, a bottom Sheet on mobile. Filters
+// live in the shared bottom-sheet used by every list surface in the dashboard.
 
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import {
-  Search,
   Check,
   Image as ImageIcon,
   Video,
@@ -20,7 +19,6 @@ import {
   Grid3X3,
   List,
   Loader2,
-  SlidersHorizontal,
   ChevronLeft,
   ChevronRight,
   AlertCircle,
@@ -29,7 +27,6 @@ import {
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import {
   Dialog,
@@ -42,16 +39,15 @@ import {
   SheetContent,
   SheetHeader,
   SheetTitle,
-  SheetFooter,
 } from '@/components/ui/sheet';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  FilterChips,
+  FilterField,
+  FilterSection,
+  FilterSheet,
+  SearchFilterBar,
+} from '@/components/filters';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Progress } from '@/components/ui/progress';
 import { cn, formatFileSize } from '@/lib/utils';
@@ -392,28 +388,19 @@ export function MediaPicker({
   // returns. Out-of-type files are blocked at selection time, not hidden here.
   const visibleFiles = files;
 
-  const hasActiveFilters =
-    !!search ||
-    filters.category !== 'all' ||
-    !!filters.minMB ||
-    !!filters.maxMB ||
-    !!filters.createdAfter ||
-    !!filters.createdBefore;
+  // Search has its own box, so it isn't counted on the filter button's badge.
+  const activeFilterCount =
+    (filters.category !== 'all' ? 1 : 0) +
+    (filters.minMB || filters.maxMB ? 1 : 0) +
+    (filters.createdAfter || filters.createdBefore ? 1 : 0) +
+    (filters.sort !== DEFAULT_FILTERS.sort ? 1 : 0);
+
+  const hasActiveFilters = !!search || activeFilterCount > 0;
 
   // ─── Pieces ──────────────────────────────────────────────────────────────────
 
   const toolbar = (
-    <div className="flex flex-col gap-3 border-b px-4 py-3 sm:px-6 sm:flex-row sm:items-center">
-      <div className="relative flex-1">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          placeholder="Search files…"
-          value={searchInput}
-          onChange={(e) => setSearchInput(e.target.value)}
-          className="h-9 pl-10"
-        />
-      </div>
-
+    <div className="border-b px-4 py-3 sm:px-6">
       <input
         ref={fileInputRef}
         type="file"
@@ -421,38 +408,37 @@ export function MediaPicker({
         className="hidden"
         onChange={(e) => e.target.files && handleUpload(e.target.files)}
       />
-      <div className="flex items-center gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setFiltersOpen(true)}
-          className="gap-2"
-        >
-          <SlidersHorizontal className="h-4 w-4" />
-          Filters
-          {hasActiveFilters && <span className="h-1.5 w-1.5 rounded-full bg-primary" />}
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => fileInputRef.current?.click()}
-          disabled={uploading}
-          className="gap-2"
-        >
-          {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-          Upload
-        </Button>
-        <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as 'grid' | 'list')}>
-          <TabsList className="h-9">
-            <TabsTrigger value="grid" className="px-2">
-              <Grid3X3 className="h-4 w-4" />
-            </TabsTrigger>
-            <TabsTrigger value="list" className="px-2">
-              <List className="h-4 w-4" />
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
-      </div>
+      <SearchFilterBar
+        value={searchInput}
+        onChange={setSearchInput}
+        placeholder="Search files…"
+        activeFilterCount={activeFilterCount}
+        onOpenFilters={() => setFiltersOpen(true)}
+        filterLabel="Filter files"
+        trailing={
+          <>
+            <Button
+              variant="outline"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              className="h-11 shrink-0 gap-2 rounded-xl"
+            >
+              {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+              <span className="hidden sm:inline">Upload</span>
+            </Button>
+            <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as 'grid' | 'list')}>
+              <TabsList className="h-11 rounded-xl">
+                <TabsTrigger value="grid" className="px-2" aria-label="Grid view">
+                  <Grid3X3 className="h-4 w-4" />
+                </TabsTrigger>
+                <TabsTrigger value="list" className="px-2" aria-label="List view">
+                  <List className="h-4 w-4" />
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </>
+        }
+      />
     </div>
   );
 
@@ -684,13 +670,17 @@ export function MediaPicker({
     </div>
   );
 
-  const filterPanel = (
-    <MediaPickerFilters
-      filters={filters}
-      onChange={setFilters}
-      onReset={() => setFilters(DEFAULT_FILTERS)}
-      onClose={() => setFiltersOpen(false)}
-    />
+  const filterSheet = (
+    <FilterSheet
+      open={filtersOpen}
+      onOpenChange={setFiltersOpen}
+      title="Filter files"
+      activeCount={activeFilterCount}
+      onClear={() => setFilters(DEFAULT_FILTERS)}
+      applyLabel="Show files"
+    >
+      <MediaPickerFilters filters={filters} onChange={setFilters} />
+    </FilterSheet>
   );
 
   return (
@@ -720,21 +710,7 @@ export function MediaPicker({
         </Dialog>
       )}
 
-      {/* Filter drawer: left on desktop, bottom sheet on mobile */}
-      <Sheet open={filtersOpen} onOpenChange={setFiltersOpen}>
-        <SheetContent
-          side={isMobile ? 'bottom' : 'left'}
-          className={cn(
-            'flex flex-col gap-0 p-0',
-            isMobile ? 'h-[80vh] rounded-t-2xl' : 'w-[340px] sm:max-w-[340px]',
-          )}
-        >
-          <SheetHeader className="border-b px-5 py-4 text-left">
-            <SheetTitle>Filters</SheetTitle>
-          </SheetHeader>
-          {filterPanel}
-        </SheetContent>
-      </Sheet>
+      {filterSheet}
     </>
   );
 }
@@ -744,113 +720,82 @@ export function MediaPicker({
 function MediaPickerFilters({
   filters,
   onChange,
-  onReset,
-  onClose,
 }: {
   filters: FilterState;
   onChange: (f: FilterState) => void;
-  onReset: () => void;
-  onClose: () => void;
 }) {
   const set = <K extends keyof FilterState>(key: K, value: FilterState[K]) =>
     onChange({ ...filters, [key]: value });
 
   return (
     <>
-      <div className="flex-1 space-y-5 overflow-auto px-5 py-4">
-        <div className="space-y-1.5">
-          <Label className="text-xs">File type</Label>
-          <Select
-            value={filters.category}
-            onValueChange={(v) => set('category', v as MediaCategory | 'all')}
-          >
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All types</SelectItem>
-              {ALL_KINDS.map((k) => (
-                <SelectItem key={k} value={k}>
-                  {KIND_LABELS[k]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+      <FilterSection title="File type">
+        <FilterChips
+          options={ALL_KINDS.map((k) => ({ value: k, label: KIND_LABELS[k] }))}
+          value={filters.category === 'all' ? undefined : (filters.category as FileKind)}
+          onChange={(v) => set('category', (v ?? 'all') as MediaCategory | 'all')}
+          allLabel="All types"
+        />
+      </FilterSection>
 
-        <div className="space-y-1.5">
-          <Label className="text-xs">Size (MB)</Label>
-          <div className="flex items-center gap-2">
+      <FilterSection title="Size (MB)">
+        <div className="flex items-center gap-2">
+          <FilterField label="Min" htmlFor="picker-min-mb" className="flex-1">
             <Input
+              id="picker-min-mb"
               type="number"
               min={0}
-              placeholder="Min"
+              placeholder="0"
               value={filters.minMB}
               onChange={(e) => set('minMB', e.target.value)}
-              className="h-9"
+              className="h-11 rounded-xl"
             />
-            <span className="text-muted-foreground">–</span>
+          </FilterField>
+          <FilterField label="Max" htmlFor="picker-max-mb" className="flex-1">
             <Input
+              id="picker-max-mb"
               type="number"
               min={0}
-              placeholder="Max"
+              placeholder="Any"
               value={filters.maxMB}
               onChange={(e) => set('maxMB', e.target.value)}
-              className="h-9"
+              className="h-11 rounded-xl"
             />
-          </div>
+          </FilterField>
         </div>
+      </FilterSection>
 
-        <div className="space-y-1.5">
-          <Label className="text-xs">Uploaded</Label>
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <span className="text-[11px] text-muted-foreground">After</span>
-              <Input
-                type="date"
-                value={filters.createdAfter}
-                onChange={(e) => set('createdAfter', e.target.value)}
-                className="h-9"
-              />
-            </div>
-            <div>
-              <span className="text-[11px] text-muted-foreground">Before</span>
-              <Input
-                type="date"
-                value={filters.createdBefore}
-                onChange={(e) => set('createdBefore', e.target.value)}
-                className="h-9"
-              />
-            </div>
-          </div>
+      <FilterSection title="Uploaded">
+        <div className="grid grid-cols-2 gap-2">
+          <FilterField label="After" htmlFor="picker-after">
+            <Input
+              id="picker-after"
+              type="date"
+              value={filters.createdAfter}
+              onChange={(e) => set('createdAfter', e.target.value)}
+              className="h-11 rounded-xl"
+            />
+          </FilterField>
+          <FilterField label="Before" htmlFor="picker-before">
+            <Input
+              id="picker-before"
+              type="date"
+              value={filters.createdBefore}
+              onChange={(e) => set('createdBefore', e.target.value)}
+              className="h-11 rounded-xl"
+            />
+          </FilterField>
         </div>
+      </FilterSection>
 
-        <div className="space-y-1.5">
-          <Label className="text-xs">Sort by</Label>
-          <Select value={filters.sort} onValueChange={(v) => set('sort', v as SortValue)}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {SORT_OPTIONS.map((o) => (
-                <SelectItem key={o.value} value={o.value}>
-                  {o.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
-      <SheetFooter className="flex-row gap-2 border-t px-5 py-4">
-        <Button variant="outline" className="flex-1 gap-1.5" onClick={onReset}>
-          <X className="h-4 w-4" />
-          Reset
-        </Button>
-        <Button className="flex-1" onClick={onClose}>
-          Done
-        </Button>
-      </SheetFooter>
+      <FilterSection title="Sort by">
+        <FilterChips
+          options={SORT_OPTIONS}
+          value={filters.sort}
+          onChange={(v) => set('sort', (v ?? DEFAULT_FILTERS.sort) as SortValue)}
+          hideAll
+        />
+      </FilterSection>
     </>
   );
 }

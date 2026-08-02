@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import type {
   Product, Order,
   AnalyticsMetrics, MetricWithChange, SalesDataPoint, TopProduct,
@@ -65,11 +65,13 @@ function computeChange(current: number, previous: number | undefined): MetricWit
 }
 
 // UI Store Context
+type Theme = 'light' | 'dark' | 'system';
+
 interface UIState {
   sidebarCollapsed: boolean;
-  theme: 'light' | 'dark' | 'system';
+  theme: Theme;
   toggleSidebar: () => void;
-  setTheme: (theme: 'light' | 'dark' | 'system') => void;
+  setTheme: (theme: Theme) => void;
 }
 
 const UIStoreContext = createContext<UIState | null>(null);
@@ -160,11 +162,49 @@ const AnalyticsStoreContext = createContext<AnalyticsState | null>(null);
 // (src/pages/MediaGallery.tsx) and MediaPicker talk to the backend File
 // Management Service directly via src/services/files.service.ts.
 
+// Theme — persisted so a reload doesn't drop the vendor back into light mode.
+const THEME_KEY = 'vendor-dash:theme';
+
+function readStoredTheme(): Theme {
+  try {
+    const raw = localStorage.getItem(THEME_KEY);
+    if (raw === 'light' || raw === 'dark' || raw === 'system') return raw;
+  } catch {
+    // Private mode / storage disabled — fall through to the default.
+  }
+  return 'light';
+}
+
 // Provider Component
 export function StoreProvider({ children }: { children: React.ReactNode }) {
   // UI State
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [theme, setTheme] = useState<'light' | 'dark' | 'system'>('light');
+  const [theme, setTheme] = useState<Theme>(readStoredTheme);
+
+  // The `dark` class has to live on <html>, not on a wrapper div: `body` is
+  // styled with `text-foreground`/`bg-background`, so a class further down the
+  // tree leaves body resolving the light `:root` values and every element that
+  // merely inherits its colour (headings, sidebar rows) renders black-on-black.
+  useEffect(() => {
+    const root = document.documentElement;
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    const apply = () => {
+      const dark = theme === 'dark' || (theme === 'system' && media.matches);
+      root.classList.toggle('dark', dark);
+      // Keeps native UI (number-input spinners, scrollbars, date pickers,
+      // autofill) in step with the theme instead of rendering light-on-dark.
+      root.style.colorScheme = dark ? 'dark' : 'light';
+    };
+    apply();
+    try {
+      localStorage.setItem(THEME_KEY, theme);
+    } catch {
+      // Ignore — persistence is a nicety, the applied theme still holds.
+    }
+    if (theme !== 'system') return;
+    media.addEventListener('change', apply);
+    return () => media.removeEventListener('change', apply);
+  }, [theme]);
 
   const toggleSidebar = useCallback(() => {
     setSidebarCollapsed(prev => !prev);

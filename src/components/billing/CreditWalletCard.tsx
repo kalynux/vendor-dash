@@ -1,5 +1,5 @@
 import { Wallet, Plus, AlertTriangle } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { SettingsSection } from '@/components/vendor-settings/SettingsSection';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { CreditPack } from '@/types/billing.types';
@@ -16,17 +16,13 @@ export function CreditWalletCard({ balance, packs, onBuyPack }: CreditWalletCard
   // nudge the vendor to top back up (credit-spending actions are blocked server-side).
   const negative = balance < 0;
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Wallet className="h-5 w-5" /> Credit wallet
-        </CardTitle>
-        <CardDescription>
-          Credits pay for AI product indexing and WhatsApp messages. They never expire.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-5">
-        <div className={cn('rounded-lg border p-4', negative ? 'border-red-200 bg-red-50' : 'bg-muted/30')}>
+    <SettingsSection
+      title="Credit wallet"
+      icon={Wallet}
+      info="Credits pay for AI product indexing and for WhatsApp messages to customers. They never expire, and your plan tops them up each term. A refunded or disputed top-up claws its credits back, which can push the balance below zero."
+      contentClassName="space-y-5"
+    >
+        <div className={cn('rounded-lg p-0 sm:border sm:p-4', negative ? 'sm:border-red-200 sm:bg-red-50' : 'sm:bg-muted/30')}>
           <p className="text-xs text-muted-foreground">Current balance</p>
           <p className={cn('text-3xl font-bold', negative && 'text-red-600')}>{formatCredits(balance)}</p>
           <p className="text-xs text-muted-foreground">credits</p>
@@ -43,7 +39,7 @@ export function CreditWalletCard({ balance, packs, onBuyPack }: CreditWalletCard
 
         <div>
           <p className="mb-2 text-sm font-medium">Top up</p>
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-2 sm:grid-cols-2 sm:gap-3">
             {packs.map((pack) => (
               <div
                 key={pack.code}
@@ -63,7 +59,6 @@ export function CreditWalletCard({ balance, packs, onBuyPack }: CreditWalletCard
             )}
           </div>
         </div>
-      </CardContent>
-    </Card>
+    </SettingsSection>
   );
 }

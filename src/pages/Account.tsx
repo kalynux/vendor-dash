@@ -7,6 +7,7 @@ import { PayoutSetupSettings } from '@/components/vendor-settings/PayoutSetupSet
 import { EarningsSummaryCard } from '@/components/vendor-settings/EarningsSummaryCard';
 import { StorefrontSettings } from '@/components/vendor-settings/StorefrontSettings';
 import { BusinessAddressSettings } from '@/components/vendor-settings/BusinessAddressSettings';
+import { SettingsSections } from '@/components/vendor-settings/SettingsSection';
 
 const VALID_TABS = ['profile', 'store', 'addresses', 'security', 'billing', 'payout'] as const;
 const DEFAULT_TAB = 'profile';
@@ -54,9 +55,13 @@ export function Account() {
           <BillingTab />
         </TabsContent>
 
-        <TabsContent value="payout" className="space-y-6">
-          <EarningsSummaryCard />
-          <PayoutSetupSettings />
+        <TabsContent value="payout">
+          {/* One flow: on mobile Earnings and Payout Setup are separated by a
+              rule instead of each sitting in its own card. */}
+          <SettingsSections>
+            <EarningsSummaryCard />
+            <PayoutSetupSettings />
+          </SettingsSections>
         </TabsContent>
       </Tabs>
     </div>

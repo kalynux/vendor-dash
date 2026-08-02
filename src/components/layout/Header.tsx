@@ -69,8 +69,12 @@ export function Header() {
   const { store } = useStoreStore();
   const roleEntity = useOnboarding().session?.role_entity;
 
-  const storeName = roleEntity?.display_name || roleEntity?.business_name || 'My Store';
-  const storeLogo = roleEntity?.branding?.logo?.url || null;
+  // This is the *user* menu (it links to Profile), so it leads with the vendor's
+  // personal identity — `avatar` + `display_name`, both still on the profile. The
+  // business logo/name moved to the Store, which the Sidebar renders; they're the
+  // fallback here so the menu never goes blank on an account with no avatar set.
+  const storeName = roleEntity?.display_name || store?.name || 'My Store';
+  const storeLogo = roleEntity?.avatar?.url || store?.logo?.url || null;
   const storeEmail = roleEntity?.email ?? '';
 
   const toggleSearch = () => setIsSearchOpen((v) => !v);

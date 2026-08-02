@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect } from 'react';
 import { useForm, useFieldArray, useWatch, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Smartphone, Building2, Plus, Trash2, Star, Phone, User, Hash, Globe2 } from 'lucide-react';
@@ -122,7 +122,7 @@ function PayoutMethodCard({
 
     return (
         <div className={cn('rounded-xl border-2 overflow-hidden', isPreferred ? 'border-primary/25' : 'border-slate-200 dark:border-zinc-700')}>
-            <div className={cn('flex items-center justify-between px-4 py-2.5', isPreferred ? 'bg-primary/5 dark:bg-primary/10' : 'bg-slate-100/60 dark:bg-zinc-800')}>
+            <div className={cn('flex items-center justify-between px-3 py-2.5 sm:px-4', isPreferred ? 'bg-primary/5 dark:bg-primary/10' : 'bg-slate-100/60 dark:bg-zinc-800')}>
                 <div className="flex items-center gap-2">
                     <Star className={cn('w-3.5 h-3.5', isPreferred ? 'text-primary fill-primary' : 'text-slate-300')} />
                     <span className={cn('text-xs font-semibold', isPreferred ? 'text-primary' : 'text-slate-500')}>
@@ -136,7 +136,7 @@ function PayoutMethodCard({
                 )}
             </div>
 
-            <div className="p-4 bg-white dark:bg-zinc-900 space-y-4">
+            <div className="p-3 sm:p-4 bg-white dark:bg-zinc-900 space-y-4">
                 <div className="space-y-1.5">
                     <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Payment Method</p>
                     <div className="flex gap-2">
@@ -227,20 +227,40 @@ export interface BasicSetupFieldsProps {
      * `defaultValues` so the schema stays satisfied.
      */
     showRegion?: boolean;
+    /**
+     * Render the "Payout Methods" sub-heading. Off in Settings, where the
+     * surrounding section is already titled — repeating it just costs a line.
+     */
+    showMethodsHeading?: boolean;
+    /** Reports whether the form differs from its initial values (drives a floating save bar). */
+    onDirtyChange?: (dirty: boolean) => void;
 }
 
-export function BasicSetupFields({ formId, defaultValues, onSubmit, showRegion = true }: BasicSetupFieldsProps) {
+export function BasicSetupFields({
+    formId,
+    defaultValues,
+    onSubmit,
+    showRegion = true,
+    showMethodsHeading = true,
+    onDirtyChange,
+}: BasicSetupFieldsProps) {
     const {
         register,
         handleSubmit,
         control,
         setValue,
         watch,
-        formState: { errors },
+        formState: { errors, isDirty },
     } = useForm<Step1FormValues>({
         resolver: zodResolver(step1Schema),
         defaultValues,
     });
+
+    // Reported up so the parent can show a single floating save bar. The parent
+    // remounts this component (via `key`) after a save or discard to reset it.
+    useEffect(() => {
+        onDirtyChange?.(isDirty);
+    }, [isDirty, onDirtyChange]);
 
     const { fields, append, remove } = useFieldArray({ control, name: 'payout_details' });
 
@@ -292,15 +312,17 @@ export function BasicSetupFields({ formId, defaultValues, onSubmit, showRegion =
             )}
 
             {/* Payout methods array */}
-            <div className="space-y-4 border-t pt-4">
-                <div className="flex items-center justify-between">
-                    <div>
-                        <h2 className="font-semibold text-sm">Payout Methods</h2>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                            The first method is used by default. Add up to 3.
-                        </p>
+            <div className={cn('space-y-4', showMethodsHeading && 'border-t pt-4')}>
+                {showMethodsHeading && (
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <h2 className="font-semibold text-sm">Payout Methods</h2>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                                The first method is used by default. Add up to 3.
+                            </p>
+                        </div>
                     </div>
-                </div>
+                )}
 
                 {errors.payout_details && !Array.isArray(errors.payout_details) && (
                     <p className="text-sm text-destructive" role="alert">

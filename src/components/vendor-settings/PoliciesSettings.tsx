@@ -9,7 +9,7 @@ import {
 } from '@/components/vendor-settings/forms/policies.helpers';
 import { mapProfileError } from '@/components/vendor-settings/errors';
 import { UnsavedChangesBar } from '@/components/vendor-settings/UnsavedChangesBar';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { SettingsSection } from '@/components/vendor-settings/SettingsSection';
 
 const FORM_ID = 'settings-policies-form';
 
@@ -70,14 +70,23 @@ export function PoliciesSettings() {
 
     return (
         <>
-            <Card>
-                <CardHeader>
-                    <CardTitle>Policies</CardTitle>
-                    <CardDescription>
-                        Your return, cancellation, and support policies. Toggle a section off to remove it.
-                    </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
+            <SettingsSection
+                title="Policies"
+                info={
+                    <div className="space-y-2">
+                        <p>
+                            The rules customers see on your storefront and that support falls back on
+                            when there&apos;s a dispute. Every field below has its own info icon
+                            explaining what it changes.
+                        </p>
+                        <p>
+                            Switching a whole policy off deletes it — your store then shows no policy
+                            for that area, which customers read as &ldquo;not offered&rdquo;.
+                        </p>
+                    </div>
+                }
+                contentClassName="space-y-6"
+            >
                     {error && (
                         <div
                             role="alert"
@@ -95,8 +104,7 @@ export function PoliciesSettings() {
                         onSubmit={onSubmit}
                         onDirtyChange={onDirtyChange}
                     />
-                </CardContent>
-            </Card>
+            </SettingsSection>
 
             <UnsavedChangesBar
                 visible={dirty || saving}

@@ -3,10 +3,10 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Loader2 } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { SettingsSection } from '@/components/vendor-settings/SettingsSection';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { LabelWithHint } from '@/components/ui/info-hint';
 import { toast } from 'sonner';
 import { fetchBillingSettings, updateBillingSettings } from '@/services/billing.service';
 import { ApiError } from '@/types/api';
@@ -67,20 +67,22 @@ export function BillingSettingsCard() {
   if (loading) return <CardSkeleton lines={2} />;
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Expiry reminders</CardTitle>
-        <CardDescription>
-          How many days before your plan expires should we warn you?
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
+    <SettingsSection
+      title="Expiry reminders"
+      info={`How far ahead of your plan's expiry date we warn you, so a lapse never catches you off guard. Set it to 7 and a plan ending on the 30th triggers a reminder on the 23rd. Between ${NOTIFY_DAYS_MIN} and ${NOTIFY_DAYS_MAX} days.`}
+    >
         {loadError ? (
           <p className="text-sm text-destructive">{loadError}</p>
         ) : (
           <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-3 sm:flex-row sm:items-end">
             <div className="space-y-1.5 sm:max-w-[200px]">
-              <Label htmlFor="notify-days">Days before expiry</Label>
+              <LabelWithHint
+                htmlFor="notify-days"
+                hintLabel="About the reminder window"
+                hint={`Days of notice before the plan expires. Between ${NOTIFY_DAYS_MIN} and ${NOTIFY_DAYS_MAX}.`}
+              >
+                Days before expiry
+              </LabelWithHint>
               <Input
                 id="notify-days"
                 type="number"
@@ -99,7 +101,6 @@ export function BillingSettingsCard() {
             </Button>
           </form>
         )}
-      </CardContent>
-    </Card>
+    </SettingsSection>
   );
 }

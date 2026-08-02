@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm, useFieldArray, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Plus, Trash2, Image as ImageIcon, MapPin } from 'lucide-react';
@@ -11,6 +11,7 @@ import type { GeoAddressCandidate } from '@/types/geo.types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { LabelWithHint } from '@/components/ui/info-hint';
 import {
     AlertDialog,
     AlertDialogAction,
@@ -36,6 +37,12 @@ export interface BrandingFieldsProps {
     showBranding?: boolean;
     /** Render the business-addresses block. Default true (onboarding shows both). */
     showAddresses?: boolean;
+    /**
+     * Render the "Business Addresses" sub-heading. Off in Settings, where the
+     * surrounding section already carries that title — the "Add address" button
+     * stays either way.
+     */
+    showAddressesHeading?: boolean;
     /** ISO-2 country to bias address search (e.g. the vendor's country). */
     addressCountryBias?: string | null;
     /** Currently-persisted preview urls for the logo/cover (from `branding.logo?.url` / `coverImage?.url`). */
@@ -44,6 +51,8 @@ export interface BrandingFieldsProps {
     /** Fires whenever the vendor uploads/removes a branding image, with the full
      *  uploaded file — the caller uses this to build an optimistic `Branding` object. */
     onBrandingFileChange?: (which: 'logo' | 'cover', file: ApiFile | null) => void;
+    /** Reports whether the form differs from its initial values (drives a floating save bar). */
+    onDirtyChange?: (dirty: boolean) => void;
 }
 
 export function BrandingFields({
@@ -52,10 +61,12 @@ export function BrandingFields({
     onSubmit,
     showBranding = true,
     showAddresses = true,
+    showAddressesHeading = true,
     addressCountryBias = null,
     logoPreviewUrl = null,
     coverPreviewUrl = null,
     onBrandingFileChange,
+    onDirtyChange,
 }: BrandingFieldsProps) {
     const {
         register,
@@ -65,11 +76,17 @@ export function BrandingFields({
         setError,
         clearErrors,
         watch,
-        formState: { errors },
+        formState: { errors, isDirty },
     } = useForm<Step3FormValues>({
         resolver: zodResolver(step3Schema),
         defaultValues,
     });
+
+    // Reported up so the parent can show a single floating save bar. The parent
+    // remounts this component (via `key`) after a save or discard to reset it.
+    useEffect(() => {
+        onDirtyChange?.(isDirty);
+    }, [isDirty, onDirtyChange]);
 
     const { fields, append, remove } = useFieldArray({
         control,
@@ -200,8 +217,8 @@ export function BrandingFields({
             {/* Business addresses */}
             {showAddresses && (
             <div className={cn('space-y-4', showBranding && 'border-t pt-4')}>
-                <div className="flex items-center justify-between">
-                    <h2 className="font-semibold text-sm">Business Addresses</h2>
+                <div className={cn('flex items-center', showAddressesHeading ? 'justify-between' : 'justify-end')}>
+                    {showAddressesHeading && <h2 className="font-semibold text-sm">Business Addresses</h2>}
                     <Button
                         type="button"
                         variant="outline"
@@ -225,7 +242,7 @@ export function BrandingFields({
                         {fields.map((field, index) => (
                             <div
                                 key={field.id}
-                                className="rounded-lg border p-4 space-y-3 relative"
+                                className="rounded-lg border p-3 sm:p-4 space-y-3 relative"
                             >
                                 <button
                                     type="button"
@@ -238,7 +255,12 @@ export function BrandingFields({
 
                                 {/* Address search — fills the fields below and captures geo coordinates */}
                                 <div className="space-y-1.5 pr-6">
-                                    <Label>Find address</Label>
+                                    <LabelWithHint
+                                        hintLabel="About finding an address"
+                                        hint="Type a street, area, or city and pick a result — that pins the exact coordinates we hand to delivery agencies. The fields below are filled in for you and stay editable, but editing them without re-picking a result will block the save."
+                                    >
+                                        Find address
+                                    </LabelWithHint>
                                     <AddressSearch
                                         countryBias={addressCountryBias}
                                         placeholder="Search a street, area, or city…"
@@ -253,17 +275,20 @@ export function BrandingFields({
                                             <MapPin className="w-3 h-3" /> Location pinned on map
                                         </p>
                                     ) : (
-                                        <p className="text-xs text-muted-foreground">
-                                            Search to pin the exact location, required before saving.
-                                        </p>
+                                        <p className="text-xs text-muted-foreground">Not pinned yet.</p>
                                     )}
                                 </div>
 
                                 {/* Label — required by backend */}
                                 <div className="space-y-2">
-                                    <Label htmlFor={`addr-label-${index}`}>
-                                        Label <span className="text-destructive">*</span>
-                                    </Label>
+                                    <LabelWithHint
+                                        htmlFor={`addr-label-${index}`}
+                                        required
+                                        hintLabel="About the address label"
+                                        hint="Your own name for this location, e.g. “Main Shop” or “Warehouse”. It's how you pick a pickup point when publishing a product."
+                                    >
+                                        Label
+                                    </LabelWithHint>
                                     <Input
                                         id={`addr-label-${index}`}
                                         placeholder="e.g. Main Shop, Warehouse"

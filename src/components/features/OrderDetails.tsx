@@ -49,6 +49,7 @@ import { DeliveryRejectionNotice } from '@/components/orders/DeliveryRejectionNo
 import { ReassignAgencyPopover } from '@/components/orders/ReassignAgencyPopover';
 import { ApiError } from '@/types/api';
 import { toast } from 'sonner';
+import { formatMoney } from '@/components/customers/customer.constants';
 import type { Order, Entitlement, OrderTimelineEvent, VendorSettableStatus } from '@/types';
 import { getNextStatuses, STATUS_LABELS, canDispatchOrder } from '@/lib/orderStatus';
 
@@ -118,11 +119,10 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
   const nextStatuses = frozen ? [] : getNextStatuses(currentOrder.status);
   const canDispatch = canDispatchOrder(currentOrder);
 
-  const formatCurrency = (value: number) =>
-    new Intl.NumberFormat('en-US', { style: 'currency', currency: currentOrder.currency || 'USD' }).format(value);
+  const formatCurrency = (value: number) => formatMoney(value, currentOrder.currency);
 
   const formatDate = (dateStr: string) =>
-    new Date(dateStr).toLocaleString('en-US', {
+    new Date(dateStr).toLocaleString(undefined, {
       month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit',
     });
 

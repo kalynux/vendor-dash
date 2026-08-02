@@ -54,6 +54,7 @@ import { addNote, revokeEntitlement, restoreEntitlement, fetchNote, dispatchOrde
 import { getNextStatuses, STATUS_LABELS, canDispatchOrder } from '@/lib/orderStatus';
 import { ApiError } from '@/types/api';
 import { toast } from 'sonner';
+import { formatMoney } from '@/components/customers/customer.constants';
 import type { Order, Entitlement, OrderTimelineEvent, VendorSettableStatus } from '@/types';
 
 const REASSIGNABLE_DELIVERY_STATUSES = ['pending', 'assigned', 'pending_agency_reassignment'];
@@ -77,15 +78,48 @@ const timelineIcons: Record<string, React.ElementType> = {
   'entitlement.restored': RotateCcw,
 };
 
-function formatCurrency(value: number, currency = 'USD') {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(value);
+function formatCurrency(value: number, currency = 'XAF') {
+  return formatMoney(value, currency);
 }
 
 function formatDate(dateStr: string) {
-  return new Date(dateStr).toLocaleString('en-US', {
+  return new Date(dateStr).toLocaleString(undefined, {
     month: 'short', day: 'numeric', year: 'numeric',
     hour: 'numeric', minute: '2-digit',
   });
+}
+
+/**
+ * One block of sheet content. Runs edge-to-edge and is separated from its
+ * neighbours by a hairline rather than being boxed in its own bordered card —
+ * on a phone the nested card padding stole ~48px of width from every row.
+ */
+function Section({
+  title,
+  icon: Icon,
+  action,
+  children,
+}: {
+  title?: string;
+  icon?: React.ElementType;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="border-b px-4 py-4 last:border-b-0">
+      {(title || action) && (
+        <div className="flex items-center justify-between gap-2 mb-3">
+          {title && (
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+              {Icon && <Icon className="w-3.5 h-3.5" />} {title}
+            </p>
+          )}
+          {action}
+        </div>
+      )}
+      {children}
+    </section>
+  );
 }
 
 interface Props {
@@ -374,20 +408,19 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
               >
                 {/* ── Details ── */}
                 {activeTab === 'details' && (
-                  <div className="p-4 space-y-4">
-                    {/* Customer card */}
-                    <div className="bg-card rounded-xl border p-4">
-                      <div className="flex items-center justify-between mb-3">
-                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
-                          <User className="w-3.5 h-3.5" /> Customer
-                        </p>
+                  <div>
+                    <Section
+                      title="Customer"
+                      icon={User}
+                      action={
                         <button
                           onClick={() => setCustomerSheetOpen(true)}
-                          className="w-7 h-7 rounded-full bg-muted flex items-center justify-center hover:bg-accent transition-colors"
+                          className="w-7 h-7 rounded-full bg-muted flex items-center justify-center hover:bg-accent transition-colors flex-shrink-0"
                         >
                           <Info className="w-3.5 h-3.5 text-muted-foreground" />
                         </button>
-                      </div>
+                      }
+                    >
                       <div className="flex items-center gap-3">
                         <img
                           src={customer.avatar || `https://i.pravatar.cc/150?u=${customer.id}`}
@@ -402,14 +435,11 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                           )}
                         </div>
                       </div>
-                    </div>
+                    </Section>
 
                     {/* Shipping / Delivery method */}
                     {isDigital ? (
-                      <div className="bg-card rounded-xl border p-4">
-                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3 flex items-center gap-1.5">
-                          <Download className="w-3.5 h-3.5" /> Delivery Method
-                        </p>
+                      <Section title="Delivery Method" icon={Download}>
                         <div className="flex items-center gap-3 p-3 rounded-lg bg-violet-50 border border-violet-200">
                           <div className="w-8 h-8 rounded-full bg-violet-100 flex items-center justify-center flex-shrink-0">
                             <Download className="w-3.5 h-3.5 text-violet-700" />
@@ -419,12 +449,9 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                             <p className="text-xs text-violet-700">Download links sent to customer's email</p>
                           </div>
                         </div>
-                      </div>
+                      </Section>
                     ) : (
-                      <div className="bg-card rounded-xl border p-4">
-                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3 flex items-center gap-1.5">
-                          <MapPin className="w-3.5 h-3.5" /> Shipping Address
-                        </p>
+                      <Section title="Shipping Address" icon={MapPin}>
                         {customer.defaultAddress ? (
                           <div className="text-sm space-y-0.5">
                             <p className="font-medium">
@@ -437,16 +464,15 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                         ) : (
                           <p className="text-sm text-muted-foreground">No address on file</p>
                         )}
-                      </div>
+                      </Section>
                     )}
 
                     {/* Shipments (physical, multi-agency) */}
                     {isPhysical && order.deliveries && order.deliveries.length > 0 && (
-                      <div className="bg-card rounded-xl border p-4">
-                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3 flex items-center gap-1.5">
-                          <Truck className="w-3.5 h-3.5" />
-                          Shipments {order.deliveries.length > 1 && `(${order.deliveries.length} agencies)`}
-                        </p>
+                      <Section
+                        title={`Shipments${order.deliveries.length > 1 ? ` (${order.deliveries.length} agencies)` : ''}`}
+                        icon={Truck}
+                      >
                         {order.deliveries.map((shipment, i) => (
                           <div key={shipment.shipmentId ?? i} className={cn(i > 0 && 'pt-2 border-t mt-2')}>
                             <p className="text-xs text-muted-foreground">Agency</p>
@@ -463,14 +489,10 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                             )}
                           </div>
                         ))}
-                      </div>
+                      </Section>
                     )}
 
-                    {/* Order summary */}
-                    <div className="bg-card rounded-xl border p-4">
-                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-                        Order Summary
-                      </p>
+                    <Section title="Order Summary">
                       <div className="space-y-2 text-sm">
                         <div className="flex justify-between">
                           <span className="text-muted-foreground">Subtotal</span>
@@ -497,16 +519,16 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                           <span className="font-bold text-base">{formatCurrency(order.total, order.currency)}</span>
                         </div>
                       </div>
-                    </div>
+                    </Section>
                     <div className="h-4" />
                   </div>
                 )}
 
                 {/* ── Items ── */}
                 {activeTab === 'items' && (
-                  <div className="p-4 space-y-3">
+                  <div>
                     {order.items.map((item) => (
-                      <div key={item.id} className="bg-card rounded-xl border p-3 space-y-2">
+                      <div key={item.id} className="border-b px-4 py-3 space-y-2">
                         <div className="flex items-center gap-3">
                           {item.image && (
                             <img src={item.image} alt={item.name} className="w-14 h-14 rounded-lg object-cover flex-shrink-0" />
@@ -663,11 +685,8 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
 
                 {/* ── Payment ── */}
                 {activeTab === 'payment' && (
-                  <div className="p-4 space-y-4">
-                    <div className="bg-card rounded-xl border p-4">
-                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3 flex items-center gap-1.5">
-                        <CreditCard className="w-3.5 h-3.5" /> Payment Information
-                      </p>
+                  <div>
+                    <Section title="Payment Information" icon={CreditCard}>
                       <div className="grid grid-cols-2 gap-4">
                         <div>
                           <p className="text-xs text-muted-foreground mb-1">Status</p>
@@ -701,15 +720,15 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                           </p>
                         </div>
                       )}
-                    </div>
+                    </Section>
                     <div className="h-4" />
                   </div>
                 )}
 
                 {/* ── Entitlements (digital only) ── */}
                 {activeTab === 'entitlements' && hasEntitlements && (
-                  <div className="p-4 space-y-3">
-                    <div className="flex items-start gap-2 p-3 rounded-lg bg-violet-50 border border-violet-200 text-xs text-violet-800">
+                  <div>
+                    <div className="flex items-start gap-2 border-b bg-violet-50 px-4 py-3 text-xs text-violet-800">
                       <Shield className="w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-violet-600" />
                       <p>Manage customer access to digital products. Revoke or restore entitlements as needed.</p>
                     </div>
@@ -720,7 +739,7 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                         : Math.min(100, Math.round((entitlement.downloadsUsed / maxDl) * 100));
 
                       return (
-                        <div key={entitlement.id} className="bg-card rounded-xl border p-4 space-y-3">
+                        <div key={entitlement.id} className="border-b px-4 py-4 space-y-3">
                           {/* Top row */}
                           <div className="flex items-start justify-between gap-2">
                             <div className="flex items-center gap-2.5 min-w-0">
@@ -863,66 +882,65 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
               <h3 className="text-base font-bold">Customer Info</h3>
             </div>
             <div className="overflow-y-auto max-h-[70vh]">
-              <div className="p-4 space-y-4">
-                <div className="flex items-center gap-3">
-                  <img
-                    src={customer.avatar || `https://i.pravatar.cc/150?u=${customer.id}`}
-                    alt={customer.name}
-                    className="w-14 h-14 rounded-full object-cover flex-shrink-0 border"
-                  />
-                  <div>
-                    <p className="font-semibold text-base">{customer.name}</p>
-                    <p className="text-sm text-muted-foreground">{customer.email}</p>
-                  </div>
+              <div className="flex items-center gap-3 border-b px-4 py-4">
+                <img
+                  src={customer.avatar || `https://i.pravatar.cc/150?u=${customer.id}`}
+                  alt={customer.name}
+                  className="w-14 h-14 rounded-full object-cover flex-shrink-0 border"
+                />
+                <div className="min-w-0">
+                  <p className="font-semibold text-base truncate">{customer.name}</p>
+                  <p className="text-sm text-muted-foreground truncate">{customer.email}</p>
                 </div>
+              </div>
 
-                <div className="bg-card rounded-xl border divide-y">
-                  {customer.phone && (
-                    <div className="flex items-center gap-3 px-4 py-3">
-                      <Phone className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                      <div>
-                        <p className="text-xs text-muted-foreground">Phone</p>
-                        <p className="text-sm font-medium">{customer.phone}</p>
-                      </div>
-                    </div>
-                  )}
+              <div className="divide-y border-b">
+                {customer.phone && (
                   <div className="flex items-center gap-3 px-4 py-3">
-                    <Mail className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                    <Phone className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                     <div>
-                      <p className="text-xs text-muted-foreground">Email</p>
-                      <p className="text-sm font-medium">{customer.email}</p>
+                      <p className="text-xs text-muted-foreground">Phone</p>
+                      <p className="text-sm font-medium">{customer.phone}</p>
                     </div>
                   </div>
-                  {customer.defaultAddress && (
-                    <div className="flex items-start gap-3 px-4 py-3">
-                      <MapPin className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
-                      <div>
-                        <p className="text-xs text-muted-foreground">Address</p>
-                        <p className="text-sm font-medium">
-                          {customer.defaultAddress.address1}, {customer.defaultAddress.city},{' '}
-                          {customer.defaultAddress.province}
-                        </p>
-                      </div>
+                )}
+                <div className="flex items-center gap-3 px-4 py-3">
+                  <Mail className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-xs text-muted-foreground">Email</p>
+                    <p className="text-sm font-medium truncate">{customer.email}</p>
+                  </div>
+                </div>
+                {customer.defaultAddress && (
+                  <div className="flex items-start gap-3 px-4 py-3">
+                    <MapPin className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-xs text-muted-foreground">Address</p>
+                      <p className="text-sm font-medium">
+                        {customer.defaultAddress.address1}, {customer.defaultAddress.city},{' '}
+                        {customer.defaultAddress.province}
+                      </p>
                     </div>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="bg-card rounded-xl border p-3 text-center">
-                    <p className="text-2xl font-bold">{customer.orderCount}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">Orders (this vendor)</p>
                   </div>
-                  <div className="bg-card rounded-xl border p-3 text-center">
-                    <p className="text-2xl font-bold">{formatCurrency(customer.totalSpent, order.currency)}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">Total Spent</p>
-                  </div>
-                </div>
+                )}
+              </div>
 
+              <div className="grid grid-cols-2 divide-x border-b">
+                <div className="px-4 py-3 text-center">
+                  <p className="text-2xl font-bold">{customer.orderCount}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Orders (this vendor)</p>
+                </div>
+                <div className="px-4 py-3 text-center">
+                  <p className="text-2xl font-bold">{formatCurrency(customer.totalSpent, order.currency)}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Total Spent</p>
+                </div>
+              </div>
+
+              <div className="px-4 py-4">
                 <Button className="w-full gap-2">
                   <UserPlus className="w-4 h-4" />
                   Add to Customers
                 </Button>
-                <div className="h-2" />
               </div>
             </div>
           </div>

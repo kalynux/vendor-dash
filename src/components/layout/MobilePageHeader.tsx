@@ -33,7 +33,7 @@ export function MobilePageHeader({
   const subheaderHidden = direction === 'down';
 
   return (
-    <div className={cn('sticky top-0 z-30 bg-background/95 backdrop-blur-sm border-b shadow-sm', className)}>
+    <div className={cn('sticky top-0 z-30 bg-background/95 backdrop-blur-sm border-b shadow-sm pt-safe', className)}>
       {/* Pinned title bar */}
       <div className="flex h-14 items-center gap-1 px-4">
         {onBack && (
@@ -41,7 +41,7 @@ export function MobilePageHeader({
             type="button"
             onClick={onBack}
             aria-label="Go back"
-            className="-ml-2 flex h-9 w-9 items-center justify-center rounded-full text-foreground hover:bg-accent transition-colors"
+            className="-ml-2 flex h-10 w-10 items-center justify-center rounded-full text-foreground hover:bg-accent transition-colors"
           >
             <ArrowLeft className="h-5 w-5" />
           </button>

@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { Building2, Check, Info, MapPin, ShieldCheck, Truck, Warehouse } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
+import { formatAgencyLocality } from '@/lib/agencyAddress';
 import { fileRefUrl } from '@/services/files.service';
 import type { VendorAgencyListItemDto } from '@/types/product.types';
 
@@ -59,7 +60,7 @@ export function AgencyCard({ agency, selected = false, onSelect, onInfo, rightSl
                 {hq && (
                     <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
                         <MapPin className="w-3 h-3 flex-shrink-0" />
-                        <span className="truncate">{hq.city}, {hq.region}</span>
+                        <span className="truncate">{formatAgencyLocality(hq)}</span>
                     </p>
                 )}
 
@@ -90,7 +91,11 @@ export function AgencyCard({ agency, selected = false, onSelect, onInfo, rightSl
                 selected ? 'border-primary bg-primary/5 shadow-sm' : 'border-border bg-card',
             )}
         >
-            <div className="flex items-stretch">
+            {/* Below `md` the actions drop to their own row under the body. Side-by-side
+                they need ~150px of fixed width ("Approve"+"Reject", "Set as default"),
+                which a phone-width card can't spare — they used to be pushed out of the
+                card and clipped, taking the info button with them. */}
+            <div className="flex flex-col md:flex-row md:items-stretch">
                 {onSelect ? (
                     <button
                         type="button"
@@ -104,21 +109,25 @@ export function AgencyCard({ agency, selected = false, onSelect, onInfo, rightSl
                     <div className="flex-1 p-4 min-w-0">{body}</div>
                 )}
 
-                {rightSlot && (
-                    <div className="flex items-center justify-center gap-1.5 px-3 flex-shrink-0 border-l border-border/60">
-                        {rightSlot}
-                    </div>
-                )}
+                {(rightSlot || onInfo) && (
+                    <div className="flex flex-wrap items-center justify-end gap-1.5 flex-shrink-0 border-t border-border/60 px-4 py-2.5 md:flex-nowrap md:items-stretch md:gap-0 md:border-t-0 md:px-0 md:py-0">
+                        {rightSlot && (
+                            <div className="flex items-center justify-center gap-1.5 md:border-l md:border-border/60 md:px-3">
+                                {rightSlot}
+                            </div>
+                        )}
 
-                {onInfo && (
-                    <button
-                        type="button"
-                        onClick={onInfo}
-                        aria-label={`View details for ${agency.agencyName}`}
-                        className="flex items-center justify-center w-12 flex-shrink-0 border-l border-border/60 text-muted-foreground hover:text-foreground hover:bg-accent/20 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-                    >
-                        <Info className="w-4 h-4" />
-                    </button>
+                        {onInfo && (
+                            <button
+                                type="button"
+                                onClick={onInfo}
+                                aria-label={`View details for ${agency.agencyName}`}
+                                className="flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/20 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring md:h-auto md:w-12 md:rounded-none md:border-l md:border-border/60"
+                            >
+                                <Info className="w-4 h-4" />
+                            </button>
+                        )}
+                    </div>
                 )}
             </div>
         </div>

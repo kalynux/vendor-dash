@@ -1,4 +1,5 @@
 import { useAnalyticsStore } from '@/store';
+import { formatMoney } from '@/components/customers/customer.constants';
 import {
   Area,
   AreaChart,
@@ -12,18 +13,12 @@ import {
 export function SalesChart() {
   const { salesData } = useAnalyticsStore();
 
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(value);
-  };
+  // Platform-default (XAF) via the shared, currency-aware formatter.
+  const formatCurrency = (value: number) => formatMoney(value);
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
   };
 
   return (
@@ -51,7 +46,7 @@ export function SalesChart() {
           />
           <YAxis
             yAxisId="left"
-            tickFormatter={(value) => `$${value / 1000}k`}
+            tickFormatter={(value) => `${Math.round(value / 1000)}k`}
             stroke="hsl(var(--muted-foreground))"
             fontSize={12}
             tickLine={false}

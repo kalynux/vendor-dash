@@ -35,9 +35,14 @@ function buildQueryString(params: Record<string, unknown>): string {
   );
 }
 
-// Public origin for files that arrive without a populated `url`. Local storage
-// serves at `<origin>/uploads/<key>`; override via VITE_FILE_BASE_URL when the
+// Public origin for files that arrive without a populated `url`. The local
+// provider serves at `<api>/files/<key>`; override via VITE_FILE_BASE_URL when the
 // storage host differs from the API host.
+//
+// `key` is an opaque storage path — never parse or build one. Uploads are routed
+// by detected media type (`images/`, `videos/`, `audio/`, `documents/`,
+// `archives/`, `other/`), and files predating that routing keep their original
+// `products/…` keys; both resolve identically through here.
 const FILE_PUBLIC_BASE: string =
   (import.meta.env.VITE_FILE_BASE_URL as string | undefined) ??
   `${BASE_URL.replace(/\/$/, '')}/files`;

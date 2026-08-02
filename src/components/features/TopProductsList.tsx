@@ -1,18 +1,14 @@
 import { Package } from 'lucide-react';
 import type { TopProduct } from '@/types';
+import { formatMoney } from '@/components/customers/customer.constants';
 
 interface TopProductsListProps {
   products: TopProduct[];
   isLoading?: boolean;
 }
 
-const formatCurrency = (value: number) =>
-  new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(value);
+// Top-product revenue carries no per-currency field; platform default (XAF).
+const formatCurrency = (value: number) => formatMoney(value);
 
 export function TopProductsList({ products, isLoading }: TopProductsListProps) {
   if (isLoading) {

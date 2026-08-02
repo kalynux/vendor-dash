@@ -1,8 +1,6 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
-  Search,
-  Filter,
   MoreHorizontal,
   ChevronLeft,
   ChevronRight,
@@ -16,14 +14,13 @@ import {
   AlertTriangle,
   PackageCheck,
   Banknote,
-  Check,
-  X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Card, CardContent } from '@/components/ui/card';
+import { formatMoney } from '@/components/customers/customer.constants';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -35,8 +32,15 @@ import {
   SheetContent,
   SheetHeader,
   SheetTitle,
-  SheetTrigger,
 } from '@/components/ui/sheet';
+import {
+  ActiveFilterChips,
+  FilterChips,
+  FilterSection,
+  FilterSheet,
+  SearchFilterBar,
+  type ActiveFilterChip,
+} from '@/components/filters';
 import {
   Dialog,
   DialogClose,
@@ -87,15 +91,8 @@ import { useInfiniteList } from '@/hooks/use-infinite-list';
 import { useScrollRestoration } from '@/hooks/use-scroll-restoration';
 import { MobilePageHeader } from '@/components/layout/MobilePageHeader';
 import { MobileListFooter } from '@/components/layout/MobileListFooter';
-import type { Order, OrderStatus, VendorSettableStatus } from '@/types';
+import type { Order, VendorSettableStatus } from '@/types';
 import { cn } from '@/lib/utils';
-
-const mobileFilterPills = ['All', 'Pending', 'Shipped', 'Delivered'];
-
-/** Maps a mobile quick-pill to its `status` filter value (`All` clears it). */
-function pillToStatus(pill: string): OrderStatus | undefined {
-  return pill === 'All' ? undefined : (pill.toLowerCase() as OrderStatus);
-}
 
 // Doc-enforced cap on orderIds per bulk/status and bulk/dispatch call.
 const MAX_BULK_SIZE = 50;
@@ -123,54 +120,14 @@ function labelFor<T extends string>(options: { value: T; label: string }[], valu
 }
 
 function formatChipDateRange(from?: string, to?: string): string {
-  const f = (iso?: string) => (iso ? new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : null);
+  const f = (iso?: string) => (iso ? new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : null);
   const a = f(from);
   const b = f(to);
   if (a && b) return a === b ? a : `${a} – ${b}`;
   return a ?? b ?? '';
 }
 
-function FilterOptionRow({ label, selected, onClick }: { label: string; selected: boolean; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        'flex w-full items-center justify-between rounded-md px-3 py-2 text-sm text-left transition-colors',
-        selected ? 'bg-primary/10 font-medium text-foreground' : 'hover:bg-muted',
-      )}
-    >
-      <span className="capitalize">{label}</span>
-      {selected && <Check className="h-4 w-4 text-primary flex-shrink-0" />}
-    </button>
-  );
-}
-
-function FilterGroup<T extends string>({
-  title,
-  value,
-  options,
-  onChange,
-}: {
-  title: string;
-  value: T | undefined;
-  options: { value: T; label: string }[];
-  onChange: (v: T | undefined) => void;
-}) {
-  return (
-    <div>
-      <h4 className="text-sm font-medium mb-2">{title}</h4>
-      <div className="space-y-0.5">
-        <FilterOptionRow label="Any" selected={!value} onClick={() => onChange(undefined)} />
-        {options.map((o) => (
-          <FilterOptionRow key={o.value} label={o.label} selected={value === o.value} onClick={() => onChange(o.value)} />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-/** Single-select filter groups + optional date range. Emits URL patches via `onChange`. */
+/** Single-select filter sections + date range. Emits URL patches via `onChange`. */
 function OrdersFilterPanel({
   filters,
   onChange,
@@ -179,59 +136,70 @@ function OrdersFilterPanel({
   onChange: (patch: Partial<OrderFilters>) => void;
 }) {
   return (
-    <div className="space-y-6">
-      <FilterGroup title="Order Status" value={filters.status} options={ORDER_STATUS_FILTER_OPTIONS} onChange={(v) => onChange({ status: v })} />
-      <FilterGroup title="Payment Status" value={filters.paymentStatus} options={PAYMENT_STATUS_FILTER_OPTIONS} onChange={(v) => onChange({ paymentStatus: v })} />
-      <FilterGroup title="Payment Method" value={filters.paymentMethod} options={PAYMENT_METHOD_FILTER_OPTIONS} onChange={(v) => onChange({ paymentMethod: v })} />
-      <FilterGroup title="Order Type" value={filters.orderType} options={ORDER_TYPE_FILTER_OPTIONS} onChange={(v) => onChange({ orderType: v })} />
-      <div>
-        <h4 className="text-sm font-medium mb-2">Order Date</h4>
+    <>
+      <FilterSection title="Order status">
+        <FilterChips
+          options={ORDER_STATUS_FILTER_OPTIONS}
+          value={filters.status}
+          onChange={(v) => onChange({ status: v })}
+          allLabel="Any status"
+        />
+      </FilterSection>
+      <FilterSection title="Payment status">
+        <FilterChips
+          options={PAYMENT_STATUS_FILTER_OPTIONS}
+          value={filters.paymentStatus}
+          onChange={(v) => onChange({ paymentStatus: v })}
+          allLabel="Any"
+        />
+      </FilterSection>
+      <FilterSection title="Payment method">
+        <FilterChips
+          options={PAYMENT_METHOD_FILTER_OPTIONS}
+          value={filters.paymentMethod}
+          onChange={(v) => onChange({ paymentMethod: v })}
+          allLabel="Any"
+        />
+      </FilterSection>
+      <FilterSection title="Order type">
+        <FilterChips
+          options={ORDER_TYPE_FILTER_OPTIONS}
+          value={filters.orderType}
+          onChange={(v) => onChange({ orderType: v })}
+          allLabel="Any"
+        />
+      </FilterSection>
+      <FilterSection title="Order date">
         <OrderDateRangeFilter
           from={filters.dateFrom}
           to={filters.dateTo}
           onApply={(from, to) => onChange({ dateFrom: from, dateTo: to })}
         />
-      </div>
-    </div>
+      </FilterSection>
+    </>
   );
 }
 
-/** Removable chips summarising the active filters (excluding the search box). */
-function OrdersActiveFilterChips({
-  filters,
-  orders,
-  onClear,
-}: {
-  filters: OrderFilters;
-  orders: Order[];
-  onClear: (patch: Partial<OrderFilters>) => void;
-}) {
-  const chips: { key: string; label: string; clear: Partial<OrderFilters> }[] = [];
-  if (filters.status) chips.push({ key: 'status', label: `Status: ${labelFor(ORDER_STATUS_FILTER_OPTIONS, filters.status)}`, clear: { status: undefined } });
-  if (filters.paymentStatus) chips.push({ key: 'paymentStatus', label: `Payment: ${labelFor(PAYMENT_STATUS_FILTER_OPTIONS, filters.paymentStatus)}`, clear: { paymentStatus: undefined } });
-  if (filters.paymentMethod) chips.push({ key: 'paymentMethod', label: `Method: ${labelFor(PAYMENT_METHOD_FILTER_OPTIONS, filters.paymentMethod)}`, clear: { paymentMethod: undefined } });
-  if (filters.orderType) chips.push({ key: 'orderType', label: `Type: ${labelFor(ORDER_TYPE_FILTER_OPTIONS, filters.orderType)}`, clear: { orderType: undefined } });
-  if (filters.dateFrom || filters.dateTo) chips.push({ key: 'date', label: `Date: ${formatChipDateRange(filters.dateFrom, filters.dateTo)}`, clear: { dateFrom: undefined, dateTo: undefined } });
+/** Active filters as removable chips, shown under the search bar. */
+function orderFilterChips(
+  filters: OrderFilters,
+  orders: Order[],
+  onClear: (patch: Partial<OrderFilters>) => void,
+): ActiveFilterChip[] {
+  const chips: ActiveFilterChip[] = [];
+  const push = (key: string, label: string, clear: Partial<OrderFilters>) =>
+    chips.push({ key, label, onRemove: () => onClear(clear) });
+
+  if (filters.status) push('status', `Status: ${labelFor(ORDER_STATUS_FILTER_OPTIONS, filters.status)}`, { status: undefined });
+  if (filters.paymentStatus) push('paymentStatus', `Payment: ${labelFor(PAYMENT_STATUS_FILTER_OPTIONS, filters.paymentStatus)}`, { paymentStatus: undefined });
+  if (filters.paymentMethod) push('paymentMethod', `Method: ${labelFor(PAYMENT_METHOD_FILTER_OPTIONS, filters.paymentMethod)}`, { paymentMethod: undefined });
+  if (filters.orderType) push('orderType', `Type: ${labelFor(ORDER_TYPE_FILTER_OPTIONS, filters.orderType)}`, { orderType: undefined });
+  if (filters.dateFrom || filters.dateTo) push('date', `Date: ${formatChipDateRange(filters.dateFrom, filters.dateTo)}`, { dateFrom: undefined, dateTo: undefined });
   if (filters.customerId) {
     const name = orders.find((o) => o.customer.id === filters.customerId)?.customer.name;
-    chips.push({ key: 'customerId', label: `Customer: ${name ?? filters.customerId}`, clear: { customerId: undefined } });
+    push('customerId', `Customer: ${name ?? filters.customerId}`, { customerId: undefined });
   }
-  if (chips.length === 0) return null;
-  return (
-    <div className="flex flex-wrap items-center gap-2">
-      {chips.map((c) => (
-        <button
-          key={c.key}
-          type="button"
-          onClick={() => onClear(c.clear)}
-          className="inline-flex items-center gap-1 rounded-full border bg-muted/50 px-3 py-1 text-xs hover:bg-muted transition-colors"
-        >
-          <span className="max-w-[180px] truncate">{c.label}</span>
-          <X className="h-3 w-3 flex-shrink-0" />
-        </button>
-      ))}
-    </div>
-  );
+  return chips;
 }
 
 export function Orders() {
@@ -509,15 +477,10 @@ export function Orders() {
     }
   };
 
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-    }).format(value);
-  };
+  const formatCurrency = (value: number, currency?: string) => formatMoney(value, currency);
 
   const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('en-US', {
+    return new Date(dateStr).toLocaleDateString(undefined, {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
@@ -692,6 +655,37 @@ export function Orders() {
     </Dialog>
   );
 
+  // ─── Search + filters (identical on desktop and mobile) ───────────────────
+  const ordersFilterSheet = (
+    <FilterSheet
+      open={filterSheetOpen}
+      onOpenChange={setFilterSheetOpen}
+      title="Filter orders"
+      activeCount={activeFilterCount}
+      onClear={clearAllFilters}
+      applyLabel="Show orders"
+    >
+      <OrdersFilterPanel filters={filters} onChange={updateFilters} />
+    </FilterSheet>
+  );
+
+  const ordersSearchBar = (
+    <div className="space-y-3">
+      <SearchFilterBar
+        value={searchQuery}
+        onChange={setSearchQuery}
+        placeholder="Search orders…"
+        activeFilterCount={activeFilterCount}
+        onOpenFilters={() => setFilterSheetOpen(true)}
+        filterLabel="Filter orders"
+      />
+      <ActiveFilterChips
+        chips={orderFilterChips(filters, orders, updateFilters)}
+        onClearAll={clearAllFilters}
+      />
+    </div>
+  );
+
   // ─── Mobile Layout ────────────────────────────────────────────────────────
   if (isMobile) {
     const selectedOrderObjects = infinite.items.filter((o) => selectedOrders.includes(o.id));
@@ -771,62 +765,16 @@ export function Orders() {
           <MobilePageHeader
             title="Orders"
             actions={
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => setFilterSheetOpen(true)}
-                  aria-label="Filter orders"
-                  className="relative flex h-9 w-9 items-center justify-center rounded-full hover:bg-accent transition-colors"
-                >
-                  <Filter className="w-5 h-5" />
-                  {activeFilterCount > 0 && (
-                    <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground">
-                      {activeFilterCount}
-                    </span>
-                  )}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {/* create order */ }}
-                  aria-label="Create order"
-                  className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-accent transition-colors"
-                >
-                  <Plus className="w-5 h-5" />
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={() => {/* create order */ }}
+                aria-label="Create order"
+                className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-accent transition-colors"
+              >
+                <Plus className="w-5 h-5" />
+              </button>
             }
-            subheader={
-              <div className="space-y-3">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Search orders"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10"
-                  />
-                </div>
-                <div className="-mx-1 flex gap-2 overflow-x-auto px-1 scrollbar-none">
-                  {mobileFilterPills.map((pill) => {
-                    const active = pill === 'All' ? !filters.status : filters.status === pillToStatus(pill);
-                    return (
-                      <button
-                        key={pill}
-                        onClick={() => updateFilters({ status: pillToStatus(pill) })}
-                        className={cn(
-                          'flex-shrink-0 px-4 py-1.5 rounded-full text-sm font-medium transition-colors border',
-                          active
-                            ? 'bg-black text-white border-black'
-                            : 'bg-background border-border'
-                        )}
-                      >
-                        {pill}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            }
+            subheader={ordersSearchBar}
           />
         )}
 
@@ -904,7 +852,7 @@ export function Orders() {
                             {order.orderType === 'digital' ? 'Digital' : 'Physical'}
                           </span>
                         </div>
-                        <p className="font-semibold text-sm flex-shrink-0">{formatCurrency(order.total)}</p>
+                        <p className="font-semibold text-sm flex-shrink-0">{formatCurrency(order.total, order.currency)}</p>
                       </div>
                       <div className="flex justify-between mt-0.5">
                         <p className="text-xs text-muted-foreground">{order.customer.name}</p>
@@ -1021,23 +969,7 @@ export function Orders() {
           </SheetContent>
         </Sheet>
 
-        {/* Mobile filter sheet */}
-        <Sheet open={filterSheetOpen} onOpenChange={setFilterSheetOpen}>
-          <SheetContent side="bottom" className="flex max-h-[85vh] flex-col p-0">
-            <SheetHeader className="border-b p-4 text-left">
-              <SheetTitle>Filter Orders</SheetTitle>
-            </SheetHeader>
-            <div className="flex-1 overflow-y-auto p-4">
-              <OrdersFilterPanel filters={filters} onChange={updateFilters} />
-            </div>
-            <div className="flex justify-between gap-2 border-t p-4">
-              <Button variant="ghost" onClick={clearAllFilters} disabled={activeFilterCount === 0 && !searchQuery}>
-                Clear all
-              </Button>
-              <Button onClick={() => setFilterSheetOpen(false)}>Done</Button>
-            </div>
-          </SheetContent>
-        </Sheet>
+        {ordersFilterSheet}
 
         {cancelOrderDialog}
         {bulkCancelDialog}
@@ -1067,52 +999,8 @@ export function Orders() {
       </div>
 
       {/* Search + Filters */}
-      <Card className="border-none shadow-none">
-        <CardContent className="border-none p-0 space-y-3">
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                placeholder="Search orders by number, customer..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10"
-              />
-            </div>
-            <Sheet open={filterSheetOpen} onOpenChange={setFilterSheetOpen}>
-              <SheetTrigger asChild>
-                <Button variant="outline" className="gap-2">
-                  <Filter className="w-4 h-4" />
-                  Filters
-                  {activeFilterCount > 0 && (
-                    <span className="ml-1 w-5 h-5 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center">
-                      {activeFilterCount}
-                    </span>
-                  )}
-                </Button>
-              </SheetTrigger>
-              <SheetContent className="flex flex-col p-0">
-                <SheetHeader className="border-b-2 p-4">
-                  <SheetTitle>Filter Orders</SheetTitle>
-                </SheetHeader>
-                <div className="flex-1 overflow-y-auto p-4">
-                  <OrdersFilterPanel filters={filters} onChange={updateFilters} />
-                </div>
-                <div className="border-t p-4 flex justify-between gap-2">
-                  <Button variant="ghost" onClick={clearAllFilters} disabled={activeFilterCount === 0 && !searchQuery}>
-                    Clear all
-                  </Button>
-                  <Button onClick={() => setFilterSheetOpen(false)}>Done</Button>
-                </div>
-              </SheetContent>
-            </Sheet>
-          </div>
-
-          {activeFilterCount > 0 && (
-            <OrdersActiveFilterChips filters={filters} orders={orders} onClear={updateFilters} />
-          )}
-        </CardContent>
-      </Card>
+      {ordersSearchBar}
+      {ordersFilterSheet}
 
       {/* Orders Table */}
       <Card>
@@ -1284,7 +1172,7 @@ export function Orders() {
                         </div>
                       </td>
                       <td className="p-4 text-right font-medium">
-                        {formatCurrency(order.total)}
+                        {formatCurrency(order.total, order.currency)}
                       </td>
                       <td className="p-4" onClick={(e) => e.stopPropagation()}>
                         <DropdownMenu>

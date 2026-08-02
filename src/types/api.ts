@@ -23,13 +23,22 @@ export interface BrandingFileRef {
   originalName?: string;
 }
 
-/** Read shape — `GET /vendor/profile` and every onboarding step response. */
+/**
+ * @deprecated The business logo/cover moved to the **Store** — read them from
+ * `GET /api/vendor/store` as `logo` / `banner` (see `VendorStore`).
+ * `GET /api/vendor/profile` no longer returns a `branding` block.
+ */
 export interface Branding {
   logo: BrandingFileRef | null;
   coverImage: BrandingFileRef | null;
 }
 
-/** Write shape — `PATCH /vendor/profile` and the onboarding branding step. */
+/**
+ * Write shape for the **onboarding branding step only** (`PUT
+ * /vendor/onboarding/branding`), which still accepts it and persists it to the
+ * Store. `PATCH /vendor/profile` no longer accepts `branding` — edit the store's
+ * images via `logoFileId` / `bannerFileId` on `PATCH /api/vendor/store`.
+ */
 export interface BrandingWritePayload {
   logo_file_id?: string | null;
   cover_image_file_id?: string | null;
@@ -93,9 +102,15 @@ export type PayoutDetails =
 export interface VendorRoleEntity {
   _id: string;
   user_id: string;
-  business_name: string;
+  /**
+   * @deprecated Moved to the Store as `name`. `GET /vendor/profile` no longer
+   * returns it; optional here because `role_entity` comes from `/auth/me`, which
+   * may still carry it. Read `useStoreStore().store?.name` instead.
+   */
+  business_name?: string;
   display_name: string | null;
-  business_description: string | null;
+  /** @deprecated Moved to the Store as `description`. Read it from `VendorStore`. */
+  business_description?: string | null;
   email: string;
   phone: string;
   email_verified: boolean;
@@ -105,12 +120,16 @@ export interface VendorRoleEntity {
   /** Language every notification is rendered in (en | fr | pt | es | ar). Default `en`. */
   preferred_language?: string | null;
   /**
-   * The vendor's personal profile avatar (distinct from the business
-   * `branding` logo/cover). A populated file reference, or `null` when unset.
+   * The vendor's personal profile avatar (distinct from the business logo/banner,
+   * which live on the Store). A populated file reference, or `null` when unset.
    * Set via `avatarFileId` on PATCH /vendor/profile.
    */
   avatar?: BrandingFileRef | null;
-  branding: Branding;
+  /**
+   * @deprecated Moved to the Store (`logo` / `banner`). `GET /vendor/profile` no
+   * longer returns it; optional so any remaining reader is compile-checked.
+   */
+  branding?: Branding;
   business_addresses: BusinessAddress[];
   /** Ordered array — index 0 is the preferred payout method. */
   payout_details: PayoutDetails[] | null;
@@ -262,9 +281,10 @@ export interface AutoCancelSettings {
 // Note: default_delivery_agency_id is NOT editable here — use the dedicated
 // /vendor/profile/default-delivery-agency routes.
 
+// `businessName`, `businessDescription` and `branding` are NOT accepted here any
+// more — they belong to the store (`PATCH /api/vendor/store`).
 export interface VendorProfileUpdatePayload {
   displayName?: string;
-  businessDescription?: string | null;
   phone?: string;
   country?: string;
   timezone?: string;
@@ -278,7 +298,6 @@ export interface VendorProfileUpdatePayload {
    */
   avatarFileId?: string | null;
   payout_details?: PayoutDetails[];
-  branding?: BrandingWritePayload;
   business_addresses?: BusinessAddress[];
   social_links?: Partial<SocialLinks>;
   policies?: {
@@ -315,8 +334,11 @@ export interface ChangePasswordResponse {
 // ─── Delivery Agency ──────────────────────────────────────────────────────────
 
 export interface DeliveryAgencyHQAddress {
-  region: string;
-  city: string;
+  /** Derived from the entry's geocode — `null` when it resolves none. */
+  region: string | null;
+  /** Derived from the entry's geocode — `null` for rural/landmark addresses. */
+  city: string | null;
+  /** Always present. Use it when `region`/`city` are null (see formatAgencyLocality). */
   address_description: string;
 }
 

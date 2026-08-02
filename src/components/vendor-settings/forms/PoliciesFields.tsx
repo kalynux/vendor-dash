@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useForm, useFieldArray, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import type { z } from 'zod';
-import { Plus, Trash2, RotateCcw, Ban, HeadphonesIcon, Info, FileText, Upload, X, Loader2 } from 'lucide-react';
+import { Plus, Trash2, RotateCcw, Ban, HeadphonesIcon, FileText, Upload, X, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { step4Schema, type Step4FormValues } from '@/onboarding/schemas/onboarding.schemas';
@@ -10,7 +10,6 @@ import { type PolicyEnabled } from '@/components/vendor-settings/forms/policies.
 import { onboardingService } from '@/services/onboarding.service';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -26,14 +25,12 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import {
-    Tooltip,
-    TooltipContent,
-    TooltipTrigger,
-} from '@/components/ui/tooltip';
+import { InfoHint, LabelWithHint } from '@/components/ui/info-hint';
 import { cn } from '@/lib/utils';
 
-// ─── FieldLabel: label + info tooltip ────────────────────────────────────────
+// ─── FieldLabel: label + press-to-open explanation ───────────────────────────
+// A popover, not a tooltip: these tips are the only documentation of what each
+// policy field actually does, and a hover tooltip never opens on a phone.
 
 function FieldLabel({
     htmlFor,
@@ -43,29 +40,18 @@ function FieldLabel({
 }: {
     htmlFor?: string;
     children: React.ReactNode;
-    tip: string;
+    tip: React.ReactNode;
     optional?: boolean;
 }) {
     return (
-        <div className="flex items-center gap-1.5">
-            <Label htmlFor={htmlFor} className="leading-none">
-                {children}
-                {optional && (
-                    <span className="text-muted-foreground font-normal ml-1">(optional)</span>
-                )}
-            </Label>
-            <Tooltip>
-                <TooltipTrigger asChild>
-                    <button type="button" tabIndex={-1} className="text-muted-foreground/60 hover:text-muted-foreground transition-colors">
-                        <Info className="w-3.5 h-3.5" />
-                        <span className="sr-only">Info</span>
-                    </button>
-                </TooltipTrigger>
-                <TooltipContent side="top" className="max-w-[220px] text-center">
-                    {tip}
-                </TooltipContent>
-            </Tooltip>
-        </div>
+        <LabelWithHint
+            htmlFor={htmlFor}
+            optional={optional}
+            hint={tip}
+            hintLabel="What this field changes"
+        >
+            {children}
+        </LabelWithHint>
     );
 }
 
@@ -91,7 +77,7 @@ function PolicySection({
             'rounded-lg border transition-colors',
             enabled ? 'border-border' : 'border-dashed border-muted-foreground/30',
         )}>
-            <div className="flex items-center justify-between p-4">
+            <div className="flex items-center justify-between gap-3 p-3 sm:p-4">
                 <div className="flex items-center gap-3">
                     <div className={cn(
                         'w-8 h-8 rounded-lg flex items-center justify-center transition-colors',
@@ -107,7 +93,7 @@ function PolicySection({
                 <Switch checked={enabled} onCheckedChange={onToggle} aria-label={`Enable ${title}`} />
             </div>
             {enabled && (
-                <div className="px-4 pb-4 pt-0 border-t space-y-4">
+                <div className="px-3 pb-3 pt-0 border-t space-y-4 sm:px-4 sm:pb-4">
                     {children}
                 </div>
             )}
@@ -263,23 +249,14 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
                 onToggle={setEnableReturn}
             >
                 {/* Accept returns toggle */}
-                <div className="flex items-center justify-between pt-4">
-                    <div className="flex items-center gap-1.5">
-                        <div>
-                            <p className="text-sm font-medium leading-none">Accept returns</p>
-                            <p className="text-xs text-muted-foreground mt-0.5">Customers can request to return items</p>
-                        </div>
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <button type="button" tabIndex={-1} className="text-muted-foreground/60 hover:text-muted-foreground transition-colors">
-                                    <Info className="w-3.5 h-3.5" />
-                                    <span className="sr-only">Info</span>
-                                </button>
-                            </TooltipTrigger>
-                            <TooltipContent side="top" className="max-w-[220px] text-center">
-                                If disabled, your store will show a "no returns accepted" policy to customers.
-                            </TooltipContent>
-                        </Tooltip>
+                <div className="flex items-center justify-between gap-3 pt-4">
+                    <div className="flex items-center gap-1">
+                        <p className="text-sm font-medium leading-none">Accept returns</p>
+                        <InfoHint label="About accepting returns">
+                            On, customers get a &ldquo;Request return&rdquo; button on delivered orders and
+                            the rules below apply. Off, your storefront shows &ldquo;No returns
+                            accepted&rdquo; and all the fields below disappear.
+                        </InfoHint>
                     </div>
                     <Switch
                         checked={returnEligible ?? true}
@@ -293,7 +270,7 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
                         <div className="space-y-2">
                             <FieldLabel
                                 htmlFor="return_window_days"
-                                tip="Number of days after purchase during which a customer can initiate a return. Max 180 days."
+                                tip="How long after purchase a customer may start a return. Set it to 14 and an order placed on 1 March can be returned until 15 March — on the 16th the return button is gone. 0 means returns close immediately. Max 180."
                             >
                                 Return window (days)
                             </FieldLabel>
@@ -311,7 +288,7 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
                         {/* Refund type */}
                         <div className="space-y-2">
                             <FieldLabel
-                                tip="The type of refund customers receive when returning an item — full price, a partial percentage, or no refund."
+                                tip="What the customer gets back on an accepted return. Full → the whole item price. Partial → only the percentage you set below (80% of a 10 000 order = 8 000 back). No refund → the return is accepted but no money is returned, e.g. exchange-only stores."
                             >
                                 Refund type
                             </FieldLabel>
@@ -336,7 +313,7 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
                             <div className="space-y-2">
                                 <FieldLabel
                                     htmlFor="refund_percentage"
-                                    tip="The percentage of the order amount refunded (0–100). Required when refund type is 'Partial'."
+                                    tip="The share of the order refunded, 0–100. At 80, a 10 000 order refunds 8 000 and you keep 2 000 as a restocking charge. Required while the refund type is Partial."
                                 >
                                     Refund percentage (%)
                                 </FieldLabel>
@@ -356,7 +333,7 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
                         {/* Return shipping payer */}
                         <div className="space-y-2">
                             <FieldLabel
-                                tip="Who covers the shipping cost when a customer sends an item back to you."
+                                tip="Who pays to send the item back. Customer → they cover it, whatever the reason. Vendor (you) → you cover every return, which reads well on the storefront but costs you on change-of-mind returns. Customer, reimbursed if defective → they pay upfront and you refund the shipping only when the item really was faulty."
                             >
                                 Return shipping paid by
                             </FieldLabel>
@@ -380,7 +357,7 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
                         <div className="space-y-2">
                             <FieldLabel
                                 htmlFor="refund_processing_days"
-                                tip="How many business days after you receive the returned item before you issue the refund. Max 30 days."
+                                tip="Business days between the returned item reaching you and the money going out. Set 5 and a parcel you receive on a Monday is refunded by the following Monday — that date is what the customer is shown, so pad it a little. Max 30."
                             >
                                 Refund processing time (days)
                             </FieldLabel>
@@ -401,7 +378,7 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
                 <div className="space-y-2">
                     <FieldLabel
                         htmlFor="return_condition_notes"
-                        tip="Conditions an item must meet to qualify for a return, e.g. 'Must be unused and in original packaging'."
+                        tip="Free text printed next to your return policy, e.g. “Unused, in the original packaging, with the tag still attached.” Support quotes this when a return is contested, so be specific. Leave it empty if you have no extra conditions."
                         optional
                     >
                         Return condition notes
@@ -427,23 +404,14 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
                 onToggle={setEnableCancellation}
             >
                 {/* Allow cancellations toggle */}
-                <div className="flex items-center justify-between pt-4">
-                    <div className="flex items-center gap-1.5">
-                        <div>
-                            <p className="text-sm font-medium leading-none">Allow cancellations</p>
-                            <p className="text-xs text-muted-foreground mt-0.5">Customers can cancel placed orders</p>
-                        </div>
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <button type="button" tabIndex={-1} className="text-muted-foreground/60 hover:text-muted-foreground transition-colors">
-                                    <Info className="w-3.5 h-3.5" />
-                                    <span className="sr-only">Info</span>
-                                </button>
-                            </TooltipTrigger>
-                            <TooltipContent side="top" className="max-w-[220px] text-center">
-                                If disabled, customers will not be able to cancel orders after they are placed.
-                            </TooltipContent>
-                        </Tooltip>
+                <div className="flex items-center justify-between gap-3 pt-4">
+                    <div className="flex items-center gap-1">
+                        <p className="text-sm font-medium leading-none">Allow cancellations</p>
+                        <InfoHint label="About allowing cancellations">
+                            On, customers can cancel a placed order themselves under the rules below.
+                            Off, the cancel button is hidden and they have to contact you — every
+                            cancellation then goes through support.
+                        </InfoHint>
                     </div>
                     <Switch
                         checked={cancellable ?? true}
@@ -456,7 +424,7 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
                         {/* Cancellation deadline */}
                         <div className="space-y-2">
                             <FieldLabel
-                                tip="The latest point in time a customer is allowed to cancel their order without penalty."
+                                tip="The cut-off for a free cancellation. “Within 24 hours” lets someone who ordered Monday 9am cancel until Tuesday 9am; after that the late-cancellation rules further down take over. “Before vendor confirms” closes the window the moment you accept the order, so it shrinks as you get faster."
                             >
                                 Cancellation deadline
                             </FieldLabel>
@@ -483,7 +451,7 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
                             <div className="space-y-2">
                                 <FieldLabel
                                     htmlFor="cancellation_deadline_days"
-                                    tip="The minimum number of days before the delivery date that a customer can still cancel."
+                                    tip="How many days ahead of the delivery date cancelling is still free. At 3, an order due Friday can be cancelled up to Tuesday; Wednesday onwards counts as late."
                                 >
                                     Days before delivery
                                 </FieldLabel>
@@ -502,7 +470,7 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
                         {/* Cancellation fee type */}
                         <div className="space-y-2">
                             <FieldLabel
-                                tip="Whether you charge a fee when a customer cancels an order."
+                                tip="What you keep when a customer cancels in time. No fee → they get everything back. Fixed → a flat amount, e.g. 500 off a 10 000 order refunds 9 500. Percentage → a share, e.g. 10% refunds 9 000. Full amount → nothing is refunded, which only makes sense for made-to-order work."
                             >
                                 Cancellation fee
                             </FieldLabel>
@@ -530,8 +498,8 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
                                     htmlFor="cancellation_fee_value"
                                     tip={
                                         feeType === 'fixed'
-                                            ? 'The fixed fee amount charged when a customer cancels.'
-                                            : 'The percentage of the order total charged as a cancellation fee (0–100).'
+                                            ? 'The flat amount you keep on a cancellation. At 500, a 10 000 order refunds 9 500 and a 2 000 order refunds 1 500 — the same charge either way, so keep it small.'
+                                            : 'The share of the order you keep, 0–100. At 10, a 10 000 order refunds 9 000 and a 2 000 order refunds 1 800 — the charge scales with the order.'
                                     }
                                 >
                                     {feeType === 'fixed' ? 'Fee amount' : 'Fee percentage (%)'}
@@ -551,7 +519,7 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
                         {/* Late cancellation refund type */}
                         <div className="space-y-2">
                             <FieldLabel
-                                tip="What refund (if any) the customer receives when they cancel after the deadline."
+                                tip="What a customer gets back when they cancel after the deadline above. Leave it as None and late cancellations follow the same fee as on-time ones. No refund → they get nothing. Percentage refunded → e.g. 50 returns 5 000 on a 10 000 order."
                             >
                                 Late cancellation refund
                             </FieldLabel>
@@ -582,8 +550,8 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
                                     htmlFor="late_cancellation_refund_value"
                                     tip={
                                         lateCancelRefundType === 'fixed'
-                                            ? 'The fixed amount refunded for late cancellations.'
-                                            : 'The percentage of the order total refunded for late cancellations (0–100).'
+                                            ? 'The flat amount handed back on a late cancellation. At 2 000, a 10 000 order returns 2 000 and you keep 8 000.'
+                                            : 'The share handed back on a late cancellation, 0–100. At 50, a 10 000 order returns 5 000.'
                                     }
                                 >
                                     {lateCancelRefundType === 'fixed' ? 'Refund amount' : 'Refund percentage (%)'}
@@ -614,7 +582,7 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
                 <div className="space-y-3 pt-4">
                     <div className="flex items-center justify-between">
                         <FieldLabel
-                            tip="Contact channels your support team is reachable on. Each channel type can only be added once. Max 4 channels."
+                            tip="Where customers reach you for help. These are published on your storefront and attached to order emails, so only add addresses you actually watch. Each type can be added once, up to 4 in total."
                         >
                             Support channels
                         </FieldLabel>
@@ -686,7 +654,7 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
                 {/* Required info */}
                 <div className="space-y-2">
                     <FieldLabel
-                        tip="Information customers must provide when opening a support request."
+                        tip="What a customer has to attach before a support request can be sent. Ticking “Product photo / video” blocks the form until they upload one — useful for damage claims, but it also slows down someone asking a simple question."
                     >
                         Required from customer
                     </FieldLabel>
@@ -714,7 +682,7 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
                 {/* Availability */}
                 <div className="space-y-2">
                     <FieldLabel
-                        tip="When your support team is available to respond to customer inquiries."
+                        tip="When you answer. Shown as a badge next to your support channels, so it sets the reply time customers expect. Pick “Limited” to spell out your exact hours in the field that appears."
                     >
                         Availability
                     </FieldLabel>
@@ -738,7 +706,7 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
                     <div className="space-y-2">
                         <FieldLabel
                             htmlFor="availability_description"
-                            tip="Describe your specific support hours so customers know when to expect a reply."
+                            tip="Your exact hours, shown to customers word for word — e.g. “Mon–Fri, 10:00–18:00 (WAT), closed on public holidays.”"
                         >
                             Availability description
                         </FieldLabel>
@@ -756,7 +724,7 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
                 {/* Languages */}
                 <div className="space-y-2">
                     <FieldLabel
-                        tip="Languages your support team can communicate in. Press Enter or click + to add each one."
+                        tip="The languages you can actually handle a support conversation in. Type one and press Enter or +, e.g. English, then Français. Up to 20. This is what customers filter on, so don't list a language you can't reply in."
                     >
                         Languages
                     </FieldLabel>
@@ -807,7 +775,7 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
                 <div className="space-y-2">
                     <FieldLabel
                         htmlFor="eligibility_notes"
-                        tip="Any conditions that determine whether a customer qualifies for support, e.g. 'Only customers with a valid order'."
+                        tip="Who qualifies for support, e.g. “Only orders placed in the last 90 days” or “Bulk orders are handled by your account manager.” Printed under your support policy."
                         optional
                     >
                         Eligibility notes

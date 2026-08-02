@@ -2,10 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Bell,
   Mail,
-  Save,
   Loader2,
   Lock,
-  Languages,
   ShoppingCart,
   PackageX,
   CalendarPlus,
@@ -33,6 +31,7 @@ import {
   unlinkWhatsapp,
 } from '@/services/notification-channels.service';
 import { ChannelSetupDialog } from '@/components/vendor-settings/ChannelSetupDialog';
+import { UnsavedChangesBar } from '@/components/vendor-settings/UnsavedChangesBar';
 import { mapProfileError } from '@/components/vendor-settings/errors';
 import { ApiError } from '@/types/api';
 import type {
@@ -47,22 +46,12 @@ import type {
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from '@/components/ui/card';
+  SettingsSection,
+  SettingsSections,
+} from '@/components/vendor-settings/SettingsSection';
+import { InfoHint } from '@/components/ui/info-hint';
 import { cn } from '@/lib/utils';
 
 // ─── Static config ──────────────────────────────────────────────────────────
@@ -262,6 +251,13 @@ export function NotificationSettings() {
     [],
   );
 
+  // Roll every editable field back to the last server snapshot.
+  const handleDiscard = useCallback(() => {
+    setChannel(savedChannel);
+    setLanguage(savedLanguage);
+    setEvents(prefs ? { ...prefs.preferences } : null);
+  }, [prefs, savedChannel, savedLanguage]);
+
   const handleSave = useCallback(async () => {
     if (!prefs || !events) return;
     setSaving(true);
@@ -308,18 +304,18 @@ export function NotificationSettings() {
     return (
       <div className="space-y-6">
         <PushPermissionBanner />
-        <Card>
-          <CardHeader>
-            <CardTitle>Notification Preferences</CardTitle>
-            <CardDescription>Choose how, where, and for which events you are notified</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <Skeleton className="h-5 w-40" />
+        <SettingsSections>
+          <SettingsSection title="Delivery channel" contentClassName="space-y-3">
             {[0, 1, 2, 3].map((i) => (
-              <Skeleton key={i} className="h-16 w-full rounded-lg" />
+              <Skeleton key={i} className="h-[4.75rem] w-full rounded-lg" />
             ))}
-          </CardContent>
-        </Card>
+          </SettingsSection>
+          <SettingsSection title="Events" contentClassName="space-y-4">
+            {[0, 1, 2, 3, 4].map((i) => (
+              <Skeleton key={i} className="h-9 w-full rounded-lg" />
+            ))}
+          </SettingsSection>
+        </SettingsSections>
       </div>
     );
   }
@@ -328,64 +324,46 @@ export function NotificationSettings() {
     return (
       <div className="space-y-6">
         <PushPermissionBanner />
-        <Card>
-          <CardHeader>
-            <CardTitle>Notification Preferences</CardTitle>
-            <CardDescription>Choose how, where, and for which events you are notified</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
+        <SettingsSections>
+          <SettingsSection title="Notifications" contentClassName="space-y-4">
             <div role="alert" className="p-3 text-sm bg-destructive/10 text-destructive rounded-lg border border-destructive/20">
               {loadError ?? 'Could not load notification settings.'}
             </div>
             <Button variant="outline" onClick={load}>Try again</Button>
-          </CardContent>
-        </Card>
+          </SettingsSection>
+        </SettingsSections>
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-    <PushPermissionBanner />
-    <Card>
-      <CardHeader>
-        <CardTitle>Notification Preferences</CardTitle>
-        <CardDescription>Choose how, where, and for which events you are notified</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-8">
+      <PushPermissionBanner />
+      <SettingsSections>
         {/* Delivery channel */}
-        <div className="space-y-4">
-          <div>
-            <h4 className="font-medium">Delivery channel</h4>
-            <p className="text-sm text-muted-foreground">
-              In-app is always on. Optionally pick one additional channel — connect it first, then select it.
+        <SettingsSection
+          title="Delivery channel"
+          info="Where your notifications land. In-app is always on and can't be turned off. On top of that you may pick one extra channel — connect it first, then make it active. Only one extra channel at a time."
+          contentClassName="space-y-3"
+        >
+          {/* In-app — always on, locked */}
+          <div className="rounded-lg border bg-muted/30 p-3 sm:p-4">
+            <div className="flex items-center gap-3">
+              <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                <Bell className="size-5" />
+              </div>
+              <p className="min-w-0 flex-1 font-medium leading-none">In-app</p>
+              <Badge variant="secondary" className="shrink-0">
+                <Lock /> Always on
+              </Badge>
+            </div>
+            <p className="mt-2.5 text-sm text-muted-foreground sm:pl-12">
+              Every notification lands in the bell menu. This can't be turned off.
             </p>
           </div>
 
-          <div className="space-y-3" role="radiogroup" aria-label="Delivery channel">
-            {/* In-app — always on, locked */}
-            <div className="flex items-center gap-4 p-4 border rounded-lg bg-muted/30">
-              <span
-                className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground"
-                aria-hidden
-              >
-                <CheckCircle2 className="h-4 w-4" />
-              </span>
-              <div className="p-2 rounded-full flex-shrink-0 bg-primary/10 text-primary">
-                <Bell className="w-5 h-5" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <p className="font-medium">In-app</p>
-                  <Badge variant="secondary" className="gap-1 text-xs">
-                    <Lock className="w-3 h-3" /> Always on
-                  </Badge>
-                </div>
-                <p className="text-sm text-muted-foreground">Delivered to your dashboard. Cannot be turned off.</p>
-              </div>
-            </div>
-
-            {/* Secondary channels — verify, then select (single choice) */}
+          {/* Secondary channels — connect first, then make one active */}
+          <div className="space-y-3" role="radiogroup" aria-label="Extra delivery channel">
             {SECONDARY_CHANNELS.map((c) => {
               const verified = prefs[c.verifyKey];
               const selected = channel === c.value;
@@ -394,67 +372,91 @@ export function NotificationSettings() {
                 <div
                   key={c.value}
                   className={cn(
-                    'flex items-center gap-4 p-4 border rounded-lg transition-colors',
+                    'rounded-lg border p-3 transition-colors sm:p-4',
                     selected && 'border-primary ring-1 ring-primary',
                     !verified && 'bg-muted/20',
                   )}
                 >
-                  {/* Radio dot — only interactive once verified */}
-                  <button
-                    type="button"
-                    role="radio"
-                    aria-checked={selected}
-                    aria-label={`Use ${c.label}`}
-                    disabled={!verified}
-                    onClick={() => selectChannel(c.value)}
-                    className={cn(
-                      'flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border transition-colors',
-                      selected ? 'border-primary' : 'border-input',
-                      verified ? 'cursor-pointer hover:border-primary' : 'cursor-not-allowed opacity-50',
-                    )}
-                  >
-                    {selected && <span className="h-2.5 w-2.5 rounded-full bg-primary" />}
-                  </button>
+                  {/* Identity, with the active indicator pinned to the top right.
+                      The old leading radio dot cost the label row ~32px and a 20px
+                      tap target; folding it into this pill gives the text the width
+                      and makes the state readable at a glance. */}
+                  <div className="flex items-center gap-3">
+                    <div className={cn('flex size-9 shrink-0 items-center justify-center rounded-full', c.iconWrap)}>
+                      <c.Icon className="size-5" />
+                    </div>
 
-                  <div className={cn('p-2 rounded-full flex-shrink-0', c.iconWrap)}>
-                    <c.Icon className="w-5 h-5" />
-                  </div>
-
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="font-medium">{c.label}</p>
+                    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
+                      <p className="font-medium leading-none">{c.label}</p>
                       {verified ? (
-                        <Badge variant="secondary" className="gap-1 text-xs text-emerald-600">
-                          <ShieldCheck className="w-3 h-3" /> Connected
+                        <Badge className="border-transparent bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                          <ShieldCheck /> Connected
                         </Badge>
                       ) : (
-                        <Badge variant="outline" className="gap-1 text-xs text-muted-foreground">
-                          <ShieldAlert className="w-3 h-3" /> Not connected
+                        <Badge variant="outline" className="text-muted-foreground">
+                          <ShieldAlert /> Not connected
                         </Badge>
                       )}
                     </div>
-                    {c.value === 'email' && verified && roleEntity?.email ? (
-                      <p className="text-sm text-muted-foreground truncate">{roleEntity.email}</p>
-                    ) : !verified ? (
-                      <p className="text-sm text-muted-foreground">Connect this channel to use it.</p>
-                    ) : selected ? (
-                      <p className="text-sm text-muted-foreground">Selected as your delivery channel.</p>
-                    ) : (
-                      <p className="text-sm text-muted-foreground">Tap the circle to use this channel.</p>
+
+                    {/* Only rendered once verified — before that "Connect" below is
+                        the only meaningful action, and a dead control just crowds
+                        the row. */}
+                    {verified && (
+                      <button
+                        type="button"
+                        role="radio"
+                        aria-checked={selected}
+                        aria-label={
+                          selected
+                            ? `${c.label} is your active extra channel — turn it off`
+                            : `Make ${c.label} your active extra channel`
+                        }
+                        onClick={() => selectChannel(c.value)}
+                        className={cn(
+                          'flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold transition-colors',
+                          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
+                          selected
+                            ? 'border-primary bg-primary/10 text-primary'
+                            : 'border-input text-muted-foreground hover:border-primary hover:text-primary',
+                        )}
+                      >
+                        <span
+                          aria-hidden
+                          className={cn(
+                            'flex size-3.5 items-center justify-center rounded-full border',
+                            selected ? 'border-primary' : 'border-current',
+                          )}
+                        >
+                          {selected && <span className="size-1.5 rounded-full bg-primary" />}
+                        </span>
+                        {selected ? 'Active' : 'Use'}
+                      </button>
                     )}
                   </div>
 
-                  {/* Actions */}
-                  <div className="flex-shrink-0">
+                  {/* Helper copy + action share a full-width row, so neither has to
+                      fight the icon and the indicator for horizontal space. */}
+                  <div className="mt-2.5 flex items-center justify-between gap-3 sm:pl-12">
+                    <p className="min-w-0 flex-1 truncate text-sm text-muted-foreground">
+                      {c.value === 'email' && verified && roleEntity?.email
+                        ? roleEntity.email
+                        : !verified
+                          ? 'Connect this channel to use it.'
+                          : selected
+                            ? 'Notifications also go here.'
+                            : 'Tap “Use” to send notifications here.'}
+                    </p>
+
                     {!verified ? (
-                      <Button variant="outline" size="sm" onClick={() => setSetupChannel(c.value)}>
+                      <Button variant="outline" size="sm" className="shrink-0" onClick={() => setSetupChannel(c.value)}>
                         Connect
                       </Button>
                     ) : c.unlinkable ? (
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="text-muted-foreground hover:text-destructive"
+                        className="shrink-0 text-muted-foreground hover:text-destructive"
                         disabled={busy}
                         onClick={() => handleUnlink(c.value)}
                       >
@@ -466,19 +468,14 @@ export function NotificationSettings() {
               );
             })}
           </div>
-        </div>
-
-        <Separator />
+        </SettingsSection>
 
         {/* Language */}
-        <div className="space-y-3">
-          <div>
-            <h4 className="font-medium flex items-center gap-2">
-              <Languages className="w-4 h-4 text-muted-foreground" />
-              Language
-            </h4>
-            <p className="text-sm text-muted-foreground">The language every notification is rendered in.</p>
-          </div>
+        {/* <SettingsSection
+          title="Language"
+          icon={Languages}
+          info="The language every notification is written in — email, WhatsApp, Telegram and in-app alike. It doesn't change the language of this dashboard."
+        >
           <Select value={language} onValueChange={(v) => setLanguage(v as PreferredLanguage)}>
             <SelectTrigger className="w-full sm:w-64">
               <SelectValue />
@@ -489,29 +486,27 @@ export function NotificationSettings() {
               ))}
             </SelectContent>
           </Select>
-        </div>
-
-        <Separator />
+        </SettingsSection> */}
 
         {/* Events */}
-        <div className="space-y-4">
-          <div>
-            <h4 className="font-medium">Events</h4>
-            <p className="text-sm text-muted-foreground">Pick which events trigger a notification.</p>
-          </div>
-          <div className="space-y-1">
+        <SettingsSection
+          title="Events"
+          info="Which events reach you. Turning one off silences it on every channel, including in-app."
+        >
+          <div className="divide-y">
             {EVENTS.map((e) => (
-              <div key={e.key} className="flex items-center justify-between gap-4 py-2.5">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="p-2 rounded-lg bg-muted text-muted-foreground flex-shrink-0">
-                    <e.Icon className="w-4 h-4" />
+              <div key={e.key} className="flex items-center justify-between gap-3 py-3">
+                <div className="flex min-w-0 flex-1 items-center gap-3">
+                  <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                    <e.Icon className="size-4" />
                   </div>
-                  <div className="min-w-0">
-                    <p className="font-medium">{e.label}</p>
-                    <p className="text-sm text-muted-foreground">{e.description}</p>
+                  <div className="flex min-w-0 items-center gap-1">
+                    <p className="truncate font-medium">{e.label}</p>
+                    <InfoHint label={`About ${e.label}`}>{e.description}</InfoHint>
                   </div>
                 </div>
                 <Switch
+                  className="shrink-0"
                   checked={events[e.key]}
                   onCheckedChange={() => toggleEvent(e.key)}
                   aria-label={e.label}
@@ -519,15 +514,15 @@ export function NotificationSettings() {
               </div>
             ))}
           </div>
-        </div>
+        </SettingsSection>
+      </SettingsSections>
 
-        <div className="flex justify-end border-t pt-4">
-          <Button onClick={handleSave} disabled={!dirty || saving} className="gap-2">
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-            Save Changes
-          </Button>
-        </div>
-      </CardContent>
+      <UnsavedChangesBar
+        visible={dirty || saving}
+        saving={saving}
+        onDiscard={handleDiscard}
+        onSave={handleSave}
+      />
 
       <ChannelSetupDialog
         channel={setupChannel}
@@ -536,7 +531,6 @@ export function NotificationSettings() {
         onRefresh={() => (setupChannel ? refreshForChannel(setupChannel) : Promise.resolve(false))}
         onClose={() => setSetupChannel(null)}
       />
-    </Card>
     </div>
   );
 }

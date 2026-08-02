@@ -20,7 +20,7 @@ function ActiveBar({ show, faded }: { show: boolean; faded?: boolean }) {
   return (
     <span
       className={cn(
-        'absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r-full',
+        'absolute left-0 top-1/2 h-6 w-1.5 -translate-y-1/2 rounded-r-full',
         faded ? 'bg-primary/40' : 'bg-primary',
       )}
     />
@@ -48,7 +48,7 @@ const FOOTER_PAD_Y = 24; // py-3 top + bottom
 const ROW_GAP = 4; // space-y-1
 
 export function Sidebar() {
-  const { sidebarCollapsed, toggleSidebar } = useUI();
+  const { sidebarCollapsed, toggleSidebar, collapsible } = useUI();
   const { unreadCount } = useNotificationStore();
   const navigate = useNavigate();
   const location = useLocation();
@@ -169,8 +169,8 @@ export function Sidebar() {
           disabled={item.disabled}
           className={cn(
             rowBase,
-            solid && 'bg-accent text-accent-foreground',
-            childActive && !solid && 'bg-accent/50 text-accent-foreground',
+            solid && 'bg-primary/10 text-primary font-semibold',
+            childActive && !solid && 'bg-accent/60 text-accent-foreground',
             sidebarCollapsed && 'justify-center',
             item.disabled && 'opacity-50 cursor-not-allowed hover:bg-transparent hover:text-foreground',
           )}
@@ -209,7 +209,7 @@ export function Sidebar() {
                   className={cn(
                     rowBase,
                     'py-2',
-                    cActive && 'bg-accent text-accent-foreground',
+                    cActive && 'bg-primary/10 text-primary font-semibold',
                     child.disabled &&
                     'opacity-50 cursor-not-allowed hover:bg-transparent hover:text-foreground',
                   )}
@@ -235,8 +235,8 @@ export function Sidebar() {
       )}
     >
       {/* Top — store name + description */}
-      <div className="h-16 flex items-center gap-2 px-4 border-b flex-shrink-0">
-        <div className="w-8 h-8 rounded-lg overflow-hidden bg-[#22C55E] flex items-center justify-center flex-shrink-0">
+      <div className="h-16 flex items-center gap-2.5 px-4 border-b flex-shrink-0">
+        <div className="w-9 h-9 rounded-xl overflow-hidden bg-gradient-to-br from-primary to-emerald-400 shadow-brand ring-1 ring-primary/20 flex items-center justify-center flex-shrink-0">
           {storeLogo ? (
             <img src={storeLogo} alt={storeName} className="w-full h-full object-cover" />
           ) : (
@@ -245,7 +245,7 @@ export function Sidebar() {
         </div>
         {!sidebarCollapsed && (
           <div className="flex-1 min-w-0">
-            <p className="font-bold text-sm leading-tight truncate">{storeName}</p>
+            <p className="font-display font-bold text-sm leading-tight tracking-tight truncate">{storeName}</p>
             {storeDescription && (
               <p className="text-xs text-muted-foreground leading-tight truncate">
                 {storeDescription}
@@ -290,7 +290,7 @@ export function Sidebar() {
       <div className="border-t flex-shrink-0">
         {sidebarCollapsed ? (
           <div className="flex justify-center py-3">
-            <div className="relative w-8 h-8 rounded-md bg-[#22C55E] flex items-center justify-center">
+            <div className="relative w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-emerald-400 shadow-brand flex items-center justify-center">
               <Store className="w-4 h-4 text-white" />
               <span className="absolute -bottom-0.5 -right-0.5 rounded-full bg-card p-0.5">
                 <PlatformStatus compact />
@@ -299,33 +299,35 @@ export function Sidebar() {
           </div>
         ) : (
           <div className="flex items-center gap-2 px-4 py-3">
-            <div className="w-8 h-8 rounded-md bg-[#22C55E] flex items-center justify-center flex-shrink-0">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-emerald-400 shadow-brand flex items-center justify-center flex-shrink-0">
               <Store className="w-4 h-4 text-white" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold leading-tight">JoviMall</p>
+              <p className="text-sm font-display font-bold tracking-tight leading-tight">wi-mall</p>
               <PlatformStatus />
             </div>
           </div>
         )}
 
-        <Button
-          variant="ghost"
-          onClick={toggleSidebar}
-          className={cn(
-            'w-full h-10 rounded-none border-t text-xs text-muted-foreground gap-2',
-            sidebarCollapsed && 'px-0'
-          )}
-        >
-          {sidebarCollapsed ? (
-            <ChevronRight className="h-4 w-4" />
-          ) : (
-            <>
-              <ChevronLeft className="h-4 w-4" />
-              Collapse
-            </>
-          )}
-        </Button>
+        {collapsible && (
+          <Button
+            variant="ghost"
+            onClick={toggleSidebar}
+            className={cn(
+              'w-full h-10 rounded-none border-t text-xs text-muted-foreground gap-2',
+              sidebarCollapsed && 'px-0'
+            )}
+          >
+            {sidebarCollapsed ? (
+              <ChevronRight className="h-4 w-4" />
+            ) : (
+              <>
+                <ChevronLeft className="h-4 w-4" />
+                Collapse
+              </>
+            )}
+          </Button>
+        )}
       </div>
     </aside>
   );

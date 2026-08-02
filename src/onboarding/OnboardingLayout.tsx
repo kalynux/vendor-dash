@@ -123,7 +123,11 @@ interface OnboardingLayoutProps {
 
 export function OnboardingLayout({ children, ctaSlot, stepKey }: OnboardingLayoutProps) {
     const { session, logout, viewingStep, currentStep, goBack, jumpToStep } = useOnboarding();
-    const businessName = session?.role_entity.business_name ?? 'Your Store';
+    // The business name moved to the Store, which isn't fetched during onboarding
+    // (the store shell mounts after it). `business_name` may still ride along on
+    // `/auth/me`'s role_entity; the placeholder covers it when it doesn't.
+    const businessName =
+        session?.role_entity.display_name || session?.role_entity.business_name || 'Your Store';
 
     const showBack = viewingStep !== null && viewingStep > 1;
 

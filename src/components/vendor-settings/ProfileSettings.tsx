@@ -3,6 +3,7 @@ import { Camera, Globe, Lock, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { useOnboarding } from '@/onboarding/store/onboarding.store';
+import { useStoreStore } from '@/store';
 import { COUNTRIES, TIMEZONES } from '@/components/vendor-settings/forms/basicSetup.helpers';
 import { mapProfileError } from '@/components/vendor-settings/errors';
 import { UnsavedChangesBar } from '@/components/vendor-settings/UnsavedChangesBar';
@@ -11,7 +12,11 @@ import { resolveFileUrl } from '@/services/files.service';
 import type { BrandingFileRef, VendorProfileUpdatePayload } from '@/types/api';
 import type { ApiFile } from '@/types/file.types';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { LabelWithHint } from '@/components/ui/info-hint';
+import {
+  SettingsSection,
+  SettingsSections,
+} from '@/components/vendor-settings/SettingsSection';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
@@ -57,6 +62,7 @@ function initialsFrom(name: string): string {
  */
 export function ProfileSettings() {
   const { session, updateVendorProfile, isSubmitting } = useOnboarding();
+  const { store } = useStoreStore();
   const roleEntity = session?.role_entity;
 
   const [error, setError] = useState<string | null>(null);
@@ -80,6 +86,9 @@ export function ProfileSettings() {
   if (!roleEntity || !session) return null;
 
   const email = roleEntity.email;
+  // Label for the avatar / initials. The business name moved to the Store, so the
+  // fallback chain is personal display name → store name → email local-part.
+  const displayLabel = fullName || store?.name || email.split('@')[0];
   const role = session.role; // e.g. "vendor" — not editable
   const roleLabel = role.charAt(0).toUpperCase() + role.slice(1);
   const countryLabel = roleEntity.country
@@ -175,36 +184,42 @@ export function ProfileSettings() {
   };
 
   return (
-    <div className="space-y-6">
+    <>
       {error && (
         <div
           role="alert"
-          className="p-3 text-sm bg-destructive/10 text-destructive rounded-lg border border-destructive/20"
+          className="mb-4 p-3 text-sm bg-destructive/10 text-destructive rounded-lg border border-destructive/20"
         >
           {error}
         </div>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Profile Information</CardTitle>
-          <CardDescription>Your personal details and contact information</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
+      <SettingsSections>
+      <SettingsSection
+        title="Profile"
+        info={
+          <>
+            Your personal details. The name and photo here are what teammates and
+            support see — your public storefront name lives under the Store tab.
+            Tap your photo to pick a new one from your media library.
+          </>
+        }
+        contentClassName="space-y-5"
+      >
           {/* Avatar */}
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-4 sm:gap-6">
             <div className="relative">
               {avatarUrl ? (
                 <>
                   <Avatar className="w-24 h-24 ring-2 ring-border">
                     <AvatarImage
                       src={avatarUrl}
-                      alt={fullName || roleEntity.business_name}
+                      alt={displayLabel}
                       crossOrigin="use-credentials"
                       className="object-cover"
                     />
                     <AvatarFallback className="text-2xl font-medium">
-                      {initialsFrom(fullName || roleEntity.business_name)}
+                      {initialsFrom(displayLabel)}
                     </AvatarFallback>
                   </Avatar>
                   <button
@@ -226,7 +241,7 @@ export function ProfileSettings() {
                 >
                   <Avatar className="w-24 h-24 ring-2 ring-border">
                     <AvatarFallback className="text-2xl font-medium">
-                      {initialsFrom(fullName || roleEntity.business_name)}
+                      {initialsFrom(displayLabel)}
                     </AvatarFallback>
                   </Avatar>
                   <span className="absolute inset-0 flex items-center justify-center rounded-full bg-foreground/0 transition-colors group-hover:bg-foreground/40">
@@ -235,12 +250,9 @@ export function ProfileSettings() {
                 </button>
               )}
             </div>
-            <div className="space-y-1">
-              <p className="font-medium">{fullName || roleEntity.business_name}</p>
-              <p className="text-sm text-muted-foreground">{email}</p>
-              <p className="text-xs text-muted-foreground">
-                Pick an image from your media library.
-              </p>
+            <div className="min-w-0 space-y-0.5">
+              <p className="truncate font-medium">{displayLabel}</p>
+              <p className="truncate text-sm text-muted-foreground">{email}</p>
               {displayedAvatar && (
                 <button
                   type="button"
@@ -271,15 +283,24 @@ export function ProfileSettings() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="profile-email">Email</Label>
+              <LabelWithHint
+                htmlFor="profile-email"
+                hintLabel="About your email"
+                hint="This is the address you sign in with, and where receipts and account notices are sent. It can't be edited here — contact support to change it."
+              >
+                Email
+              </LabelWithHint>
               <Input id="profile-email" type="email" value={email} disabled />
-              <p className="text-xs text-muted-foreground">
-                Contact support to change your email address.
-              </p>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="profile-phone">Phone</Label>
+              <LabelWithHint
+                htmlFor="profile-phone"
+                hintLabel="About your phone number"
+                hint="Your account phone number, used for account and payout follow-ups. Include the country code, e.g. +237699000001. Between 8 and 20 characters."
+              >
+                Phone
+              </LabelWithHint>
               <Input
                 id="profile-phone"
                 value={phone}
@@ -293,7 +314,13 @@ export function ProfileSettings() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="profile-whatsapp">WhatsApp Number</Label>
+              <LabelWithHint
+                htmlFor="profile-whatsapp"
+                hintLabel="About your WhatsApp number"
+                hint="The number you take order questions on. Separate from your account phone — the one customers see on your storefront is set under Store → Support & contact."
+              >
+                WhatsApp Number
+              </LabelWithHint>
               <Input
                 id="profile-whatsapp"
                 value={whatsapp}
@@ -303,39 +330,46 @@ export function ProfileSettings() {
             </div>
 
             <div className="space-y-2 md:col-span-2">
-              <Label htmlFor="profile-role">Role</Label>
+              <LabelWithHint
+                htmlFor="profile-role"
+                hintLabel="About your role"
+                hint="What this account may do on the platform. Set by the platform and not editable."
+              >
+                Role
+              </LabelWithHint>
               <div className="relative">
                 <Input id="profile-role" value={roleLabel} disabled />
                 <ShieldCheck className="w-4 h-4 text-muted-foreground absolute right-3 top-1/2 -translate-y-1/2" />
               </div>
             </div>
           </div>
-        </CardContent>
-      </Card>
+      </SettingsSection>
 
       {/* Localization — profile-level regional settings (PATCH /vendor/profile) */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Globe className="w-4 h-4 text-muted-foreground" />
-            Localization
-          </CardTitle>
-          <CardDescription>Your operating country, timezone, and language.</CardDescription>
-        </CardHeader>
-        <CardContent>
+      <SettingsSection
+        title="Localization"
+        icon={Globe}
+        info="Where you operate and in which language you're contacted. Your country drives tax, shipping and address rules; your timezone is used for every date and time in the dashboard."
+      >
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label className="flex items-center gap-1.5 text-muted-foreground">
-                <Lock className="w-3 h-3" /> Country
-              </Label>
+              <LabelWithHint
+                hintLabel="About your country"
+                hint="Set once during onboarding and locked afterwards — it decides your tax, shipping, and address rules, and your business addresses must fall inside it. Contact support if it needs to change."
+              >
+                <Lock className="mr-1.5 w-3 h-3 text-muted-foreground" /> Country
+              </LabelWithHint>
               <Input value={countryLabel} disabled readOnly aria-label="Country (read-only)" />
-              <p className="text-xs text-muted-foreground">
-                Set once during onboarding — locked for tax, shipping, and address policy.
-              </p>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="profile-timezone">Timezone</Label>
+              <LabelWithHint
+                htmlFor="profile-timezone"
+                hintLabel="About your timezone"
+                hint="Every order time, report, and schedule in the dashboard is shown in this zone. Changing it re-labels existing timestamps; it doesn't move them."
+              >
+                Timezone
+              </LabelWithHint>
               <Select value={timezone} onValueChange={setTimezone}>
                 <SelectTrigger id="profile-timezone">
                   <SelectValue placeholder="Select your timezone" />
@@ -351,7 +385,13 @@ export function ProfileSettings() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="profile-language">Language</Label>
+              <LabelWithHint
+                htmlFor="profile-language"
+                hintLabel="About your language"
+                hint="The language your notifications are written in — email, WhatsApp, Telegram and in-app alerts. It does not change the language of this dashboard."
+              >
+                Language
+              </LabelWithHint>
               <Select value={language} onValueChange={setLanguage}>
                 <SelectTrigger id="profile-language">
                   <SelectValue placeholder="Select a language" />
@@ -364,13 +404,10 @@ export function ProfileSettings() {
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground">
-                Language used for your notifications.
-              </p>
             </div>
           </div>
-        </CardContent>
-      </Card>
+      </SettingsSection>
+      </SettingsSections>
 
       <UnsavedChangesBar
         visible={dirty || isSubmitting}
@@ -386,6 +423,6 @@ export function ProfileSettings() {
         multiple={false}
         acceptedTypes={['image']}
       />
-    </div>
+    </>
   );
 }

@@ -2,8 +2,6 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
-  Search,
-  Filter,
   Grid3X3,
   List,
   Plus,
@@ -26,7 +24,6 @@ import {
   TriangleAlert,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Card, CardContent } from '@/components/ui/card';
@@ -41,8 +38,14 @@ import {
   SheetContent,
   SheetHeader,
   SheetTitle,
-  SheetTrigger,
 } from '@/components/ui/sheet';
+import {
+  ActiveFilterChips,
+  FilterMultiChips,
+  FilterSection,
+  FilterSheet,
+  SearchFilterBar,
+} from '@/components/filters';
 import {
   Dialog,
   DialogClose,
@@ -221,6 +224,7 @@ export function Products() {
     setListCache(PRODUCTS_VIEW_KEY, mode);
   }, []);
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
+  const [filterSheetOpen, setFilterSheetOpen] = useState(false);
   const [actionsSheetProduct, setActionsSheetProduct] = useState<ProductListItem | null>(null);
   const [productToDelete, setProductToDelete] = useState<ProductListItem | null>(null);
   const [productToConvert, setProductToConvert] = useState<ProductListItem | null>(null);
@@ -457,8 +461,45 @@ export function Products() {
     ? nonServiceProducts
     : nonServiceProducts.filter((p) => statusFilter.includes(p.status));
 
-  // Mobile infinite list — same service exclusion.
-  const mobileItems = infinite.items.filter((p) => (p.type as string) !== 'service');
+  // Mobile infinite list — same service exclusion, same status filter.
+  const mobileItems = infinite.items.filter(
+    (p) =>
+      (p.type as string) !== 'service' &&
+      (statusFilter.length === 0 || statusFilter.includes(p.status)),
+  );
+
+  // ── Filter sheet plumbing (shared by desktop + mobile) ──────────────────────
+  const activeFilterCount = statusFilter.length;
+
+  const productFilterSheet = (
+    <FilterSheet
+      open={filterSheetOpen}
+      onOpenChange={setFilterSheetOpen}
+      title="Filter products"
+      activeCount={activeFilterCount}
+      onClear={() => setStatusFilter([])}
+      applyLabel="Show products"
+    >
+      <FilterSection title="Status">
+        <FilterMultiChips
+          options={STATUS_OPTIONS}
+          values={statusFilter}
+          onToggle={toggleStatusFilter}
+        />
+      </FilterSection>
+    </FilterSheet>
+  );
+
+  const productFilterChips = (
+    <ActiveFilterChips
+      chips={statusFilter.map((value) => ({
+        key: value,
+        label: STATUS_OPTIONS.find((o) => o.value === value)?.label ?? value,
+        onRemove: () => toggleStatusFilter(value),
+      }))}
+      onClearAll={() => setStatusFilter([])}
+    />
+  );
 
   const allSelected =
     filteredProducts.length > 0 && selectedProducts.length === filteredProducts.length;
@@ -631,14 +672,16 @@ export function Products() {
             </button>
           }
           subheader={
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                placeholder="Search products"
+            <div className="space-y-3">
+              <SearchFilterBar
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10"
+                onChange={setSearchQuery}
+                placeholder="Search products…"
+                activeFilterCount={activeFilterCount}
+                onOpenFilters={() => setFilterSheetOpen(true)}
+                filterLabel="Filter products"
               />
+              {productFilterChips}
             </div>
           }
         />
@@ -731,6 +774,8 @@ export function Products() {
         </div>
 
         <MobileListFooter shown={mobileItems.length} total={infinite.total} noun="products" />
+
+        {productFilterSheet}
 
         {/* Mobile actions bottom sheet */}
         <Sheet
@@ -858,73 +903,31 @@ export function Products() {
       </div>
 
       {/* Search + Filters */}
-      <Card className="border-none shadow-none">
-        <CardContent className="border-none p-0">
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                placeholder="Search products…"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10"
-              />
-            </div>
-            <div className="flex items-center gap-3">
-              <Sheet>
-                <SheetTrigger asChild>
-                  <Button variant="outline" className="gap-2">
-                    <Filter className="w-4 h-4" />
-                    Filters
-                    {statusFilter.length > 0 && (
-                      <span className="ml-1 w-5 h-5 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center">
-                        {statusFilter.length}
-                      </span>
-                    )}
-                  </Button>
-                </SheetTrigger>
-                <SheetContent>
-                  <SheetHeader>
-                    <SheetTitle>Filter Products</SheetTitle>
-                  </SheetHeader>
-                  <div className="mt-6 space-y-4">
-                    <h4 className="text-sm font-medium">Status</h4>
-                    {STATUS_OPTIONS.map(({ value, label }) => (
-                      <label key={value} className="flex items-center gap-2 cursor-pointer">
-                        <Checkbox
-                          checked={statusFilter.includes(value)}
-                          onCheckedChange={() => toggleStatusFilter(value)}
-                        />
-                        <span className="text-sm">{label}</span>
-                      </label>
-                    ))}
-                    {statusFilter.length > 0 && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setStatusFilter([])}
-                        className="mt-2"
-                      >
-                        Clear filters
-                      </Button>
-                    )}
-                  </div>
-                </SheetContent>
-              </Sheet>
-              <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as 'grid' | 'list')}>
-                <TabsList>
-                  <TabsTrigger value="grid">
-                    <Grid3X3 className="w-4 h-4" />
-                  </TabsTrigger>
-                  <TabsTrigger value="list">
-                    <List className="w-4 h-4" />
-                  </TabsTrigger>
-                </TabsList>
-              </Tabs>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="space-y-3">
+        <SearchFilterBar
+          value={searchQuery}
+          onChange={setSearchQuery}
+          placeholder="Search products…"
+          activeFilterCount={activeFilterCount}
+          onOpenFilters={() => setFilterSheetOpen(true)}
+          filterLabel="Filter products"
+          trailing={
+            <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as 'grid' | 'list')}>
+              <TabsList className="h-11 rounded-xl">
+                <TabsTrigger value="grid" aria-label="Grid view">
+                  <Grid3X3 className="w-4 h-4" />
+                </TabsTrigger>
+                <TabsTrigger value="list" aria-label="List view">
+                  <List className="w-4 h-4" />
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+          }
+        />
+        {productFilterChips}
+      </div>
+
+      {productFilterSheet}
 
       {/* Bulk action bar */}
       {selectedProducts.length > 0 && (

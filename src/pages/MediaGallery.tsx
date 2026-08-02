@@ -14,7 +14,6 @@ import {
 } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Search,
   Upload,
   Grid3X3,
   List,
@@ -62,13 +61,6 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
@@ -81,6 +73,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  ActiveFilterChips,
+  FilterChips,
+  FilterSection,
+  FilterSheet,
+  SearchFilterBar,
+  type ActiveFilterChip,
+} from '@/components/filters';
 import { cn, formatFileSize, storagePercent, storageBarColor } from '@/lib/utils';
 import { ApiError } from '@/types/api';
 import { getUploadErrorMessage } from '@/lib/uploadErrors';
@@ -140,6 +140,16 @@ const KIND_FILTERS: { value: FileKind | 'all'; label: string; mime?: string }[] 
 const PROVIDERS: StorageProvider[] = ['local', 's3', 'gcs', 'r2', 'firebase', 'cloudinary'];
 
 type SortField = 'date' | 'name' | 'size';
+
+/** `field:direction` pairs, so sort is one chip group rather than two controls. */
+const SORT_OPTIONS: { value: string; label: string }[] = [
+  { value: 'date:desc', label: 'Newest first' },
+  { value: 'date:asc', label: 'Oldest first' },
+  { value: 'name:asc', label: 'Name A–Z' },
+  { value: 'name:desc', label: 'Name Z–A' },
+  { value: 'size:desc', label: 'Largest first' },
+  { value: 'size:asc', label: 'Smallest first' },
+];
 
 // Small viewport hook — drives the persistent-aside vs slide-over inspector.
 function useIsDesktop(): boolean {
@@ -394,6 +404,7 @@ export function MediaGallery() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>(dCache?.viewMode ?? 'grid');
 
   // Inspector
+  const [filterSheetOpen, setFilterSheetOpen] = useState(false);
   const [inspectId, setInspectId] = useState<string | null>(null);
 
   // Upload
@@ -699,57 +710,113 @@ export function MediaGallery() {
   const totalCount = isMobile ? infinite.total : (pagination?.total ?? files.length);
   const listLoading = isMobile ? infinite.loading : loading;
 
-  // Compact controls reused inside the mobile sticky subheader.
-  const mobileToolbar = (
+  // ── Search + filters (identical on desktop and mobile) ─────────────────────
+  const sortValue = `${sortField}:${sortAsc ? 'asc' : 'desc'}`;
+  const activeFilterCount =
+    (kind !== 'all' ? 1 : 0) + (provider !== 'all' ? 1 : 0) + (sortValue !== 'date:desc' ? 1 : 0);
+
+  const clearFilters = () => {
+    setKind('all');
+    setProvider('all');
+    setSortField('date');
+    setSortAsc(false);
+    setPage(1);
+  };
+
+  const filterChips: ActiveFilterChip[] = [];
+  if (kind !== 'all') {
+    filterChips.push({
+      key: 'kind',
+      label: `Type: ${KIND_FILTERS.find((k) => k.value === kind)?.label ?? kind}`,
+      onRemove: () => { setKind('all'); setPage(1); },
+    });
+  }
+  if (provider !== 'all') {
+    filterChips.push({
+      key: 'provider',
+      label: `Provider: ${provider.toUpperCase()}`,
+      onRemove: () => { setProvider('all'); setPage(1); },
+    });
+  }
+  if (sortValue !== 'date:desc') {
+    filterChips.push({
+      key: 'sort',
+      label: `Sort: ${SORT_OPTIONS.find((o) => o.value === sortValue)?.label ?? sortValue}`,
+      onRemove: () => { setSortField('date'); setSortAsc(false); },
+    });
+  }
+
+  const viewToggle = (
+    <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as 'grid' | 'list')}>
+      <TabsList className="h-11 rounded-xl">
+        <TabsTrigger value="grid" aria-label="Grid view">
+          <Grid3X3 className="h-4 w-4" />
+        </TabsTrigger>
+        <TabsTrigger value="list" aria-label="List view">
+          <List className="h-4 w-4" />
+        </TabsTrigger>
+      </TabsList>
+    </Tabs>
+  );
+
+  const toolbar = (withViewToggle: boolean) => (
     <div className="space-y-3">
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          placeholder="Search by name or type…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="pl-10"
+      <SearchFilterBar
+        value={search}
+        onChange={setSearch}
+        placeholder="Search by name or type…"
+        activeFilterCount={activeFilterCount}
+        onOpenFilters={() => setFilterSheetOpen(true)}
+        filterLabel="Filter files"
+        trailing={withViewToggle ? viewToggle : undefined}
+      />
+      <ActiveFilterChips chips={filterChips} onClearAll={clearFilters} />
+    </div>
+  );
+
+  const filterSheet = (
+    <FilterSheet
+      open={filterSheetOpen}
+      onOpenChange={setFilterSheetOpen}
+      title="Filter media"
+      activeCount={activeFilterCount}
+      onClear={clearFilters}
+      applyLabel="Show files"
+    >
+      <FilterSection title="File type">
+        <FilterChips
+          options={KIND_FILTERS.filter((k) => k.value !== 'all').map((k) => ({
+            value: k.value as FileKind,
+            label: k.label,
+          }))}
+          value={kind === 'all' ? undefined : kind}
+          onChange={(v) => { setKind(v ?? 'all'); setPage(1); }}
+          allLabel="All"
         />
-      </div>
-      <div className="-mx-1 flex items-center gap-2 overflow-x-auto px-1">
-        <div className="flex shrink-0 items-center gap-1 rounded-lg border p-1">
-          {KIND_FILTERS.map((k) => (
-            <button
-              key={k.value}
-              onClick={() => setKind(k.value)}
-              className={cn(
-                'rounded-md px-2.5 py-1 text-sm transition-colors whitespace-nowrap',
-                kind === k.value
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-muted-foreground hover:bg-muted',
-              )}
-            >
-              {k.label}
-            </button>
-          ))}
-        </div>
-        <Select
-          value={`${sortField}:${sortAsc ? 'asc' : 'desc'}`}
-          onValueChange={(v) => {
-            const [field, dir] = v.split(':') as [SortField, 'asc' | 'desc'];
+      </FilterSection>
+
+      <FilterSection title="Storage provider">
+        <FilterChips
+          options={PROVIDERS.map((p) => ({ value: p, label: p.toUpperCase() }))}
+          value={provider === 'all' ? undefined : provider}
+          onChange={(v) => { setProvider(v ?? 'all'); setPage(1); }}
+          allLabel="All providers"
+        />
+      </FilterSection>
+
+      <FilterSection title="Sort by">
+        <FilterChips
+          options={SORT_OPTIONS}
+          value={sortValue}
+          onChange={(v) => {
+            const [field, dir] = (v ?? 'date:desc').split(':') as [SortField, 'asc' | 'desc'];
             setSortField(field);
             setSortAsc(dir === 'asc');
           }}
-        >
-          <SelectTrigger className="w-[140px] shrink-0">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="date:desc">Newest first</SelectItem>
-            <SelectItem value="date:asc">Oldest first</SelectItem>
-            <SelectItem value="name:asc">Name A–Z</SelectItem>
-            <SelectItem value="name:desc">Name Z–A</SelectItem>
-            <SelectItem value="size:desc">Largest first</SelectItem>
-            <SelectItem value="size:asc">Smallest first</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-    </div>
+          hideAll
+        />
+      </FilterSection>
+    </FilterSheet>
   );
 
   return (
@@ -789,7 +856,7 @@ export function MediaGallery() {
                 {uploading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Upload className="h-5 w-5" />}
               </button>
             }
-            subheader={mobileToolbar}
+            subheader={toolbar(false)}
           />
         )}
 
@@ -863,87 +930,9 @@ export function MediaGallery() {
         )}
 
         {/* Toolbar (desktop only — mobile uses the sticky subheader) */}
-        {!isMobile && (
-        <Card>
-          <CardContent className="flex flex-col gap-3 p-4 lg:flex-row lg:items-center">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Search by name or type…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-10"
-              />
-            </div>
+        {!isMobile && toolbar(true)}
 
-            <div className="flex flex-wrap items-center gap-2">
-              {/* Kind chips (server mimeType filter) */}
-              <div className="flex items-center gap-1 rounded-lg border p-1">
-                {KIND_FILTERS.map((k) => (
-                  <button
-                    key={k.value}
-                    onClick={() => setKind(k.value)}
-                    className={cn(
-                      'rounded-md px-2.5 py-1 text-sm transition-colors',
-                      kind === k.value
-                        ? 'bg-primary text-primary-foreground'
-                        : 'text-muted-foreground hover:bg-muted',
-                    )}
-                  >
-                    {k.label}
-                  </button>
-                ))}
-              </div>
-
-              <Select value={provider} onValueChange={(v) => setProvider(v as StorageProvider | 'all')}>
-                <SelectTrigger className="w-[130px]">
-                  <SelectValue placeholder="Provider" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All providers</SelectItem>
-                  {PROVIDERS.map((p) => (
-                    <SelectItem key={p} value={p} className="uppercase">
-                      {p}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <Select
-                value={`${sortField}:${sortAsc ? 'asc' : 'desc'}`}
-                onValueChange={(v) => {
-                  const [field, dir] = v.split(':') as [SortField, 'asc' | 'desc'];
-                  setSortField(field);
-                  setSortAsc(dir === 'asc');
-                }}
-              >
-                <SelectTrigger className="w-[150px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="date:desc">Newest first</SelectItem>
-                  <SelectItem value="date:asc">Oldest first</SelectItem>
-                  <SelectItem value="name:asc">Name A–Z</SelectItem>
-                  <SelectItem value="name:desc">Name Z–A</SelectItem>
-                  <SelectItem value="size:desc">Largest first</SelectItem>
-                  <SelectItem value="size:asc">Smallest first</SelectItem>
-                </SelectContent>
-              </Select>
-
-              <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as 'grid' | 'list')}>
-                <TabsList>
-                  <TabsTrigger value="grid">
-                    <Grid3X3 className="h-4 w-4" />
-                  </TabsTrigger>
-                  <TabsTrigger value="list">
-                    <List className="h-4 w-4" />
-                  </TabsTrigger>
-                </TabsList>
-              </Tabs>
-            </div>
-          </CardContent>
-        </Card>
-        )}
+        {filterSheet}
 
         {/* Main: library + persistent inspector (desktop) */}
         <div className={cn('grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_360px]', isMobile && 'px-4 pt-3')}>

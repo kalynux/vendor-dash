@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
-  Plus, Search, Ticket as TicketIcon, ChevronRight,
+  Plus, Ticket as TicketIcon, ChevronRight,
   ShoppingCart, Package, Calendar, User, Tag, HelpCircle, Loader2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -15,6 +14,15 @@ import {
 import {
   Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
+import {
+  ActiveFilterChips,
+  FilterChips,
+  FilterField,
+  FilterSection,
+  FilterSheet,
+  SearchFilterBar,
+  type ActiveFilterChip,
+} from '@/components/filters';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useInfiniteList } from '@/hooks/use-infinite-list';
@@ -28,7 +36,7 @@ import { FaqSheet } from '@/components/tickets/FaqSheet';
 import {
   STATUS_LABELS, STATUS_BADGE_CLASSES, STATUS_DOT_CLASSES, STATUS_TABS,
   PRIORITY_LABELS, PRIORITY_BADGE_CLASSES, PRIORITY_DOT_CLASSES, TICKET_PRIORITIES,
-  TICKET_TYPE_GROUPS, getTypeVisual, shortTicketRef, relativeTime,
+  TICKET_TYPE_GROUPS, TICKET_TYPE_LABELS, getTypeVisual, shortTicketRef, relativeTime,
 } from '@/components/tickets/ticket.constants';
 import { fetchTickets } from '@/services/tickets.service';
 import { ApiError } from '@/types/api';
@@ -81,6 +89,7 @@ export function Tickets() {
   const [createOpen, setCreateOpen] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [faqOpen, setFaqOpen] = useState(false);
+  const [filterSheetOpen, setFilterSheetOpen] = useState(false);
 
   const isMobile = useIsMobile();
   const location = useLocation();
@@ -219,88 +228,120 @@ export function Tickets() {
   const hasActiveQuery =
     !!statusFilter || !!priorityFilter || !!typeFilter || searchQuery.trim().length > 0;
 
-  // ── Shared filter UI (reused in the desktop layout and the mobile subheader) ──
-  const statusTabsNode = (
-    <div className="-mx-1 overflow-x-auto">
-      <div className="flex min-w-max items-center gap-1 border-b px-1">
-        {STATUS_TABS.map((tab) => {
-          const active = statusFilter === tab.value;
-          return (
-            <button
-              key={tab.label}
-              onClick={() => { setStatusFilter(tab.value); setPage(1); }}
-              className={cn(
-                'relative whitespace-nowrap px-3 py-2 text-sm font-medium transition-colors',
-                active ? 'text-foreground' : 'text-muted-foreground hover:text-foreground',
-              )}
-            >
-              {tab.label}
-              {active && <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-primary" />}
-            </button>
-          );
-        })}
-      </div>
+  // ── Shared search + filter UI (desktop layout and mobile subheader) ─────────
+  const activeFilterCount =
+    (statusFilter ? 1 : 0) +
+    (priorityFilter ? 1 : 0) +
+    (typeFilter ? 1 : 0) +
+    (sort !== SORT_OPTIONS[0].value ? 1 : 0);
+
+  const activeChips: ActiveFilterChip[] = [];
+  if (statusFilter) {
+    activeChips.push({
+      key: 'status',
+      label: `Status: ${STATUS_LABELS[statusFilter] ?? statusFilter}`,
+      onRemove: () => { setStatusFilter(null); setPage(1); },
+    });
+  }
+  if (typeFilter) {
+    activeChips.push({
+      key: 'type',
+      label: `Type: ${TICKET_TYPE_LABELS[typeFilter] ?? typeFilter}`,
+      onRemove: () => { setTypeFilter(''); setPage(1); },
+    });
+  }
+  if (priorityFilter) {
+    activeChips.push({
+      key: 'priority',
+      label: `Priority: ${PRIORITY_LABELS[priorityFilter]}`,
+      onRemove: () => { setPriorityFilter(''); setPage(1); },
+    });
+  }
+  if (sort !== SORT_OPTIONS[0].value) {
+    activeChips.push({
+      key: 'sort',
+      label: `Sort: ${sortConfig.label}`,
+      onRemove: () => { setSort(SORT_OPTIONS[0].value); setPage(1); },
+    });
+  }
+
+  const filtersNode = (
+    <div className="space-y-3">
+      <SearchFilterBar
+        value={searchQuery}
+        onChange={setSearchQuery}
+        placeholder="Search tickets…"
+        activeFilterCount={activeFilterCount}
+        onOpenFilters={() => setFilterSheetOpen(true)}
+        filterLabel="Filter tickets"
+      />
+      <ActiveFilterChips chips={activeChips} onClearAll={clearFilters} />
     </div>
   );
 
-  const filtersNode = (
-    <div className="flex flex-col gap-3 lg:flex-row">
-      <div className="relative flex-1">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          placeholder="Search tickets by subject or description…"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="pl-10"
+  const filterSheet = (
+    <FilterSheet
+      open={filterSheetOpen}
+      onOpenChange={setFilterSheetOpen}
+      title="Filter tickets"
+      activeCount={activeFilterCount}
+      onClear={clearFilters}
+      applyLabel="Show tickets"
+    >
+      <FilterSection title="Status">
+        <FilterChips
+          options={STATUS_TABS.filter((t): t is { label: string; value: TicketStatus } => t.value !== null)
+            .map((t) => ({ value: t.value, label: t.label }))}
+          value={statusFilter ?? undefined}
+          onChange={(v) => { setStatusFilter(v ?? null); setPage(1); }}
+          allLabel="Any status"
         />
-      </div>
-      <div className="-mx-1 flex gap-3 overflow-x-auto px-1 pb-1 lg:mx-0 lg:overflow-visible lg:px-0 lg:pb-0">
-        {/* Type */}
-        <Select
-          value={typeFilter || ALL}
-          onValueChange={(v) => { setTypeFilter(v === ALL ? '' : (v as TicketType)); setPage(1); }}
-        >
-          <SelectTrigger className="w-40 shrink-0 lg:w-44"><SelectValue placeholder="All types" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL}>All types</SelectItem>
-            {TICKET_TYPE_GROUPS.map((g) => (
-              <SelectGroup key={g.groupLabel}>
-                <SelectLabel>{g.groupLabel}</SelectLabel>
-                {g.values.map((v) => (
-                  <SelectItem key={v.value} value={v.value}>{v.label}</SelectItem>
-                ))}
-              </SelectGroup>
-            ))}
-          </SelectContent>
-        </Select>
+      </FilterSection>
 
-        {/* Priority */}
-        <Select
-          value={priorityFilter || ALL}
-          onValueChange={(v) => { setPriorityFilter(v === ALL ? '' : (v as UpdatablePriority)); setPage(1); }}
-        >
-          <SelectTrigger className="w-36 shrink-0 lg:w-40"><SelectValue placeholder="All priorities" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL}>All priorities</SelectItem>
-            {TICKET_PRIORITIES.map((p) => (
-              <SelectItem key={p} value={p}>{PRIORITY_LABELS[p]}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      <FilterSection title="Priority">
+        <FilterChips
+          options={TICKET_PRIORITIES.map((p) => ({ value: p, label: PRIORITY_LABELS[p] }))}
+          value={priorityFilter || undefined}
+          onChange={(v) => { setPriorityFilter((v ?? '') as UpdatablePriority | ''); setPage(1); }}
+          allLabel="Any"
+        />
+      </FilterSection>
 
-        {/* Sort */}
-        <Select value={sort} onValueChange={(v) => { setSort(v as SortKey); setPage(1); }}>
-          <SelectTrigger className="w-44 shrink-0 lg:w-48">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {SORT_OPTIONS.map((o) => (
-              <SelectItem key={o.value} value={o.value}>Sort: {o.label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-    </div>
+      {/* Type has ~40 values across 8 groups — a grouped select stays scannable
+          where a chip wall would not. */}
+      <FilterSection title="Type">
+        <FilterField>
+          <Select
+            value={typeFilter || ALL}
+            onValueChange={(v) => { setTypeFilter(v === ALL ? '' : (v as TicketType)); setPage(1); }}
+          >
+            <SelectTrigger className="h-11 w-full rounded-xl">
+              <SelectValue placeholder="All types" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL}>All types</SelectItem>
+              {TICKET_TYPE_GROUPS.map((g) => (
+                <SelectGroup key={g.groupLabel}>
+                  <SelectLabel>{g.groupLabel}</SelectLabel>
+                  {g.values.map((v) => (
+                    <SelectItem key={v.value} value={v.value}>{v.label}</SelectItem>
+                  ))}
+                </SelectGroup>
+              ))}
+            </SelectContent>
+          </Select>
+        </FilterField>
+      </FilterSection>
+
+      <FilterSection title="Sort by">
+        <FilterChips
+          options={SORT_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+          value={sort}
+          onChange={(v) => { setSort(v ?? SORT_OPTIONS[0].value); setPage(1); }}
+          hideAll
+        />
+      </FilterSection>
+    </FilterSheet>
   );
 
   const emptyNode = (
@@ -343,6 +384,7 @@ export function Tickets() {
 
   const sheets = (
     <>
+      {filterSheet}
       <CreateTicketSheet
         open={createOpen}
         onOpenChange={setCreateOpen}
@@ -387,7 +429,7 @@ export function Tickets() {
               </button>
             </>
           }
-          subheader={<div className="space-y-3">{statusTabsNode}{filtersNode}</div>}
+          subheader={filtersNode}
         />
 
         <div className="px-4 pt-3 pb-28">
@@ -439,7 +481,6 @@ export function Tickets() {
         </div>
       </div>
 
-      {statusTabsNode}
       {filtersNode}
 
       {/* Content */}

@@ -4,6 +4,13 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Textarea } from '@/components/ui/textarea';
+import {
+    ActiveFilterChips,
+    FilterChips,
+    FilterSection,
+    FilterSheet,
+    SearchFilterBar,
+} from '@/components/filters';
 import { cn } from '@/lib/utils';
 import { useAgencyConnectionActions } from '@/hooks/useAgencyConnectionActions';
 import { listAgencyConnections, resolveAgencyDisplayForConnections } from '@/services/agency-connections.service';
@@ -226,6 +233,8 @@ export function ConnectionsList({
     const [isLoading, setIsLoading] = useState(true);
     const [loadError, setLoadError] = useState<string | null>(null);
     const [chip, setChip] = useState<StatusChip>('all');
+    const [search, setSearch] = useState('');
+    const [filtersOpen, setFiltersOpen] = useState(false);
 
     const actions = useAgencyConnectionActions({
         onChanged: (_agencyId, dto) => {
@@ -268,27 +277,53 @@ export function ConnectionsList({
         load();
     }, [load]);
 
-    const filtered = connections.filter((c) => matchesChip(c.status, chip));
+    // The whole connection history is already in memory, so name search is local.
+    const query = search.trim().toLowerCase();
+    const filtered = connections.filter((c) => {
+        if (!matchesChip(c.status, chip)) return false;
+        if (!query) return true;
+        return (agencyDisplay.get(c.agencyId)?.agencyName ?? '').toLowerCase().includes(query);
+    });
+
+    const activeFilterCount = chip === 'all' ? 0 : 1;
 
     return (
         <div className="space-y-3">
-            <div className="flex flex-wrap gap-1.5">
-                {CHIPS.map((c) => (
-                    <button
-                        key={c.key}
-                        type="button"
-                        onClick={() => setChip(c.key)}
-                        className={cn(
-                            'text-xs px-3 py-1.5 rounded-full border transition-colors',
-                            chip === c.key
-                                ? 'bg-primary text-primary-foreground border-primary'
-                                : 'bg-card border-border text-muted-foreground hover:text-foreground',
-                        )}
-                    >
-                        {c.label}
-                    </button>
-                ))}
-            </div>
+            <SearchFilterBar
+                value={search}
+                onChange={setSearch}
+                placeholder="Search connections…"
+                activeFilterCount={activeFilterCount}
+                onOpenFilters={() => setFiltersOpen(true)}
+                filterLabel="Filter connections"
+            />
+            <ActiveFilterChips
+                chips={chip === 'all'
+                    ? []
+                    : [{
+                        key: 'status',
+                        label: `Status: ${CHIPS.find((c) => c.key === chip)?.label ?? chip}`,
+                        onRemove: () => setChip('all'),
+                    }]}
+            />
+
+            <FilterSheet
+                open={filtersOpen}
+                onOpenChange={setFiltersOpen}
+                title="Filter connections"
+                activeCount={activeFilterCount}
+                onClear={() => setChip('all')}
+                applyLabel="Show connections"
+            >
+                <FilterSection title="Status">
+                    <FilterChips
+                        options={CHIPS.filter((c) => c.key !== 'all').map((c) => ({ value: c.key, label: c.label }))}
+                        value={chip === 'all' ? undefined : chip}
+                        onChange={(v) => setChip(v ?? 'all')}
+                        allLabel="All"
+                    />
+                </FilterSection>
+            </FilterSheet>
 
             {isLoading ? (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground py-6">
@@ -312,7 +347,10 @@ export function ConnectionsList({
                         return (
                             <div
                                 key={connection.id}
-                                className="flex items-center justify-between gap-3 rounded-xl border border-border p-3"
+                                // Actions ("Set as default" + "Terminate") need ~200px side by
+                                // side, so below `md` they wrap onto their own line instead of
+                                // squeezing — or clipping — the agency name.
+                                className="flex flex-col gap-3 rounded-xl border border-border p-3 md:flex-row md:items-center md:justify-between"
                             >
                                 <div className="flex items-center gap-3 min-w-0">
                                     <div className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center flex-shrink-0 overflow-hidden">
@@ -331,7 +369,7 @@ export function ConnectionsList({
                                         </Badge>
                                     </div>
                                 </div>
-                                <div className="flex-shrink-0">
+                                <div className="flex flex-shrink-0 justify-end">
                                     <ConnectionRowActions
                                         connection={connection}
                                         actions={actions}

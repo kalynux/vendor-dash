@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { CreditCard, Smartphone, Plus, Trash2, Star, Loader2, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { SettingsSection } from '@/components/vendor-settings/SettingsSection';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -87,14 +87,10 @@ export function SavedPaymentMethodsCard() {
   const atLimit = methods.length >= MAX_METHODS;
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
-        <div className="space-y-1.5">
-          <CardTitle>Payment methods</CardTitle>
-          <CardDescription>
-            Saved methods pre-fill checkout. We never store full card numbers or CVV.
-          </CardDescription>
-        </div>
+    <SettingsSection
+      title="Payment methods"
+      info={`Saved methods pre-fill checkout when you buy a plan or credits. Only a token and the last digits are stored — never the full card number or the CVV. Up to ${MAX_METHODS} methods. Deleting your default doesn't promote another one, so pick a new default yourself.`}
+      action={
         <Button
           size="sm"
           className="gap-1"
@@ -104,8 +100,8 @@ export function SavedPaymentMethodsCard() {
         >
           <Plus className="h-4 w-4" /> Add
         </Button>
-      </CardHeader>
-      <CardContent>
+      }
+    >
         {loading ? (
           <CardSkeleton lines={3} />
         ) : error ? (
@@ -174,7 +170,6 @@ export function SavedPaymentMethodsCard() {
             ))}
           </ul>
         )}
-      </CardContent>
 
       <AddPaymentMethodDialog
         open={addOpen}
@@ -212,6 +207,6 @@ export function SavedPaymentMethodsCard() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </Card>
+    </SettingsSection>
   );
 }

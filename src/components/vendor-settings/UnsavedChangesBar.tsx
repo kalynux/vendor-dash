@@ -12,25 +12,40 @@ interface UnsavedChangesBarProps {
     onSave?: () => void;
     /** When set, Save is a submit button for that form (react-hook-form flows). */
     formId?: string;
+    /** Blocks Save only (e.g. a field is invalid); Discard stays usable. */
+    saveDisabled?: boolean;
 }
 
 /**
  * Floating "Unsaved changes" pill pinned to the bottom of the viewport, with
  * Discard / Save actions. One instance per settings tab — the tab tracks its
  * own dirty state and performs a single API call on save.
+ *
+ * On mobile it has to clear the tab bar (4rem) *and* the FAB that pops 1.5rem
+ * above it, hence the offset; it also stretches to the full width there so the
+ * label truncates instead of the buttons being clipped off the pill.
  */
-export function UnsavedChangesBar({ visible, saving, onDiscard, onSave, formId }: UnsavedChangesBarProps) {
+export function UnsavedChangesBar({
+    visible,
+    saving,
+    onDiscard,
+    onSave,
+    formId,
+    saveDisabled,
+}: UnsavedChangesBarProps) {
     if (!visible) return null;
 
     return (
-        <div className="pointer-events-none fixed inset-x-0 bottom-6 z-50 flex justify-center px-4">
-            <div className="pointer-events-auto flex items-center gap-2 rounded-full border bg-background/95 py-1.5 pl-4 pr-1.5 shadow-lg backdrop-blur animate-fade-in sm:gap-3">
-                <span className="relative flex h-2 w-2">
+        <div className="pointer-events-none fixed inset-x-0 bottom-[calc(5.75rem+env(safe-area-inset-bottom))] z-50 flex justify-center px-3 md:bottom-6 md:px-4">
+            <div className="pointer-events-auto flex w-full max-w-sm items-center gap-2 rounded-full border bg-background/95 py-1.5 pl-3.5 pr-1.5 shadow-lg backdrop-blur animate-fade-in md:w-auto md:max-w-none md:gap-3 md:pl-4">
+                <span className="relative flex h-2 w-2 shrink-0">
                     <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-500 opacity-60" />
                     <span className="relative inline-flex h-2 w-2 rounded-full bg-amber-500" />
                 </span>
-                <p className="text-sm font-medium">Unsaved changes</p>
-                <div className="flex items-center gap-1.5">
+                <p className="min-w-0 flex-1 truncate text-xs font-medium md:flex-none md:text-sm">
+                    Unsaved changes
+                </p>
+                <div className="flex shrink-0 items-center gap-1 md:gap-1.5">
                     <Button
                         type="button"
                         variant="ghost" // destructive, outline, secondary
@@ -47,10 +62,11 @@ export function UnsavedChangesBar({ visible, saving, onDiscard, onSave, formId }
                         size="sm"
                         className="gap-1.5 rounded-full"
                         onClick={formId ? undefined : onSave}
-                        disabled={saving}
+                        disabled={saving || saveDisabled}
                     >
                         {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-                        Save changes
+                        <span className="md:hidden">Save</span>
+                        <span className="hidden md:inline">Save changes</span>
                     </Button>
                 </div>
             </div>

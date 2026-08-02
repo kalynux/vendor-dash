@@ -29,7 +29,7 @@ import { Sidebar } from '@/components/layout/Sidebar';
 import { Header } from '@/components/layout/Header';
 import { MobileTabBar } from '@/components/layout/MobileTabBar';
 import { NotificationsBootstrap } from '@/components/notifications/NotificationsBootstrap';
-import { useIsMobile } from '@/hooks/use-mobile';
+import { useIsMobile, useIsTablet } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 
 // Onboarding system
@@ -38,19 +38,23 @@ import { OnboardingGuard } from '@/onboarding/OnboardingGuard';
 import { OnboardingRouter } from '@/onboarding/OnboardingRouter';
 import { OnboardingErrorBoundary } from '@/onboarding/OnboardingErrorBoundary';
 
-// UIStore (kept for sidebar + theme); StoreStore for the vendor's storefront profile
-import { useUIStore, useStoreStore } from '@/store';
+// StoreStore for the vendor's storefront profile
+import { useStoreStore } from '@/store';
 
 // ─── Sidebar collapse context (preserved for Sidebar/Header compatibility) ────
 
 interface UIContextType {
   sidebarCollapsed: boolean;
   toggleSidebar: () => void;
+  /** False in the tablet range, where the sidebar is force-collapsed to the
+   *  icon rail and the manual collapse toggle is hidden. */
+  collapsible: boolean;
 }
 
 const UIContext = createContext<UIContextType>({
   sidebarCollapsed: false,
   toggleSidebar: () => { },
+  collapsible: true,
 });
 
 export const useUI = () => useContext(UIContext);
@@ -162,7 +166,8 @@ function DashboardShell() {
         )}
       >
         {!isMobile && <Header />}
-        <main className={cn('p-6', isMobile && 'pb-24')}>
+        <main className={cn('px-6 py-6 md:px-8 md:py-8', isMobile && 'pb-[calc(6rem_+_env(safe-area-inset-bottom))]')}>
+          <div className="mx-auto w-full max-w-[1600px]">
           <Routes>
             <Route index element={<Overview />} />
             <Route path="orders" element={<Orders />} />
@@ -192,6 +197,7 @@ function DashboardShell() {
             <Route path="service-edit/:id" element={<ServiceEdit />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
+          </div>
         </main>
       </div>
       {isMobile && <MobileTabBar />}
@@ -203,7 +209,10 @@ function DashboardShell() {
 
 function AppContent() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const { theme } = useUIStore();
+  const isTablet = useIsTablet();
+  // In the tablet range the sidebar is pinned to its icon rail regardless of
+  // the user's manual toggle, reclaiming horizontal space for content.
+  const effectiveCollapsed = isTablet || sidebarCollapsed;
   const reactNavigate = useNavigate();
   const location = useLocation();
   const currentRoute = pathToLegacyRoute(location.pathname);
@@ -239,8 +248,10 @@ function AppContent() {
       }}
     >
       <LegacyRouterContext.Provider value={{ route: currentRoute, navigate: legacyNavigate }}>
-        <UIContext.Provider value={{ sidebarCollapsed, toggleSidebar }}>
-          <div className={theme === 'dark' ? 'dark' : ''}>
+        <UIContext.Provider value={{ sidebarCollapsed: effectiveCollapsed, toggleSidebar, collapsible: !isTablet }}>
+          {/* The theme class is applied to <html> by StoreProvider — it has to
+              sit above <body>, which carries `bg-background`/`text-foreground`. */}
+          <>
             <OnboardingErrorBoundary>
               <OnboardingProvider>
                 <Routes>
@@ -301,7 +312,7 @@ function AppContent() {
               </OnboardingProvider>
             </OnboardingErrorBoundary>
             <Toaster richColors position="top-right" />
-          </div>
+          </>
         </UIContext.Provider>
       </LegacyRouterContext.Provider>
     </LegacyAuthContext.Provider>

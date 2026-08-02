@@ -4,6 +4,10 @@ module.exports = {
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ["var(--font-sans)"],
+        display: ["var(--font-display)"],
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
@@ -21,6 +25,18 @@ module.exports = {
         destructive: {
           DEFAULT: "hsl(var(--destructive) / <alpha-value>)",
           foreground: "hsl(var(--destructive-foreground) / <alpha-value>)",
+        },
+        success: {
+          DEFAULT: "hsl(var(--success))",
+          foreground: "hsl(var(--success-foreground))",
+        },
+        warning: {
+          DEFAULT: "hsl(var(--warning))",
+          foreground: "hsl(var(--warning-foreground))",
+        },
+        info: {
+          DEFAULT: "hsl(var(--info))",
+          foreground: "hsl(var(--info-foreground))",
         },
         muted: {
           DEFAULT: "hsl(var(--muted))",
@@ -57,7 +73,15 @@ module.exports = {
         xs: "calc(var(--radius) - 6px)",
       },
       boxShadow: {
-        xs: "0 1px 2px 0 rgb(0 0 0 / 0.05)",
+        xs: "0 1px 2px 0 rgb(16 24 40 / 0.05)",
+        sm: "0 1px 3px 0 rgb(16 24 40 / 0.08), 0 1px 2px -1px rgb(16 24 40 / 0.06)",
+        DEFAULT:
+          "0 2px 4px -1px rgb(16 24 40 / 0.06), 0 4px 12px -2px rgb(16 24 40 / 0.08)",
+        md: "0 4px 8px -2px rgb(16 24 40 / 0.08), 0 8px 20px -4px rgb(16 24 40 / 0.10)",
+        lg: "0 10px 24px -6px rgb(16 24 40 / 0.12), 0 4px 8px -4px rgb(16 24 40 / 0.08)",
+        xl: "0 20px 44px -10px rgb(16 24 40 / 0.16), 0 6px 14px -6px rgb(16 24 40 / 0.10)",
+        brand:
+          "0 8px 24px -8px hsl(var(--primary) / 0.45), 0 2px 6px -2px hsl(var(--primary) / 0.30)",
       },
       keyframes: {
         "accordion-down": {
@@ -72,11 +96,16 @@ module.exports = {
           "0%,70%,100%": { opacity: "1" },
           "20%,50%": { opacity: "0" },
         },
+        "fade-up": {
+          from: { opacity: "0", transform: "translateY(14px)" },
+          to: { opacity: "1", transform: "translateY(0)" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
         "caret-blink": "caret-blink 1.25s ease-out infinite",
+        "fade-up": "fade-up 0.55s cubic-bezier(0.16, 1, 0.3, 1) both",
       },
     },
   },

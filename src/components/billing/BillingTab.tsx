@@ -34,6 +34,10 @@ import { SavedPaymentMethodsCard } from './SavedPaymentMethodsCard';
 import { PaymentDialog } from './PaymentDialog';
 import { CardSkeleton, PlansSkeleton } from './BillingSkeletons';
 import {
+  SettingsSection,
+  SettingsSections,
+} from '@/components/vendor-settings/SettingsSection';
+import {
   formatCredits,
   readStripeResume,
   clearStripeResume,
@@ -217,28 +221,30 @@ export function BillingTab() {
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-6 lg:grid-cols-2">
-        {current && <CurrentPlanCard data={current} productCount={productCount} />}
-        {balance !== null && (
-          <CreditWalletCard balance={balance} packs={packs} onBuyPack={openPackPurchase} />
-        )}
-      </div>
-
-      {storage && <StorageUsageCard storage={storage} onViewPlans={scrollToPlans} />}
-
-      <section ref={plansRef} className="space-y-3">
-        <div>
-          <h3 className="text-lg font-semibold">Plans</h3>
-          <p className="text-sm text-muted-foreground">
-            Upgrade any time — a paid plan you buy now starts when your current one ends.
-          </p>
+      <SettingsSections>
+        {/* Plan + wallet sit side by side from lg; below that they are two
+            sections in the same flow, separated by a rule on mobile. */}
+        <div className="grid max-md:divide-y md:gap-6 lg:grid-cols-2">
+          {current && <CurrentPlanCard data={current} productCount={productCount} />}
+          {balance !== null && (
+            <CreditWalletCard balance={balance} packs={packs} onBuyPack={openPackPurchase} />
+          )}
         </div>
-        <PlansCatalog plans={plans} current={current} onBuy={openPlanPurchase} />
-      </section>
 
-      <SavedPaymentMethodsCard />
+        {storage && <StorageUsageCard storage={storage} onViewPlans={scrollToPlans} />}
 
-      <BillingSettingsCard />
+        <SettingsSection
+          ref={plansRef}
+          title="Plans"
+          info="Upgrade any time. A paid plan you buy now doesn't cut your current one short — it's queued and starts the day the current one ends."
+        >
+          <PlansCatalog plans={plans} current={current} onBuy={openPlanPurchase} />
+        </SettingsSection>
+
+        <SavedPaymentMethodsCard />
+
+        <BillingSettingsCard />
+      </SettingsSections>
 
       {payment && (
         <PaymentDialog

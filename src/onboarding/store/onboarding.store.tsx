@@ -17,7 +17,6 @@ import type {
     BasicSetupPayload,
     DeliveryLinkingPayload,
     BrandingPayload,
-    Branding,
     BrandingFileRef,
     PolicySetupPayload,
     OnboardingStepResponse,
@@ -105,21 +104,17 @@ export interface OnboardingState {
     /**
      * Post-onboarding edit (Settings). PATCH /vendor/profile with a partial patch.
      * Merges the submitted fields into session.role_entity and bumps version.
-     * Use for payout, branding, addresses, policies, country/timezone.
+     * Use for payout, addresses, policies, country/timezone. Business
+     * name/description/logo/banner are NOT here — they live on the store
+     * (`PATCH /api/vendor/store`, see StorefrontSettings).
      *
-     * `brandingPreview` is a local-only escape hatch: the PATCH response doesn't echo
-     * back populated file objects for `branding`, so when `patch.branding` is present
-     * the caller must supply the read-shape `Branding` it already has in hand (from the
-     * upload responses) to replace `role_entity.branding` with. Stripped before the
-     * network call.
-     *
-     * `avatarPreview` is the same escape hatch for `avatarFileId`: pass the populated
-     * file object (or `null` when clearing) so `role_entity.avatar` reflects the new
+     * `avatarPreview` is a local-only escape hatch for `avatarFileId`: the PATCH
+     * response doesn't echo back a populated file object, so pass the one you already
+     * have in hand (or `null` when clearing) and `role_entity.avatar` reflects the new
      * picture immediately. Stripped before the network call.
      */
     updateVendorProfile: (
         patch: Omit<VendorProfileUpdatePayload, 'version'> & {
-            brandingPreview?: Branding;
             avatarPreview?: BrandingFileRef | null;
         },
     ) => Promise<void>;
@@ -308,13 +303,12 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     const updateVendorProfile = useCallback(
         async (
             patch: Omit<VendorProfileUpdatePayload, 'version'> & {
-                brandingPreview?: Branding;
                 avatarPreview?: BrandingFileRef | null;
             },
         ) => {
             setIsSubmitting(true);
             setError(null);
-            const { brandingPreview, avatarPreview, ...writePatch } = patch;
+            const { avatarPreview, ...writePatch } = patch;
             try {
                 const currentVersion = session?.role_entity.version ?? 0;
                 const res = await onboardingService.updateProfile({
@@ -338,18 +332,12 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
                             ...(writePatch.preferred_language !== undefined ? { preferred_language: writePatch.preferred_language } : {}),
                             ...(writePatch.payout_details !== undefined ? { payout_details: writePatch.payout_details } : {}),
                             ...(writePatch.business_addresses !== undefined ? { business_addresses: writePatch.business_addresses } : {}),
-                            // `writePatch.branding` (if present) is the write shape
-                            // ({logo_file_id, cover_image_file_id}) — it can't be spread
-                            // into the read-shape `branding` object. Use the caller-supplied
-                            // preview instead; fall back to leaving branding untouched.
-                            ...(brandingPreview !== undefined ? { branding: brandingPreview } : {}),
                             // `avatarFileId` is a write-shape id; mirror the populated
                             // preview (or `null` on clear) into the read-shape `avatar`.
                             ...(avatarPreview !== undefined ? { avatar: avatarPreview } : {}),
                             ...(writePatch.social_links !== undefined ? { social_links: { ...re.social_links, ...writePatch.social_links } } : {}),
                             ...(writePatch.policies !== undefined ? { policies: writePatch.policies } : {}),
                             ...(writePatch.displayName !== undefined ? { display_name: writePatch.displayName } : {}),
-                            ...(writePatch.businessDescription !== undefined ? { business_description: writePatch.businessDescription } : {}),
                             ...(writePatch.phone !== undefined ? { phone: writePatch.phone } : {}),
                             version: nextVersion,
                         },

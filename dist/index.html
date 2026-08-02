@@ -2,12 +2,36 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Multi-Vendor E-commerce Dashboard</title>
-    <script type="module" crossorigin src="./assets/index-BZUJ0tHa.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-DxOIH-5I.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#047857" />
+    <title>wi-mall · Vendor Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <script>
+      // Paint the stored theme before first paint, otherwise a dark-mode vendor
+      // gets a white flash until React mounts. Mirrors StoreProvider's logic.
+      (function () {
+        try {
+          var t = localStorage.getItem('vendor-dash:theme') || 'light';
+          var dark =
+            t === 'dark' ||
+            (t === 'system' &&
+              window.matchMedia('(prefers-color-scheme: dark)').matches);
+          if (dark) {
+            document.documentElement.classList.add('dark');
+            document.documentElement.style.colorScheme = 'dark';
+          }
+        } catch (e) {}
+      })();
+    </script>
+    <script type="module" crossorigin src="./assets/index-DD7dQDtz.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-B8ujPOvr.css">
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root"></div>
   </body>
 </html>

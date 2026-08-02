@@ -5,7 +5,10 @@ import { toast } from 'sonner';
 import { onboardingService } from '@/services/onboarding.service';
 import { mapProfileError } from '@/components/vendor-settings/errors';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import {
+  SettingsSection,
+  SettingsSections,
+} from '@/components/vendor-settings/SettingsSection';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
@@ -55,19 +58,14 @@ export function SecuritySettings() {
   }, [canSubmit, current, next]);
 
   return (
-    <div className="space-y-6">
+    <SettingsSections>
       {/* Password change */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Lock className="w-4 h-4" />
-            Change Password
-          </CardTitle>
-          <CardDescription>
-            Use a strong password you don't use anywhere else.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4 max-w-md">
+      <SettingsSection
+        title="Change Password"
+        icon={Lock}
+        info="Use a password you don't use anywhere else. Changing it doesn't sign you out of this device, but you'll need the new one next time you log in."
+        contentClassName="space-y-4 max-w-md"
+      >
           {error && (
             <div
               role="alert"
@@ -146,55 +144,48 @@ export function SecuritySettings() {
               Update Password
             </Button>
           </div>
-        </CardContent>
-      </Card>
+      </SettingsSection>
 
       {/* Not-yet-implemented security features, greyed out. */}
-      <Card className="opacity-60">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Shield className="w-4 h-4" />
+      <SettingsSection
+        className="opacity-60"
+        icon={Shield}
+        title={
+          <span className="flex items-center gap-2">
             Two-Factor Authentication
-            <Badge variant="outline" className="ml-1">Coming soon</Badge>
-          </CardTitle>
-          <CardDescription>Add an extra layer of security to your account.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="font-medium">Enable 2FA</p>
-              <p className="text-sm text-muted-foreground">
-                Not available yet — this will be enabled in a future update.
-              </p>
-            </div>
+            <Badge variant="outline">Coming soon</Badge>
+          </span>
+        }
+        info="A second step at login — a code from your phone on top of your password. Not available yet."
+      >
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm text-muted-foreground">
+              Not available yet — this will be enabled in a future update.
+            </p>
             <Switch disabled aria-label="Enable two-factor authentication" />
           </div>
-        </CardContent>
-      </Card>
+      </SettingsSection>
 
-      <Card className="opacity-60">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Globe className="w-4 h-4" />
+      <SettingsSection
+        className="opacity-60"
+        icon={Globe}
+        title={
+          <span className="flex items-center gap-2">
             Active Sessions
-            <Badge variant="outline" className="ml-1">Coming soon</Badge>
-          </CardTitle>
-          <CardDescription>Review and revoke devices signed in to your account.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
-            <div>
-              <p className="font-medium">Session management</p>
-              <p className="text-sm text-muted-foreground">
-                Not available yet — this will be enabled in a future update.
-              </p>
-            </div>
+            <Badge variant="outline">Coming soon</Badge>
+          </span>
+        }
+        info="Review the devices signed in to your account and sign them out remotely. Not available yet."
+      >
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm text-muted-foreground">
+              Not available yet — this will be enabled in a future update.
+            </p>
             <Button variant="outline" size="sm" disabled>
               Revoke
             </Button>
           </div>
-        </CardContent>
-      </Card>
-    </div>
+      </SettingsSection>
+    </SettingsSections>
   );
 }

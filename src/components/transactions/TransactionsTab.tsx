@@ -1,7 +1,15 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import {
+  ActiveFilterChips,
+  FilterChips,
+  FilterSection,
+  FilterSheet,
+  FilterTriggerButton,
+} from '@/components/filters';
 import { cn } from '@/lib/utils';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { fetchTransactions } from '@/services/transactions.service';
 import type {
   Transaction,
@@ -30,7 +38,9 @@ type CategoryFilter = TransactionCategory | 'all';
  * `refreshKey` bumps to force a reload after a successful purchase elsewhere.
  */
 export function TransactionsTab({ refreshKey = 0 }: { refreshKey?: number }) {
+  const isMobile = useIsMobile();
   const [category, setCategory] = useState<CategoryFilter>('all');
+  const [filterSheetOpen, setFilterSheetOpen] = useState(false);
   const [rows, setRows] = useState<Transaction[]>([]);
   const [meta, setMeta] = useState<TransactionsListMeta | null>(null);
   const [page, setPage] = useState(1);
@@ -69,6 +79,159 @@ export function TransactionsTab({ refreshKey = 0 }: { refreshKey?: number }) {
     load(page, category);
   }, [load, page, category, refreshKey]);
 
+  // Transactions have no free-text search endpoint, so this toolbar carries the
+  // same filter button as every other list — just without a search field.
+  const activeFilterCount = category === 'all' ? 0 : 1;
+  const categoryLabelFor = (value: CategoryFilter) =>
+    TRANSACTION_CATEGORY_TABS.find((t) => t.value === value)?.label ?? value;
+
+  const toolbar = (
+    <div
+      className={cn(
+        'space-y-3',
+        // Full-bleed on mobile: the row sits directly on the page with the same
+        // 16px gutter as the list below it, no card inset.
+        isMobile && 'border-b px-4 py-3',
+      )}
+    >
+      <FilterTriggerButton
+        onClick={() => setFilterSheetOpen(true)}
+        activeCount={activeFilterCount}
+        label="Filter transactions"
+      />
+      <ActiveFilterChips
+        chips={category === 'all'
+          ? []
+          : [{
+            key: 'category',
+            label: categoryLabelFor(category),
+            onRemove: () => setCategory('all'),
+          }]}
+      />
+    </div>
+  );
+
+  const filterSheet = (
+    <FilterSheet
+      open={filterSheetOpen}
+      onOpenChange={setFilterSheetOpen}
+      title="Filter transactions"
+      activeCount={activeFilterCount}
+      onClear={() => setCategory('all')}
+      applyLabel="Show transactions"
+    >
+      <FilterSection title="Category">
+        <FilterChips
+          options={TRANSACTION_CATEGORY_TABS
+            .filter((t) => t.value !== 'all')
+            .map((t) => ({ value: t.value as TransactionCategory, label: t.label }))}
+          value={category === 'all' ? undefined : category}
+          onChange={(v) => setCategory(v ?? 'all')}
+          allLabel="All activity"
+        />
+      </FilterSection>
+    </FilterSheet>
+  );
+
+  const paginationBar = meta && (
+    <div
+      className={cn(
+        'flex items-center justify-between text-sm text-muted-foreground',
+        isMobile && 'px-4 py-3',
+      )}
+    >
+      <span>
+        Page {meta.page} of {meta.totalPages || 1}
+      </span>
+      {meta.totalPages > 1 && (
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={meta.page <= 1}
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+          >
+            Previous
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={meta.page >= meta.totalPages}
+            onClick={() => setPage((p) => p + 1)}
+          >
+            Next
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+
+  // ─── Mobile: edge-to-edge rows separated by hairlines, no card chrome ───────
+  if (isMobile) {
+    return (
+      <div>
+        {toolbar}
+        {filterSheet}
+
+        {loading ? (
+          Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="flex items-center gap-4 border-b px-4 py-3">
+              <div className="flex-1 space-y-2">
+                <div className="h-4 w-2/5 animate-pulse rounded bg-muted" />
+                <div className="h-3 w-24 animate-pulse rounded bg-muted" />
+              </div>
+              <div className="h-4 w-16 animate-pulse rounded bg-muted" />
+            </div>
+          ))
+        ) : error ? (
+          <div className="border-b bg-destructive/5 px-4 py-4 text-sm text-destructive">
+            {error}{' '}
+            <button className="underline" onClick={() => load(page, category)}>
+              Retry
+            </button>
+          </div>
+        ) : rows.length === 0 ? (
+          <p className="px-4 py-16 text-center text-sm text-muted-foreground">
+            No transactions yet.
+          </p>
+        ) : (
+          <>
+            {rows.map((tx) => {
+              const amount = transactionAmount(tx);
+              return (
+                <div key={tx.id} className="border-b px-4 py-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold">{tx.description}</p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        {formatDate(tx.createdAt)}
+                        {tx.gateway && ` · ${gatewayLabel(tx.gateway)}`}
+                      </p>
+                      <div className="mt-1">
+                        <CategoryChip category={tx.category} />
+                      </div>
+                    </div>
+                    <div className="flex flex-shrink-0 flex-col items-end gap-1">
+                      <p className={cn('text-sm font-semibold', amount.className)}>{amount.text}</p>
+                      <StatusBadge status={tx.status} />
+                    </div>
+                  </div>
+                  {isReversalTransaction(tx) && (
+                    <p className="mt-2 text-xs text-orange-600">
+                      Chargeback/refund — this charge was unwound.
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+            {paginationBar}
+          </>
+        )}
+      </div>
+    );
+  }
+
+  // ─── Desktop ────────────────────────────────────────────────────────────────
   return (
     <Card>
       <CardHeader>
@@ -79,23 +242,8 @@ export function TransactionsTab({ refreshKey = 0 }: { refreshKey?: number }) {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Category sub-tabs */}
-        <div className="-mx-1 flex gap-2 overflow-x-auto px-1 scrollbar-none">
-          {TRANSACTION_CATEGORY_TABS.map((tab) => (
-            <button
-              key={tab.value}
-              onClick={() => setCategory(tab.value)}
-              className={cn(
-                'flex-shrink-0 rounded-full border px-4 py-1.5 text-sm font-medium transition-colors',
-                category === tab.value
-                  ? 'border-foreground bg-foreground text-background'
-                  : 'border-border bg-background hover:bg-accent',
-              )}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
+        {toolbar}
+        {filterSheet}
 
         {loading ? (
           <LedgerSkeleton />
@@ -112,8 +260,7 @@ export function TransactionsTab({ refreshKey = 0 }: { refreshKey?: number }) {
           </p>
         ) : (
           <>
-            {/* Desktop table */}
-            <div className="hidden overflow-hidden rounded-lg border sm:block">
+            <div className="overflow-hidden rounded-lg border">
               <table className="w-full text-sm">
                 <thead className="border-b bg-muted/40 text-left">
                   <tr>
@@ -158,62 +305,7 @@ export function TransactionsTab({ refreshKey = 0 }: { refreshKey?: number }) {
               </table>
             </div>
 
-            {/* Mobile stacked rows */}
-            <ul className="space-y-2 sm:hidden">
-              {rows.map((tx) => {
-                const amount = transactionAmount(tx);
-                return (
-                  <li key={tx.id} className="rounded-lg border p-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="truncate font-medium">{tx.description}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {formatDate(tx.createdAt)}
-                          {tx.gateway && ` · ${gatewayLabel(tx.gateway)}`}
-                        </p>
-                      </div>
-                      <div className="flex flex-col items-end gap-1">
-                        <p className={cn('font-medium', amount.className)}>{amount.text}</p>
-                        <StatusBadge status={tx.status} />
-                      </div>
-                    </div>
-                    {isReversalTransaction(tx) && (
-                      <p className="mt-2 text-xs text-orange-600">
-                        Chargeback/refund — this charge was unwound.
-                      </p>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-
-            {meta && (
-              <div className="flex items-center justify-between text-sm text-muted-foreground">
-                <span>
-                  Page {meta.page} of {meta.totalPages || 1}
-                </span>
-                {meta.totalPages > 1 && (
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={meta.page <= 1}
-                      onClick={() => setPage((p) => Math.max(1, p - 1))}
-                    >
-                      Previous
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={meta.page >= meta.totalPages}
-                      onClick={() => setPage((p) => p + 1)}
-                    >
-                      Next
-                    </Button>
-                  </div>
-                )}
-              </div>
-            )}
+            {paginationBar}
           </>
         )}
       </CardContent>

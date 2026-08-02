@@ -5,11 +5,14 @@ import {
   OctagonXIcon,
   TriangleAlertIcon,
 } from "lucide-react"
-import { useTheme } from "next-themes"
 import { Toaster as Sonner, type ToasterProps } from "sonner"
 
+import { useUIStore } from "@/store"
+
 const Toaster = ({ ...props }: ToasterProps) => {
-  const { theme = "system" } = useTheme()
+  // The app owns its theme (see StoreProvider); next-themes is not mounted, so
+  // its useTheme would silently pin toasts to the OS preference instead.
+  const { theme } = useUIStore()
 
   return (
     <Sonner
@@ -24,9 +27,11 @@ const Toaster = ({ ...props }: ToasterProps) => {
       }}
       style={
         {
-          "--normal-bg": "var(--popover)",
-          "--normal-text": "var(--popover-foreground)",
-          "--normal-border": "var(--border)",
+          // Our tokens are bare HSL triplets — they need wrapping, otherwise
+          // sonner gets an invalid colour and falls back to its own palette.
+          "--normal-bg": "hsl(var(--popover))",
+          "--normal-text": "hsl(var(--popover-foreground))",
+          "--normal-border": "hsl(var(--border))",
           "--border-radius": "var(--radius)",
         } as React.CSSProperties
       }

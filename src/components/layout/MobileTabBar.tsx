@@ -25,12 +25,15 @@ function TabButton({ label, icon: Icon, active, badge, onClick }: TabButtonProps
     <button
       onClick={onClick}
       className={cn(
-        'flex flex-col items-center justify-center gap-0.5 flex-1 py-1',
-        active ? 'text-foreground' : 'text-muted-foreground',
+        'relative flex flex-col items-center justify-center gap-0.5 flex-1 py-1 transition-colors',
+        active ? 'text-primary' : 'text-muted-foreground',
       )}
     >
+      {active && (
+        <span className="absolute top-0 h-0.5 w-8 rounded-full bg-primary" />
+      )}
       <div className="relative">
-        <Icon className="w-5 h-5" />
+        <Icon className="w-5 h-5" strokeWidth={active ? 2.5 : 2} />
         {badge !== undefined && badge > 0 && (
           <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-destructive text-destructive-foreground text-[10px] font-bold rounded-full flex items-center justify-center">
             {badge > 9 ? '9+' : badge}
@@ -68,8 +71,8 @@ export function MobileTabBar() {
 
   return (
     <>
-      <nav className="fixed bottom-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-sm border-t shadow-[0_-4px_12px_rgba(0,0,0,0.05)] h-16 safe-area-inset-bottom">
-        <div className="flex items-center justify-around h-full px-2">
+      <nav className="fixed bottom-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-sm border-t shadow-[0_-4px_12px_rgba(0,0,0,0.05)] pb-safe">
+        <div className="flex items-center justify-around h-16 px-2">
           {tabs.map((tab) => (
             <TabButton
               key={tab.route}
@@ -84,9 +87,10 @@ export function MobileTabBar() {
           {/* FAB */}
           <button
             onClick={() => setQuickActionsOpen(true)}
-            className="-mt-5 w-14 h-14 rounded-full bg-black text-white shadow-lg flex items-center justify-center flex-shrink-0"
+            aria-label="Quick actions"
+            className="-mt-6 w-14 h-14 rounded-full bg-gradient-to-br from-primary to-emerald-400 text-primary-foreground shadow-brand ring-4 ring-background flex items-center justify-center flex-shrink-0 transition-transform active:scale-95"
           >
-            <Plus className="w-6 h-6" />
+            <Plus className="w-6 h-6" strokeWidth={2.5} />
           </button>
 
           {rightTabs.map((tab) => (

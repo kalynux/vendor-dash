@@ -1,16 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Search, Users, Tag, ChevronRight, Loader2, ShoppingBag,
+  Users, Tag, ChevronRight, Loader2, ShoppingBag,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
 import {
   Empty, EmptyHeader, EmptyTitle, EmptyDescription, EmptyContent, EmptyMedia,
 } from '@/components/ui/empty';
+import {
+  ActiveFilterChips,
+  FilterChips,
+  FilterSection,
+  FilterSheet,
+  SearchFilterBar,
+} from '@/components/filters';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useInfiniteList } from '@/hooks/use-infinite-list';
 import { useScrollRestoration } from '@/hooks/use-scroll-restoration';
@@ -31,7 +34,6 @@ import type {
 } from '@/types/customers.types';
 
 const PAGE_LIMIT = 20;
-const ALL = '__all__';
 
 const CUSTOMERS_DESKTOP_KEY = 'customers-desktop';
 interface CustomersDesktopCache {
@@ -60,6 +62,7 @@ export function Customers() {
   const [flags, setFlags] = useState<CustomerFlag[]>([]);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [flagsManagerOpen, setFlagsManagerOpen] = useState(false);
+  const [filterSheetOpen, setFilterSheetOpen] = useState(false);
 
   // Local overrides applied after an in-detail edit, so both the desktop list and
   // the mobile infinite list reflect name/flag/stat changes without a full reload.
@@ -203,52 +206,79 @@ export function Customers() {
 
   const hasActiveQuery = !!flagFilter || searchQuery.trim().length > 0;
   const activeFlag = flags.find((f) => f.id === flagFilter) ?? null;
+  const defaultSort = CUSTOMER_SORT_OPTIONS[0].value;
+  const activeFilterCount = (flagFilter ? 1 : 0) + (sort !== defaultSort ? 1 : 0);
 
-  // ── Shared filters UI ─────────────────────────────────────────────────────────
+  // ── Shared search + filter UI (desktop layout and mobile subheader) ──────────
   const filtersNode = (
-    <div className="flex flex-col gap-3 lg:flex-row">
-      <div className="relative flex-1">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          placeholder="Search by name or email…"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="pl-10"
-        />
-      </div>
-      <div className="-mx-1 flex gap-3 overflow-x-auto px-1 pb-1 lg:mx-0 lg:overflow-visible lg:px-0 lg:pb-0">
-        {/* Flag filter */}
-        <Select
-          value={flagFilter || ALL}
-          onValueChange={(v) => { setFlagFilter(v === ALL ? '' : v); setPage(1); }}
-        >
-          <SelectTrigger className="w-44 shrink-0">
-            <SelectValue placeholder="All flags" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL}>All flags</SelectItem>
-            {flags.map((flag) => (
-              <SelectItem key={flag.id} value={flag.id}>
-                <span className="flex items-center gap-2">
-                  <FlagDot color={flag.color} />
-                  {flag.name}
-                </span>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        {/* Sort */}
-        <Select value={sort} onValueChange={(v) => { setSort(v); setPage(1); }}>
-          <SelectTrigger className="w-48 shrink-0"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            {CUSTOMER_SORT_OPTIONS.map((o) => (
-              <SelectItem key={o.value} value={o.value}>Sort: {o.label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+    <div className="space-y-3">
+      <SearchFilterBar
+        value={searchQuery}
+        onChange={setSearchQuery}
+        placeholder="Search by name or email…"
+        activeFilterCount={activeFilterCount}
+        onOpenFilters={() => setFilterSheetOpen(true)}
+        filterLabel="Filter customers"
+      />
+      <ActiveFilterChips
+        chips={[
+          ...(activeFlag
+            ? [{
+              key: 'flag',
+              label: `Flag: ${activeFlag.name}`,
+              onRemove: () => { setFlagFilter(''); setPage(1); },
+            }]
+            : []),
+          ...(sort !== defaultSort
+            ? [{
+              key: 'sort',
+              label: `Sort: ${sortConfig.label}`,
+              onRemove: () => { setSort(defaultSort); setPage(1); },
+            }]
+            : []),
+        ]}
+        onClearAll={clearFilters}
+      />
     </div>
+  );
+
+  const filterSheet = (
+    <FilterSheet
+      open={filterSheetOpen}
+      onOpenChange={setFilterSheetOpen}
+      title="Filter customers"
+      activeCount={activeFilterCount}
+      onClear={clearFilters}
+      applyLabel="Show customers"
+    >
+      <FilterSection title="Flag">
+        {flags.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No flags yet — create one from “Manage flags”.
+          </p>
+        ) : (
+          <FilterChips
+            options={flags.map((flag) => ({
+              value: flag.id,
+              label: flag.name,
+              icon: <FlagDot color={flag.color} />,
+            }))}
+            value={flagFilter || undefined}
+            onChange={(v) => { setFlagFilter(v ?? ''); setPage(1); }}
+            allLabel="All flags"
+          />
+        )}
+      </FilterSection>
+
+      <FilterSection title="Sort by">
+        <FilterChips
+          options={CUSTOMER_SORT_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+          value={sort}
+          onChange={(v) => { setSort(v ?? defaultSort); setPage(1); }}
+          hideAll
+        />
+      </FilterSection>
+    </FilterSheet>
   );
 
   const emptyNode = (
@@ -272,6 +302,7 @@ export function Customers() {
 
   const sheets = (
     <>
+      {filterSheet}
       <CustomerDetailSheet
         customerId={detailId}
         open={!!detailId}
@@ -382,14 +413,6 @@ export function Customers() {
           <Tag className="h-4 w-4" /> Manage flags
         </Button>
       </div>
-
-      {/* Active flag filter chip */}
-      {activeFlag && (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <span>Filtered by</span>
-          <FlagBadge flag={activeFlag} onRemove={() => { setFlagFilter(''); setPage(1); }} />
-        </div>
-      )}
 
       {filtersNode}
 

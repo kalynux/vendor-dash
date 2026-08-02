@@ -26,6 +26,7 @@ import { MobileOrderDetailSheet } from '@/components/orders/MobileOrderDetailShe
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useRouter } from '@/App';
 import { cn } from '@/lib/utils';
+import { formatMoney } from '@/components/customers/customer.constants';
 import {
   AreaChart,
   Area,
@@ -60,34 +61,34 @@ function MetricCard({ title, value, change, changeType, icon: Icon, isLoading }:
   }
 
   return (
-    <div className="animate-fade-in">
-      <Card className="hover:shadow-lg transition-shadow">
+    <div>
+      <Card className="group transition-all hover:shadow-lg hover:-translate-y-0.5">
         <CardContent className="p-6">
-          <div className="flex items-start justify-between">
+          <div className="flex items-start justify-between gap-3">
             <div className="space-y-2">
               <p className="text-sm font-medium text-muted-foreground">{title}</p>
-              <p className="text-2xl font-bold">{value}</p>
-              <div className="flex items-center gap-1">
-                {changeType === 'increase' ? (
-                  <TrendingUp className="w-4 h-4 text-green-500" />
-                ) : changeType === 'decrease' ? (
-                  <TrendingDown className="w-4 h-4 text-red-500" />
-                ) : null}
+              <p className="text-2xl font-display font-bold tracking-tight tabular-nums">{value}</p>
+              <div className="flex items-center gap-1.5">
                 <span
                   className={cn(
-                    'text-sm font-medium',
-                    changeType === 'increase' && 'text-green-500',
-                    changeType === 'decrease' && 'text-red-500',
-                    changeType === 'neutral' && 'text-muted-foreground'
+                    'inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-xs font-semibold',
+                    changeType === 'increase' && 'bg-success/15 text-success',
+                    changeType === 'decrease' && 'bg-destructive/15 text-destructive',
+                    changeType === 'neutral' && 'bg-muted text-muted-foreground'
                   )}
                 >
+                  {changeType === 'increase' ? (
+                    <TrendingUp className="w-3.5 h-3.5" />
+                  ) : changeType === 'decrease' ? (
+                    <TrendingDown className="w-3.5 h-3.5" />
+                  ) : null}
                   {change > 0 ? '+' : ''}{change}%
                 </span>
-                <span className="text-sm text-muted-foreground">vs last period</span>
+                <span className="text-xs text-muted-foreground">vs last period</span>
               </div>
             </div>
-            <div className="p-3 bg-muted rounded-lg">
-              <Icon className="w-5 h-5 text-muted-foreground" />
+            <div className="p-3 bg-primary/10 text-primary rounded-xl ring-1 ring-primary/10 transition-colors group-hover:bg-primary/15">
+              <Icon className="w-5 h-5" />
             </div>
           </div>
         </CardContent>
@@ -214,14 +215,9 @@ export function Overview() {
     }
   };
 
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(value);
-  };
+  // Analytics metrics carry no currency (platform default XAF); order rows do —
+  // pass order.currency at those call sites. Uses the shared currency-aware formatter.
+  const formatCurrency = (value: number, currency?: string) => formatMoney(value, currency);
 
   // ─── Mobile Layout ─────────────────────────────────────────────────────────
   if (isMobile) {
@@ -278,7 +274,7 @@ export function Overview() {
             <div className="flex justify-between items-start mb-3">
               <div>
                 <p className="text-xs text-muted-foreground">Total sales · {dateRange.label}</p>
-                <p className="text-3xl font-bold mt-1">
+                <p className="text-3xl font-display font-bold tracking-tight tabular-nums mt-1">
                   {formatCurrency(metrics.totalSales.value)}
                 </p>
               </div>
@@ -300,15 +296,15 @@ export function Overview() {
                   <AreaChart data={salesData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
                     <defs>
                       <linearGradient id="mobileSparkline" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#000" stopOpacity={0.1} />
-                        <stop offset="95%" stopColor="#000" stopOpacity={0} />
+                        <stop offset="5%" stopColor="#059669" stopOpacity={0.24} />
+                        <stop offset="95%" stopColor="#059669" stopOpacity={0} />
                       </linearGradient>
                     </defs>
                     <Area
                       type="monotone"
                       dataKey="sales"
-                      stroke="#000"
-                      strokeWidth={1.5}
+                      stroke="#059669"
+                      strokeWidth={2}
                       fill="url(#mobileSparkline)"
                       dot={false}
                     />
@@ -411,7 +407,7 @@ export function Overview() {
               <div className="flex-1 min-w-0">
                 <div className="flex justify-between">
                   <p className="font-medium text-sm">{order.orderNumber}</p>
-                  <p className="font-semibold text-sm">{formatCurrency(order.total)}</p>
+                  <p className="font-semibold text-sm">{formatCurrency(order.total, order.currency)}</p>
                 </div>
                 <div className="flex justify-between mt-0.5">
                   <p className="text-xs text-muted-foreground">
@@ -439,11 +435,11 @@ export function Overview() {
 
   // ─── Desktop Layout ─────────────────────────────────────────────────────────
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-6 animate-fade-up">
       {/* Header row */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold">Overview</h1>
+        <div className="space-y-1">
+          <h1 className="text-3xl font-bold tracking-tight">Overview</h1>
           <p className="text-muted-foreground">
             Welcome back! Here&apos;s what&apos;s happening with your store.
           </p>
@@ -568,7 +564,7 @@ export function Overview() {
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
-                    <span className="font-medium text-sm">{formatCurrency(order.total)}</span>
+                    <span className="font-medium text-sm">{formatCurrency(order.total, order.currency)}</span>
                     <OrderStatusBadge status={order.status} />
                   </div>
                 </div>

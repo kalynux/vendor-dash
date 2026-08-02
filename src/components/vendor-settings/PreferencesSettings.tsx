@@ -1,14 +1,17 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Loader2, Save, Send, Clock, Moon, Sun } from 'lucide-react';
+import { Send, Clock, Moon, Sun } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { onboardingService } from '@/services/onboarding.service';
 import { mapProfileError } from '@/components/vendor-settings/errors';
 import { useUIStore } from '@/store';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { UnsavedChangesBar } from '@/components/vendor-settings/UnsavedChangesBar';
+import {
+  SettingsSection,
+  SettingsSections,
+} from '@/components/vendor-settings/SettingsSection';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { InfoHint, LabelWithHint } from '@/components/ui/info-hint';
 import { Switch } from '@/components/ui/switch';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -85,6 +88,13 @@ export function PreferencesSettings() {
   const thresholdInvalid =
     threshold.trim() !== '' && (Number.isNaN(thresholdNum) || thresholdNum < 0);
 
+  const handleDiscard = useCallback(() => {
+    setError(null);
+    setAutoRedirect(saved.autoRedirect);
+    setThreshold(saved.threshold);
+    setCancelDays(saved.cancelDays);
+  }, [saved]);
+
   const handleSave = useCallback(async () => {
     if (daysInvalid || thresholdInvalid) return;
     setSaving(true);
@@ -123,22 +133,17 @@ export function PreferencesSettings() {
     cancelDays, daysNum, daysInvalid, redirectDirty, cancelDirty,
   ]);
 
-  const appearanceCard = (
-    <Card>
-      <CardHeader>
-        <CardTitle>Appearance</CardTitle>
-        <CardDescription>Choose how the dashboard looks to you.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="flex items-center justify-between">
+  const appearanceSection = (
+    <SettingsSection
+      title="Appearance"
+      info="Applies to this dashboard only, on this browser. “System” follows your device's light/dark setting."
+    >
+        <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-lg bg-muted text-muted-foreground flex-shrink-0">
               {theme === 'dark' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
             </div>
-            <div>
-              <p className="font-medium">Theme</p>
-              <p className="text-sm text-muted-foreground">Choose your preferred theme</p>
-            </div>
+            <p className="font-medium">Theme</p>
           </div>
           <Select
             value={theme}
@@ -154,130 +159,130 @@ export function PreferencesSettings() {
             </SelectContent>
           </Select>
         </div>
-      </CardContent>
-    </Card>
+    </SettingsSection>
   );
 
   if (loading) {
     return (
-      <div className="space-y-6">
-        {appearanceCard}
-        <Card>
-          <CardContent className="space-y-4 pt-6">
-            <Skeleton className="h-5 w-44" />
-            <Skeleton className="h-16 w-full rounded-lg" />
-            <Skeleton className="h-16 w-full rounded-lg" />
-          </CardContent>
-        </Card>
-      </div>
+      <SettingsSections>
+        {appearanceSection}
+        <SettingsSection title="Order Automation" contentClassName="space-y-4">
+          <Skeleton className="h-16 w-full rounded-lg" />
+          <Skeleton className="h-16 w-full rounded-lg" />
+        </SettingsSection>
+      </SettingsSections>
     );
   }
 
   return (
-    <div className="space-y-6">
-      {appearanceCard}
-      <Card>
-      <CardHeader>
-        <CardTitle>Order Automation</CardTitle>
-        <CardDescription>
-          Automate order handling to reduce manual dispatch and clean up unpaid orders.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        {(error || loadError) && (
-          <div
-            role="alert"
-            className="p-3 text-sm bg-destructive/10 text-destructive rounded-lg border border-destructive/20"
-          >
-            {error ?? loadError}
-          </div>
-        )}
+    <>
+      <SettingsSections>
+        {appearanceSection}
+        <SettingsSection
+          title="Order Automation"
+          info="Two hands-off rules that keep your order list clean: one moves paid orders on to the delivery agency for you, the other cancels orders customers never paid for."
+          contentClassName="space-y-6"
+        >
+          {(error || loadError) && (
+            <div
+              role="alert"
+              className="p-3 text-sm bg-destructive/10 text-destructive rounded-lg border border-destructive/20"
+            >
+              {error ?? loadError}
+            </div>
+          )}
 
-        {/* Auto-redirect orders to agency */}
-        <div className="space-y-4">
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3 min-w-0">
+          {/* Auto-redirect orders to agency */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="p-2 rounded-lg bg-muted text-muted-foreground flex-shrink-0">
+                  <Send className="w-4 h-4" />
+                </div>
+                <div className="flex min-w-0 items-center gap-1">
+                  <p className="font-medium">Auto-dispatch paid orders</p>
+                  <InfoHint label="About auto-dispatch">
+                    As soon as a physical order is paid, it moves straight to the delivery agency in
+                    charge instead of waiting in your queue. Off by default — leave it off if you want
+                    to check each order before it ships.
+                  </InfoHint>
+                </div>
+              </div>
+              <Switch
+                checked={autoRedirect}
+                onCheckedChange={setAutoRedirect}
+                aria-label="Auto-dispatch paid orders"
+              />
+            </div>
+
+            <div className="space-y-1.5 sm:pl-12">
+              <LabelWithHint
+                htmlFor="auto-redirect-threshold"
+                optional
+                hintLabel="About the maximum order total"
+                hint="A safety cap. Set it to 50 000 and orders up to 50 000 dispatch themselves, while a 75 000 order stays pending so you can look at it first. Leave it empty and every paid order dispatches, whatever the total."
+              >
+                Maximum order total
+              </LabelWithHint>
+              <Input
+                id="auto-redirect-threshold"
+                type="number"
+                inputMode="numeric"
+                min={0}
+                placeholder="No cap"
+                value={threshold}
+                onChange={(e) => setThreshold(e.target.value)}
+                disabled={!autoRedirect}
+                aria-invalid={thresholdInvalid}
+              />
+            </div>
+          </div>
+
+          {/* Auto-cancel unpaid orders */}
+          <div className="space-y-1.5 border-t pt-6">
+            <div className="flex items-center gap-3 mb-1">
               <div className="p-2 rounded-lg bg-muted text-muted-foreground flex-shrink-0">
-                <Send className="w-4 h-4" />
+                <Clock className="w-4 h-4" />
               </div>
-              <div className="min-w-0">
-                <p className="font-medium">Auto-dispatch paid orders</p>
-                <p className="text-sm text-muted-foreground">
-                  Automatically advance a paid physical order to the agency in charge.
-                </p>
+              <div className="flex min-w-0 items-center gap-1">
+                <p className="font-medium">Auto-cancel unpaid orders</p>
+                <InfoHint label="About auto-cancel">
+                  Orders that are still unpaid after the number of days below are cancelled
+                  automatically and their reserved stock is released back to your inventory.
+                </InfoHint>
               </div>
             </div>
-            <Switch
-              checked={autoRedirect}
-              onCheckedChange={setAutoRedirect}
-              aria-label="Auto-dispatch paid orders"
-            />
-          </div>
-
-          <div className="space-y-1.5 pl-12">
-            <Label htmlFor="auto-redirect-threshold">Maximum order total (optional)</Label>
-            <Input
-              id="auto-redirect-threshold"
-              type="number"
-              inputMode="numeric"
-              min={0}
-              placeholder="No cap"
-              value={threshold}
-              onChange={(e) => setThreshold(e.target.value)}
-              disabled={!autoRedirect}
-              aria-invalid={thresholdInvalid}
-            />
-            <p className="text-xs text-muted-foreground">
-              Orders above this total stay pending for manual dispatch. Leave empty for no cap.
-            </p>
-          </div>
-        </div>
-
-        {/* Auto-cancel unpaid orders */}
-        <div className="space-y-1.5 border-t pt-6">
-          <div className="flex items-center gap-3 mb-1">
-            <div className="p-2 rounded-lg bg-muted text-muted-foreground flex-shrink-0">
-              <Clock className="w-4 h-4" />
-            </div>
-            <div className="min-w-0">
-              <p className="font-medium">Auto-cancel unpaid orders</p>
-              <p className="text-sm text-muted-foreground">
-                Cancel orders left unpaid after this many days.
-              </p>
+            <div className="sm:pl-12 space-y-1.5">
+              <LabelWithHint
+                htmlFor="auto-cancel-days"
+                hintLabel="About days before cancel"
+                hint={`How long an unpaid order is held before it is cancelled and its stock released. Set it to 3 and an order placed Monday is cancelled Thursday if it's still unpaid. Between ${MIN_CANCEL_DAYS} and ${MAX_CANCEL_DAYS} days.`}
+              >
+                Days before cancel
+              </LabelWithHint>
+              <Input
+                id="auto-cancel-days"
+                type="number"
+                inputMode="numeric"
+                min={MIN_CANCEL_DAYS}
+                max={MAX_CANCEL_DAYS}
+                value={cancelDays}
+                onChange={(e) => setCancelDays(e.target.value)}
+                aria-invalid={daysInvalid}
+                className="max-w-[8rem]"
+              />
             </div>
           </div>
-          <div className="pl-12 space-y-1.5">
-            <Label htmlFor="auto-cancel-days">Days before cancel</Label>
-            <Input
-              id="auto-cancel-days"
-              type="number"
-              inputMode="numeric"
-              min={MIN_CANCEL_DAYS}
-              max={MAX_CANCEL_DAYS}
-              value={cancelDays}
-              onChange={(e) => setCancelDays(e.target.value)}
-              aria-invalid={daysInvalid}
-              className="max-w-[8rem]"
-            />
-            <p className="text-xs text-muted-foreground">
-              Between {MIN_CANCEL_DAYS} and {MAX_CANCEL_DAYS} days.
-            </p>
-          </div>
-        </div>
+        </SettingsSection>
+      </SettingsSections>
 
-        <div className="flex justify-end border-t pt-4">
-          <Button
-            type="button"
-            onClick={handleSave}
-            disabled={!dirty || saving || daysInvalid || thresholdInvalid}
-            className="gap-2"
-          >
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-            Save Changes
-          </Button>
-        </div>
-      </CardContent>
-      </Card>
-    </div>
+      <UnsavedChangesBar
+        visible={dirty || saving}
+        saving={saving}
+        saveDisabled={daysInvalid || thresholdInvalid}
+        onDiscard={handleDiscard}
+        onSave={handleSave}
+      />
+    </>
   );
 }

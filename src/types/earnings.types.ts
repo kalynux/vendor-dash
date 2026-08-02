@@ -13,11 +13,20 @@ export interface EarningsBalance {
 
 export type PayoutRequestStatus = 'pending' | 'paid' | 'rejected';
 
+/**
+ * Who opened the request: the vendor (`manual`), or the daily platform sweep that
+ * fires automatically once `available` reaches the auto-payout threshold
+ * (`auto_threshold`). See api-doc/vendor/earnings.md — "Automatic payout".
+ */
+export type PayoutOrigin = 'manual' | 'auto_threshold';
+
 export interface PayoutRequest {
   id: string;
   amount: number;
   currency: string;
   status: PayoutRequestStatus;
+  /** `manual` (vendor-requested) or `auto_threshold` (platform swept it at the threshold). */
+  origin: PayoutOrigin;
   /** The linked PAYOUT_REQUEST support ticket — open it under Tickets for the full history. */
   ticketId: string;
   /** Set when `status` is `rejected`. Absent on the create response. */

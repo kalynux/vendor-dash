@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Building2, Loader2, Search, SlidersHorizontal, X } from 'lucide-react';
+import { Building2, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Textarea } from '@/components/ui/textarea';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { FilterSheet, SearchFilterBar } from '@/components/filters';
+import { cn } from '@/lib/utils';
 import { AgencyCard, AgencyCardSkeleton } from '@/components/delivery/AgencyCard';
 import { AgencyDetailSheet } from '@/components/delivery/AgencyDetailSheet';
 import { AgencyFiltersPanel } from '@/components/delivery/AgencyFiltersPanel';
@@ -188,12 +188,22 @@ function ConnectionActionSlot({
 export interface AgencyConnectionBrowserProps {
     /** Called after any successful connection mutation (request/approve/reject/withdraw). */
     onConnectionChange?: (agencyId: string, dto: ConnectionDto) => void;
-    /** Tailwind height for the scroll list (default 42vh). */
+    /** Tailwind height for the scroll list (default 42vh). Ignored when `scrollable` is false. */
     listHeightClass?: string;
+    /**
+     * Confine the list to its own scroll window. Turn this off where the browser
+     * owns the whole page (mobile) — a short scroller nested inside a scrolling
+     * page is awkward to drive by touch.
+     */
+    scrollable?: boolean;
 }
 
 /** Search + filter + paginated agency list, each card driven by its connection state. */
-export function AgencyConnectionBrowser({ onConnectionChange, listHeightClass = 'h-[42vh] min-h-[160px]' }: AgencyConnectionBrowserProps) {
+export function AgencyConnectionBrowser({
+    onConnectionChange,
+    listHeightClass = 'h-[42vh] min-h-[160px]',
+    scrollable = true,
+}: AgencyConnectionBrowserProps) {
     const [agencies, setAgencies] = useState<AgencyBrowseItemDto[]>([]);
     const [meta, setMeta] = useState<AgencyConnectionListMeta | null>(null);
     const [loadingAgencies, setLoadingAgencies] = useState(false);
@@ -290,51 +300,25 @@ export function AgencyConnectionBrowser({ onConnectionChange, listHeightClass = 
 
     return (
         <div className="space-y-3">
-            <Collapsible open={filtersOpen} onOpenChange={setFiltersOpen}>
-                <div className="flex gap-2">
-                    <div className="relative flex-1">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-                        <Input
-                            placeholder="Search agencies…"
-                            value={search}
-                            onChange={e => handleSearchChange(e.target.value)}
-                            className="pl-9 h-10"
-                        />
-                        {search && (
-                            <button
-                                type="button"
-                                onClick={() => handleSearchChange('')}
-                                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                                aria-label="Clear search"
-                            >
-                                <X className="w-3.5 h-3.5" />
-                            </button>
-                        )}
-                    </div>
-                    <CollapsibleTrigger asChild>
-                        <Button
-                            type="button"
-                            variant="outline"
-                            size="icon"
-                            className="h-10 w-10 flex-shrink-0 relative"
-                            aria-label="Toggle filters"
-                        >
-                            <SlidersHorizontal className="w-4 h-4" />
-                            {activeFilterCount > 0 && (
-                                <span className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center">
-                                    {activeFilterCount}
-                                </span>
-                            )}
-                        </Button>
-                    </CollapsibleTrigger>
-                </div>
+            <SearchFilterBar
+                value={search}
+                onChange={handleSearchChange}
+                placeholder="Search agencies…"
+                activeFilterCount={activeFilterCount}
+                onOpenFilters={() => setFiltersOpen(true)}
+                filterLabel="Filter agencies"
+            />
 
-                <CollapsibleContent>
-                    <div className="mt-3">
-                        <AgencyFiltersPanel filters={filters} onChange={handleFilterChange} onClear={handleClearFilters} />
-                    </div>
-                </CollapsibleContent>
-            </Collapsible>
+            <FilterSheet
+                open={filtersOpen}
+                onOpenChange={setFiltersOpen}
+                title="Filter agencies"
+                activeCount={activeFilterCount}
+                onClear={handleClearFilters}
+                applyLabel="Show agencies"
+            >
+                <AgencyFiltersPanel filters={filters} onChange={handleFilterChange} />
+            </FilterSheet>
 
             <div className="flex items-center justify-between h-5">
                 {!loadingAgencies && meta && (
@@ -374,9 +358,9 @@ export function AgencyConnectionBrowser({ onConnectionChange, listHeightClass = 
                         </button>
                     )}
                 </div>
-            ) : (
-                <ScrollArea className={listHeightClass}>
-                    <div className="space-y-3 pr-3">
+            ) : (() => {
+                const list = (
+                    <div className={cn('space-y-3', scrollable && 'pr-3')}>
                         {agencies.map((agency) => (
                             <AgencyCard
                                 key={agency.id}
@@ -388,8 +372,9 @@ export function AgencyConnectionBrowser({ onConnectionChange, listHeightClass = 
                             />
                         ))}
                     </div>
-                </ScrollArea>
-            )}
+                );
+                return scrollable ? <ScrollArea className={listHeightClass}>{list}</ScrollArea> : list;
+            })()}
 
             {meta && meta.totalPages > 1 && (
                 <div className="flex items-center justify-between pt-1">

@@ -652,8 +652,11 @@ export interface DigitalFormatRow {
 // ─── Delivery Agencies ────────────────────────────────────────────────────────
 
 export interface VendorAgencyHQAddressDto {
-  region: string;
-  city: string;
+  /** Derived from the entry's geocode — `null` when it resolves none. */
+  region: string | null;
+  /** Derived from the entry's geocode — `null` for rural/landmark addresses. */
+  city: string | null;
+  /** Always present. Use it when `region`/`city` are null (see formatAgencyLocality). */
   address_description: string;
 }
 

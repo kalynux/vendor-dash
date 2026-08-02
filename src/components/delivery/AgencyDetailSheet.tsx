@@ -7,6 +7,7 @@ import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { cn } from '@/lib/utils';
+import { formatAgencyAddressDetail, formatAgencyLocality } from '@/lib/agencyAddress';
 import { fileRefUrl } from '@/services/files.service';
 import type { VendorAgencyListItemDto } from '@/types/product.types';
 
@@ -90,8 +91,10 @@ export function AgencyDetailSheet({ agency, open, onOpenChange, footerSlot }: Ag
                                     Headquarters
                                 </h3>
                                 <div className="rounded-lg bg-muted/50 p-3 space-y-1">
-                                    <p className="text-sm font-medium">{hq.city}, {hq.region}</p>
-                                    <p className="text-xs text-muted-foreground">{hq.address_description}</p>
+                                    <p className="text-sm font-medium">{formatAgencyLocality(hq)}</p>
+                                    {formatAgencyAddressDetail(hq) && (
+                                        <p className="text-xs text-muted-foreground">{formatAgencyAddressDetail(hq)}</p>
+                                    )}
                                 </div>
                             </section>
                         )}

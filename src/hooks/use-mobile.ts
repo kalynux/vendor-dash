@@ -26,3 +26,26 @@ export function useIsMobile() {
 
   return isMobile
 }
+
+// Tablet range: wide enough for the desktop shell, too narrow for a comfortable
+// 256px sidebar. The dashboard auto-collapses the sidebar to its icon rail here.
+const TABLET_QUERY = `(min-width: ${MOBILE_BREAKPOINT}px) and (max-width: 1023px)`
+
+function getIsTablet(): boolean {
+  if (typeof window === "undefined") return false
+  return window.matchMedia(TABLET_QUERY).matches
+}
+
+export function useIsTablet() {
+  const [isTablet, setIsTablet] = React.useState<boolean>(getIsTablet)
+
+  React.useEffect(() => {
+    const mql = window.matchMedia(TABLET_QUERY)
+    const onChange = () => setIsTablet(mql.matches)
+    mql.addEventListener("change", onChange)
+    setIsTablet(mql.matches)
+    return () => mql.removeEventListener("change", onChange)
+  }, [])
+
+  return isTablet
+}

@@ -1,5 +1,5 @@
 import { CalendarClock, Package, Percent, Sparkles } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { SettingsSection } from '@/components/vendor-settings/SettingsSection';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import type { CurrentPlanData } from '@/types/billing.types';
@@ -26,24 +26,22 @@ export function CurrentPlanCard({ data, productCount }: CurrentPlanCardProps) {
   const isFree = plan.price === 0;
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              {plan.name}
-              <Badge variant={subscriberPlan.status === 'active' ? 'default' : 'secondary'}>
-                {subscriberPlanStatusLabel(subscriberPlan.status)}
-              </Badge>
-            </CardTitle>
-            <CardDescription>
-              {isFree ? 'Free plan' : `${formatMoney(plan.price, plan.currency)} · ${formatTerm(plan.term_days)}`}
-            </CardDescription>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+    <SettingsSection
+      title={
+        <span className="flex items-center gap-2">
+          {plan.name}
+          <Badge variant={subscriberPlan.status === 'active' ? 'default' : 'secondary'}>
+            {subscriberPlanStatusLabel(subscriberPlan.status)}
+          </Badge>
+        </span>
+      }
+      description={
+        isFree ? 'Free plan' : `${formatMoney(plan.price, plan.currency)} · ${formatTerm(plan.term_days)}`
+      }
+      info="Your current subscription. Commission is what the platform takes per sale, and the credit allowance is what tops up your wallet each term. Hitting the product cap doesn't remove anything — it just stops you publishing more until you archive one or upgrade."
+      contentClassName="space-y-4"
+    >
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 sm:gap-3">
           <Stat
             icon={<CalendarClock className="h-4 w-4" />}
             label="Renews / expires"
@@ -89,19 +87,18 @@ export function CurrentPlanCard({ data, productCount }: CurrentPlanCardProps) {
             </p>
           </div>
         )}
-      </CardContent>
-    </Card>
+    </SettingsSection>
   );
 }
 
 function Stat({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
   return (
-    <div className="rounded-lg border bg-muted/30 p-3">
+    <div className="rounded-lg p-0 sm:border sm:bg-muted/30 sm:p-3">
       <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-        {icon}
-        {label}
+        <span className="shrink-0">{icon}</span>
+        <span className="min-w-0 truncate">{label}</span>
       </div>
-      <p className="mt-1 font-semibold">{value}</p>
+      <p className="mt-1 text-sm font-semibold sm:text-base">{value}</p>
     </div>
   );
 }

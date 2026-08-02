@@ -38,13 +38,11 @@ import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
+import { InfoHint } from '@/components/ui/info-hint';
 import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from '@/components/ui/card';
+  SettingsSection,
+  SettingsSections,
+} from '@/components/vendor-settings/SettingsSection';
 
 // The editable string fields, in payload key order. `name` is required (2–100);
 // the rest are nullable. slug + country are immutable (rendered read-only) —
@@ -272,18 +270,15 @@ export function StorefrontSettings() {
 
   if (!store || !form) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Storefront</CardTitle>
-          <CardDescription>Your public store identity and support contacts.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div role="alert" className="p-3 text-sm bg-destructive/10 text-destructive rounded-lg border border-destructive/20">
-            Could not load your storefront.
-          </div>
-          <Button variant="outline" className="mt-3" onClick={fetchStore}>Try again</Button>
-        </CardContent>
-      </Card>
+      <SettingsSection
+        title="Storefront"
+        info="Your public store identity and support contacts."
+      >
+        <div role="alert" className="p-3 text-sm bg-destructive/10 text-destructive rounded-lg border border-destructive/20">
+          Could not load your storefront.
+        </div>
+        <Button variant="outline" className="mt-3" onClick={fetchStore}>Try again</Button>
+      </SettingsSection>
     );
   }
 
@@ -292,7 +287,9 @@ export function StorefrontSettings() {
   return (
     <div className="space-y-6">
       {/* ─── Storefront preview hero ─────────────────────────────────────── */}
-      <Card className="overflow-hidden gap-0 py-0">
+      {/* Full-bleed on mobile (cancels the page's own px-6) — a framed banner
+          inside a card inside the page padding left it postage-stamp small. */}
+      <div className="overflow-hidden max-md:-mx-6 md:rounded-xl md:border md:bg-card md:shadow-sm">
         {/* Banner — live preview of the picked image */}
         <div className="relative aspect-[3/1] min-h-[130px] max-h-[260px] w-full bg-muted">
           {form.banner ? (
@@ -340,10 +337,10 @@ export function StorefrontSettings() {
             </button>
           )}
         </div>
-      </Card>
+      </div>
 
       {/* Identity row — logo overlaps the banner */}
-        <div className="px-4 pb-5 sm:px-6">
+        <div className="md:px-6 md:pb-5">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
             <div className="relative -mt-10 shrink-0 sm:-mt-12">
               {form.logo ? (
@@ -424,19 +421,16 @@ export function StorefrontSettings() {
       )}
 
       {/* ─── Forms + side rail ───────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-3">
+      <div className="grid grid-cols-1 items-start max-md:divide-y md:gap-6 lg:grid-cols-3">
         {/* Main column */}
-        <div className="space-y-6 lg:col-span-2">
+        <SettingsSections className="lg:col-span-2">
           {/* Identity */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <StoreIcon className="w-4 h-4 text-muted-foreground" />
-                Store identity
-              </CardTitle>
-              <CardDescription>The name and description customers see on your storefront page.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-5">
+          <SettingsSection
+            title="Store identity"
+            icon={StoreIcon}
+            info="The name and description customers see on your storefront page and in search results. Changing the name here does not change your store URL."
+            contentClassName="space-y-5"
+          >
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <Label htmlFor="store-name">Store name</Label>
@@ -475,19 +469,14 @@ export function StorefrontSettings() {
                   className="resize-y"
                 />
               </div>
-            </CardContent>
-          </Card>
+          </SettingsSection>
 
           {/* Support contacts */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <LifeBuoy className="w-4 h-4 text-muted-foreground" />
-                Support & contact
-              </CardTitle>
-              <CardDescription>How customers reach you with questions about their orders.</CardDescription>
-            </CardHeader>
-            <CardContent>
+          <SettingsSection
+            title="Support & contact"
+            icon={LifeBuoy}
+            info="How customers reach you with questions about their orders. These are published on your storefront — leave a field empty to hide that channel."
+          >
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-2 sm:col-span-2">
                   <Label htmlFor="store-email">Support email</Label>
@@ -529,21 +518,18 @@ export function StorefrontSettings() {
                   <FieldError message={fieldErrors.supportWhatsapp} />
                 </div>
               </div>
-            </CardContent>
-          </Card>
+          </SettingsSection>
 
-        </div>
+        </SettingsSections>
 
         {/* Side rail */}
-        <div className="space-y-6">
+        <SettingsSections>
           {/* Vacation mode */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Store status</CardTitle>
-              <CardDescription>Temporarily close your storefront without deleting anything.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center justify-between gap-3 rounded-lg border p-4">
+          <SettingsSection
+            title="Store status"
+            info="Close your storefront temporarily without deleting anything. While closed, customers see a vacation notice, your products stay listed but can't be ordered, and existing orders are unaffected."
+          >
+              <div className="flex items-center justify-between gap-3 rounded-lg border p-3 sm:p-4">
                 <div className="flex min-w-0 items-center gap-3">
                   <div
                     className={cn(
@@ -574,16 +560,14 @@ export function StorefrontSettings() {
                   />
                 </div>
               </div>
-            </CardContent>
-          </Card>
+          </SettingsSection>
 
           {/* Store details (read-only) */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Store details</CardTitle>
-              <CardDescription>Fixed properties of your storefront.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
+          <SettingsSection
+            title="Store details"
+            info="Fixed properties of your storefront. None of these can be edited here — contact support if one is wrong."
+            contentClassName="space-y-4"
+          >
               <DetailRow icon={Globe} label="Public URL">
                 <a
                   href={store.publicUrl}
@@ -595,20 +579,27 @@ export function StorefrontSettings() {
                 </a>
               </DetailRow>
               <Separator />
-              <DetailRow icon={Lock} label="Slug" hint="Contact support if you need a new store URL.">
+              <DetailRow
+                icon={Lock}
+                label="Slug"
+                hint="The last part of your store URL. It's locked because existing links, QR codes, and shared posts would break — contact support if you need a new one."
+              >
                 <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">{store.slug}</code>
               </DetailRow>
               <Separator />
-              <DetailRow icon={Lock} label="Country" hint="Set once during onboarding — sourced from your vendor profile.">
+              <DetailRow
+                icon={Lock}
+                label="Country"
+                hint="Set once during onboarding and taken from your vendor profile. It drives tax, shipping, and which addresses you're allowed to register."
+              >
                 <span className="text-sm">{store.country ?? '—'}</span>
               </DetailRow>
               <Separator />
               <DetailRow icon={CalendarDays} label="Last updated">
                 <span className="text-sm">{formatDate(store.updatedAt)}</span>
               </DetailRow>
-            </CardContent>
-          </Card>
-        </div>
+          </SettingsSection>
+        </SettingsSections>
       </div>
 
       <UnsavedChangesBar
@@ -663,7 +654,7 @@ function FieldError({ message }: { message?: string }) {
   return <p className="text-xs text-destructive">{message}</p>;
 }
 
-/** Labeled read-only row in the "Store details" card. */
+/** Labeled read-only row in the "Store details" section. */
 function DetailRow({
   icon: Icon,
   label,
@@ -672,16 +663,21 @@ function DetailRow({
 }: {
   icon: LucideIcon;
   label: string;
-  hint?: string;
+  /** Explanation folded behind an info icon rather than printed under the value. */
+  hint?: ReactNode;
   children: ReactNode;
 }) {
   return (
     <div className="space-y-1">
       <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
         <Icon className="w-3 h-3" /> {label}
+        {hint && (
+          <InfoHint label={`About ${label}`} align="start" className="-my-1">
+            {hint}
+          </InfoHint>
+        )}
       </p>
       {children}
-      {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
     </div>
   );
 }
@@ -696,18 +692,18 @@ function formatDate(iso: string): string {
 function StorefrontSkeleton() {
   return (
     <div className="space-y-6">
-      <Card className="overflow-hidden gap-0 py-0">
+      <div className="overflow-hidden max-md:-mx-6 md:rounded-xl md:border md:bg-card md:shadow-sm">
         <Skeleton className="aspect-[3/1] min-h-[130px] max-h-[260px] w-full rounded-none" />
-        <div className="px-4 pb-5 sm:px-6">
-          <div className="flex items-end gap-4">
-            <Skeleton className="-mt-10 h-20 w-20 rounded-xl border-4 border-card sm:-mt-12 sm:h-24 sm:w-24" />
-            <div className="flex-1 space-y-2 pb-1">
-              <Skeleton className="h-5 w-44" />
-              <Skeleton className="h-4 w-64 max-w-full" />
-            </div>
+      </div>
+      <div className="md:px-6 md:pb-5">
+        <div className="flex items-end gap-4">
+          <Skeleton className="-mt-10 h-20 w-20 rounded-xl border-4 border-card sm:-mt-12 sm:h-24 sm:w-24" />
+          <div className="flex-1 space-y-2 pb-1">
+            <Skeleton className="h-5 w-44" />
+            <Skeleton className="h-4 w-64 max-w-full" />
           </div>
         </div>
-      </Card>
+      </div>
       <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
           <Skeleton className="h-56 w-full rounded-xl" />

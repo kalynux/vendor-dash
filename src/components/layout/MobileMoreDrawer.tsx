@@ -133,7 +133,7 @@ export function MobileMoreDrawer({ open, onOpenChange }: MobileMoreDrawerProps) 
             <h2 className="text-xl font-bold">More</h2>
           </div>
 
-          <div className="flex-1 overflow-y-auto min-h-0">
+          <div className="flex-1 overflow-y-auto min-h-0 pb-safe">
             {/* Vendor profile card */}
             <div className="mx-4 mt-4 mb-4 p-4 bg-card rounded-xl border flex items-center gap-3">
               <img

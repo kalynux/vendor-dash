@@ -1,21 +1,48 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Loader2, ChevronRight, SkipForward } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { OnboardingLayout } from '@/onboarding/OnboardingLayout';
 import { type Step3FormValues } from '@/onboarding/schemas/onboarding.schemas';
 import { useOnboarding } from '@/onboarding/store/onboarding.store';
+import { useStoreStore } from '@/store';
+import { fetchStore as fetchStoreProfile } from '@/services/store.service';
 import { BrandingFields } from '@/components/vendor-settings/forms/BrandingFields';
 import { Button } from '@/components/ui/button';
 import { ApiError } from '@/types/api';
 
 export function Step3Branding() {
     const { submitBranding, isSubmitting, session, drafts, saveDraft } = useOnboarding();
+    const { store, applyStore } = useStoreStore();
     const [apiError, setApiError] = useState<string | null>(null);
     const [isSkipping, setIsSkipping] = useState(false);
 
     const roleEntity = session?.role_entity;
     const draft = drafts.branding;
+
+    // What this step submits as `branding` is persisted to the STORE (logo/banner),
+    // not the profile — so that's where an already-saved image has to be read back
+    // from. GET /vendor/store auto-provisions the row when it doesn't exist yet,
+    // which is the same row onboarding would create anyway.
+    //
+    // Called directly rather than via the store's `fetchStore`, which error-toasts:
+    // this is opportunistic pre-population during onboarding, so a failure should
+    // leave the fields empty silently, not interrupt the vendor.
+    const loadStore = useCallback(async () => {
+        try {
+            applyStore(await fetchStoreProfile());
+        } catch {
+            // No storefront readable yet — the vendor just starts from empty slots.
+        }
+    }, [applyStore]);
+
+    useEffect(() => {
+        if (!store) loadStore();
+    }, [store, loadStore]);
+
+    // Store is authoritative; `role_entity.branding` is the pre-migration fallback.
+    const savedLogo = store?.logo ?? roleEntity?.branding?.logo ?? null;
+    const savedCover = store?.banner ?? roleEntity?.branding?.coverImage ?? null;
 
     // Pre-population priority: draft → session role_entity → empty defaults
     const defaultAddresses = (): Step3FormValues['business_addresses'] => {
@@ -35,8 +62,8 @@ export function Step3Branding() {
     };
 
     const defaultValues: Step3FormValues = {
-        logo_file_id: draft?.logo_file_id ?? roleEntity?.branding?.logo?.id ?? null,
-        cover_image_file_id: draft?.cover_image_file_id ?? roleEntity?.branding?.coverImage?.id ?? null,
+        logo_file_id: draft?.logo_file_id ?? savedLogo?.id ?? null,
+        cover_image_file_id: draft?.cover_image_file_id ?? savedCover?.id ?? null,
         business_addresses: defaultAddresses(),
     };
 
@@ -57,6 +84,9 @@ export function Step3Branding() {
                     ),
                     version: roleEntity?.version,
                 });
+                // The logo/banner landed on the store — refresh it so the header,
+                // sidebar and a revisit of this step all read the new images.
+                await loadStore();
                 toast.success('Profile complete! Welcome aboard 🎉');
             } catch (err) {
                 if (err instanceof ApiError) {
@@ -74,7 +104,7 @@ export function Step3Branding() {
                 }
             }
         },
-        [submitBranding, saveDraft, roleEntity?.version],
+        [submitBranding, saveDraft, loadStore, roleEntity?.version],
     );
 
     const handleSkip = useCallback(async () => {
@@ -158,8 +188,8 @@ export function Step3Branding() {
                 defaultValues={defaultValues}
                 onSubmit={handleSave}
                 addressCountryBias={roleEntity?.country}
-                logoPreviewUrl={roleEntity?.branding?.logo?.url ?? null}
-                coverPreviewUrl={roleEntity?.branding?.coverImage?.url ?? null}
+                logoPreviewUrl={savedLogo?.url ?? null}
+                coverPreviewUrl={savedCover?.url ?? null}
             />
         </OnboardingLayout>
     );

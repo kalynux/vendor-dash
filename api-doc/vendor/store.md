@@ -52,7 +52,7 @@ Authorization: Bearer <jwt_token>
     "slug": "techsolutions",
     "logo": {
       "id": "507f1f77bcf86cd799439030",
-      "key": "products/2026/07/logo-techsolutions.png",
+      "key": "images/2026/07/logo-techsolutions.png",
       "url": "https://cdn.example.com/logos/techsolutions.png",
       "mimeType": "image/png",
       "size": 24576,
@@ -60,7 +60,7 @@ Authorization: Bearer <jwt_token>
     },
     "banner": {
       "id": "507f1f77bcf86cd799439031",
-      "key": "products/2026/07/banner-techsolutions.jpg",
+      "key": "images/2026/07/banner-techsolutions.jpg",
       "url": "https://cdn.example.com/banners/techsolutions.jpg",
       "mimeType": "image/jpeg",
       "size": 184320,
@@ -89,7 +89,7 @@ Authorization: Bearer <jwt_token>
 
 **Auto-provisioning**: if the vendor has no store row yet (accounts created before
 store provisioning existed), this endpoint creates it on the fly — name derived
-from the vendor's display/business name, slug auto-generated and unique.
+from the business name given at signup (else the vendor's display name), slug auto-generated and unique.
 
 #### Error Responses
 
@@ -199,7 +199,7 @@ are equivalent: both remove the logo. A non-empty invalid value (e.g. `"logoFile
     "slug": "techsolutions",
     "logo": {
       "id": "507f1f77bcf86cd799439030",
-      "key": "products/2026/07/new-logo.png",
+      "key": "images/2026/07/new-logo.png",
       "url": "https://cdn.example.com/logos/new-logo.png",
       "mimeType": "image/png",
       "size": 24576,
@@ -207,7 +207,7 @@ are equivalent: both remove the logo. A non-empty invalid value (e.g. `"logoFile
     },
     "banner": {
       "id": "507f1f77bcf86cd799439031",
-      "key": "products/2026/07/new-banner.jpg",
+      "key": "images/2026/07/new-banner.jpg",
       "url": "https://cdn.example.com/banners/new-banner.jpg",
       "mimeType": "image/jpeg",
       "size": 184320,

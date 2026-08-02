@@ -5,11 +5,16 @@ import {
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
-import {
   Empty, EmptyHeader, EmptyTitle, EmptyDescription, EmptyMedia,
 } from '@/components/ui/empty';
+import {
+  ActiveFilterChips,
+  FilterChips,
+  FilterSection,
+  FilterSheet,
+  FilterTriggerButton,
+  type ActiveFilterChip,
+} from '@/components/filters';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useInfiniteList } from '@/hooks/use-infinite-list';
@@ -24,7 +29,6 @@ import type {
 } from '@/types/services.types';
 
 const PAGE_LIMIT = 20;
-const ALL = '__all__';
 
 const STATUS_OPTIONS: { value: BookingStatus | ''; label: string }[] = [
   { value: '', label: 'All statuses' },
@@ -63,6 +67,7 @@ export function BookingsPanel({ openBookingId }: { openBookingId?: string | null
 
   const [statusFilter, setStatusFilter] = useState<BookingStatus | ''>('');
   const [paymentFilter, setPaymentFilter] = useState<PaymentStatus | ''>('');
+  const [filterSheetOpen, setFilterSheetOpen] = useState(false);
   const [page, setPage] = useState(1);
 
   const [detailId, setDetailId] = useState<string | null>(null);
@@ -122,49 +127,91 @@ export function BookingsPanel({ openBookingId }: { openBookingId?: string | null
     deps: [statusFilter, paymentFilter, reloadToken],
   });
 
-  const filtersNode = (
-    <div className="flex flex-wrap gap-2">
-      <Select
-        value={statusFilter || ALL}
-        onValueChange={(v) => { setStatusFilter(v === ALL ? '' : (v as BookingStatus)); setPage(1); }}
-      >
-        <SelectTrigger className="w-40"><SelectValue placeholder="Status" /></SelectTrigger>
-        <SelectContent>
-          {STATUS_OPTIONS.map((o) => (
-            <SelectItem key={o.value || ALL} value={o.value || ALL}>{o.label}</SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <Select
-        value={paymentFilter || ALL}
-        onValueChange={(v) => { setPaymentFilter(v === ALL ? '' : (v as PaymentStatus)); setPage(1); }}
-      >
-        <SelectTrigger className="w-40"><SelectValue placeholder="Payment" /></SelectTrigger>
-        <SelectContent>
-          {PAYMENT_OPTIONS.map((o) => (
-            <SelectItem key={o.value || ALL} value={o.value || ALL}>{o.label}</SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
+  // Bookings have no free-text search endpoint, so this panel shows the same
+  // filter button as every other list — just without a search field beside it.
+  const activeFilterCount = (statusFilter ? 1 : 0) + (paymentFilter ? 1 : 0);
+
+  const clearFilters = () => {
+    setStatusFilter('');
+    setPaymentFilter('');
+    setPage(1);
+  };
+
+  const filterChips: ActiveFilterChip[] = [];
+  if (statusFilter) {
+    filterChips.push({
+      key: 'status',
+      label: `Status: ${STATUS_OPTIONS.find((o) => o.value === statusFilter)?.label ?? statusFilter}`,
+      onRemove: () => { setStatusFilter(''); setPage(1); },
+    });
+  }
+  if (paymentFilter) {
+    filterChips.push({
+      key: 'payment',
+      label: `Payment: ${PAYMENT_OPTIONS.find((o) => o.value === paymentFilter)?.label ?? paymentFilter}`,
+      onRemove: () => { setPaymentFilter(''); setPage(1); },
+    });
+  }
+
+  const filterSheet = (
+    <FilterSheet
+      open={filterSheetOpen}
+      onOpenChange={setFilterSheetOpen}
+      title="Filter bookings"
+      activeCount={activeFilterCount}
+      onClear={clearFilters}
+      applyLabel="Show bookings"
+    >
+      <FilterSection title="Booking status">
+        <FilterChips
+          options={STATUS_OPTIONS.filter((o): o is { value: BookingStatus; label: string } => o.value !== '')}
+          value={statusFilter || undefined}
+          onChange={(v) => { setStatusFilter(v ?? ''); setPage(1); }}
+          allLabel="Any status"
+        />
+      </FilterSection>
+      <FilterSection title="Payment status">
+        <FilterChips
+          options={PAYMENT_OPTIONS.filter((o): o is { value: PaymentStatus; label: string } => o.value !== '')}
+          value={paymentFilter || undefined}
+          onChange={(v) => { setPaymentFilter(v ?? ''); setPage(1); }}
+          allLabel="Any"
+        />
+      </FilterSection>
+    </FilterSheet>
   );
 
   const viewToggle = (
-    <div className="inline-flex overflow-hidden rounded-lg border">
+    <div className="inline-flex h-11 shrink-0 overflow-hidden rounded-xl border">
       <button
         type="button"
         onClick={() => setView('list')}
-        className={cn('flex items-center gap-1.5 px-3 py-1.5 text-sm', view === 'list' ? 'bg-accent' : 'hover:bg-muted/50')}
+        className={cn('flex items-center gap-1.5 px-3 text-sm', view === 'list' ? 'bg-accent' : 'hover:bg-muted/50')}
       >
         <List className="h-4 w-4" /> List
       </button>
       <button
         type="button"
         onClick={() => setView('calendar')}
-        className={cn('flex items-center gap-1.5 border-l px-3 py-1.5 text-sm', view === 'calendar' ? 'bg-accent' : 'hover:bg-muted/50')}
+        className={cn('flex items-center gap-1.5 border-l px-3 text-sm', view === 'calendar' ? 'bg-accent' : 'hover:bg-muted/50')}
       >
         <CalendarDays className="h-4 w-4" /> Calendar
       </button>
+    </div>
+  );
+
+  const toolbar = (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <FilterTriggerButton
+          onClick={() => setFilterSheetOpen(true)}
+          activeCount={activeFilterCount}
+          label="Filter bookings"
+        />
+        <div className="flex-1" />
+        {viewToggle}
+      </div>
+      <ActiveFilterChips chips={filterChips} onClearAll={clearFilters} />
     </div>
   );
 
@@ -200,12 +247,8 @@ export function BookingsPanel({ openBookingId }: { openBookingId?: string | null
 
   return (
     <div className="space-y-4">
-      {!isMobile && (
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          {filtersNode}
-          {viewToggle}
-        </div>
-      )}
+      {toolbar}
+      {filterSheet}
 
       {view === 'calendar' ? (
         <BookingCalendar onOpenBooking={setDetailId} reloadToken={reloadToken} />

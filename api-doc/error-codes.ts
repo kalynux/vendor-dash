@@ -181,6 +181,10 @@ export const ERROR_CODES = Object.freeze({
     SHIPMENT_ACCESS_DENIED: 'SHIPMENT_ACCESS_DENIED',
     SHIPMENT_ALREADY_CONFIRMED: 'SHIPMENT_ALREADY_CONFIRMED',
     SHIPMENT_CONFIRMATION_NOT_ALLOWED: 'SHIPMENT_CONFIRMATION_NOT_ALLOWED',
+    // The auto-generated tracking number collided on every attempt — see
+    // TrackingNumberGenerator. Effectively unreachable; it means a broken clock
+    // or RNG rather than bad luck.
+    SHIPMENT_TRACKING_NUMBER_GENERATION_FAILED: 'SHIPMENT_TRACKING_NUMBER_GENERATION_FAILED',
     // Agent-acceptance workflow (shipment assignment offers)
     SHIPMENT_OFFER_NOT_FOUND: 'SHIPMENT_OFFER_NOT_FOUND',
     SHIPMENT_OFFER_NOT_PENDING: 'SHIPMENT_OFFER_NOT_PENDING',
@@ -197,6 +201,17 @@ export const ERROR_CODES = Object.freeze({
     SHIPMENT_REASSIGN_SAME_AGENT: 'SHIPMENT_REASSIGN_SAME_AGENT',
     SHIPMENT_REASSIGN_REQUIRES_MANUAL_AGENT: 'SHIPMENT_REASSIGN_REQUIRES_MANUAL_AGENT',
     SHIPMENT_REASSIGNMENT_CONFLICT: 'SHIPMENT_REASSIGNMENT_CONFLICT',
+    // Agent-initiated mid-delivery cancellation (releases the agent, resumes auto-assignment).
+    SHIPMENT_CANCEL_NOT_ALLOWED: 'SHIPMENT_CANCEL_NOT_ALLOWED',
+    SHIPMENT_CANCEL_CONFLICT: 'SHIPMENT_CANCEL_CONFLICT',
+    // The shipment moved between the read that validated the transition and the
+    // write — the other actor (agency vs agent, who now drive the same state
+    // machine) got there first. Retry from a fresh read.
+    SHIPMENT_STATUS_CONFLICT: 'SHIPMENT_STATUS_CONFLICT',
+    // Agent delivery-proof upload allowed only at/after the delivery outcome.
+    SHIPMENT_PROOF_NOT_ALLOWED: 'SHIPMENT_PROOF_NOT_ALLOWED',
+    SHIPMENT_PROOF_NOT_FOUND: 'SHIPMENT_PROOF_NOT_FOUND',
+    SHIPMENT_PROOF_FILE_REQUIRED: 'SHIPMENT_PROOF_FILE_REQUIRED',
     ORDER_ALREADY_CANCELLED: 'ORDER_ALREADY_CANCELLED',
     ORDER_NOT_CANCELLABLE: 'ORDER_NOT_CANCELLABLE',
     ORDER_CANCEL_REQUIRES_REFUND: 'ORDER_CANCEL_REQUIRES_REFUND',
@@ -221,6 +236,16 @@ export const ERROR_CODES = Object.freeze({
     GEO_PROVIDER_UNAVAILABLE: 'GEO_PROVIDER_UNAVAILABLE',
     // Provider returned a non-2xx or unparseable response.
     GEO_SEARCH_FAILED: 'GEO_SEARCH_FAILED',
+    // A new/edited business or headquarters address was submitted without a
+    // geocoded `geo` (a selected /api/geo/search result). Required so every
+    // physical location is mappable and its country verifiable.
+    ADDRESS_GEO_REQUIRED: 'ADDRESS_GEO_REQUIRED',
+    // A geocoded address resolves outside the profile's registered country
+    // (or its provider returned no country code, so it cannot be verified).
+    ADDRESS_COUNTRY_MISMATCH: 'ADDRESS_COUNTRY_MISMATCH',
+    // Attempt to change a profile country that is already set. Country is
+    // chosen during onboarding and immutable afterwards (tax/shipping policy).
+    PROFILE_COUNTRY_IMMUTABLE: 'PROFILE_COUNTRY_IMMUTABLE',
 
     // ── MAIL ──────────────────────────────────────────────────────────────────
     MAIL_TEMPLATE_NOT_FOUND: 'MAIL_TEMPLATE_NOT_FOUND',
@@ -256,6 +281,11 @@ export const ERROR_CODES = Object.freeze({
     CATALOG_PRODUCT_INVALID_PICKUP_LOCATION: 'CATALOG_PRODUCT_INVALID_PICKUP_LOCATION',
     CATALOG_PRODUCT_VECTORISATION_PENDING: 'CATALOG_PRODUCT_VECTORISATION_PENDING',
     CATALOG_PRODUCT_VECTORISATION_NOT_ELIGIBLE: 'CATALOG_PRODUCT_VECTORISATION_NOT_ELIGIBLE',
+    // Authoring mode (see product.model.ts ProductMode). A `simple` product is
+    // locked to exactly one variant and zero options; the advanced endpoints
+    // refuse it, and the simple endpoints refuse an advanced product.
+    CATALOG_PRODUCT_SIMPLE_MODE_LOCKED: 'CATALOG_PRODUCT_SIMPLE_MODE_LOCKED',
+    CATALOG_PRODUCT_NOT_SIMPLE_MODE: 'CATALOG_PRODUCT_NOT_SIMPLE_MODE',
     // Variants
     CATALOG_VARIANT_NOT_FOUND: 'CATALOG_VARIANT_NOT_FOUND',
     CATALOG_VARIANT_ACCESS_DENIED: 'CATALOG_VARIANT_ACCESS_DENIED',
@@ -323,6 +353,7 @@ export const ERROR_CODES = Object.freeze({
 
     // ── DELIVERY ──────────────────────────────────────────────────────────────
     DELIVERY_AGENCY_NOT_FOUND: 'DELIVERY_AGENCY_NOT_FOUND',
+    AGENCY_COVERAGE_AREA_INVALID: 'AGENCY_COVERAGE_AREA_INVALID',
     DELIVERY_AGENT_NOT_FOUND: 'DELIVERY_AGENT_NOT_FOUND',
     DELIVERY_AGENCY_ALREADY_EXISTS: 'DELIVERY_AGENCY_ALREADY_EXISTS',
     DELIVERY_ONBOARDING_STEP_INVALID: 'DELIVERY_ONBOARDING_STEP_INVALID',
@@ -347,6 +378,8 @@ export const ERROR_CODES = Object.freeze({
     AGENT_NOT_FOUND: 'AGENT_NOT_FOUND',
     AGENT_NOT_ACTIVE: 'AGENT_NOT_ACTIVE',
     AGENT_SUSPENDED: 'AGENT_SUSPENDED',
+    // Onboarding (locks once completed — edits then go through profile/settings)
+    AGENT_ONBOARDING_ALREADY_COMPLETED: 'AGENT_ONBOARDING_ALREADY_COMPLETED',
     // Membership lifecycle
     AGENT_MEMBERSHIP_NOT_FOUND: 'AGENT_MEMBERSHIP_NOT_FOUND',
     AGENT_MEMBERSHIP_ALREADY_EXISTS: 'AGENT_MEMBERSHIP_ALREADY_EXISTS',
@@ -392,8 +425,8 @@ export const ERROR_CODES = Object.freeze({
     CONTRACT_COVERAGE_OUTSIDE_AGENT_RADIUS: 'CONTRACT_COVERAGE_OUTSIDE_AGENT_RADIUS',
     CONTRACT_SHIPMENT_VALUE_EXCEEDED: 'CONTRACT_SHIPMENT_VALUE_EXCEEDED',
     CONTRACT_FEE_SPLIT_INVALID: 'CONTRACT_FEE_SPLIT_INVALID',
-    // Settlement (COD remittance under a contract)
-    CONTRACT_SETTLEMENT_INVALID_AMOUNT: 'CONTRACT_SETTLEMENT_INVALID_AMOUNT',
+    // Settlement (COD remittance under a contract). Thrown by AgentDepositService,
+    // which owns the settlement path; there is no separate settlement collection.
     CONTRACT_SETTLEMENT_EXCEEDS_OUTSTANDING: 'CONTRACT_SETTLEMENT_EXCEEDS_OUTSTANDING',
     // Platform gates (run BEFORE COD/capacity)
     AGENT_KYC_NOT_VERIFIED: 'AGENT_KYC_NOT_VERIFIED',
@@ -431,6 +464,10 @@ export const ERROR_CODES = Object.freeze({
     // ── STORE ─────────────────────────────────────────────────────────────────
     STORE_NOT_FOUND: 'STORE_NOT_FOUND',
     STORE_SLUG_TAKEN: 'STORE_SLUG_TAKEN',
+
+    // ── MAGAZIN (agency business surface) ───────────────────────────────────────
+    MAGAZIN_NOT_FOUND: 'MAGAZIN_NOT_FOUND',
+    MAGAZIN_CONFLICT: 'MAGAZIN_CONFLICT',
 
     // ── VENDOR ────────────────────────────────────────────────────────────────
     VENDOR_FISCAL_CALENDAR_INVALID: 'VENDOR_FISCAL_CALENDAR_INVALID',

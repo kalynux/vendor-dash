@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { HardDrive, ImageIcon, Video, FileText, Music, Archive, File as FileIcon } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { SettingsSection } from '@/components/vendor-settings/SettingsSection';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { formatFileSize, storagePercent, storageBarColor } from '@/lib/utils';
@@ -35,18 +35,17 @@ export function StorageUsageCard({ storage, onViewPlans }: StorageUsageCardProps
   const categories = CATEGORY_ORDER.filter((c) => (storage.byCategory?.[c]?.bytes ?? 0) > 0);
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <HardDrive className="h-5 w-5" /> Media storage
-        </CardTitle>
-        <CardDescription>
-          {hasLimit
-            ? `${formatFileSize(usedBytes)} of ${formatFileSize(limitBytes)} used`
-            : `${formatFileSize(usedBytes)} used · no limit`}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <SettingsSection
+      title="Media storage"
+      icon={HardDrive}
+      description={
+        hasLimit
+          ? `${formatFileSize(usedBytes)} of ${formatFileSize(limitBytes)} used`
+          : `${formatFileSize(usedBytes)} used · no limit`
+      }
+      info="Only product media counts toward this limit — download assets for digital products are excluded. Once you hit 100% new uploads are blocked until you free up space or upgrade, and media left unused for a long time may be removed."
+      contentClassName="space-y-4"
+    >
         {/* Usage bar */}
         <div className="space-y-1.5">
           <div className="flex items-center justify-between text-sm">
@@ -70,7 +69,7 @@ export function StorageUsageCard({ storage, onViewPlans }: StorageUsageCardProps
               const entry = storage.byCategory![c];
               const { label, icon: Icon } = CATEGORY_META[c];
               return (
-                <div key={c} className="rounded-lg border bg-muted/30 p-3">
+                <div key={c} className="rounded-lg p-0 sm:border sm:bg-muted/30 sm:p-3">
                   <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                     <Icon className="h-4 w-4" />
                     {label}
@@ -105,12 +104,6 @@ export function StorageUsageCard({ storage, onViewPlans }: StorageUsageCardProps
             </div>
           </div>
         )}
-
-        <p className="text-xs text-muted-foreground">
-          Only product media counts toward this limit — digital-product download assets are
-          excluded. Unused media may be removed after a long period of inactivity.
-        </p>
-      </CardContent>
-    </Card>
+    </SettingsSection>
   );
 }

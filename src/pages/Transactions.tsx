@@ -1,7 +1,24 @@
 import { Receipt } from 'lucide-react';
 import { TransactionsTab } from '@/components/transactions/TransactionsTab';
+import { MobilePageHeader } from '@/components/layout/MobilePageHeader';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 export function Transactions() {
+  const isMobile = useIsMobile();
+
+  // Mobile: full-bleed list — the page header replaces the card header and the
+  // rows below run edge-to-edge, matching Products/Orders.
+  if (isMobile) {
+    return (
+      <div className="-mx-6 -mt-6">
+        <MobilePageHeader title="Transactions" />
+        <div className="pb-28">
+          <TransactionsTab />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-5 animate-fade-in">
       <div className="flex items-center gap-3">

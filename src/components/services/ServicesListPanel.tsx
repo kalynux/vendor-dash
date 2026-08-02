@@ -1,18 +1,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Search, Plus, CalendarClock, Loader2, Clock, Grid3X3, List,
+  Plus, CalendarClock, Loader2, Clock, Grid3X3, List,
   MoreHorizontal, Edit, Rocket, RotateCcw, Trash2, Sparkles, RotateCw, XCircle,
   CheckCircle2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Card, CardContent } from '@/components/ui/card';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  ActiveFilterChips,
+  FilterChips,
+  FilterSection,
+  FilterSheet,
+  SearchFilterBar,
+} from '@/components/filters';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
@@ -45,7 +48,6 @@ import type {
 } from '@/types/services.types';
 
 const PAGE_LIMIT = 20;
-const ALL = '__all__';
 
 type ViewMode = 'grid' | 'list';
 type VectorisationAction = 'enable' | 'disable' | 'retry';
@@ -284,6 +286,7 @@ export function ServicesListPanel({ onOpenDetail, onCreate, reloadToken }: Servi
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<ServiceStatus | ''>('');
+  const [filterSheetOpen, setFilterSheetOpen] = useState(false);
   const [page, setPage] = useState(1);
   // Bumped after a row action to refetch the current view.
   const [localReload, setLocalReload] = useState(0);
@@ -446,38 +449,56 @@ export function ServicesListPanel({ onOpenDetail, onCreate, reloadToken }: Servi
 
   const viewToggle = (
     <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as ViewMode)}>
-      <TabsList>
-        <TabsTrigger value="grid"><Grid3X3 className="h-4 w-4" /></TabsTrigger>
-        <TabsTrigger value="list"><List className="h-4 w-4" /></TabsTrigger>
+      <TabsList className="h-11 rounded-xl">
+        <TabsTrigger value="grid" aria-label="Grid view"><Grid3X3 className="h-4 w-4" /></TabsTrigger>
+        <TabsTrigger value="list" aria-label="List view"><List className="h-4 w-4" /></TabsTrigger>
       </TabsList>
     </Tabs>
   );
 
-  const filtersNode = (
-    <div className="flex flex-col gap-3 sm:flex-row">
-      <div className="relative flex-1">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          placeholder="Search services…"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="pl-10"
-        />
-      </div>
-      <Select
-        value={statusFilter || ALL}
-        onValueChange={(v) => { setStatusFilter(v === ALL ? '' : (v as ServiceStatus)); setPage(1); }}
-      >
-        <SelectTrigger className="w-full shrink-0 sm:w-44">
-          <SelectValue placeholder="All statuses" />
-        </SelectTrigger>
-        <SelectContent>
-          {STATUS_OPTIONS.map((o) => (
-            <SelectItem key={o.value || ALL} value={o.value || ALL}>{o.label}</SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+  const activeFilterCount = statusFilter ? 1 : 0;
+
+  const filtersNode = (trailing?: React.ReactNode) => (
+    <div className="space-y-3">
+      <SearchFilterBar
+        value={searchQuery}
+        onChange={setSearchQuery}
+        placeholder="Search services…"
+        activeFilterCount={activeFilterCount}
+        onOpenFilters={() => setFilterSheetOpen(true)}
+        filterLabel="Filter services"
+        trailing={trailing}
+      />
+      <ActiveFilterChips
+        chips={statusFilter
+          ? [{
+            key: 'status',
+            label: `Status: ${STATUS_OPTIONS.find((o) => o.value === statusFilter)?.label ?? statusFilter}`,
+            onRemove: () => { setStatusFilter(''); setPage(1); },
+          }]
+          : []}
+      />
     </div>
+  );
+
+  const filterSheet = (
+    <FilterSheet
+      open={filterSheetOpen}
+      onOpenChange={setFilterSheetOpen}
+      title="Filter services"
+      activeCount={activeFilterCount}
+      onClear={clearFilters}
+      applyLabel="Show services"
+    >
+      <FilterSection title="Status">
+        <FilterChips
+          options={STATUS_OPTIONS.filter((o): o is { value: ServiceStatus; label: string } => o.value !== '')}
+          value={statusFilter || undefined}
+          onChange={(v) => { setStatusFilter(v ?? ''); setPage(1); }}
+          allLabel="All statuses"
+        />
+      </FilterSection>
+    </FilterSheet>
   );
 
   const emptyNode = (
@@ -714,20 +735,11 @@ export function ServicesListPanel({ onOpenDetail, onCreate, reloadToken }: Servi
   if (isMobile) {
     return (
       <div className="space-y-3">
-        <div className="flex items-center gap-3">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Search services…"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10"
-            />
-          </div>
-          <Button onClick={onCreate} size="sm" className="shrink-0 gap-2">
-            <Plus className="h-4 w-4" /> New
-          </Button>
-        </div>
+        {filtersNode(
+          <Button onClick={onCreate} aria-label="New service" className="h-11 w-11 shrink-0 rounded-xl p-0">
+            <Plus className="h-5 w-5" />
+          </Button>,
+        )}
         {infinite.loading ? (
           <ListSkeleton mobile />
         ) : infinite.error ? (
@@ -747,6 +759,7 @@ export function ServicesListPanel({ onOpenDetail, onCreate, reloadToken }: Servi
         )}
         {confirmDialog}
         {actionsSheet}
+        {filterSheet}
       </div>
     );
   }
@@ -754,15 +767,15 @@ export function ServicesListPanel({ onOpenDetail, onCreate, reloadToken }: Servi
   // ── Desktop ─────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-3">
-        {filtersNode}
-        <div className="flex shrink-0 items-center gap-2">
+      {filtersNode(
+        <>
           {viewToggle}
-          <Button onClick={onCreate} className="gap-2">
+          <Button onClick={onCreate} className="h-11 shrink-0 gap-2">
             <Plus className="h-4 w-4" /> New service
           </Button>
-        </div>
-      </div>
+        </>,
+      )}
+      {filterSheet}
 
       {loading ? (
         <ListSkeleton />
