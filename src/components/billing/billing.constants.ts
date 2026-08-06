@@ -1,16 +1,17 @@
 // ─── Vendor Billing — display constants & helpers ────────────────────────────────
+//
+// User-visible labels are exported as `TranslationKey`s and resolved by the call
+// site: this module has no React context of its own. See src/i18n/README.md.
 
+import type { TranslationKey } from '@/i18n';
 import type {
   PaymentGateway,
   PhoneOperator,
   SubscriberPlanStatus,
 } from '@/types/billing.types';
 import type { PaymentMethodType } from '@/types/payment-method.types';
-import { ApiError } from '@/types/api';
 
-// Re-export the generic formatters used across the app so billing components have
-// a single import surface. These live in the customers module today.
-export { formatMoney, formatDate, relativeTime } from '@/components/customers/customer.constants';
+type Translate = (key: TranslationKey, params?: Record<string, string | number>) => string;
 
 // ─── Settings limits ──────────────────────────────────────────────────────────
 
@@ -26,10 +27,10 @@ export const PAYMENT_POLL_TIMEOUT_MS = 3 * 60 * 1000;
 
 // ─── Mobile-money operators ──────────────────────────────────────────────────────
 
-export const PHONE_OPERATORS: { value: PhoneOperator; label: string }[] = [
-  { value: 'MTN', label: 'MTN Mobile Money' },
-  { value: 'ORANGE', label: 'Orange Money' },
-  { value: 'MOOV', label: 'Moov Money' },
+export const PHONE_OPERATORS: { value: PhoneOperator; labelKey: TranslationKey }[] = [
+  { value: 'MTN', labelKey: 'billing.operator.MTN' },
+  { value: 'ORANGE', labelKey: 'billing.operator.ORANGE' },
+  { value: 'MOOV', labelKey: 'billing.operator.MOOV' },
 ];
 
 /** Gateway used for mobile-money charges (default operator gateway). */
@@ -43,47 +44,50 @@ export const CARD_GATEWAY: PaymentGateway = 'STRIPE';
 
 export interface GatewayMeta {
   value: PaymentGateway;
-  label: string;
+  labelKey: TranslationKey;
   /** Which channel fields this gateway collects. */
   methodType: Extract<PaymentMethodType, 'card' | 'mobile_money'>;
   /** Short helper line shown under the chip row. */
-  description: string;
+  descriptionKey: TranslationKey;
   /** Currency the vendor is actually charged in (mobile money: XAF, card: USD). */
   chargeCurrency: 'XAF' | 'USD';
 }
 
 export const GATEWAYS: GatewayMeta[] = [
-  { value: 'NOTCHPAY', label: 'NotchPay', methodType: 'mobile_money', description: 'Mobile money — charged in XAF', chargeCurrency: 'XAF' },
-  { value: 'MYCOOLPAY', label: 'MyCoolPay', methodType: 'mobile_money', description: 'Mobile money — charged in XAF', chargeCurrency: 'XAF' },
-  { value: 'STRIPE', label: 'Card', methodType: 'card', description: 'Visa, Mastercard & more — charged in USD', chargeCurrency: 'USD' },
+  {
+    value: 'NOTCHPAY',
+    labelKey: 'billing.gateway.notchpay',
+    methodType: 'mobile_money',
+    descriptionKey: 'billing.gatewayHelp.mobileMoney',
+    chargeCurrency: 'XAF',
+  },
+  {
+    value: 'MYCOOLPAY',
+    labelKey: 'billing.gateway.mycoolpay',
+    methodType: 'mobile_money',
+    descriptionKey: 'billing.gatewayHelp.mobileMoney',
+    chargeCurrency: 'XAF',
+  },
+  {
+    value: 'STRIPE',
+    labelKey: 'billing.gateway.card',
+    methodType: 'card',
+    descriptionKey: 'billing.gatewayHelp.card',
+    chargeCurrency: 'USD',
+  },
 ];
-
-export function gatewayLabel(gateway: PaymentGateway): string {
-  return GATEWAYS.find((g) => g.value === gateway)?.label ?? gateway;
-}
 
 // ─── Saved payment-method display ────────────────────────────────────────────────
 
-const METHOD_TYPE_LABELS: Record<PaymentMethodType, string> = {
-  card: 'Card',
-  mobile_money: 'Mobile money',
-  bank_transfer: 'Bank transfer',
+const METHOD_TYPE_KEYS: Record<PaymentMethodType, TranslationKey> = {
+  card: 'billing.methodType.card',
+  mobile_money: 'billing.methodType.mobile_money',
+  bank_transfer: 'billing.methodType.bank_transfer',
 };
 
-export function methodTypeLabel(type: PaymentMethodType): string {
-  return METHOD_TYPE_LABELS[type] ?? type;
-}
-
-const PROVIDER_LABELS: Record<string, string> = {
-  stripe: 'Stripe',
-  notchpay: 'NotchPay',
-  mycoolpay: 'MyCoolPay',
-  mtn_momo: 'MTN MoMo',
-  orange_money: 'Orange Money',
-};
-
-export function providerLabel(provider: string): string {
-  return PROVIDER_LABELS[provider.toLowerCase()] ?? provider;
+export function methodTypeLabel(type: PaymentMethodType, t: Translate): string {
+  const key = METHOD_TYPE_KEYS[type];
+  return key ? t(key) : type;
 }
 
 /** Provider/operator string for the gateway used to tokenise a mobile-money method. */
@@ -106,58 +110,49 @@ export function planAccent(code: string): string {
 
 // ─── Status badge variants ───────────────────────────────────────────────────────
 
-export function subscriberPlanStatusLabel(status: SubscriberPlanStatus): string {
-  switch (status) {
-    case 'active':
-      return 'Active';
-    case 'pending_activation':
-      return 'Queued';
-    case 'expired':
-      return 'Expired';
-    case 'cancelled':
-      return 'Cancelled';
-    default:
-      return status;
-  }
+const SUBSCRIBER_PLAN_STATUS_KEYS: Record<SubscriberPlanStatus, TranslationKey> = {
+  active: 'billing.status.active',
+  pending_activation: 'billing.status.pending_activation',
+  expired: 'billing.status.expired',
+  cancelled: 'billing.status.cancelled',
+};
+
+export function subscriberPlanStatusLabel(status: SubscriberPlanStatus, t: Translate): string {
+  const key = SUBSCRIBER_PLAN_STATUS_KEYS[status];
+  return key ? t(key) : status;
 }
 
 // ─── Term / credits formatting ────────────────────────────────────────────────────
 
-export function formatTerm(termDays: number | null): string {
-  if (termDays === null || termDays === undefined) return 'Never expires';
+export function formatTerm(termDays: number | null, t: Translate): string {
+  if (termDays === null || termDays === undefined) return t('billing.term.never');
   if (termDays % 30 === 0) {
     const months = termDays / 30;
-    return months === 1 ? 'Monthly' : `Every ${months} months`;
+    return months === 1 ? t('billing.term.monthly') : t('billing.term.months', { count: months });
   }
-  return `Every ${termDays} days`;
+  return t('billing.term.days', { count: termDays });
 }
 
-export function formatProductCap(cap: number | null): string {
-  return cap === null || cap === undefined ? 'Unlimited' : new Intl.NumberFormat().format(cap);
-}
-
-export function formatCredits(n: number): string {
-  return new Intl.NumberFormat().format(n);
+export function formatProductCap(
+  cap: number | null,
+  t: Translate,
+  formatNumber: (value: number) => string,
+): string {
+  return cap === null || cap === undefined ? t('common.units.unlimited') : formatNumber(cap);
 }
 
 /**
- * Format the exact amount Stripe will charge (in USD). Stripe charges in USD even
- * though the catalog price stays in XAF — render this for the card path. The
- * backend supplies the amount (`instructions.chargedAmount`); never convert it
- * on the frontend.
+ * The exact amount Stripe will charge, in USD. Stripe charges in USD even though
+ * the catalog price stays in XAF — render this for the card path. The backend
+ * supplies the amount (`instructions.chargedAmount`); never convert it here.
  */
-export function formatCharged(amount: number, currency = 'usd'): string {
-  const code = currency.toUpperCase();
-  try {
-    const formatted = new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: code,
-      minimumFractionDigits: 2,
-    }).format(amount);
-    return `${formatted} ${code}`;
-  } catch {
-    return `$${amount.toFixed(2)} ${code}`;
-  }
+export function formatCharged(
+  amount: number,
+  currency: string | undefined,
+  formatCurrency: (value: number, currency: string, options?: Intl.NumberFormatOptions) => string,
+): string {
+  const code = (currency ?? 'usd').toUpperCase();
+  return `${formatCurrency(amount, code, { minimumFractionDigits: 2 })} ${code}`;
 }
 
 // ─── Stripe 3-D Secure return / resume ───────────────────────────────────────────
@@ -211,28 +206,6 @@ export function clearStripeResume(): void {
   }
 }
 
-// ─── Error-code → friendly message ────────────────────────────────────────────────
-
-const BILLING_ERROR_MESSAGES: Record<string, string> = {
-  BILLING_PLAN_NOT_FOUND: 'That plan is no longer available.',
-  BILLING_PLAN_INACTIVE: 'That plan is no longer available for purchase.',
-  BILLING_PLAN_NOT_PURCHASABLE: 'The free Starter plan is the default tier and cannot be purchased.',
-  BILLING_PENDING_PLAN_EXISTS: 'You already have a plan queued to start when your current one ends. Wait for it to activate before buying another.',
-  BILLING_TOPUP_PACK_NOT_FOUND: 'That credit pack is no longer available.',
-  BILLING_INSUFFICIENT_CREDITS: 'Not enough credits for this action.',
-  PAYMENT_GATEWAY_NOT_SUPPORTED: 'That payment method is not supported.',
-  PAYMENT_INITIATION_FAILED: 'The payment provider could not start the payment. Please try again.',
-  PAYMENT_CARD_DECLINED: 'Your card was declined. Check the details or try another card.',
-  BILLING_TOPUP_INVALID_STATE: 'This payment cannot be verified yet. Please retry in a moment.',
-  BILLING_PURCHASE_INVALID_STATE: 'This payment cannot be verified yet. Please retry in a moment.',
-  PAYMENT_METHOD_NOT_FOUND: 'That payment method could not be found.',
-  PAYMENT_METHOD_LIMIT_REACHED: 'You can save up to 10 payment methods. Remove one to add another.',
-  VALIDATION_ERROR: 'Please check the details and try again.',
-};
-
-export function billingErrorMessage(err: unknown, fallback = 'Something went wrong. Please try again.'): string {
-  if (err instanceof ApiError) {
-    return BILLING_ERROR_MESSAGES[err.code] ?? err.message ?? fallback;
-  }
-  return fallback;
-}
+// Backend error codes resolve through the shared i18n catalog — `useApiError()`
+// in components. The billing-specific wording lives in `errors.contexts.billing`,
+// so call sites pass `{ context: 'billing' }`. See src/i18n/api-errors.ts.

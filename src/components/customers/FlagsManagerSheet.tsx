@@ -27,6 +27,7 @@ import {
   contrastColor, responsiveSheetProps,
 } from '@/components/customers/customer.constants';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useTranslation, useMessage, useApiError } from '@/i18n';
 import { createFlag, updateFlag, deleteFlag } from '@/services/customers.service';
 import { ApiError } from '@/types/api';
 import type { CustomerFlag } from '@/types/customers.types';
@@ -43,6 +44,8 @@ type EditorTarget = { mode: 'create' } | { mode: 'edit'; flag: CustomerFlag } | 
 
 export function FlagsManagerSheet({ open, onOpenChange, flags, onChanged }: FlagsManagerSheetProps) {
   const isMobile = useIsMobile();
+  const { t } = useTranslation();
+  const apiError = useApiError();
   const sheet = responsiveSheetProps(isMobile, 'sm:max-w-md');
 
   const [editor, setEditor] = useState<EditorTarget>(null);
@@ -59,11 +62,11 @@ export function FlagsManagerSheet({ open, onOpenChange, flags, onChanged }: Flag
     setDeleting(true);
     try {
       await deleteFlag(pendingDelete.id);
-      toast.success('Flag deleted');
+      toast.success(t('customers.toast.flagDeleted'));
       setPendingDelete(null);
       onChanged();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Failed to delete flag');
+      apiError.toast(err, { fallbackKey: 'customers.errors.deleteFlagFailed' });
     } finally {
       setDeleting(false);
     }
@@ -78,7 +81,7 @@ export function FlagsManagerSheet({ open, onOpenChange, flags, onChanged }: Flag
               <button
                 type="button"
                 onClick={() => setEditor(null)}
-                aria-label="Back to flags"
+                aria-label={t('customers.flags.back')}
                 className="-ml-1 inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent"
               >
                 <ArrowLeft className="h-4 w-4" />
@@ -86,16 +89,16 @@ export function FlagsManagerSheet({ open, onOpenChange, flags, onChanged }: Flag
             )}
             <SheetTitle>
               {editor?.mode === 'create'
-                ? 'New flag'
+                ? t('customers.flags.newFlag')
                 : editor?.mode === 'edit'
-                  ? 'Edit flag'
-                  : 'Customer flags'}
+                  ? t('customers.flags.editFlag')
+                  : t('customers.flags.title')}
             </SheetTitle>
           </div>
           <SheetDescription>
             {editor
-              ? 'Name, colour and an optional description.'
-              : 'Colour-coded tags to segment your customers (e.g. VIP, New).'}
+              ? t('customers.flags.editorDescription')
+              : t('customers.flags.description')}
           </SheetDescription>
         </SheetHeader>
 
@@ -116,14 +119,14 @@ export function FlagsManagerSheet({ open, onOpenChange, flags, onChanged }: Flag
                 <Empty className="py-12">
                   <EmptyHeader>
                     <EmptyMedia variant="icon"><Tag className="h-6 w-6" /></EmptyMedia>
-                    <EmptyTitle>No flags yet</EmptyTitle>
+                    <EmptyTitle>{t('customers.flags.emptyTitle')}</EmptyTitle>
                     <EmptyDescription>
-                      Create your first flag to start grouping customers.
+                      {t('customers.flags.emptyDescription')}
                     </EmptyDescription>
                   </EmptyHeader>
                   <EmptyContent>
                     <Button onClick={() => setEditor({ mode: 'create' })} className="gap-2">
-                      <Plus className="h-4 w-4" /> New flag
+                      <Plus className="h-4 w-4" /> {t('customers.flags.newFlag')}
                     </Button>
                   </EmptyContent>
                 </Empty>
@@ -149,7 +152,7 @@ export function FlagsManagerSheet({ open, onOpenChange, flags, onChanged }: Flag
                       <button
                         type="button"
                         onClick={() => setEditor({ mode: 'edit', flag })}
-                        aria-label={`Edit ${flag.name}`}
+                        aria-label={t('customers.flags.editAria', { name: flag.name })}
                         className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent"
                       >
                         <Pencil className="h-4 w-4" />
@@ -157,7 +160,7 @@ export function FlagsManagerSheet({ open, onOpenChange, flags, onChanged }: Flag
                       <button
                         type="button"
                         onClick={() => setPendingDelete(flag)}
-                        aria-label={`Delete ${flag.name}`}
+                        aria-label={t('customers.flags.deleteAria', { name: flag.name })}
                         className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -171,7 +174,7 @@ export function FlagsManagerSheet({ open, onOpenChange, flags, onChanged }: Flag
             {flags.length > 0 && (
               <SheetFooter className="border-t">
                 <Button onClick={() => setEditor({ mode: 'create' })} className="gap-2">
-                  <Plus className="h-4 w-4" /> New flag
+                  <Plus className="h-4 w-4" /> {t('customers.flags.newFlag')}
                 </Button>
               </SheetFooter>
             )}
@@ -182,21 +185,24 @@ export function FlagsManagerSheet({ open, onOpenChange, flags, onChanged }: Flag
       <AlertDialog open={!!pendingDelete} onOpenChange={(o) => !deleting && !o && setPendingDelete(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete “{pendingDelete?.name}”?</AlertDialogTitle>
+            <AlertDialogTitle>
+              {t('customers.flags.deleteTitle', { name: pendingDelete?.name ?? '' })}
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              This removes the flag and detaches it from every customer it's currently
-              assigned to. This can't be undone.
+              {t('customers.flags.deleteDescription')}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleting}>Keep flag</AlertDialogCancel>
+            <AlertDialogCancel disabled={deleting}>
+              {t('customers.flags.keepFlag')}
+            </AlertDialogCancel>
             <AlertDialogAction
               onClick={(e) => { e.preventDefault(); handleDelete(); }}
               disabled={deleting}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {deleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
-              Delete flag
+              {t('customers.flags.deleteConfirm')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -214,6 +220,9 @@ function FlagEditor({
   onDone: () => void;
   onCancel: () => void;
 }) {
+  const { t } = useTranslation();
+  const m = useMessage();
+  const apiError = useApiError();
   const existing = target.mode === 'edit' ? target.flag : null;
   const {
     register, handleSubmit, watch, setValue, setError,
@@ -235,25 +244,25 @@ function FlagEditor({
     try {
       if (existing) {
         await updateFlag(existing.id, { name: values.name.trim(), color: values.color, description });
-        toast.success('Flag updated');
+        toast.success(t('customers.toast.flagUpdated'));
       } else {
         await createFlag({ name: values.name.trim(), color: values.color, description });
-        toast.success('Flag created');
+        toast.success(t('customers.toast.flagCreated'));
       }
       onDone();
     } catch (err) {
       if (err instanceof ApiError && err.code === 'VENDOR_CUSTOMER_FLAG_DUPLICATE') {
-        setError('name', { message: 'You already have a flag with this name.' });
+        setError('name', { message: 'customers.flags.duplicateName' });
         return;
       }
-      if (err instanceof ApiError && err.details?.length) {
-        err.details.forEach((d) => {
-          if (d.field === 'name' || d.field === 'color' || d.field === 'description') {
-            setError(d.field, { message: d.message });
-          }
-        });
+      if (err instanceof ApiError) {
+        // Field-level messages come back localized by code, never as backend prose.
+        const fields = apiError.fields(err);
+        for (const field of ['name', 'color', 'description'] as const) {
+          if (fields[field]) setError(field, { message: fields[field] });
+        }
       }
-      toast.error(err instanceof ApiError ? err.message : 'Failed to save flag');
+      apiError.toast(err, { fallbackKey: 'customers.errors.saveFlagFailed' });
     }
   }
 
@@ -262,29 +271,34 @@ function FlagEditor({
       <SheetBody className="space-y-5 p-4">
         {/* Live preview */}
         <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">Preview:</span>
-          <FlagBadge flag={{ name: name?.trim() || 'Flag name', color: color || DEFAULT_FLAG_COLOR }} />
+          <span className="text-xs text-muted-foreground">{t('customers.flags.preview')}</span>
+          <FlagBadge
+            flag={{
+              name: name?.trim() || t('customers.flags.previewName'),
+              color: color || DEFAULT_FLAG_COLOR,
+            }}
+          />
         </div>
 
         {/* Name */}
         <div className="space-y-1.5">
           <Label htmlFor="flag-name">
-            Name <span className="text-destructive">*</span>
+            {t('customers.flags.name')} <span className="text-destructive">*</span>
           </Label>
           <Input
             id="flag-name"
-            placeholder="e.g. VIP"
+            placeholder={t('customers.flags.namePlaceholder')}
             maxLength={FLAG_NAME_MAX}
             {...register('name')}
             aria-invalid={!!errors.name}
           />
-          {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
+          {errors.name && <p className="text-xs text-destructive">{m(errors.name.message)}</p>}
         </div>
 
         {/* Colour */}
         <div className="space-y-1.5">
           <Label>
-            Colour <span className="text-destructive">*</span>
+            {t('customers.flags.colour')} <span className="text-destructive">*</span>
           </Label>
           <div className="flex flex-wrap gap-2">
             {FLAG_COLOR_PRESETS.map((preset) => {
@@ -294,7 +308,7 @@ function FlagEditor({
                   key={preset.value}
                   type="button"
                   onClick={() => setValue('color', preset.value, { shouldValidate: true })}
-                  aria-label={preset.name}
+                  aria-label={t(preset.nameKey)}
                   className={cn(
                     'flex h-8 w-8 items-center justify-center rounded-full ring-offset-background transition',
                     active && 'ring-2 ring-ring ring-offset-2',
@@ -312,7 +326,7 @@ function FlagEditor({
               value={/^#([0-9a-fA-F]{6})$/.test(color ?? '') ? color : DEFAULT_FLAG_COLOR}
               onChange={(e) => setValue('color', e.target.value, { shouldValidate: true })}
               className="h-9 w-12 cursor-pointer rounded border bg-transparent p-1"
-              aria-label="Custom colour"
+              aria-label={t('customers.flags.customColour')}
             />
             <Input
               value={color ?? ''}
@@ -322,33 +336,33 @@ function FlagEditor({
               aria-invalid={!!errors.color}
             />
           </div>
-          {errors.color && <p className="text-xs text-destructive">{errors.color.message}</p>}
+          {errors.color && <p className="text-xs text-destructive">{m(errors.color.message)}</p>}
         </div>
 
         {/* Description */}
         <div className="space-y-1.5">
-          <Label htmlFor="flag-description">Description</Label>
+          <Label htmlFor="flag-description">{t('customers.flags.descriptionLabel')}</Label>
           <Textarea
             id="flag-description"
             rows={3}
             maxLength={FLAG_DESCRIPTION_MAX}
-            placeholder="Optional — what this flag means"
+            placeholder={t('customers.flags.descriptionPlaceholder')}
             {...register('description')}
             aria-invalid={!!errors.description}
           />
           {errors.description && (
-            <p className="text-xs text-destructive">{errors.description.message}</p>
+            <p className="text-xs text-destructive">{m(errors.description.message)}</p>
           )}
         </div>
       </SheetBody>
 
       <SheetFooter className="flex-row justify-end gap-2 border-t">
         <Button type="button" variant="outline" onClick={onCancel} disabled={isSubmitting}>
-          Cancel
+          {t('common.actions.cancel')}
         </Button>
         <Button type="submit" disabled={isSubmitting}>
           {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          {existing ? 'Save changes' : 'Create flag'}
+          {existing ? t('common.actions.saveChanges') : t('customers.flags.create')}
         </Button>
       </SheetFooter>
     </form>

@@ -2,13 +2,13 @@ import { useCallback, useEffect, useState } from 'react';
 import { Bell, Loader2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import { ApiError } from '@/types/api';
 import {
   isPushSupported,
   getPermissionState,
   requestPermissionAndToken,
 } from '@/lib/fcm';
 import { registerDevice } from '@/services/devices.service';
+import { useApiError, useTranslation } from '@/i18n';
 
 /**
  * Opt-in banner for FCM web push. Clicking the banner requests permission and
@@ -19,6 +19,8 @@ import { registerDevice } from '@/services/devices.service';
  * Only renders when push is supported AND permission is not yet granted.
  */
 export function PushPermissionBanner({ className }: { className?: string }) {
+  const { t } = useTranslation();
+  const apiError = useApiError();
   const [supported, setSupported] = useState<boolean | null>(null);
   const [permission, setPermission] = useState<NotificationPermission | null>(getPermissionState());
   const [dismissed, setDismissed] = useState(false);
@@ -42,20 +44,20 @@ export function PushPermissionBanner({ className }: { className?: string }) {
       setPermission(getPermissionState());
       if (!token) {
         toast.error(
-          getPermissionState() === 'denied'
-            ? 'Push is blocked. Enable notifications for this site in your browser settings.'
-            : 'Could not enable push on this device.',
+          t(getPermissionState() === 'denied'
+            ? 'notifications.settings.push.blockedToast'
+            : 'notifications.settings.push.enableFailed'),
         );
         return;
       }
       await registerDevice(token);
-      toast.success('Push notifications enabled on this device');
+      toast.success(t('notifications.settings.push.enabled'));
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Could not enable push on this device.');
+      apiError.toast(err, { fallbackKey: 'notifications.settings.push.enableFailed' });
     } finally {
       setEnabling(false);
     }
-  }, [enabling]);
+  }, [enabling, t, apiError]);
 
   if (supported !== true || permission === 'granted' || dismissed) return null;
 
@@ -63,7 +65,7 @@ export function PushPermissionBanner({ className }: { className?: string }) {
     <div
       role="button"
       tabIndex={0}
-      aria-label="Enable push notifications on this device"
+      aria-label={t('notifications.settings.push.bannerLabel')}
       onClick={handleEnable}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -81,16 +83,16 @@ export function PushPermissionBanner({ className }: { className?: string }) {
         {enabling ? <Loader2 className="h-5 w-5 animate-spin" /> : <Bell className="h-5 w-5" />}
       </div>
       <div className="min-w-0 flex-1">
-        <p className="font-medium">Turn on push notifications</p>
+        <p className="font-medium">{t('notifications.settings.push.title')}</p>
         <p className="text-sm text-muted-foreground">
-          {permission === 'denied'
-            ? 'Notifications are blocked — allow them for this site in your browser settings, then tap here.'
-            : 'Tap to get real-time alerts on this device, even when the dashboard is in the background.'}
+          {t(permission === 'denied'
+            ? 'notifications.settings.push.blocked'
+            : 'notifications.settings.push.description')}
         </p>
       </div>
       <button
         type="button"
-        aria-label="Dismiss"
+        aria-label={t('notifications.settings.push.dismiss')}
         onClick={(e) => {
           e.stopPropagation();
           setDismissed(true);

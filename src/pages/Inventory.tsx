@@ -56,16 +56,11 @@ import {
 import { useIsMobile } from '@/hooks/use-mobile';
 import { MobilePageHeader } from '@/components/layout/MobilePageHeader';
 import { cn } from '@/lib/utils';
+import { Trans, useApiError, useFormatters, useTranslation, type TranslationKey } from '@/i18n';
 
 const PAGE_LIMIT = 20;
 const EMPTY_META: InventoryPageMeta = { page: 1, limit: PAGE_LIMIT, total: 0, totalPages: 1 };
 const MAX_CSV_BYTES = 5 * 1024 * 1024; // Backend limit — see api-doc/vendor/inventory.md
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-}
 
 // ─── Shared pagination footer ──────────────────────────────────────────────
 
@@ -80,40 +75,47 @@ function InventoryPagination({
   onPage: (p: number) => void;
   loading: boolean;
 }) {
+  const { t } = useTranslation();
   if (meta.totalPages <= 1) return null;
   return (
     <div className="flex items-center justify-between px-4 py-3 border-t">
       <p className="text-sm text-muted-foreground">
-        Page {meta.page} of {meta.totalPages} · {meta.total} total
+        {t('inventory.pagination.summary', {
+          page: meta.page,
+          total: meta.totalPages,
+          count: meta.total,
+        })}
       </p>
       <div className="flex items-center gap-2">
         <Button variant="outline" size="sm" disabled={page <= 1 || loading} onClick={() => onPage(page - 1)} className="gap-1">
-          <ChevronLeft className="h-4 w-4" /> Prev
+          <ChevronLeft className="h-4 w-4" /> {t('inventory.pagination.prev')}
         </Button>
         <Button variant="outline" size="sm" disabled={page >= meta.totalPages || loading} onClick={() => onPage(page + 1)} className="gap-1">
-          Next <ChevronRight className="h-4 w-4" />
+          {t('inventory.pagination.next')} <ChevronRight className="h-4 w-4" />
         </Button>
       </div>
     </div>
   );
 }
 
-function TableSkeleton({ cols }: { cols: number }) {
+function TableSkeleton() {
+  const { t } = useTranslation();
   return (
     <div className="p-4 space-y-2">
       {Array.from({ length: 5 }).map((_, i) => (
         <Skeleton key={i} className="h-10 w-full" />
       ))}
-      <span className="sr-only">Loading {cols} columns</span>
+      <span className="sr-only">{t('common.a11y.loading')}</span>
     </div>
   );
 }
 
-function EmptyState({ icon: Icon, message }: { icon: typeof Boxes; message: string }) {
+function EmptyState({ icon: Icon, messageKey }: { icon: typeof Boxes; messageKey: TranslationKey }) {
+  const { t } = useTranslation();
   return (
     <div className="py-12 text-center">
       <Icon className="mx-auto mb-3 h-10 w-10 text-muted-foreground" />
-      <p className="text-muted-foreground">{message}</p>
+      <p className="text-muted-foreground">{t(messageKey)}</p>
     </div>
   );
 }
@@ -129,6 +131,8 @@ function AdjustStockDialog({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const { t } = useTranslation();
+  const apiError = useApiError();
   const [value, setValue] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -140,45 +144,53 @@ function AdjustStockDialog({
     if (!alert) return;
     const qty = Number(value);
     if (!Number.isInteger(qty)) {
-      toast.error('Enter a whole number.');
+      toast.error(t('inventory.adjust.wholeNumber'));
       return;
     }
     setSaving(true);
     try {
       const result = await bulkUpdateStock([{ variantId: alert.variantId, quantity: qty }]);
-      toast.success(`Stock updated for ${alert.sku} (${result.updated} variant updated).`);
+      toast.success(
+        t('inventory.adjust.updated', { sku: alert.sku, count: result.updated }),
+      );
       onSaved();
       onClose();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Could not update stock.');
+      apiError.toast(err, { fallbackKey: 'inventory.errors.updateFailed' });
     } finally {
       setSaving(false);
     }
-  }, [alert, value, onSaved, onClose]);
+  }, [alert, value, onSaved, onClose, t, apiError]);
 
   return (
     <Dialog open={!!alert} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
-          <DialogTitle>Adjust stock</DialogTitle>
+          <DialogTitle>{t('inventory.adjust.title')}</DialogTitle>
           <DialogDescription>
-            {alert ? <>Set the absolute stock level for <span className="font-medium">{alert.sku}</span> ({alert.productTitle}).</> : null}
+            {alert ? (
+              <Trans
+                i18nKey="inventory.adjust.description"
+                params={{ sku: alert.sku, product: alert.productTitle }}
+                components={[<span className="font-medium" />]}
+              />
+            ) : null}
           </DialogDescription>
         </DialogHeader>
         {alert && (
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-3 text-sm">
               <div className="rounded-lg border p-3">
-                <p className="text-muted-foreground text-xs">Current stock</p>
+                <p className="text-muted-foreground text-xs">{t('inventory.adjust.currentStock')}</p>
                 <p className="text-lg font-semibold">{alert.currentStock}</p>
               </div>
               <div className="rounded-lg border p-3">
-                <p className="text-muted-foreground text-xs">Reserved</p>
+                <p className="text-muted-foreground text-xs">{t('inventory.adjust.reserved')}</p>
                 <p className="text-lg font-semibold">{alert.activeReservations}</p>
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="new-stock">New stock level (absolute)</Label>
+              <Label htmlFor="new-stock">{t('inventory.adjust.newLevel')}</Label>
               <Input
                 id="new-stock"
                 type="number"
@@ -187,15 +199,17 @@ function AdjustStockDialog({
                 autoFocus
               />
               <p className="text-xs text-muted-foreground">
-                This sets the total quantity — it is not added to the current stock.
+                {t('inventory.adjust.newLevelHint')}
               </p>
             </div>
           </div>
         )}
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
+          <Button variant="outline" onClick={onClose} disabled={saving}>
+            {t('common.actions.cancel')}
+          </Button>
           <Button onClick={save} disabled={saving} className="gap-2">
-            {saving && <Loader2 className="h-4 w-4 animate-spin" />} Save
+            {saving && <Loader2 className="h-4 w-4 animate-spin" />} {t('common.actions.save')}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -214,6 +228,14 @@ function ImportCsvDialog({
   onOpenChange: (o: boolean) => void;
   onImported: () => void;
 }) {
+  const { t, tDynamic, hasKey } = useTranslation();
+  const fmt = useFormatters();
+  const apiError = useApiError();
+  /** Row failures ship a machine code; never print the backend's English text. */
+  const rowErrorText = (e: BulkStockRowError) => {
+    const key = `errors.codes.${e.error}`;
+    return hasKey(key) ? tDynamic(key) : t('inventory.bulk.rowUnknownError');
+  };
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [rowErrors, setRowErrors] = useState<BulkStockRowError[] | null>(null);
@@ -234,11 +256,11 @@ function ImportCsvDialog({
     }
     const isCsv = f.name.toLowerCase().endsWith('.csv') || f.type === 'text/csv';
     if (!isCsv) {
-      toast.error('Please choose a .csv file.');
+      toast.error(t('inventory.bulk.notCsv'));
       return;
     }
     if (f.size > MAX_CSV_BYTES) {
-      toast.error('That file is larger than the 5MB limit.');
+      toast.error(t('inventory.bulk.tooLarge'));
       return;
     }
     setFile(f);
@@ -250,7 +272,9 @@ function ImportCsvDialog({
     setRowErrors(null);
     try {
       const result = await bulkUpdateStockCsv(file);
-      toast.success(`${result.updated} variant${result.updated === 1 ? '' : 's'} updated from ${file.name}.`);
+      toast.success(
+        t('inventory.bulk.imported', { count: result.updated, name: file.name }),
+      );
       onImported();
       onOpenChange(false);
       reset();
@@ -260,12 +284,12 @@ function ImportCsvDialog({
       if (err instanceof ApiError && err.rowErrors?.length) {
         setRowErrors(err.rowErrors);
       } else {
-        toast.error(err instanceof ApiError ? err.message : 'Could not import the CSV file.');
+        apiError.toast(err, { fallbackKey: 'inventory.errors.csvInvalid' });
       }
     } finally {
       setUploading(false);
     }
-  }, [file, onImported, onOpenChange, reset]);
+  }, [file, onImported, onOpenChange, reset, t, apiError]);
 
   return (
     <Dialog
@@ -277,24 +301,26 @@ function ImportCsvDialog({
     >
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Import stock from CSV</DialogTitle>
+          <DialogTitle>{t('inventory.bulk.title')}</DialogTitle>
           <DialogDescription>
-            Upload a CSV with exactly two columns — <span className="font-mono">variantId</span> and{' '}
-            <span className="font-mono">quantity</span> — to set absolute stock levels in one atomic batch.
+            <Trans
+              i18nKey="inventory.bulk.description"
+              components={[<span className="font-mono" />, <span className="font-mono" />]}
+            />
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
           {/* Format hint */}
           <div className="rounded-lg border bg-muted/40 p-3">
-            <p className="mb-1.5 text-xs font-medium text-muted-foreground">Required format</p>
+            <p className="mb-1.5 text-xs font-medium text-muted-foreground">{t('inventory.bulk.requiredFormat')}</p>
             <pre className="overflow-x-auto font-mono text-[11px] leading-relaxed">
 {`variantId,quantity
 507f1f77bcf86cd799439060,50
 507f1f77bcf86cd799439061,0`}
             </pre>
             <p className="mt-2 text-xs text-muted-foreground">
-              Max 5MB · up to 1,000 rows · quantities are absolute (they replace current stock, not added to it).
+              {t('inventory.bulk.limits')}
             </p>
           </div>
 
@@ -309,10 +335,12 @@ function ImportCsvDialog({
             />
             <div className="flex items-center gap-3">
               <Button type="button" variant="outline" onClick={() => inputRef.current?.click()} disabled={uploading} className="gap-2">
-                <Upload className="h-4 w-4" /> Choose file
+                <Upload className="h-4 w-4" /> {t('inventory.bulk.chooseFile')}
               </Button>
               <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground">
-                {file ? `${file.name} · ${formatBytes(file.size)}` : 'No file selected'}
+                {file
+                  ? `${file.name} · ${fmt.fileSize(file.size)}`
+                  : t('inventory.bulk.noFileSelected')}
               </span>
             </div>
           </div>
@@ -322,19 +350,21 @@ function ImportCsvDialog({
             <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-3">
               <p className="mb-2 flex items-center gap-1.5 text-sm font-medium text-destructive">
                 <AlertTriangle className="h-4 w-4 flex-shrink-0" />
-                {rowErrors.length} row{rowErrors.length === 1 ? '' : 's'} failed — no stock was changed.
+                {t('inventory.bulk.rowsFailed', { count: rowErrors.length })}
               </p>
               <div className="max-h-48 space-y-1 overflow-y-auto">
                 {rowErrors.map((e, i) => (
                   <div key={i} className="rounded bg-background/70 px-2 py-1.5 text-xs">
-                    <span className="font-medium">Row {e.row ?? '—'}</span>
+                    <span className="font-medium">
+                      {t('inventory.bulk.rowLabel', { row: e.row ?? '—' })}
+                    </span>
                     {e.variantId ? <span className="font-mono text-muted-foreground"> · {e.variantId}</span> : null}
-                    <span className="text-destructive"> — {e.message ?? e.error}</span>
+                    <span className="text-destructive"> — {rowErrorText(e)}</span>
                   </div>
                 ))}
               </div>
               <p className="mt-2 text-xs text-muted-foreground">
-                Fix the rows above and upload again — the batch is applied all-or-nothing.
+                {t('inventory.bulk.fixAndRetry')}
               </p>
             </div>
           )}
@@ -349,10 +379,10 @@ function ImportCsvDialog({
             }}
             disabled={uploading}
           >
-            Cancel
+            {t('common.actions.cancel')}
           </Button>
           <Button onClick={upload} disabled={!file || uploading} className="gap-2">
-            {uploading && <Loader2 className="h-4 w-4 animate-spin" />} Upload
+            {uploading && <Loader2 className="h-4 w-4 animate-spin" />} {t('inventory.bulk.upload')}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -363,6 +393,8 @@ function ImportCsvDialog({
 // ─── Alerts tab ─────────────────────────────────────────────────────────────
 
 function AlertsTab({ onCount, refreshToken }: { onCount: (n: number) => void; refreshToken: number }) {
+  const { t } = useTranslation();
+  const apiError = useApiError();
   const [rows, setRows] = useState<StockAlert[]>([]);
   const [meta, setMeta] = useState<InventoryPageMeta>(EMPTY_META);
   const [page, setPage] = useState(1);
@@ -377,12 +409,12 @@ function AlertsTab({ onCount, refreshToken }: { onCount: (n: number) => void; re
       setMeta(res.meta);
       onCount(res.meta.total);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Could not load stock alerts.');
+      apiError.toast(err, { fallbackKey: 'inventory.errors.loadAlertsFailed' });
     } finally {
       setLoading(false);
     }
     // refreshToken bumps after a CSV import to re-pull updated alert counts.
-  }, [page, onCount, refreshToken]);
+  }, [page, onCount, refreshToken, apiError]);
 
   useEffect(() => {
     load();
@@ -392,20 +424,20 @@ function AlertsTab({ onCount, refreshToken }: { onCount: (n: number) => void; re
     <Card>
       <CardContent className="p-0">
         {loading ? (
-          <TableSkeleton cols={6} />
+          <TableSkeleton />
         ) : rows.length === 0 ? (
-          <EmptyState icon={AlertTriangle} message="No low-stock variants. You're all stocked up." />
+          <EmptyState icon={AlertTriangle} messageKey="inventory.empty.alerts" />
         ) : (
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Product</TableHead>
-                <TableHead>SKU</TableHead>
-                <TableHead className="text-right">Available</TableHead>
-                <TableHead className="text-right">In stock</TableHead>
-                <TableHead className="text-right">Reserved</TableHead>
-                <TableHead className="text-right">Threshold</TableHead>
-                <TableHead className="text-right">Action</TableHead>
+                <TableHead>{t('inventory.columns.product')}</TableHead>
+                <TableHead>{t('inventory.columns.sku')}</TableHead>
+                <TableHead className="text-right">{t('inventory.columns.available')}</TableHead>
+                <TableHead className="text-right">{t('inventory.columns.inStock')}</TableHead>
+                <TableHead className="text-right">{t('inventory.columns.reserved')}</TableHead>
+                <TableHead className="text-right">{t('inventory.columns.threshold')}</TableHead>
+                <TableHead className="text-right">{t('inventory.columns.action')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -425,7 +457,7 @@ function AlertsTab({ onCount, refreshToken }: { onCount: (n: number) => void; re
                     <TableCell className="text-right text-muted-foreground">{a.threshold}</TableCell>
                     <TableCell className="text-right">
                       <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => setAdjust(a)}>
-                        <Pencil className="h-3.5 w-3.5" /> Adjust
+                        <Pencil className="h-3.5 w-3.5" /> {t('inventory.adjust.action')}
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -451,6 +483,9 @@ const RESERVATION_STATUS_STYLES: Record<ReservationStatus, string> = {
 };
 
 function ReservationsTab({ onTotalReserved }: { onTotalReserved: (n: number) => void }) {
+  const { t } = useTranslation();
+  const fmt = useFormatters();
+  const apiError = useApiError();
   const [rows, setRows] = useState<StockReservation[]>([]);
   const [meta, setMeta] = useState<InventoryPageMeta>(EMPTY_META);
   const [page, setPage] = useState(1);
@@ -464,11 +499,11 @@ function ReservationsTab({ onTotalReserved }: { onTotalReserved: (n: number) => 
       setMeta(res.meta);
       onTotalReserved(res.totalReserved);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Could not load reservations.');
+      apiError.toast(err, { fallbackKey: 'inventory.errors.loadReservationsFailed' });
     } finally {
       setLoading(false);
     }
-  }, [page, onTotalReserved]);
+  }, [page, onTotalReserved, apiError]);
 
   useEffect(() => {
     load();
@@ -478,18 +513,18 @@ function ReservationsTab({ onTotalReserved }: { onTotalReserved: (n: number) => 
     <Card>
       <CardContent className="p-0">
         {loading ? (
-          <TableSkeleton cols={5} />
+          <TableSkeleton />
         ) : rows.length === 0 ? (
-          <EmptyState icon={Lock} message="No active reservations right now." />
+          <EmptyState icon={Lock} messageKey="inventory.empty.reservations" />
         ) : (
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Product</TableHead>
-                <TableHead>SKU</TableHead>
-                <TableHead className="text-right">Qty locked</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Expires</TableHead>
+                <TableHead>{t('inventory.columns.product')}</TableHead>
+                <TableHead>{t('inventory.columns.sku')}</TableHead>
+                <TableHead className="text-right">{t('inventory.columns.quantityLocked')}</TableHead>
+                <TableHead>{t('inventory.columns.status')}</TableHead>
+                <TableHead>{t('inventory.columns.expiresAt')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -499,10 +534,12 @@ function ReservationsTab({ onTotalReserved }: { onTotalReserved: (n: number) => 
                   <TableCell className="font-mono text-xs text-muted-foreground">{r.sku}</TableCell>
                   <TableCell className="text-right">{r.quantity}</TableCell>
                   <TableCell>
-                    <span className={cn('capitalize text-sm', RESERVATION_STATUS_STYLES[r.status])}>{r.status}</span>
+                    <span className={cn('text-sm', RESERVATION_STATUS_STYLES[r.status])}>
+                      {t(`inventory.reservationStatus.${r.status}` as TranslationKey)}
+                    </span>
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
-                    {r.expiresAt ? new Date(r.expiresAt).toLocaleString() : '—'}
+                    {r.expiresAt ? fmt.dateTime(r.expiresAt) : t('common.labels.emptyValue')}
                   </TableCell>
                 </TableRow>
               ))}
@@ -527,6 +564,9 @@ const OPERATION_STYLES: Record<StockOperation, string> = {
 };
 
 function HistoryTab({ refreshToken }: { refreshToken: number }) {
+  const { t } = useTranslation();
+  const fmt = useFormatters();
+  const apiError = useApiError();
   const [rows, setRows] = useState<StockHistoryLog[]>([]);
   const [meta, setMeta] = useState<InventoryPageMeta>(EMPTY_META);
   const [page, setPage] = useState(1);
@@ -539,12 +579,12 @@ function HistoryTab({ refreshToken }: { refreshToken: number }) {
       setRows(res.data);
       setMeta(res.meta);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Could not load stock history.');
+      apiError.toast(err, { fallbackKey: 'inventory.errors.loadHistoryFailed' });
     } finally {
       setLoading(false);
     }
     // refreshToken bumps after a CSV import — a `bulk` audit entry appears here.
-  }, [page, refreshToken]);
+  }, [page, refreshToken, apiError]);
 
   useEffect(() => {
     load();
@@ -554,38 +594,43 @@ function HistoryTab({ refreshToken }: { refreshToken: number }) {
     <Card>
       <CardContent className="p-0">
         {loading ? (
-          <TableSkeleton cols={5} />
+          <TableSkeleton />
         ) : rows.length === 0 ? (
-          <EmptyState icon={HistoryIcon} message="No stock changes recorded yet." />
+          <EmptyState icon={HistoryIcon} messageKey="inventory.empty.history" />
         ) : (
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>When</TableHead>
-                <TableHead>SKU</TableHead>
-                <TableHead>Change</TableHead>
-                <TableHead className="text-right">Before → After</TableHead>
-                <TableHead>Reason</TableHead>
+                <TableHead>{t('inventory.columns.timestamp')}</TableHead>
+                <TableHead>{t('inventory.columns.sku')}</TableHead>
+                <TableHead>{t('inventory.columns.change')}</TableHead>
+                <TableHead className="text-right">{t('inventory.columns.beforeAfter')}</TableHead>
+                <TableHead>{t('inventory.columns.reason')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {rows.map((l) => (
                 <TableRow key={l.id}>
                   <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
-                    {new Date(l.timestamp).toLocaleString()}
+                    {fmt.dateTime(l.timestamp)}
                   </TableCell>
                   <TableCell className="font-mono text-xs text-muted-foreground">{l.sku}</TableCell>
                   <TableCell>
                     <span className={cn('font-medium', l.delta < 0 ? 'text-red-600' : 'text-emerald-600')}>
                       {l.delta > 0 ? `+${l.delta}` : l.delta}
                     </span>{' '}
-                    <span className={cn('text-xs capitalize', OPERATION_STYLES[l.operation])}>({l.operation})</span>
+                    <span className={cn('text-xs', OPERATION_STYLES[l.operation])}>
+                      ({t(`inventory.operation.${l.operation}` as TranslationKey)})
+                    </span>
                   </TableCell>
                   <TableCell className="text-right text-sm">
                     {l.previousQuantity} → {l.newQuantity}
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate">
-                    {l.metadata?.reason ?? l.metadata?.orderId ?? l.metadata?.batchId ?? '—'}
+                    {l.metadata?.reason ??
+                      l.metadata?.orderId ??
+                      l.metadata?.batchId ??
+                      t('common.labels.emptyValue')}
                   </TableCell>
                 </TableRow>
               ))}
@@ -601,6 +646,7 @@ function HistoryTab({ refreshToken }: { refreshToken: number }) {
 // ─── Page ───────────────────────────────────────────────────────────────────
 
 export function Inventory() {
+  const { t } = useTranslation();
   const isMobile = useIsMobile();
   const [alertCount, setAlertCount] = useState<number | null>(null);
   const [totalReserved, setTotalReserved] = useState<number | null>(null);
@@ -613,9 +659,14 @@ export function Inventory() {
     <div className={cn('animate-fade-in', isMobile ? '-mx-6 -mt-6' : 'space-y-6')}>
       {isMobile ? (
         <MobilePageHeader
-          title="Inventory"
+          title={t('inventory.title')}
           actions={
-            <Button variant="ghost" size="icon" onClick={() => setCsvOpen(true)} aria-label="Import stock from CSV">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setCsvOpen(true)}
+              aria-label={t('inventory.bulk.title')}
+            >
               <Upload className="h-5 w-5" />
             </Button>
           }
@@ -623,11 +674,11 @@ export function Inventory() {
       ) : (
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold">Inventory</h1>
-            <p className="text-muted-foreground">Monitor low stock, active reservations, and stock history for your physical products.</p>
+            <h1 className="text-2xl font-bold">{t('inventory.title')}</h1>
+            <p className="text-muted-foreground">{t('inventory.subtitle')}</p>
           </div>
           <Button variant="outline" onClick={() => setCsvOpen(true)} className="gap-2 flex-shrink-0">
-            <Upload className="h-4 w-4" /> Import CSV
+            <Upload className="h-4 w-4" /> {t('inventory.bulk.importCsv')}
           </Button>
         </div>
       )}
@@ -640,7 +691,7 @@ export function Inventory() {
           <Card>
             <CardContent className="p-6 flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Low-stock variants</p>
+                <p className="text-sm text-muted-foreground">{t('inventory.stats.lowStockVariants')}</p>
                 <p className="text-2xl font-bold">{alertCount ?? '—'}</p>
               </div>
               <div className="p-3 bg-amber-100 rounded-lg"><AlertTriangle className="w-5 h-5 text-amber-600" /></div>
@@ -649,7 +700,7 @@ export function Inventory() {
           <Card>
             <CardContent className="p-6 flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Units reserved</p>
+                <p className="text-sm text-muted-foreground">{t('inventory.stats.unitsReserved')}</p>
                 <p className="text-2xl font-bold">{totalReserved ?? '—'}</p>
               </div>
               <div className="p-3 bg-blue-100 rounded-lg"><Lock className="w-5 h-5 text-blue-600" /></div>
@@ -661,14 +712,14 @@ export function Inventory() {
       <Tabs defaultValue="alerts" className={cn('w-full', isMobile && 'px-4 pt-3 pb-28')}>
         <TabsList>
           <TabsTrigger value="alerts" className="gap-2">
-            <AlertTriangle className="w-4 h-4" /> Alerts
+            <AlertTriangle className="w-4 h-4" /> {t('inventory.tabs.alerts')}
             {alertCount ? <Badge variant="destructive">{alertCount}</Badge> : null}
           </TabsTrigger>
           <TabsTrigger value="reservations" className="gap-2">
-            <Lock className="w-4 h-4" /> Reservations
+            <Lock className="w-4 h-4" /> {t('inventory.tabs.reservations')}
           </TabsTrigger>
           <TabsTrigger value="history" className="gap-2">
-            <HistoryIcon className="w-4 h-4" /> History
+            <HistoryIcon className="w-4 h-4" /> {t('inventory.tabs.history')}
           </TabsTrigger>
         </TabsList>
 

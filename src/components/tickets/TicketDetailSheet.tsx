@@ -24,10 +24,10 @@ import { NotesThread } from '@/components/tickets/NotesThread';
 import { AttachmentsPanel } from '@/components/tickets/AttachmentsPanel';
 import { ActorAvatar } from '@/components/tickets/ActorAvatar';
 import {
-  STATUS_LABELS, STATUS_BADGE_CLASSES, STATUS_DOT_CLASSES, TICKET_STATUSES,
-  PRIORITY_LABELS, PRIORITY_BADGE_CLASSES, PRIORITY_DOT_CLASSES, TICKET_PRIORITIES,
-  IMPORTANCE_LABELS, IMPORTANCE_BADGE_CLASSES, WAITING_STATUS_ROLE,
-  TICKET_TYPE_LABELS, ROLE_LABELS, getTypeVisual, shortTicketRef, relativeTime,
+  STATUS_LABEL_KEYS, STATUS_BADGE_CLASSES, STATUS_DOT_CLASSES, TICKET_STATUSES,
+  PRIORITY_LABEL_KEYS, PRIORITY_BADGE_CLASSES, PRIORITY_DOT_CLASSES, TICKET_PRIORITIES,
+  IMPORTANCE_LABEL_KEYS, IMPORTANCE_BADGE_CLASSES, WAITING_STATUS_ROLE,
+  ticketTypeKey, ROLE_LABEL_KEYS, getTypeVisual, shortTicketRef, relativeTime,
   responsiveSheetProps, DESCRIPTION_MAX_LENGTH,
 } from '@/components/tickets/ticket.constants';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -35,6 +35,7 @@ import {
   fetchTicketById, updateTicket, updateTicketStatus, updateTicketPriority, closeTicket,
 } from '@/services/tickets.service';
 import { ApiError } from '@/types/api';
+import { useApiError, useFormatters, useMessage, useTranslation } from '@/i18n';
 import type {
   ApiTicketDetail, ApiTicketMutation, TicketStatus, TicketActorRole, UpdatablePriority,
 } from '@/types/tickets.types';
@@ -47,11 +48,11 @@ interface TicketDetailSheetProps {
   onUpdated: (ticket: ApiTicketMutation) => void;
 }
 
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
-}
-
 export function TicketDetailSheet({ ticketId, open, onOpenChange, onUpdated }: TicketDetailSheetProps) {
+  const { t } = useTranslation();
+  const m = useMessage();
+  const fmt = useFormatters();
+  const apiError = useApiError();
   const [ticket, setTicket] = useState<ApiTicketDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -84,7 +85,7 @@ export function TicketDetailSheet({ ticketId, open, onOpenChange, onUpdated }: T
         setDraftDescription(data.description);
       })
       .catch((err) => {
-        if (active) setError(err instanceof ApiError ? err.message : 'Failed to load ticket');
+        if (active) setError(apiError.resolve(err, { fallbackKey: 'tickets.errors.loadDetailFailed' }));
       })
       .finally(() => active && setLoading(false));
     return () => {
@@ -107,12 +108,12 @@ export function TicketDetailSheet({ ticketId, open, onOpenChange, onUpdated }: T
       });
       applyUpdate(updated);
       setEditing(false);
-      toast.success('Ticket updated');
+      toast.success(t('tickets.toast.updated'));
     } catch (err) {
       if (err instanceof ApiError && err.isForbidden) {
-        toast.error('Only the ticket creator can edit these details.');
+        toast.error(t('tickets.errors.editNotCreator'));
       } else {
-        toast.error(err instanceof ApiError ? err.message : 'Failed to update ticket');
+        apiError.toast(err, { fallbackKey: 'tickets.detail.updateFailed' });
       }
     } finally {
       setSavingEdit(false);
@@ -125,14 +126,14 @@ export function TicketDetailSheet({ ticketId, open, onOpenChange, onUpdated }: T
     try {
       const updated = await updateTicketStatus(ticket._id, status);
       applyUpdate(updated);
-      toast.success('Status updated');
+      toast.success(t('tickets.toast.statusUpdated'));
     } catch (err) {
       if (err instanceof ApiError && err.code === 'TICKET_WAITING_TARGET_NOT_PARTICIPANT') {
-        toast.error('No participant with that role is on this ticket to wait on.');
+        toast.error(t('tickets.errors.noParticipantForRole'));
       } else if (err instanceof ApiError && err.isValidation) {
-        toast.error('That status change isn’t allowed from the current state.');
+        toast.error(t('tickets.errors.statusNotAllowed'));
       } else {
-        toast.error(err instanceof ApiError ? err.message : 'Failed to update status');
+        apiError.toast(err, { fallbackKey: 'tickets.detail.statusUpdateFailed' });
       }
     } finally {
       setStatusBusy(false);
@@ -145,12 +146,12 @@ export function TicketDetailSheet({ ticketId, open, onOpenChange, onUpdated }: T
     try {
       const updated = await updateTicketPriority(ticket._id, priority);
       applyUpdate(updated);
-      toast.success('Priority updated');
+      toast.success(t('tickets.toast.priorityUpdated'));
     } catch (err) {
       if (err instanceof ApiError && err.code === 'PRIORITY_LOCKED') {
-        toast.error('Priority is locked by an admin and cannot be changed.');
+        toast.error(t('tickets.errors.priorityLocked'));
       } else {
-        toast.error(err instanceof ApiError ? err.message : 'Failed to update priority');
+        apiError.toast(err, { fallbackKey: 'tickets.detail.priorityUpdateFailed' });
       }
     } finally {
       setPriorityBusy(false);
@@ -164,12 +165,12 @@ export function TicketDetailSheet({ ticketId, open, onOpenChange, onUpdated }: T
       const updated = await closeTicket(ticket._id);
       applyUpdate(updated);
       setConfirmCloseOpen(false);
-      toast.success('Ticket closed');
+      toast.success(t('tickets.toast.closed'));
     } catch (err) {
       if (err instanceof ApiError && err.isForbidden) {
-        toast.error('Only the ticket creator or an admin can close this ticket.');
+        toast.error(t('tickets.errors.closeNotAllowed'));
       } else {
-        toast.error(err instanceof ApiError ? err.message : 'Failed to close ticket');
+        apiError.toast(err, { fallbackKey: 'tickets.detail.closeFailed' });
       }
     } finally {
       setClosing(false);
@@ -207,7 +208,9 @@ export function TicketDetailSheet({ ticketId, open, onOpenChange, onUpdated }: T
               <SheetTitle className="text-lg leading-snug">{ticket.subject}</SheetTitle>
             </>
           ) : (
-            <SheetTitle>{loading ? 'Loading ticket…' : 'Ticket'}</SheetTitle>
+            <SheetTitle>
+              {t(loading ? 'tickets.detail.loadingTicket' : 'tickets.detail.ticket')}
+            </SheetTitle>
           )}
 
           {ticket && !isClosed && (
@@ -215,7 +218,7 @@ export function TicketDetailSheet({ ticketId, open, onOpenChange, onUpdated }: T
               type="button"
               onClick={() => setEditing((e) => !e)}
               className="absolute right-12 top-4 inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground opacity-70 transition hover:bg-accent hover:opacity-100"
-              aria-label="Edit ticket"
+              aria-label={t('tickets.detail.edit')}
             >
               <Pencil className="h-4 w-4" />
             </button>
@@ -228,8 +231,10 @@ export function TicketDetailSheet({ ticketId, open, onOpenChange, onUpdated }: T
           ) : error ? (
             <div className="flex flex-col items-center gap-3 py-16 text-center">
               <XCircle className="h-8 w-8 text-destructive" />
-              <p className="text-sm text-muted-foreground">{error}</p>
-              <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>Close</Button>
+              <p className="text-sm text-muted-foreground">{m(error)}</p>
+              <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
+                {t('common.actions.close')}
+              </Button>
             </div>
           ) : ticket ? (
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -237,11 +242,11 @@ export function TicketDetailSheet({ ticketId, open, onOpenChange, onUpdated }: T
               <div className="space-y-6 lg:col-span-2">
                 {/* Description (inline editable) */}
                 <section className="space-y-2">
-                  <h3 className="text-sm font-semibold">Description</h3>
+                  <h3 className="text-sm font-semibold">{t('tickets.detail.description')}</h3>
                   {editing ? (
                     <div className="space-y-3">
                       <div className="space-y-1.5">
-                        <Label htmlFor="edit-subject">Subject</Label>
+                        <Label htmlFor="edit-subject">{t('tickets.detail.subject')}</Label>
                         <Input
                           id="edit-subject"
                           value={draftSubject}
@@ -249,7 +254,7 @@ export function TicketDetailSheet({ ticketId, open, onOpenChange, onUpdated }: T
                         />
                       </div>
                       <div className="space-y-1.5">
-                        <Label htmlFor="edit-description">Description</Label>
+                        <Label htmlFor="edit-description">{t('tickets.detail.description')}</Label>
                         <Textarea
                           id="edit-description"
                           rows={6}
@@ -272,11 +277,11 @@ export function TicketDetailSheet({ ticketId, open, onOpenChange, onUpdated }: T
                             setDraftDescription(ticket.description);
                           }}
                         >
-                          <X className="mr-2 h-3.5 w-3.5" /> Cancel
+                          <X className="mr-2 h-3.5 w-3.5" /> {t('common.actions.cancel')}
                         </Button>
                         <Button size="sm" onClick={saveEdit} disabled={savingEdit}>
                           {savingEdit ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-2 h-3.5 w-3.5" />}
-                          Save
+                          {t('common.actions.save')}
                         </Button>
                       </div>
                     </div>
@@ -297,7 +302,7 @@ export function TicketDetailSheet({ ticketId, open, onOpenChange, onUpdated }: T
                 {/* Status + Priority — side by side on mobile, stacked in the desktop sidebar */}
                 <div className="grid grid-cols-2 gap-4 lg:grid-cols-1 lg:gap-6">
                 {/* Status control */}
-                <SidebarSection label="Status">
+                <SidebarSection label={t('tickets.columns.status')}>
                   <Select
                     value={ticket.status}
                     onValueChange={(v) => {
@@ -315,8 +320,12 @@ export function TicketDetailSheet({ ticketId, open, onOpenChange, onUpdated }: T
                         const blocked = !!role && role !== 'admin' && !participantRoles.has(role);
                         return (
                           <SelectItem key={s} value={s} disabled={blocked}>
-                            {STATUS_LABELS[s]}
-                            {blocked && <span className="text-muted-foreground"> · no participant</span>}
+                            {t(STATUS_LABEL_KEYS[s])}
+                            {blocked && (
+                              <span className="text-muted-foreground">
+                                {t('tickets.detail.noParticipant')}
+                              </span>
+                            )}
                           </SelectItem>
                         );
                       })}
@@ -325,13 +334,17 @@ export function TicketDetailSheet({ ticketId, open, onOpenChange, onUpdated }: T
                 </SidebarSection>
 
                 {/* Priority control */}
-                <SidebarSection label="Priority">
+                <SidebarSection label={t('tickets.columns.priority')}>
                   {ticket.priority_locked ? (
                     <div className="space-y-1.5">
-                      <PriorityPill priority={ticket.priority} locked lockedLabel="Locked by admin" />
+                      <PriorityPill
+                        priority={ticket.priority}
+                        locked
+                        lockedLabel={t('tickets.detail.lockedByAdmin')}
+                      />
                       <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
                         <Info className="mt-0.5 h-3 w-3 shrink-0" />
-                        An admin set this priority; it can no longer be changed.
+                        {t('tickets.detail.priorityLockedByAdmin')}
                       </p>
                     </div>
                   ) : (
@@ -341,11 +354,11 @@ export function TicketDetailSheet({ ticketId, open, onOpenChange, onUpdated }: T
                       disabled={priorityBusy || isClosed}
                     >
                       <SelectTrigger className="w-full">
-                        <SelectValue placeholder={PRIORITY_LABELS[ticket.priority]} />
+                        <SelectValue placeholder={t(PRIORITY_LABEL_KEYS[ticket.priority])} />
                       </SelectTrigger>
                       <SelectContent>
                         {TICKET_PRIORITIES.map((p) => (
-                          <SelectItem key={p} value={p}>{PRIORITY_LABELS[p]}</SelectItem>
+                          <SelectItem key={p} value={p}>{t(PRIORITY_LABEL_KEYS[p])}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
@@ -354,72 +367,77 @@ export function TicketDetailSheet({ ticketId, open, onOpenChange, onUpdated }: T
                 </div>
 
                 <div className="space-y-3 border-t pt-4">
-                  <InfoRow label="Type">
+                  <InfoRow label={t('tickets.detail.type')}>
                     <span className="inline-flex items-center gap-1.5">
                       {TypeIcon && <TypeIcon className="h-3.5 w-3.5 text-muted-foreground" />}
-                      {TICKET_TYPE_LABELS[ticket.type] ?? ticket.type}
+                      {t(ticketTypeKey(ticket.type))}
                     </span>
                   </InfoRow>
-                  <InfoRow label="Importance">
+                  <InfoRow label={t('tickets.detail.importance')}>
                     <Badge className={cn('border-0', IMPORTANCE_BADGE_CLASSES[ticket.importance])}>
-                      {IMPORTANCE_LABELS[ticket.importance]}
+                      {t(IMPORTANCE_LABEL_KEYS[ticket.importance])}
                     </Badge>
                   </InfoRow>
-                  <InfoRow label="Related to">
+                  <InfoRow label={t('tickets.detail.relatedTo')}>
                     {ticket.entity ? (
                       <Badge variant="outline" className="max-w-full gap-1">
                         <span className="truncate">{ticket.entity.label}</span>
                       </Badge>
                     ) : (
-                      <span className="text-muted-foreground">{ticket.entity_id || '—'}</span>
+                      <span className="text-muted-foreground">
+                        {ticket.entity_id || t('common.labels.emptyValue')}
+                      </span>
                     )}
                   </InfoRow>
                 </div>
 
                 {/* Assigned to */}
-                <SidebarSection label="Assigned to" className="border-t pt-4">
+                <SidebarSection label={t('tickets.detail.assignedTo')} className="border-t pt-4">
                   {assignee ? (
                     <div className="flex items-center gap-2.5">
                       <ActorAvatar actor={assignee} />
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium">{assignee.name}</p>
-                        <p className="text-xs text-muted-foreground">{ROLE_LABELS[assignee.role]}</p>
+                        <p className="text-xs text-muted-foreground">{t(ROLE_LABEL_KEYS[assignee.role])}</p>
                       </div>
                     </div>
                   ) : (
-                    <p className="text-sm text-muted-foreground">Unassigned</p>
+                    <p className="text-sm text-muted-foreground">{t('tickets.detail.unassigned')}</p>
                   )}
                   <p className="mt-2 flex items-start gap-1.5 text-xs text-muted-foreground">
                     <Info className="mt-0.5 h-3 w-3 shrink-0" />
-                    Vendors can’t reassign tickets.
+                    {t('tickets.detail.cannotReassign')}
                   </p>
                 </SidebarSection>
 
                 {/* Followers */}
-                <SidebarSection label="Followers" className="border-t pt-4">
+                <SidebarSection label={t('tickets.detail.followers')} className="border-t pt-4">
                   <ul className="space-y-2">
                     {ticket.followers.length === 0 ? (
-                      <li className="text-sm text-muted-foreground">No followers yet.</li>
+                      <li className="text-sm text-muted-foreground">{t('tickets.detail.noFollowers')}</li>
                     ) : (
                       ticket.followers.map((f) => (
                         <li key={f.user_id} className="flex items-center gap-2.5">
                           <ActorAvatar actor={f} className="h-7 w-7" />
                           <div className="min-w-0">
                             <p className="truncate text-sm">{f.name}</p>
-                            <p className="text-xs text-muted-foreground">{ROLE_LABELS[f.role]}</p>
+                            <p className="text-xs text-muted-foreground">{t(ROLE_LABEL_KEYS[f.role])}</p>
                           </div>
                         </li>
                       ))
                     )}
                   </ul>
-                  <p className="mt-2 text-xs text-muted-foreground">Up to 5 non-admin followers per ticket.</p>
+                  <p className="mt-2 text-xs text-muted-foreground">{t('tickets.detail.followerLimit')}</p>
                 </SidebarSection>
 
                 {/* Timeline meta */}
                 <dl className="space-y-2 border-t pt-4 text-sm">
-                  <MetaLine label="Created" value={formatDate(ticket.createdAt)} />
-                  <MetaLine label="Last updated" value={relativeTime(ticket.updatedAt)} />
-                  <MetaLine label="Ticket ID" value={shortTicketRef(ticket._id)} mono />
+                  <MetaLine label={t('tickets.detail.created')} value={fmt.date(ticket.createdAt)} />
+                  <MetaLine
+                    label={t('tickets.detail.lastUpdated')}
+                    value={relativeTime(ticket.updatedAt, t, fmt.date)}
+                  />
+                  <MetaLine label={t('tickets.detail.ticketId')} value={shortTicketRef(ticket._id)} mono />
                 </dl>
               </aside>
             </div>
@@ -435,7 +453,7 @@ export function TicketDetailSheet({ ticketId, open, onOpenChange, onUpdated }: T
               disabled={closing}
             >
               <CircleSlash className="mr-2 h-4 w-4" />
-              Close ticket
+              {t('tickets.detail.close')}
             </Button>
           </SheetFooter>
         )}
@@ -444,22 +462,18 @@ export function TicketDetailSheet({ ticketId, open, onOpenChange, onUpdated }: T
       <AlertDialog open={confirmCloseOpen} onOpenChange={(o) => !closing && setConfirmCloseOpen(o)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Close this ticket?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Closing the ticket marks it as resolved. You won’t be able to change its
-              priority or add new messages or attachments afterwards. This can’t be undone
-              from here.
-            </AlertDialogDescription>
+            <AlertDialogTitle>{t('tickets.detail.closeConfirmTitle')}</AlertDialogTitle>
+            <AlertDialogDescription>{t('tickets.detail.closeConfirmBody')}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={closing}>Keep open</AlertDialogCancel>
+            <AlertDialogCancel disabled={closing}>{t('tickets.detail.keepOpen')}</AlertDialogCancel>
             <AlertDialogAction
               onClick={(e) => { e.preventDefault(); handleClose(); }}
               disabled={closing}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {closing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CircleSlash className="mr-2 h-4 w-4" />}
-              Close ticket
+              {t('tickets.detail.close')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -471,10 +485,11 @@ export function TicketDetailSheet({ ticketId, open, onOpenChange, onUpdated }: T
 // ─── Presentational helpers ───────────────────────────────────────────────────
 
 function StatusPill({ status }: { status: TicketStatus }) {
+  const { t } = useTranslation();
   return (
     <Badge className={cn('gap-1.5 border-0 font-medium', STATUS_BADGE_CLASSES[status])}>
       <span className={cn('h-1.5 w-1.5 rounded-full', STATUS_DOT_CLASSES[status])} />
-      {STATUS_LABELS[status]}
+      {t(STATUS_LABEL_KEYS[status])}
     </Badge>
   );
 }
@@ -482,10 +497,11 @@ function StatusPill({ status }: { status: TicketStatus }) {
 function PriorityPill({
   priority, locked, lockedLabel,
 }: { priority: import('@/types/tickets.types').TicketPriority; locked?: boolean; lockedLabel?: string }) {
+  const { t } = useTranslation();
   return (
     <Badge className={cn('gap-1.5 border-0 font-medium', PRIORITY_BADGE_CLASSES[priority])}>
       <span className={cn('h-1.5 w-1.5 rounded-full', PRIORITY_DOT_CLASSES[priority])} />
-      {PRIORITY_LABELS[priority]}
+      {t(PRIORITY_LABEL_KEYS[priority])}
       {locked && <Lock className="h-3 w-3" />}
       {locked && lockedLabel && <span className="text-[10px] font-normal opacity-80">{lockedLabel}</span>}
     </Badge>

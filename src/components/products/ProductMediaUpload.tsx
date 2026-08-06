@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { X, GripVertical, ImagePlus, Info, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { MediaPicker } from '@/components/features/MediaPicker';
+import { useFormatters, useTranslation } from '@/i18n';
 import { resolveFileUrl } from '@/services/files.service';
 import type { ApiFile } from '@/types/file.types';
 import type { ApiFileDetail } from '@/types/product.types';
@@ -28,12 +29,6 @@ interface ProductMediaUploadProps {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-}
 
 function formatMime(mime: string): string {
   const sub = mime.split('/')[1] ?? mime;
@@ -63,6 +58,8 @@ export function ProductMediaUpload({
   maxFiles = 10,
   disabled = false,
 }: ProductMediaUploadProps) {
+  const { t } = useTranslation();
+  const fmt = useFormatters();
   const [items, setItems] = useState<GalleryFile[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [replaceIndex, setReplaceIndex] = useState<number | null>(null);
@@ -204,15 +201,15 @@ export function ProductMediaUpload({
                     onClick={() => setInfoIndex(null)}
                   >
                     <p className="truncate text-[10px] font-semibold leading-tight text-white">{item.name}</p>
-                    <p className="text-[10px] text-white/70">{formatSize(item.size)}</p>
+                    <p className="text-[10px] text-white/70">{fmt.fileSize(item.size)}</p>
                     <p className="text-[10px] text-white/70">{formatMime(item.mime)}</p>
-                    <p className="mt-1 text-[9px] text-white/40">Tap to close</p>
+                    <p className="mt-1 text-[9px] text-white/40">{t('products.media.tapToClose')}</p>
                   </div>
                 )}
 
                 {isFirst && (
                   <div className="absolute left-1 top-1 rounded-full bg-primary px-1.5 py-0.5 text-[9px] font-bold leading-none text-primary-foreground shadow">
-                    Thumbnail
+                    {t('products.media.thumbnail')}
                   </div>
                 )}
 
@@ -237,7 +234,7 @@ export function ProductMediaUpload({
                         if (interactive) setReplaceIndex(index);
                       }}
                       disabled={!interactive}
-                      title="Replace image"
+                      title={t('products.media.replaceImage')}
                       className="absolute bottom-1 left-1 z-10 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white opacity-0 shadow transition-opacity group-hover:opacity-100"
                     >
                       <RefreshCw className="h-3 w-3" />
@@ -281,9 +278,12 @@ export function ProductMediaUpload({
             <ImagePlus className="h-6 w-6 text-muted-foreground" />
           </div>
           <div className="text-center">
-            <p className="text-sm font-medium">Add images from your library</p>
+            <p className="text-sm font-medium">{t('products.media.addFromLibrary')}</p>
             <p className="mt-1 text-xs text-muted-foreground">
-              Images only · max {maxFiles} · {maxFiles - items.length} remaining · drag cards above to reorder
+              {t('products.media.addFromLibraryHint', {
+                max: maxFiles,
+                remaining: maxFiles - items.length,
+              })}
             </p>
           </div>
         </button>

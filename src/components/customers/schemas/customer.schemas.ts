@@ -5,10 +5,13 @@ import {
 } from '@/components/customers/customer.constants';
 
 // Validation rules derived from api-doc/vendor/customer-management.md.
+//
+// Every message is a *translation key*: the schema is built at module load,
+// before any locale exists. `useMessage()` resolves them at the call site.
 
 const hexColor = z
   .string()
-  .regex(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/, 'Enter a hex colour like #FF8800');
+  .regex(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/, 'customers.validation.hexColor');
 
 // ─── Flag create / edit ───────────────────────────────────────────────────────
 
@@ -16,13 +19,13 @@ export const flagSchema = z.object({
   name: z
     .string()
     .trim()
-    .min(1, 'Name is required')
-    .max(FLAG_NAME_MAX, `Name must be ${FLAG_NAME_MAX} characters or less`),
+    .min(1, 'customers.validation.nameRequired')
+    .max(FLAG_NAME_MAX, 'customers.validation.nameMax'),
   color: hexColor,
   description: z
     .string()
     .trim()
-    .max(FLAG_DESCRIPTION_MAX, `Description must be ${FLAG_DESCRIPTION_MAX} characters or less`)
+    .max(FLAG_DESCRIPTION_MAX, 'customers.validation.descriptionMax')
     .optional()
     .or(z.literal('')),
 });

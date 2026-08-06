@@ -2,8 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Search, Loader2, MapPin, LocateFixed, X } from 'lucide-react';
 import { toast } from 'sonner';
 
-import { searchAddresses, reverseGeocode, GEO_ERROR_MESSAGES } from '@/services/geo.service';
-import { ApiError } from '@/types/api';
+import { searchAddresses, reverseGeocode } from '@/services/geo.service';
+import { useTranslation, useApiError } from '@/i18n';
 import type { GeoAddressCandidate } from '@/types/geo.types';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -29,6 +29,8 @@ interface AddressSearchProps {
  * Also offers "use my location" via reverse geocoding.
  */
 export function AddressSearch({ onSelect, countryBias, placeholder, className }: AddressSearchProps) {
+  const { t } = useTranslation();
+  const apiError = useApiError();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<GeoAddressCandidate[]>([]);
   const [open, setOpen] = useState(false);
@@ -60,7 +62,7 @@ export function AddressSearch({ onSelect, countryBias, placeholder, className }:
       } catch (err) {
         if (!cancelled) {
           setResults([]);
-          setHint(err instanceof ApiError ? (GEO_ERROR_MESSAGES[err.code] ?? 'Address search is unavailable right now.') : 'Address search is unavailable right now.');
+          setHint(apiError.resolve(err, { fallbackKey: 'common.address.searchUnavailable' }));
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -94,7 +96,7 @@ export function AddressSearch({ onSelect, countryBias, placeholder, className }:
 
   const useMyLocation = useCallback(() => {
     if (!('geolocation' in navigator)) {
-      toast.error('Location is not available in this browser.');
+      toast.error(t('common.address.geolocationUnavailable'));
       return;
     }
     setLocating(true);
@@ -104,18 +106,18 @@ export function AddressSearch({ onSelect, countryBias, placeholder, className }:
           const candidate = await reverseGeocode(pos.coords.latitude, pos.coords.longitude);
           if (candidate) {
             onSelect(candidate, candidate.formatted_address);
-            toast.success('Address filled from your location');
+            toast.success(t('common.address.filledFromLocation'));
           } else {
-            toast.error('Could not resolve your location to an address.');
+            toast.error(t('common.address.resolveFailed'));
           }
         } catch (err) {
-          toast.error(err instanceof ApiError ? (GEO_ERROR_MESSAGES[err.code] ?? 'Could not resolve your location.') : 'Could not resolve your location.');
+          apiError.toast(err, { fallbackKey: 'common.address.resolveFailed' });
         } finally {
           setLocating(false);
         }
       },
       () => {
-        toast.error('Location permission denied.');
+        toast.error(t('common.address.permissionDenied'));
         setLocating(false);
       },
       { timeout: 10000 },
@@ -132,7 +134,7 @@ export function AddressSearch({ onSelect, countryBias, placeholder, className }:
           ) : query ? (
             <button
               type="button"
-              aria-label="Clear"
+              aria-label={t('common.actions.clear')}
               onClick={() => { setQuery(''); setResults([]); setOpen(false); }}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
             >
@@ -154,10 +156,10 @@ export function AddressSearch({ onSelect, countryBias, placeholder, className }:
           onClick={useMyLocation}
           disabled={locating}
           className="h-10 gap-1.5 flex-shrink-0"
-          title="Use my current location"
+          title={t('common.address.useMyLocation')}
         >
           {locating ? <Loader2 className="h-4 w-4 animate-spin" /> : <LocateFixed className="h-4 w-4" />}
-          <span className="hidden sm:inline">My location</span>
+          <span className="hidden sm:inline">{t('common.address.myLocation')}</span>
         </Button>
       </div>
 
@@ -181,7 +183,7 @@ export function AddressSearch({ onSelect, countryBias, placeholder, className }:
       )}
 
       {open && !loading && query.trim().length >= MIN_QUERY && results.length === 0 && !hint && (
-        <p className="mt-1 text-xs text-muted-foreground">No matches — refine your search or type the address manually.</p>
+        <p className="mt-1 text-xs text-muted-foreground">{t('common.address.noMatches')}</p>
       )}
     </div>
   );

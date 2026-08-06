@@ -24,6 +24,7 @@ import { cn } from '@/lib/utils';
 import { MediaPicker } from '@/components/features/MediaPicker';
 import { updateVariant } from '@/services/products.service';
 import { getUploadErrorMessage } from '@/lib/uploadErrors';
+import { useFormatters, useTranslation } from '@/i18n';
 import type { ApiFile } from '@/types/file.types';
 import type { ApiFileDetail } from '@/types/product.types';
 
@@ -38,12 +39,6 @@ interface VariantImageStackProps {
   onChange: (variantId: string, files: ApiFileDetail[]) => void;
 }
 
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-}
-
 export function VariantImageStack({
   productId,
   variantId,
@@ -52,6 +47,8 @@ export function VariantImageStack({
   disabled = false,
   onChange,
 }: VariantImageStackProps) {
+  const { t } = useTranslation();
+  const fmt = useFormatters();
   const [busy, setBusy] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
@@ -101,7 +98,7 @@ export function VariantImageStack({
     return (
       <span
         className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-dashed border-border text-muted-foreground/60"
-        title="Save the variant to add images"
+        title={t('products.media.saveVariantFirst')}
       >
         <ImagePlus className="h-4 w-4" />
       </span>
@@ -122,11 +119,11 @@ export function VariantImageStack({
             'relative h-8 w-8 shrink-0 overflow-hidden rounded-md border border-border bg-muted shadow-sm transition-transform',
             'hover:z-20 hover:scale-125 focus-visible:z-20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
           )}
-          title={f.originalName ?? 'Image'}
+          title={f.originalName ?? t('products.media.imageFallback')}
         >
           <img
             src={f.url}
-            alt={f.originalName ?? 'Variant image'}
+            alt={f.originalName ?? t('products.media.variantImageAlt')}
             crossOrigin="use-credentials"
             className="h-full w-full object-cover"
             draggable={false}
@@ -146,7 +143,7 @@ export function VariantImageStack({
             'hover:z-20 hover:border-primary/60 hover:text-foreground',
             !interactive && 'opacity-50 cursor-not-allowed',
           )}
-          title={`Add image (${files.length}/${maxImages})`}
+          title={t('products.media.addVariantImage', { used: files.length, max: maxImages })}
         >
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
         </button>
@@ -171,7 +168,9 @@ export function VariantImageStack({
       <Dialog open={!!openFile} onOpenChange={(o) => !o && setOpenId(null)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="truncate">{openFile?.originalName ?? 'Image'}</DialogTitle>
+            <DialogTitle className="truncate">
+              {openFile?.originalName ?? t('products.media.imageFallback')}
+            </DialogTitle>
           </DialogHeader>
 
           {openFile && (
@@ -179,18 +178,18 @@ export function VariantImageStack({
               <div className="overflow-hidden rounded-lg border border-border bg-muted">
                 <img
                   src={openFile.url}
-                  alt={openFile.originalName ?? 'Variant image'}
+                  alt={openFile.originalName ?? t('products.media.variantImageAlt')}
                   crossOrigin="use-credentials"
                   className="max-h-72 w-full object-contain"
                 />
               </div>
               <dl className="grid grid-cols-2 gap-1 text-xs text-muted-foreground">
                 <div>
-                  <dt className="inline font-medium text-foreground">Size: </dt>
-                  <dd className="inline">{formatSize(openFile.size)}</dd>
+                  <dt className="inline font-medium text-foreground">{t('products.media.sizeLabel')}</dt>
+                  <dd className="inline">{fmt.fileSize(openFile.size)}</dd>
                 </div>
                 <div>
-                  <dt className="inline font-medium text-foreground">Type: </dt>
+                  <dt className="inline font-medium text-foreground">{t('products.media.typeLabel')}</dt>
                   <dd className="inline">{openFile.mimeType}</dd>
                 </div>
               </dl>
@@ -207,7 +206,7 @@ export function VariantImageStack({
               className="gap-1.5"
             >
               <RefreshCw className="h-3.5 w-3.5" />
-              Replace
+              {t('products.asset.replace')}
             </Button>
             <Button
               type="button"
@@ -218,7 +217,7 @@ export function VariantImageStack({
               className="gap-1.5 text-destructive hover:bg-destructive/10 hover:text-destructive"
             >
               <Trash2 className="h-3.5 w-3.5" />
-              Delete
+              {t('products.media.delete')}
             </Button>
           </DialogFooter>
 

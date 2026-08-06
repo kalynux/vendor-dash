@@ -1,5 +1,5 @@
 import { useAnalyticsStore } from '@/store';
-import { formatMoney } from '@/components/customers/customer.constants';
+import { useFormatters } from '@/i18n';
 import {
   Area,
   AreaChart,
@@ -12,14 +12,11 @@ import {
 
 export function SalesChart() {
   const { salesData } = useAnalyticsStore();
+  const fmt = useFormatters();
 
-  // Platform-default (XAF) via the shared, currency-aware formatter.
-  const formatCurrency = (value: number) => formatMoney(value);
-
-  const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr);
-    return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-  };
+  // Platform-default (XAF) via the shared, locale-aware formatter.
+  const formatCurrency = (value: number) => fmt.currency(value);
+  const formatDate = (dateStr: string) => fmt.date(dateStr, 'dayMonth');
 
   return (
     <div className="h-[300px] w-full">

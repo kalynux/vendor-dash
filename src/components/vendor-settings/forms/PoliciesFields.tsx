@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useForm, useFieldArray, useWatch } from 'react-hook-form';
+import { Controller, useForm, useFieldArray, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import type { z } from 'zod';
 import { Plus, Trash2, RotateCcw, Ban, HeadphonesIcon, FileText, Upload, X, Loader2 } from 'lucide-react';
@@ -26,6 +26,9 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { InfoHint, LabelWithHint } from '@/components/ui/info-hint';
+import { PhoneInput } from '@/components/phone';
+import { normalizeStoredPhone } from '@/lib/phone';
+import { useMessage, useTranslation, type TranslationKey } from '@/i18n';
 import { cn } from '@/lib/utils';
 
 // ─── FieldLabel: label + press-to-open explanation ───────────────────────────
@@ -43,12 +46,13 @@ function FieldLabel({
     tip: React.ReactNode;
     optional?: boolean;
 }) {
+    const { t } = useTranslation();
     return (
         <LabelWithHint
             htmlFor={htmlFor}
             optional={optional}
             hint={tip}
-            hintLabel="What this field changes"
+            hintLabel={t('settings.policies.fieldHintLabel')}
         >
             {children}
         </LabelWithHint>
@@ -72,6 +76,7 @@ function PolicySection({
     onToggle: (v: boolean) => void;
     children: React.ReactNode;
 }) {
+    const { t } = useTranslation();
     return (
         <div className={cn(
             'rounded-lg border transition-colors',
@@ -90,7 +95,7 @@ function PolicySection({
                         <p className="text-xs text-muted-foreground">{subtitle}</p>
                     </div>
                 </div>
-                <Switch checked={enabled} onCheckedChange={onToggle} aria-label={`Enable ${title}`} />
+                <Switch checked={enabled} onCheckedChange={onToggle} aria-label={t('settings.policies.enableSection', { title })} />
             </div>
             {enabled && (
                 <div className="px-3 pb-3 pt-0 border-t space-y-4 sm:px-4 sm:pb-4">
@@ -102,25 +107,50 @@ function PolicySection({
 }
 
 function FieldError({ message }: { message?: string }) {
+    const m = useMessage();
     if (!message) return null;
-    return <p className="text-sm text-destructive" role="alert">{message}</p>;
+    return <p className="text-sm text-destructive" role="alert">{m(message)}</p>;
 }
 
 // ─── Channel type labels ──────────────────────────────────────────────────────
 
-const CHANNEL_LABELS: Record<string, string> = {
-    email: 'Email',
-    phone: 'Phone',
-    whatsapp: 'WhatsApp',
-    telegram: 'Telegram',
+const CHANNEL_LABEL_KEYS: Record<string, TranslationKey> = {
+    email: 'settings.policies.support.channelEmail',
+    phone: 'settings.policies.support.channelPhone',
+    whatsapp: 'settings.policies.support.channelWhatsapp',
+    telegram: 'settings.policies.support.channelTelegram',
 };
 
+// Phone and WhatsApp are absent on purpose — those render `<PhoneInput>`, which
+// supplies a real example number for the selected country.
 const CHANNEL_PLACEHOLDERS: Record<string, string> = {
     email: 'support@example.com',
-    phone: '+237670000000',
-    whatsapp: '+237670000000',
     telegram: '@yourusername',
 };
+
+/** Channels whose contact is a dialable number rather than free text. */
+const PHONE_CHANNELS = new Set(['phone', 'whatsapp']);
+
+/**
+ * Bring saved phone/WhatsApp channels up to E.164 before they seed the form, so
+ * a policy written before phone numbers were standardized doesn't fail the
+ * schema (and block saving) on a field the vendor never touched.
+ */
+function withNormalizedChannels(values: Step4FormValues): Step4FormValues {
+    const channels = values.support_policy?.channels;
+    if (!channels?.length) return values;
+    return {
+        ...values,
+        support_policy: {
+            ...values.support_policy,
+            channels: channels.map((channel) =>
+                PHONE_CHANNELS.has(channel.type)
+                    ? { ...channel, contact: normalizeStoredPhone(channel.contact) }
+                    : channel,
+            ),
+        },
+    };
+}
 
 // ─── Public types ─────────────────────────────────────────────────────────────
 
@@ -138,11 +168,14 @@ export interface PoliciesFieldsProps {
 // ─── Shared Policies form body ────────────────────────────────────────────────
 
 export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit, onDirtyChange }: PoliciesFieldsProps) {
+    const { t } = useTranslation();
     const [langInput, setLangInput] = useState('');
     const [enableReturn, setEnableReturn] = useState(defaultEnabled.return);
     const [enableCancellation, setEnableCancellation] = useState(defaultEnabled.cancellation);
     const [enableSupport, setEnableSupport] = useState(defaultEnabled.support);
 
+    // Computed once: the parent remounts this component (via `key`) to reset it.
+    const [initialValues] = useState(() => withNormalizedChannels(defaultValues));
     const {
         register,
         handleSubmit,
@@ -151,7 +184,7 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
         formState: { errors, isDirty },
     } = useForm<z.input<typeof step4Schema>, unknown, Step4FormValues>({
         resolver: zodResolver(step4Schema),
-        defaultValues,
+        defaultValues: initialValues,
     });
 
     // Dirty = any field edited (RHF) OR an enabled-section toggle flipped. Reported
@@ -190,11 +223,11 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
             const res = await onboardingService.uploadPolicyDocuments([file]);
             setValue('documents', [...documents, ...res.data.urls], { shouldDirty: true });
         } catch {
-            toast.error('Could not upload document. Please try again.');
+            toast.error(t('settings.policies.documents.uploadFailed'));
         } finally {
             setUploadingDoc(false);
         }
-    }, [documents, setValue]);
+    }, [documents, setValue, t]);
 
     const handleRemoveDoc = useCallback(
         (url: string) => setValue('documents', documents.filter((d) => d !== url), { shouldDirty: true }),
@@ -243,19 +276,17 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
             {/* ── Return Policy ── */}
             <PolicySection
                 icon={<RotateCcw className="w-4 h-4" />}
-                title="Return Policy"
-                subtitle="How you handle product returns and refunds"
+                title={t('settings.policies.return.title')}
+                subtitle={t('settings.policies.return.subtitle')}
                 enabled={enableReturn}
                 onToggle={setEnableReturn}
             >
                 {/* Accept returns toggle */}
                 <div className="flex items-center justify-between gap-3 pt-4">
                     <div className="flex items-center gap-1">
-                        <p className="text-sm font-medium leading-none">Accept returns</p>
-                        <InfoHint label="About accepting returns">
-                            On, customers get a &ldquo;Request return&rdquo; button on delivered orders and
-                            the rules below apply. Off, your storefront shows &ldquo;No returns
-                            accepted&rdquo; and all the fields below disappear.
+                        <p className="text-sm font-medium leading-none">{t('settings.policies.return.accept')}</p>
+                        <InfoHint label={t('settings.policies.return.acceptHintLabel')}>
+                            {t('settings.policies.return.acceptHint')}
                         </InfoHint>
                     </div>
                     <Switch
@@ -270,9 +301,9 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
                         <div className="space-y-2">
                             <FieldLabel
                                 htmlFor="return_window_days"
-                                tip="How long after purchase a customer may start a return. Set it to 14 and an order placed on 1 March can be returned until 15 March — on the 16th the return button is gone. 0 means returns close immediately. Max 180."
+                                tip={t('settings.policies.return.windowDaysHint')}
                             >
-                                Return window (days)
+                                {t('settings.policies.return.windowDays')}
                             </FieldLabel>
                             <Input
                                 id="return_window_days"
@@ -288,9 +319,9 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
                         {/* Refund type */}
                         <div className="space-y-2">
                             <FieldLabel
-                                tip="What the customer gets back on an accepted return. Full → the whole item price. Partial → only the percentage you set below (80% of a 10 000 order = 8 000 back). No refund → the return is accepted but no money is returned, e.g. exchange-only stores."
+                                tip={t('settings.policies.return.refundTypeHint')}
                             >
-                                Refund type
+                                {t('settings.policies.return.refundType')}
                             </FieldLabel>
                             <Select
                                 value={refundType ?? 'full'}
@@ -300,9 +331,9 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="full">Full refund</SelectItem>
-                                    <SelectItem value="partial">Partial refund</SelectItem>
-                                    <SelectItem value="none">No refund</SelectItem>
+                                    <SelectItem value="full">{t('settings.policies.return.refundTypeFull')}</SelectItem>
+                                    <SelectItem value="partial">{t('settings.policies.return.refundTypePartial')}</SelectItem>
+                                    <SelectItem value="none">{t('settings.policies.return.refundTypeNone')}</SelectItem>
                                 </SelectContent>
                             </Select>
                             <FieldError message={errors.return_policy?.refund_type?.message} />
@@ -313,16 +344,16 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
                             <div className="space-y-2">
                                 <FieldLabel
                                     htmlFor="refund_percentage"
-                                    tip="The share of the order refunded, 0–100. At 80, a 10 000 order refunds 8 000 and you keep 2 000 as a restocking charge. Required while the refund type is Partial."
+                                    tip={t('settings.policies.return.refundPercentageHint')}
                                 >
-                                    Refund percentage (%)
+                                    {t('settings.policies.return.refundPercentage')}
                                 </FieldLabel>
                                 <Input
                                     id="refund_percentage"
                                     type="number"
                                     min={0}
                                     max={100}
-                                    placeholder="e.g. 80"
+                                    placeholder={t('settings.policies.return.refundPercentagePlaceholder')}
                                     className={cn('h-11 w-full', errors.return_policy?.refund_percentage && 'border-destructive')}
                                     {...register('return_policy.refund_percentage')}
                                 />
@@ -333,9 +364,9 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
                         {/* Return shipping payer */}
                         <div className="space-y-2">
                             <FieldLabel
-                                tip="Who pays to send the item back. Customer → they cover it, whatever the reason. Vendor (you) → you cover every return, which reads well on the storefront but costs you on change-of-mind returns. Customer, reimbursed if defective → they pay upfront and you refund the shipping only when the item really was faulty."
+                                tip={t('settings.policies.return.shippingPayerHint')}
                             >
-                                Return shipping paid by
+                                {t('settings.policies.return.shippingPayer')}
                             </FieldLabel>
                             <Select
                                 value={returnShippingPayer ?? 'customer'}
@@ -345,9 +376,9 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="customer">Customer</SelectItem>
-                                    <SelectItem value="vendor">Vendor (you)</SelectItem>
-                                    <SelectItem value="customer_reimbursed_if_defect">Customer (reimbursed if defective)</SelectItem>
+                                    <SelectItem value="customer">{t('settings.policies.return.shippingPayerCustomer')}</SelectItem>
+                                    <SelectItem value="vendor">{t('settings.policies.return.shippingPayerVendor')}</SelectItem>
+                                    <SelectItem value="customer_reimbursed_if_defect">{t('settings.policies.return.shippingPayerReimbursed')}</SelectItem>
                                 </SelectContent>
                             </Select>
                             <FieldError message={errors.return_policy?.return_shipping_payer?.message} />
@@ -357,9 +388,9 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
                         <div className="space-y-2">
                             <FieldLabel
                                 htmlFor="refund_processing_days"
-                                tip="Business days between the returned item reaching you and the money going out. Set 5 and a parcel you receive on a Monday is refunded by the following Monday — that date is what the customer is shown, so pad it a little. Max 30."
+                                tip={t('settings.policies.return.processingDaysHint')}
                             >
-                                Refund processing time (days)
+                                {t('settings.policies.return.processingDays')}
                             </FieldLabel>
                             <Input
                                 id="refund_processing_days"
@@ -378,14 +409,14 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
                 <div className="space-y-2">
                     <FieldLabel
                         htmlFor="return_condition_notes"
-                        tip="Free text printed next to your return policy, e.g. “Unused, in the original packaging, with the tag still attached.” Support quotes this when a return is contested, so be specific. Leave it empty if you have no extra conditions."
+                        tip={t('settings.policies.return.conditionNotesHint')}
                         optional
                     >
-                        Return condition notes
+                        {t('settings.policies.return.conditionNotes')}
                     </FieldLabel>
                     <Textarea
                         id="return_condition_notes"
-                        placeholder="e.g. Item must be unused and in original packaging."
+                        placeholder={t('settings.policies.return.conditionNotesPlaceholder')}
                         maxLength={500}
                         rows={3}
                         className={cn('w-full', errors.return_policy?.return_condition_notes && 'border-destructive')}
@@ -398,19 +429,17 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
             {/* ── Cancellation Policy ── */}
             <PolicySection
                 icon={<Ban className="w-4 h-4" />}
-                title="Cancellation Policy"
-                subtitle="When and how customers can cancel orders"
+                title={t('settings.policies.cancellation.title')}
+                subtitle={t('settings.policies.cancellation.subtitle')}
                 enabled={enableCancellation}
                 onToggle={setEnableCancellation}
             >
                 {/* Allow cancellations toggle */}
                 <div className="flex items-center justify-between gap-3 pt-4">
                     <div className="flex items-center gap-1">
-                        <p className="text-sm font-medium leading-none">Allow cancellations</p>
-                        <InfoHint label="About allowing cancellations">
-                            On, customers can cancel a placed order themselves under the rules below.
-                            Off, the cancel button is hidden and they have to contact you — every
-                            cancellation then goes through support.
+                        <p className="text-sm font-medium leading-none">{t('settings.policies.cancellation.allow')}</p>
+                        <InfoHint label={t('settings.policies.cancellation.allowHintLabel')}>
+                            {t('settings.policies.cancellation.allowHint')}
                         </InfoHint>
                     </div>
                     <Switch
@@ -424,23 +453,23 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
                         {/* Cancellation deadline */}
                         <div className="space-y-2">
                             <FieldLabel
-                                tip="The cut-off for a free cancellation. “Within 24 hours” lets someone who ordered Monday 9am cancel until Tuesday 9am; after that the late-cancellation rules further down take over. “Before vendor confirms” closes the window the moment you accept the order, so it shrinks as you get faster."
+                                tip={t('settings.policies.cancellation.deadlineHint')}
                             >
-                                Cancellation deadline
+                                {t('settings.policies.cancellation.deadline')}
                             </FieldLabel>
                             <Select
                                 value={cancellationDeadline ?? ''}
                                 onValueChange={(v) => setValue('cancellation_policy.cancellation_deadline', v || null, { shouldDirty: true })}
                             >
                                 <SelectTrigger className="h-11 w-full">
-                                    <SelectValue placeholder="Select a deadline…" />
+                                    <SelectValue placeholder={t('settings.policies.cancellation.deadlinePlaceholder')} />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="within_1_hour">Within 1 hour of order</SelectItem>
-                                    <SelectItem value="within_24_hours">Within 24 hours of order</SelectItem>
-                                    <SelectItem value="before_vendor_confirmation">Before vendor confirms the order</SelectItem>
-                                    <SelectItem value="before_service_start">Before service start date/time</SelectItem>
-                                    <SelectItem value="anytime_until_days_before_delivery">Anytime until X days before delivery</SelectItem>
+                                    <SelectItem value="within_1_hour">{t('settings.policies.cancellation.deadline1Hour')}</SelectItem>
+                                    <SelectItem value="within_24_hours">{t('settings.policies.cancellation.deadline24Hours')}</SelectItem>
+                                    <SelectItem value="before_vendor_confirmation">{t('settings.policies.cancellation.deadlineBeforeConfirmation')}</SelectItem>
+                                    <SelectItem value="before_service_start">{t('settings.policies.cancellation.deadlineBeforeServiceStart')}</SelectItem>
+                                    <SelectItem value="anytime_until_days_before_delivery">{t('settings.policies.cancellation.deadlineDaysBeforeDelivery')}</SelectItem>
                                 </SelectContent>
                             </Select>
                             <FieldError message={errors.cancellation_policy?.cancellation_deadline?.message} />
@@ -451,15 +480,15 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
                             <div className="space-y-2">
                                 <FieldLabel
                                     htmlFor="cancellation_deadline_days"
-                                    tip="How many days ahead of the delivery date cancelling is still free. At 3, an order due Friday can be cancelled up to Tuesday; Wednesday onwards counts as late."
+                                    tip={t('settings.policies.cancellation.deadlineDaysHint')}
                                 >
-                                    Days before delivery
+                                    {t('settings.policies.cancellation.deadlineDays')}
                                 </FieldLabel>
                                 <Input
                                     id="cancellation_deadline_days"
                                     type="number"
                                     min={0}
-                                    placeholder="e.g. 3"
+                                    placeholder={t('settings.policies.cancellation.deadlineDaysPlaceholder')}
                                     className={cn('h-11 w-full', errors.cancellation_policy?.cancellation_deadline_days && 'border-destructive')}
                                     {...register('cancellation_policy.cancellation_deadline_days')}
                                 />
@@ -470,9 +499,9 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
                         {/* Cancellation fee type */}
                         <div className="space-y-2">
                             <FieldLabel
-                                tip="What you keep when a customer cancels in time. No fee → they get everything back. Fixed → a flat amount, e.g. 500 off a 10 000 order refunds 9 500. Percentage → a share, e.g. 10% refunds 9 000. Full amount → nothing is refunded, which only makes sense for made-to-order work."
+                                tip={t('settings.policies.cancellation.feeHint')}
                             >
-                                Cancellation fee
+                                {t('settings.policies.cancellation.fee')}
                             </FieldLabel>
                             <Select
                                 value={feeType ?? 'none'}
@@ -482,10 +511,10 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="none">No fee</SelectItem>
-                                    <SelectItem value="fixed">Fixed amount</SelectItem>
-                                    <SelectItem value="percentage">Percentage of order</SelectItem>
-                                    <SelectItem value="full_non_refundable">Full amount (non-refundable)</SelectItem>
+                                    <SelectItem value="none">{t('settings.policies.cancellation.feeNone')}</SelectItem>
+                                    <SelectItem value="fixed">{t('settings.policies.cancellation.feeFixed')}</SelectItem>
+                                    <SelectItem value="percentage">{t('settings.policies.cancellation.feePercentage')}</SelectItem>
+                                    <SelectItem value="full_non_refundable">{t('settings.policies.cancellation.feeFull')}</SelectItem>
                                 </SelectContent>
                             </Select>
                             <FieldError message={errors.cancellation_policy?.cancellation_fee_type?.message} />
@@ -496,19 +525,23 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
                             <div className="space-y-2">
                                 <FieldLabel
                                     htmlFor="cancellation_fee_value"
-                                    tip={
+                                    tip={t(
                                         feeType === 'fixed'
-                                            ? 'The flat amount you keep on a cancellation. At 500, a 10 000 order refunds 9 500 and a 2 000 order refunds 1 500 — the same charge either way, so keep it small.'
-                                            : 'The share of the order you keep, 0–100. At 10, a 10 000 order refunds 9 000 and a 2 000 order refunds 1 800 — the charge scales with the order.'
-                                    }
+                                            ? 'settings.policies.cancellation.feeAmountHint'
+                                            : 'settings.policies.cancellation.feePercentageHint',
+                                    )}
                                 >
-                                    {feeType === 'fixed' ? 'Fee amount' : 'Fee percentage (%)'}
+                                    {t(feeType === 'fixed'
+                                        ? 'settings.policies.cancellation.feeAmount'
+                                        : 'settings.policies.cancellation.feePercentageValue')}
                                 </FieldLabel>
                                 <Input
                                     id="cancellation_fee_value"
                                     type="number"
                                     min={0}
-                                    placeholder={feeType === 'fixed' ? 'e.g. 500' : 'e.g. 10'}
+                                    placeholder={t(feeType === 'fixed'
+                                        ? 'settings.policies.cancellation.feeAmountPlaceholder'
+                                        : 'settings.policies.cancellation.feePercentagePlaceholder')}
                                     className={cn('h-11 w-full', errors.cancellation_policy?.cancellation_fee_value && 'border-destructive')}
                                     {...register('cancellation_policy.cancellation_fee_value')}
                                 />
@@ -519,9 +552,9 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
                         {/* Late cancellation refund type */}
                         <div className="space-y-2">
                             <FieldLabel
-                                tip="What a customer gets back when they cancel after the deadline above. Leave it as None and late cancellations follow the same fee as on-time ones. No refund → they get nothing. Percentage refunded → e.g. 50 returns 5 000 on a 10 000 order."
+                                tip={t('settings.policies.cancellation.lateRefundHint')}
                             >
-                                Late cancellation refund
+                                {t('settings.policies.cancellation.lateRefund')}
                             </FieldLabel>
                             <Select
                                 value={lateCancelRefundType ?? ''}
@@ -532,12 +565,12 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
                                 )}
                             >
                                 <SelectTrigger className="h-11 w-full">
-                                    <SelectValue placeholder="None" />
+                                    <SelectValue placeholder={t('common.labels.none')} />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="full_non_refundable">No refund</SelectItem>
-                                    <SelectItem value="fixed">Fixed amount refunded</SelectItem>
-                                    <SelectItem value="percentage">Percentage refunded</SelectItem>
+                                    <SelectItem value="full_non_refundable">{t('settings.policies.cancellation.lateRefundNone')}</SelectItem>
+                                    <SelectItem value="fixed">{t('settings.policies.cancellation.lateRefundFixed')}</SelectItem>
+                                    <SelectItem value="percentage">{t('settings.policies.cancellation.lateRefundPercentage')}</SelectItem>
                                 </SelectContent>
                             </Select>
                             <FieldError message={errors.cancellation_policy?.late_cancellation_refund_type?.message} />
@@ -548,13 +581,15 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
                             <div className="space-y-2">
                                 <FieldLabel
                                     htmlFor="late_cancellation_refund_value"
-                                    tip={
+                                    tip={t(
                                         lateCancelRefundType === 'fixed'
-                                            ? 'The flat amount handed back on a late cancellation. At 2 000, a 10 000 order returns 2 000 and you keep 8 000.'
-                                            : 'The share handed back on a late cancellation, 0–100. At 50, a 10 000 order returns 5 000.'
-                                    }
+                                            ? 'settings.policies.cancellation.lateRefundAmountHint'
+                                            : 'settings.policies.cancellation.lateRefundPercentageHint',
+                                    )}
                                 >
-                                    {lateCancelRefundType === 'fixed' ? 'Refund amount' : 'Refund percentage (%)'}
+                                    {t(lateCancelRefundType === 'fixed'
+                                        ? 'settings.policies.cancellation.lateRefundAmount'
+                                        : 'settings.policies.cancellation.lateRefundPercentageValue')}
                                 </FieldLabel>
                                 <Input
                                     id="late_cancellation_refund_value"
@@ -573,8 +608,8 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
             {/* ── Support Policy ── */}
             <PolicySection
                 icon={<HeadphonesIcon className="w-4 h-4" />}
-                title="Support Policy"
-                subtitle="How customers can reach you for help"
+                title={t('settings.policies.support.title')}
+                subtitle={t('settings.policies.support.subtitle')}
                 enabled={enableSupport}
                 onToggle={setEnableSupport}
             >
@@ -582,9 +617,9 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
                 <div className="space-y-3 pt-4">
                     <div className="flex items-center justify-between">
                         <FieldLabel
-                            tip="Where customers reach you for help. These are published on your storefront and attached to order emails, so only add addresses you actually watch. Each type can be added once, up to 4 in total."
+                            tip={t('settings.policies.support.channelsHint')}
                         >
-                            Support channels
+                            {t('settings.policies.support.channels')}
                         </FieldLabel>
 
                         {/* DropdownMenu avoids the Select freeze issue */}
@@ -593,21 +628,21 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
                                 <DropdownMenuTrigger asChild>
                                     <Button type="button" variant="outline" size="sm" className="h-8 gap-1.5 text-xs px-3">
                                         <Plus className="w-3 h-3" />
-                                        Add channel
+                                        {t('settings.policies.support.addChannel')}
                                     </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
-                                    {availableChannelTypes.map((t) => (
+                                    {availableChannelTypes.map((channelType) => (
                                         <DropdownMenuItem
-                                            key={t}
+                                            key={channelType}
                                             onSelect={() =>
                                                 appendChannel({
-                                                    type: t,
+                                                    type: channelType,
                                                     contact: '',
                                                 })
                                             }
                                         >
-                                            {CHANNEL_LABELS[t]}
+                                            {t(CHANNEL_LABEL_KEYS[channelType])}
                                         </DropdownMenuItem>
                                     ))}
                                 </DropdownMenuContent>
@@ -617,7 +652,7 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
 
                     {channelFields.length === 0 && (
                         <p className="text-xs text-muted-foreground py-1">
-                            No channels added yet. Add at least one so customers can reach you.
+                            {t('settings.policies.support.noChannels')}
                         </p>
                     )}
 
@@ -626,20 +661,40 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
                             <div key={field.id} className="space-y-1">
                                 <div className="flex items-center gap-2">
                                     <span className="text-xs font-semibold text-muted-foreground w-16 shrink-0">
-                                        {CHANNEL_LABELS[field.type]}
+                                        {t(CHANNEL_LABEL_KEYS[field.type])}
                                     </span>
-                                    <Input
-                                        placeholder={CHANNEL_PLACEHOLDERS[field.type]}
-                                        className={cn(
-                                            'h-10 w-full flex-1',
-                                            errors.support_policy?.channels?.[index]?.contact && 'border-destructive',
-                                        )}
-                                        {...register(`support_policy.channels.${index}.contact`)}
-                                    />
+                                    {PHONE_CHANNELS.has(field.type) ? (
+                                        <div className="min-w-0 flex-1">
+                                            <Controller
+                                                control={control}
+                                                name={`support_policy.channels.${index}.contact`}
+                                                render={({ field: f }) => (
+                                                    <PhoneInput
+                                                        value={f.value ?? ''}
+                                                        onChange={f.onChange}
+                                                        onBlur={f.onBlur}
+                                                        required
+                                                        hideError
+                                                        invalid={!!errors.support_policy?.channels?.[index]?.contact}
+                                                        className="h-10"
+                                                    />
+                                                )}
+                                            />
+                                        </div>
+                                    ) : (
+                                        <Input
+                                            placeholder={CHANNEL_PLACEHOLDERS[field.type]}
+                                            className={cn(
+                                                'h-10 w-full flex-1',
+                                                errors.support_policy?.channels?.[index]?.contact && 'border-destructive',
+                                            )}
+                                            {...register(`support_policy.channels.${index}.contact`)}
+                                        />
+                                    )}
                                     <button
                                         type="button"
                                         onClick={() => removeChannel(index)}
-                                        aria-label={`Remove ${field.type} channel`}
+                                        aria-label={t('settings.policies.support.removeChannel', { type: field.type })}
                                         className="text-muted-foreground hover:text-destructive transition-colors shrink-0"
                                     >
                                         <Trash2 className="w-4 h-4" />
@@ -654,18 +709,18 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
                 {/* Required info */}
                 <div className="space-y-2">
                     <FieldLabel
-                        tip="What a customer has to attach before a support request can be sent. Ticking “Product photo / video” blocks the form until they upload one — useful for damage claims, but it also slows down someone asking a simple question."
+                        tip={t('settings.policies.support.requiredInfoHint')}
                     >
-                        Required from customer
+                        {t('settings.policies.support.requiredInfo')}
                     </FieldLabel>
                     <div className="space-y-2">
                         {(
                             [
-                                { value: 'order_number', label: 'Order number' },
-                                { value: 'product_photo_video', label: 'Product photo / video' },
-                                { value: 'tracking_number', label: 'Tracking number' },
-                            ] as { value: 'order_number' | 'product_photo_video' | 'tracking_number'; label: string }[]
-                        ).map(({ value, label }) => (
+                                { value: 'order_number', labelKey: 'settings.policies.support.requiredOrderNumber' },
+                                { value: 'product_photo_video', labelKey: 'settings.policies.support.requiredProductPhoto' },
+                                { value: 'tracking_number', labelKey: 'settings.policies.support.requiredTrackingNumber' },
+                            ] as { value: 'order_number' | 'product_photo_video' | 'tracking_number'; labelKey: TranslationKey }[]
+                        ).map(({ value, labelKey }) => (
                             <label key={value} className="flex items-center gap-2.5 cursor-pointer select-none">
                                 <input
                                     type="checkbox"
@@ -673,7 +728,7 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
                                     checked={(requiredInfo as string[]).includes(value)}
                                     onChange={(e) => toggleRequiredInfo(value, e.target.checked)}
                                 />
-                                <span className="text-sm">{label}</span>
+                                <span className="text-sm">{t(labelKey)}</span>
                             </label>
                         ))}
                     </div>
@@ -682,21 +737,21 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
                 {/* Availability */}
                 <div className="space-y-2">
                     <FieldLabel
-                        tip="When you answer. Shown as a badge next to your support channels, so it sets the reply time customers expect. Pick “Limited” to spell out your exact hours in the field that appears."
+                        tip={t('settings.policies.support.availabilityHint')}
                     >
-                        Availability
+                        {t('settings.policies.support.availability')}
                     </FieldLabel>
                     <Select
                         value={availability ?? ''}
                         onValueChange={(v) => setValue('support_policy.availability', (v || null) as '24_7' | 'business_hours' | 'limited' | null, { shouldDirty: true })}
                     >
                         <SelectTrigger className="h-11 w-full">
-                            <SelectValue placeholder="Select availability…" />
+                            <SelectValue placeholder={t('settings.policies.support.availabilityPlaceholder')} />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="24_7">24/7</SelectItem>
-                            <SelectItem value="business_hours">Business hours</SelectItem>
-                            <SelectItem value="limited">Limited (specify below)</SelectItem>
+                            <SelectItem value="24_7">{t('settings.policies.support.availability247')}</SelectItem>
+                            <SelectItem value="business_hours">{t('settings.policies.support.availabilityBusinessHours')}</SelectItem>
+                            <SelectItem value="limited">{t('settings.policies.support.availabilityLimited')}</SelectItem>
                         </SelectContent>
                     </Select>
                 </div>
@@ -706,13 +761,13 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
                     <div className="space-y-2">
                         <FieldLabel
                             htmlFor="availability_description"
-                            tip="Your exact hours, shown to customers word for word — e.g. “Mon–Fri, 10:00–18:00 (WAT), closed on public holidays.”"
+                            tip={t('settings.policies.support.availabilityDescriptionHint')}
                         >
-                            Availability description
+                            {t('settings.policies.support.availabilityDescription')}
                         </FieldLabel>
                         <Input
                             id="availability_description"
-                            placeholder="e.g. Mon–Fri, 10:00–18:00"
+                            placeholder={t('settings.policies.support.availabilityDescriptionPlaceholder')}
                             maxLength={200}
                             className={cn('h-11 w-full', errors.support_policy?.availability_description && 'border-destructive')}
                             {...register('support_policy.availability_description')}
@@ -724,9 +779,9 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
                 {/* Languages */}
                 <div className="space-y-2">
                     <FieldLabel
-                        tip="The languages you can actually handle a support conversation in. Type one and press Enter or +, e.g. English, then Français. Up to 20. This is what customers filter on, so don't list a language you can't reply in."
+                        tip={t('settings.policies.support.languagesHint')}
                     >
-                        Languages
+                        {t('settings.policies.support.languages')}
                     </FieldLabel>
                     <div className="flex gap-2">
                         <Input
@@ -735,7 +790,7 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
                             onKeyDown={(e) => {
                                 if (e.key === 'Enter') { e.preventDefault(); handleAddLanguage(); }
                             }}
-                            placeholder="e.g. English"
+                            placeholder={t('settings.policies.support.languagesPlaceholder')}
                             maxLength={50}
                             className="h-10 w-full flex-1"
                         />
@@ -760,7 +815,7 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
                                     <button
                                         type="button"
                                         onClick={() => handleRemoveLanguage(lang)}
-                                        aria-label={`Remove ${lang}`}
+                                        aria-label={t('settings.policies.support.removeLanguage', { language: lang })}
                                         className="hover:text-destructive transition-colors leading-none"
                                     >
                                         ×
@@ -775,14 +830,14 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
                 <div className="space-y-2">
                     <FieldLabel
                         htmlFor="eligibility_notes"
-                        tip="Who qualifies for support, e.g. “Only orders placed in the last 90 days” or “Bulk orders are handled by your account manager.” Printed under your support policy."
+                        tip={t('settings.policies.support.eligibilityNotesHint')}
                         optional
                     >
-                        Eligibility notes
+                        {t('settings.policies.support.eligibilityNotes')}
                     </FieldLabel>
                     <Textarea
                         id="eligibility_notes"
-                        placeholder="e.g. Only customers with a valid order."
+                        placeholder={t('settings.policies.support.eligibilityNotesPlaceholder')}
                         maxLength={500}
                         rows={2}
                         className={cn('w-full', errors.support_policy?.eligibility_notes && 'border-destructive')}
@@ -799,8 +854,8 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
                         <FileText className="w-4 h-4" />
                     </div>
                     <div>
-                        <p className="text-sm font-semibold">Policy Documents</p>
-                        <p className="text-xs text-muted-foreground">Optional supporting PDFs (max 2, 5MB each)</p>
+                        <p className="text-sm font-semibold">{t('settings.policies.documents.title')}</p>
+                        <p className="text-xs text-muted-foreground">{t('settings.policies.documents.subtitle')}</p>
                     </div>
                 </div>
 
@@ -822,7 +877,7 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
                                 <button
                                     type="button"
                                     onClick={() => handleRemoveDoc(url)}
-                                    aria-label="Remove document"
+                                    aria-label={t('settings.policies.documents.remove')}
                                     className="text-muted-foreground hover:text-destructive transition-colors shrink-0"
                                 >
                                     <X className="w-3.5 h-3.5" />
@@ -848,7 +903,7 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
                     className="h-8 gap-1.5 text-xs"
                 >
                     {uploadingDoc ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />}
-                    Upload document
+                    {t('settings.policies.documents.upload')}
                 </Button>
             </div>
 

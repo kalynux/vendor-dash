@@ -3,6 +3,7 @@ import { AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { ProductMediaUpload } from '@/components/products/ProductMediaUpload';
+import { useTranslation } from '@/i18n';
 import { SERVICE_IMAGE_LIMIT } from '@/components/services/service.constants';
 import type { ApiFileDetail } from '@/types/product.types';
 
@@ -24,16 +25,15 @@ export function StepServiceImages({
   onSaveComplete,
   onBack,
 }: StepServiceImagesProps) {
+  const { t } = useTranslation();
   const [orderedIds, setOrderedIds] = useState<string[]>([]);
 
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-semibold">Service images</h2>
+        <h2 className="text-lg font-semibold">{t('services.images.title')}</h2>
         <p className="text-sm text-muted-foreground mt-1">
-          Add up to {SERVICE_IMAGE_LIMIT} images. The first image will be used as the service
-          thumbnail. Drag cards to reorder. Images come from your media library — upload new ones
-          right inside the picker.
+          {t('services.images.description', { limit: SERVICE_IMAGE_LIMIT })}
         </p>
       </div>
 
@@ -55,16 +55,16 @@ export function StepServiceImages({
       <div className="flex items-center justify-between pt-2">
         <Button type="button" variant="ghost" size="sm" onClick={onBack} className="gap-1.5">
           <ChevronLeft className="w-4 h-4" />
-          Back
+          {t('common.actions.back')}
         </Button>
         <Button onClick={() => onSaveComplete(orderedIds)} disabled={isSaving} className="gap-1.5">
           {isSaving
-            ? 'Saving…'
+            ? t('common.actions.saving')
             : orderedIds.length > 0
-              ? 'Save & Continue'
+              ? t('services.wizard.saveAndContinue')
               : mode === 'create'
-                ? 'Skip for now'
-                : 'Continue'}
+                ? t('services.wizard.skipForNow')
+                : t('common.actions.continue')}
           {!isSaving && <ChevronRight className="w-4 h-4" />}
         </Button>
       </div>

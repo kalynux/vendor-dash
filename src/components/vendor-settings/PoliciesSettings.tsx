@@ -10,10 +10,12 @@ import {
 import { mapProfileError } from '@/components/vendor-settings/errors';
 import { UnsavedChangesBar } from '@/components/vendor-settings/UnsavedChangesBar';
 import { SettingsSection } from '@/components/vendor-settings/SettingsSection';
+import { useTranslation } from '@/i18n';
 
 const FORM_ID = 'settings-policies-form';
 
 export function PoliciesSettings() {
+    const { t } = useTranslation();
     const { session, updateVendorProfile } = useOnboarding();
     const roleEntity = session?.role_entity;
     const [saving, setSaving] = useState(false);
@@ -71,18 +73,13 @@ export function PoliciesSettings() {
     return (
         <>
             <SettingsSection
-                title="Policies"
+                title={t('settings.policies.tabTitle')}
                 info={
                     <div className="space-y-2">
                         <p>
-                            The rules customers see on your storefront and that support falls back on
-                            when there&apos;s a dispute. Every field below has its own info icon
-                            explaining what it changes.
+                            {t('settings.policies.tabInfo1')}
                         </p>
-                        <p>
-                            Switching a whole policy off deletes it — your store then shows no policy
-                            for that area, which customers read as &ldquo;not offered&rdquo;.
-                        </p>
+                        <p>{t('settings.policies.tabInfo2')}</p>
                     </div>
                 }
                 contentClassName="space-y-6"

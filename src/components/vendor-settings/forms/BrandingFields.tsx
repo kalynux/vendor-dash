@@ -22,6 +22,7 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { useMessage, useTranslation } from '@/i18n';
 import { cn } from '@/lib/utils';
 import type { ApiFile } from '@/types/file.types';
 
@@ -68,6 +69,8 @@ export function BrandingFields({
     onBrandingFileChange,
     onDirtyChange,
 }: BrandingFieldsProps) {
+    const { t } = useTranslation();
+    const m = useMessage();
     const {
         register,
         handleSubmit,
@@ -138,7 +141,7 @@ export function BrandingFields({
             if (isNewOrEdited && !addr.geo) {
                 setError(`business_addresses.${index}.geo`, {
                     type: 'manual',
-                    message: 'Search and select this address so we can pin it on the map.',
+                    message: t('settings.branding.geoRequired'),
                 });
                 hasGeoError = true;
                 return;
@@ -149,7 +152,7 @@ export function BrandingFields({
                 if (cc && cc !== requiredCountry) {
                     setError(`business_addresses.${index}.geo`, {
                         type: 'manual',
-                        message: `This address must be in your registered country (${requiredCountry}). Search for it again within ${requiredCountry}.`,
+                        message: t('settings.branding.geoCountryMismatch', { country: requiredCountry }),
                     });
                     hasGeoError = true;
                 }
@@ -157,7 +160,7 @@ export function BrandingFields({
         });
 
         if (hasGeoError) {
-            toast.error('Some addresses need a valid pinned location before saving.');
+            toast.error(t('settings.branding.geoBlocked'));
             return;
         }
         return onSubmit(values);
@@ -175,7 +178,7 @@ export function BrandingFields({
             <div className="space-y-4">
                 <div className="flex items-center gap-2">
                     <ImageIcon className="w-4 h-4 text-muted-foreground" />
-                    <h2 className="font-semibold text-sm">Branding</h2>
+                    <h2 className="font-semibold text-sm">{t('settings.branding.title')}</h2>
                 </div>
 
                 <Controller
@@ -183,8 +186,8 @@ export function BrandingFields({
                     name="logo_file_id"
                     render={({ field }) => (
                         <BrandingImageUpload
-                            label="Logo"
-                            hint="Square image, min 200×200px recommended"
+                            label={t('settings.branding.logo')}
+                            hint={t('settings.branding.logoHint')}
                             fileId={field.value}
                             previewUrl={logoPreviewUrl}
                             onChange={(fileId, file) => {
@@ -200,7 +203,7 @@ export function BrandingFields({
                     name="cover_image_file_id"
                     render={({ field }) => (
                         <BrandingImageUpload
-                            label="Cover Image"
+                            label={t('settings.branding.coverImage')}
                             aspect="wide"
                             fileId={field.value}
                             previewUrl={coverPreviewUrl}
@@ -218,7 +221,7 @@ export function BrandingFields({
             {showAddresses && (
             <div className={cn('space-y-4', showBranding && 'border-t pt-4')}>
                 <div className={cn('flex items-center', showAddressesHeading ? 'justify-between' : 'justify-end')}>
-                    {showAddressesHeading && <h2 className="font-semibold text-sm">Business Addresses</h2>}
+                    {showAddressesHeading && <h2 className="font-semibold text-sm">{t('settings.branding.addressesTitle')}</h2>}
                     <Button
                         type="button"
                         variant="outline"
@@ -229,13 +232,13 @@ export function BrandingFields({
                         className="h-8 gap-1.5 text-xs"
                     >
                         <Plus className="w-3 h-3" />
-                        Add address
+                        {t('settings.branding.addAddress')}
                     </Button>
                 </div>
 
                 {fields.length === 0 ? (
                     <p className="text-xs text-muted-foreground py-2">
-                        No addresses added. Customers won't see a pickup location until you add one.
+                        {t('settings.branding.noAddresses')}
                     </p>
                 ) : (
                     <div className="space-y-4">
@@ -247,7 +250,7 @@ export function BrandingFields({
                                 <button
                                     type="button"
                                     onClick={() => (field._id ? setConfirmRemoveIndex(index) : remove(index))}
-                                    aria-label="Remove address"
+                                    aria-label={t('settings.branding.removeAddress')}
                                     className="absolute top-3 right-3 text-muted-foreground hover:text-destructive transition-colors"
                                 >
                                     <Trash2 className="w-4 h-4" />
@@ -256,26 +259,26 @@ export function BrandingFields({
                                 {/* Address search — fills the fields below and captures geo coordinates */}
                                 <div className="space-y-1.5 pr-6">
                                     <LabelWithHint
-                                        hintLabel="About finding an address"
-                                        hint="Type a street, area, or city and pick a result — that pins the exact coordinates we hand to delivery agencies. The fields below are filled in for you and stay editable, but editing them without re-picking a result will block the save."
+                                        hintLabel={t('settings.branding.findAddressHintLabel')}
+                                        hint={t('settings.branding.findAddressHint')}
                                     >
-                                        Find address
+                                        {t('settings.branding.findAddress')}
                                     </LabelWithHint>
                                     <AddressSearch
                                         countryBias={addressCountryBias}
-                                        placeholder="Search a street, area, or city…"
+                                        placeholder={t('settings.branding.searchPlaceholder')}
                                         onSelect={(candidate, raw) => applyCandidate(index, candidate, raw)}
                                     />
                                     {errors.business_addresses?.[index]?.geo?.message ? (
                                         <p className="text-sm text-destructive" role="alert">
-                                            {errors.business_addresses[index]?.geo?.message}
+                                            {m(errors.business_addresses[index]?.geo?.message)}
                                         </p>
                                     ) : watch(`business_addresses.${index}.geo`) ? (
                                         <p className="inline-flex items-center gap-1 text-xs text-emerald-600">
-                                            <MapPin className="w-3 h-3" /> Location pinned on map
+                                            <MapPin className="w-3 h-3" /> {t('settings.branding.pinned')}
                                         </p>
                                     ) : (
-                                        <p className="text-xs text-muted-foreground">Not pinned yet.</p>
+                                        <p className="text-xs text-muted-foreground">{t('settings.branding.notPinned')}</p>
                                     )}
                                 </div>
 
@@ -284,14 +287,14 @@ export function BrandingFields({
                                     <LabelWithHint
                                         htmlFor={`addr-label-${index}`}
                                         required
-                                        hintLabel="About the address label"
-                                        hint="Your own name for this location, e.g. “Main Shop” or “Warehouse”. It's how you pick a pickup point when publishing a product."
+                                        hintLabel={t('settings.branding.labelHintLabel')}
+                                        hint={t('settings.branding.labelHint')}
                                     >
-                                        Label
+                                        {t('settings.branding.label')}
                                     </LabelWithHint>
                                     <Input
                                         id={`addr-label-${index}`}
-                                        placeholder="e.g. Main Shop, Warehouse"
+                                        placeholder={t('settings.branding.labelPlaceholder')}
                                         className={cn(
                                             'h-10',
                                             errors.business_addresses?.[index]?.label && 'border-destructive',
@@ -301,18 +304,18 @@ export function BrandingFields({
                                     />
                                     {errors.business_addresses?.[index]?.label && (
                                         <p className="text-sm text-destructive" role="alert">
-                                            {errors.business_addresses[index]?.label?.message}
+                                            {m(errors.business_addresses[index]?.label?.message)}
                                         </p>
                                     )}
                                 </div>
 
                                 <div className="space-y-2">
                                     <Label htmlFor={`addr-line1-${index}`}>
-                                        Street Address <span className="text-destructive">*</span>
+                                        {t('settings.branding.street')} <span className="text-destructive">*</span>
                                     </Label>
                                     <Input
                                         id={`addr-line1-${index}`}
-                                        placeholder="123 Market Street"
+                                        placeholder={t('settings.branding.streetPlaceholder')}
                                         className={cn(
                                             'h-10',
                                             errors.business_addresses?.[index]?.address_line1 && 'border-destructive',
@@ -322,18 +325,18 @@ export function BrandingFields({
                                     />
                                     {errors.business_addresses?.[index]?.address_line1 && (
                                         <p className="text-sm text-destructive" role="alert">
-                                            {errors.business_addresses[index]?.address_line1?.message}
+                                            {m(errors.business_addresses[index]?.address_line1?.message)}
                                         </p>
                                     )}
                                 </div>
 
                                 <div className="space-y-2">
                                     <Label htmlFor={`addr-line2-${index}`}>
-                                        Address Line 2
+                                        {t('settings.branding.line2')}
                                     </Label>
                                     <Input
                                         id={`addr-line2-${index}`}
-                                        placeholder="Suite 4B, Floor 2…"
+                                        placeholder={t('settings.branding.line2Placeholder')}
                                         className="h-10"
                                         {...register(`business_addresses.${index}.address_line2`)}
                                     />
@@ -342,11 +345,11 @@ export function BrandingFields({
                                 <div className="grid grid-cols-2 gap-3">
                                     <div className="space-y-2">
                                         <Label htmlFor={`addr-city-${index}`}>
-                                            City <span className="text-destructive">*</span>
+                                            {t('settings.branding.city')} <span className="text-destructive">*</span>
                                         </Label>
                                         <Input
                                             id={`addr-city-${index}`}
-                                            placeholder="Douala"
+                                            placeholder={t('settings.branding.cityPlaceholder')}
                                             className={cn(
                                                 'h-10',
                                                 errors.business_addresses?.[index]?.city && 'border-destructive',
@@ -355,15 +358,15 @@ export function BrandingFields({
                                         />
                                         {errors.business_addresses?.[index]?.city && (
                                             <p className="text-sm text-destructive" role="alert">
-                                                {errors.business_addresses[index]?.city?.message}
+                                                {m(errors.business_addresses[index]?.city?.message)}
                                             </p>
                                         )}
                                     </div>
                                     <div className="space-y-2">
-                                        <Label htmlFor={`addr-state-${index}`}>State / Region</Label>
+                                        <Label htmlFor={`addr-state-${index}`}>{t('settings.branding.state')}</Label>
                                         <Input
                                             id={`addr-state-${index}`}
-                                            placeholder="Littoral"
+                                            placeholder={t('settings.branding.statePlaceholder')}
                                             className="h-10"
                                             {...register(`business_addresses.${index}.state`)}
                                         />
@@ -379,14 +382,13 @@ export function BrandingFields({
             <AlertDialog open={confirmRemoveIndex !== null} onOpenChange={(open) => !open && setConfirmRemoveIndex(null)}>
                 <AlertDialogContent>
                     <AlertDialogHeader>
-                        <AlertDialogTitle>Remove this address?</AlertDialogTitle>
+                        <AlertDialogTitle>{t('settings.branding.removeConfirmTitle')}</AlertDialogTitle>
                         <AlertDialogDescription>
-                            If it&apos;s still set as a pickup location on a product, saving will be
-                            blocked until you reassign that product.
+                            {t('settings.branding.removeConfirmBody')}
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                        <AlertDialogCancel type="button">Cancel</AlertDialogCancel>
+                        <AlertDialogCancel type="button">{t('common.actions.cancel')}</AlertDialogCancel>
                         <AlertDialogAction
                             type="button"
                             onClick={() => {
@@ -394,7 +396,7 @@ export function BrandingFields({
                                 setConfirmRemoveIndex(null);
                             }}
                         >
-                            Remove
+                            {t('common.actions.remove')}
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>

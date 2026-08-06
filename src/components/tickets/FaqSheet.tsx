@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/accordion';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { responsiveSheetProps } from '@/components/tickets/ticket.constants';
+import { useTranslation } from '@/i18n';
 
 const FAQS: { q: string; a: string }[] = [
   {
@@ -40,10 +41,11 @@ interface FaqSheetProps {
 }
 
 /**
- * Frequently Asked Questions, shown as a right-side sheet on desktop and a
+ * {t('tickets.faq.title')}, shown as a right-side sheet on desktop and a
  * bottom sheet on mobile (matching CreateTicketSheet / TicketDetailSheet).
  */
 export function FaqSheet({ open, onOpenChange }: FaqSheetProps) {
+  const { t } = useTranslation();
   const isMobile = useIsMobile();
   const sheetProps = responsiveSheetProps(isMobile);
 
@@ -51,9 +53,9 @@ export function FaqSheet({ open, onOpenChange }: FaqSheetProps) {
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side={sheetProps.side} className={sheetProps.className}>
         <SheetHeader>
-          <SheetTitle>Frequently Asked Questions</SheetTitle>
+          <SheetTitle>{t('tickets.faq.title')}</SheetTitle>
           <SheetDescription>
-            Quick answers to the most common questions. Still stuck? Create a ticket.
+            {t('tickets.faq.description')}
           </SheetDescription>
         </SheetHeader>
         <SheetBody className="px-4 pb-4">

@@ -11,6 +11,7 @@ import {
   type PushPayload,
 } from '@/lib/fcm';
 import { registerDevice } from '@/services/devices.service';
+import { tStatic } from '@/i18n';
 import { notificationRoute } from '@/lib/notifications.utils';
 import type { VendorNotification } from '@/types/notifications.types';
 
@@ -91,7 +92,7 @@ export function NotificationsBootstrap() {
         toast(payload.title, {
           description: payload.body,
           action: payload.aggregateType
-            ? { label: 'View', onClick: () => navigate(notificationRoute(payload)) }
+            ? { label: tStatic('common.actions.view'), onClick: () => navigate(notificationRoute(payload)) }
             : undefined,
         });
         // Reconcile AFTER a short delay (not immediately) so the optimistic

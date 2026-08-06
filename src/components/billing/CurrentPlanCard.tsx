@@ -2,12 +2,10 @@ import { CalendarClock, Package, Percent, Sparkles } from 'lucide-react';
 import { SettingsSection } from '@/components/vendor-settings/SettingsSection';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
+import { useTranslation, useFormatters } from '@/i18n';
 import type { CurrentPlanData } from '@/types/billing.types';
 import {
-  formatMoney,
-  formatDate,
   formatTerm,
-  formatCredits,
   formatProductCap,
   subscriberPlanStatusLabel,
 } from './billing.constants';
@@ -19,6 +17,8 @@ interface CurrentPlanCardProps {
 }
 
 export function CurrentPlanCard({ data, productCount }: CurrentPlanCardProps) {
+  const { t } = useTranslation();
+  const fmt = useFormatters();
   const { plan, subscriberPlan } = data.active;
   const cap = plan.max_active_products;
   const used = productCount ?? 0;
@@ -31,31 +31,40 @@ export function CurrentPlanCard({ data, productCount }: CurrentPlanCardProps) {
         <span className="flex items-center gap-2">
           {plan.name}
           <Badge variant={subscriberPlan.status === 'active' ? 'default' : 'secondary'}>
-            {subscriberPlanStatusLabel(subscriberPlan.status)}
+            {subscriberPlanStatusLabel(subscriberPlan.status, t)}
           </Badge>
         </span>
       }
       description={
-        isFree ? 'Free plan' : `${formatMoney(plan.price, plan.currency)} · ${formatTerm(plan.term_days)}`
+        isFree
+          ? t('billing.plan.freePlan')
+          : t('billing.plan.price', {
+              price: fmt.currency(plan.price, plan.currency),
+              term: formatTerm(plan.term_days, t),
+            })
       }
-      info="Your current subscription. Commission is what the platform takes per sale, and the credit allowance is what tops up your wallet each term. Hitting the product cap doesn't remove anything — it just stops you publishing more until you archive one or upgrade."
+      info={t('billing.plan.info')}
       contentClassName="space-y-4"
     >
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 sm:gap-3">
           <Stat
             icon={<CalendarClock className="h-4 w-4" />}
-            label="Renews / expires"
-            value={subscriberPlan.expires_at ? formatDate(subscriberPlan.expires_at) : 'Never expires'}
+            label={t('billing.plan.renewsOrExpires')}
+            value={
+              subscriberPlan.expires_at
+                ? fmt.date(subscriberPlan.expires_at)
+                : t('billing.plan.neverExpires')
+            }
           />
           <Stat
             icon={<Percent className="h-4 w-4" />}
-            label="Commission"
+            label={t('billing.plan.commission')}
             value={`${plan.commission_percent}%`}
           />
           <Stat
             icon={<Sparkles className="h-4 w-4" />}
-            label="Credit allowance"
-            value={formatCredits(plan.credit_allowance)}
+            label={t('billing.plan.creditAllowance')}
+            value={fmt.number(plan.credit_allowance)}
           />
         </div>
 
@@ -63,10 +72,12 @@ export function CurrentPlanCard({ data, productCount }: CurrentPlanCardProps) {
         <div className="space-y-1.5">
           <div className="flex items-center justify-between text-sm">
             <span className="flex items-center gap-1.5 text-muted-foreground">
-              <Package className="h-4 w-4" /> Active products
+              <Package className="h-4 w-4" /> {t('billing.plan.activeProducts')}
             </span>
             <span className="font-medium">
-              {productCount === null ? '—' : used} / {formatProductCap(cap)}
+              {productCount === null ? t('common.labels.emptyValue') : fmt.number(used)}
+              {' / '}
+              {formatProductCap(cap, t, fmt.number)}
             </span>
           </div>
           {cap !== null && <Progress value={pct} />}
@@ -76,14 +87,14 @@ export function CurrentPlanCard({ data, productCount }: CurrentPlanCardProps) {
         {data.pending && (
           <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-sm">
             <p className="font-medium text-primary">
-              {data.pending.plan.name} queued
+              {t('billing.plan.pendingQueued', { name: data.pending.plan.name })}
             </p>
             <p className="text-muted-foreground">
-              Starts when your current plan ends
               {data.pending.subscriberPlan.started_at
-                ? ` on ${formatDate(data.pending.subscriberPlan.started_at)}`
-                : ''}
-              .
+                ? t('billing.plan.pendingStartsOn', {
+                    date: fmt.date(data.pending.subscriberPlan.started_at),
+                  })
+                : t('billing.plan.pendingStarts')}
             </p>
           </div>
         )}

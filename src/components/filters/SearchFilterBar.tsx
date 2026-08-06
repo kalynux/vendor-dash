@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Search, SlidersHorizontal, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import { useTranslation } from '@/i18n';
 import { cn } from '@/lib/utils';
 
 /**
@@ -26,13 +27,15 @@ export interface SearchFilterBarProps {
 export function SearchFilterBar({
   value,
   onChange,
-  placeholder = 'Search…',
+  placeholder,
   activeFilterCount = 0,
   onOpenFilters,
-  filterLabel = 'Open filters',
+  filterLabel,
   trailing,
   className,
 }: SearchFilterBarProps) {
+  const { t } = useTranslation();
+  const searchPlaceholder = placeholder ?? t('common.search.placeholder');
   return (
     <div className={cn('flex items-center gap-2', className)}>
       <div className="relative min-w-0 flex-1">
@@ -41,8 +44,8 @@ export function SearchFilterBar({
           type="search"
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          placeholder={placeholder}
-          aria-label={placeholder}
+          placeholder={searchPlaceholder}
+          aria-label={searchPlaceholder}
           className={cn(
             'h-11 rounded-xl pl-10 shadow-none',
             // Kill the WebKit clear affordance — we render our own so it matches.
@@ -54,7 +57,7 @@ export function SearchFilterBar({
           <button
             type="button"
             onClick={() => onChange('')}
-            aria-label="Clear search"
+            aria-label={t('common.search.clearSearch')}
             className="absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           >
             <X className="h-3.5 w-3.5" />
@@ -66,7 +69,7 @@ export function SearchFilterBar({
         <FilterTriggerButton
           onClick={onOpenFilters}
           activeCount={activeFilterCount}
-          label={filterLabel}
+          label={filterLabel ?? t('common.filters.openFilters')}
         />
       )}
 
@@ -82,7 +85,7 @@ export function SearchFilterBar({
 export function FilterTriggerButton({
   onClick,
   activeCount = 0,
-  label = 'Open filters',
+  label,
   className,
 }: {
   onClick: () => void;
@@ -90,11 +93,12 @@ export function FilterTriggerButton({
   label?: string;
   className?: string;
 }) {
+  const { t } = useTranslation();
   return (
     <button
       type="button"
       onClick={onClick}
-      aria-label={label}
+      aria-label={label ?? t('common.filters.openFilters')}
       className={cn(
         'relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border transition-colors',
         'focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50',

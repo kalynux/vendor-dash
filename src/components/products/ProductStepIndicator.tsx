@@ -1,10 +1,11 @@
 import { Fragment } from 'react';
 import { Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useTranslation, type TranslationKey } from '@/i18n';
 
 interface StepDefinition {
   id: string;
-  label: string;
+  labelKey: TranslationKey;
   icon: React.ElementType;
 }
 
@@ -21,6 +22,7 @@ export function ProductStepIndicator({
   completedSteps,
   onStepClick,
 }: ProductStepIndicatorProps) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-start justify-between sm:items-center sm:justify-start w-full gap-1 overflow-x-auto pb-1 scrollbar-hide">
       {steps.map((step, index) => {
@@ -57,7 +59,7 @@ export function ProductStepIndicator({
                   <Icon className={cn('w-3.5 h-3.5', isActive && 'text-primary')} />
                 )}
               </div>
-              <span className="block sm:inline text-center sm:text-left leading-tight">{step.label}</span>
+              <span className="block sm:inline text-center sm:text-left leading-tight">{t(step.labelKey)}</span>
             </button>
 
             {index < steps.length - 1 && (

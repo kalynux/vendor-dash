@@ -17,27 +17,27 @@ import {
   updateService,
   ensureServiceVariant,
   changeServiceStatus,
-  SERVICE_ACTIVATION_ERROR_MAP,
 } from '@/services/services.service';
 import { buildServiceConfig, type ServiceConfigFormShape } from '@/components/services/service.constants';
 import { DEFAULT_PEAK_HOURS } from '@/components/services/schemas/service.schemas';
-import { ApiError } from '@/types/api';
+import { useTranslation, useApiError } from '@/i18n';
 import type {
   ServiceBasicsFormValues,
   ServiceSettingsFormValues,
 } from '@/components/services/schemas/service.schemas';
 import type { ServiceProduct, ServiceConfig } from '@/types/services.types';
+import type { TranslationKey } from '@/i18n';
 
 // ─── Step definitions ─────────────────────────────────────────────────────────
 
 type ServiceStep = 'basic-info' | 'images' | 'booking' | 'availability' | 'review';
 
-const STEPS: { id: ServiceStep; label: string; icon: React.ElementType }[] = [
-  { id: 'basic-info', label: 'Details', icon: Package },
-  { id: 'images', label: 'Images', icon: ImageIcon },
-  { id: 'booking', label: 'Booking', icon: Clock },
-  { id: 'availability', label: 'Availability', icon: CalendarRange },
-  { id: 'review', label: 'Review', icon: CheckSquare },
+const STEPS: { id: ServiceStep; labelKey: TranslationKey; icon: React.ElementType }[] = [
+  { id: 'basic-info', labelKey: 'services.wizard.stepDetails', icon: Package },
+  { id: 'images', labelKey: 'services.wizard.stepImages', icon: ImageIcon },
+  { id: 'booking', labelKey: 'services.wizard.stepBooking', icon: Clock },
+  { id: 'availability', labelKey: 'services.wizard.stepAvailability', icon: CalendarRange },
+  { id: 'review', labelKey: 'services.wizard.stepReview', icon: CheckSquare },
 ];
 
 const STEP_IDS = STEPS.map((s) => s.id);
@@ -114,6 +114,8 @@ function reducer(state: ServiceEditState, action: ServiceEditAction): ServiceEdi
 export function ServiceEdit() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { t } = useTranslation();
+  const apiError = useApiError();
   const [state, dispatch] = useReducer(reducer, INITIAL_STATE);
 
   useEffect(() => {
@@ -135,13 +137,15 @@ export function ServiceEdit() {
         }
       } catch (err) {
         if (!cancelled) {
-          const msg = err instanceof ApiError ? err.message : 'Failed to load service.';
-          dispatch({ type: 'LOAD_ERROR', error: msg });
+          dispatch({
+            type: 'LOAD_ERROR',
+            error: apiError.resolve(err, { fallbackKey: 'services.errors.loadServiceFailed' }),
+          });
         }
       }
     })();
     return () => { cancelled = true; };
-  }, [id]);
+  }, [id, apiError]);
 
   function advance(updates: Partial<ServiceEditState> = {}) {
     const next = nextStep(state.currentStep);
@@ -163,12 +167,15 @@ export function ServiceEdit() {
           seoTitle: values.seoTitle || undefined,
           seoDescription: values.seoDescription || undefined,
         });
-        toast.success('Details saved');
+        toast.success(t('services.toast.detailsSaved'));
         advance({ service });
       } catch (err) {
         dispatch({
           type: 'SET_STEP_ERROR',
-          error: err instanceof ApiError ? err.message : 'Failed to save details.',
+          error: apiError.resolve(err, {
+            context: 'service',
+            fallbackKey: 'services.errors.saveDetailsFailed',
+          }),
         });
       }
     },
@@ -188,12 +195,15 @@ export function ServiceEdit() {
       dispatch({ type: 'SET_SAVING', value: true });
       try {
         const service = await updateService(id, { fileIds });
-        toast.success('Images saved');
+        toast.success(t('services.toast.imagesSaved'));
         advance({ service });
       } catch (err) {
         dispatch({
           type: 'SET_STEP_ERROR',
-          error: err instanceof ApiError ? err.message : 'Failed to save images.',
+          error: apiError.resolve(err, {
+            context: 'service',
+            fallbackKey: 'services.errors.saveImagesFailed',
+          }),
         });
       }
     },
@@ -211,15 +221,15 @@ export function ServiceEdit() {
         const config = buildServiceConfig(values as unknown as ServiceConfigFormShape);
         await ensureServiceVariant(id, { price: values.price, serviceConfig: config });
         const service = await fetchServiceById(id); // refresh defaultVariantId for the status pre-flight
-        toast.success('Booking settings saved');
+        toast.success(t('services.toast.bookingSettingsSaved'));
         advance({ price: values.price, config, service });
       } catch (err) {
         dispatch({
           type: 'SET_STEP_ERROR',
-          error:
-            err instanceof ApiError
-              ? SERVICE_ACTIVATION_ERROR_MAP[err.code] ?? err.message
-              : 'Failed to save booking settings.',
+          error: apiError.resolve(err, {
+            context: 'service',
+            fallbackKey: 'services.errors.saveBookingSettingsFailed',
+          }),
         });
       }
     },
@@ -243,19 +253,19 @@ export function ServiceEdit() {
         // would be rejected and silently reset the flag to false.
         await changeServiceStatus(id, 'active');
         await updateService(id, { vectorisationEnabled });
-        toast.success('Service published successfully!');
+        toast.success(t('services.toast.published'));
         navigate('/dashboard/services');
       } catch (err) {
         dispatch({
           type: 'SET_STEP_ERROR',
-          error:
-            err instanceof ApiError
-              ? SERVICE_ACTIVATION_ERROR_MAP[err.code] ?? err.message
-              : 'Failed to publish service.',
+          error: apiError.resolve(err, {
+            context: 'service',
+            fallbackKey: 'services.errors.publishFailed',
+          }),
         });
       }
     },
-    [id, state.service, navigate],
+    [id, state.service, navigate, t, apiError],
   );
 
   const handleSaveDraft = useCallback(
@@ -264,16 +274,19 @@ export function ServiceEdit() {
       dispatch({ type: 'SET_SAVING', value: true });
       try {
         await updateService(id, { vectorisationEnabled });
-        toast.success('Service saved as draft.');
+        toast.success(t('services.toast.savedAsDraft'));
         navigate('/dashboard/services');
       } catch (err) {
         dispatch({
           type: 'SET_STEP_ERROR',
-          error: err instanceof ApiError ? err.message : 'Failed to save service.',
+          error: apiError.resolve(err, {
+            context: 'service',
+            fallbackKey: 'services.errors.saveFailed',
+          }),
         });
       }
     },
-    [id, navigate],
+    [id, navigate, t, apiError],
   );
 
   // ─── Navigation ───────────────────────────────────────────────────────────────
@@ -289,7 +302,7 @@ export function ServiceEdit() {
   if (state.loadError) {
     return (
       <div className="max-w-3xl mx-auto space-y-4 px-1">
-        <PageBackButton fallbackPath="/dashboard/services" label="Services" />
+        <PageBackButton fallbackPath="/dashboard/services" label={t('services.wizard.backToServices')} />
         <div className="rounded-lg border border-dashed py-16 text-center text-sm text-muted-foreground">
           {state.loadError}
         </div>
@@ -397,8 +410,12 @@ export function ServiceEdit() {
   return (
     <div className="space-y-4 sm:space-y-6 animate-fade-in max-w-3xl mx-auto -mx-6 sm:mx-auto">
       <div className="px-4 sm:px-0">
-        <PageBackButton fallbackPath="/dashboard/services" label="Services" className="mb-1" />
-        <h1 className="text-xl sm:text-2xl font-bold">Edit Service</h1>
+        <PageBackButton
+          fallbackPath="/dashboard/services"
+          label={t('services.wizard.backToServices')}
+          className="mb-1"
+        />
+        <h1 className="text-xl sm:text-2xl font-bold">{t('services.wizard.editTitle')}</h1>
         <p className="text-muted-foreground text-xs sm:text-sm mt-1 truncate">{service.title}</p>
       </div>
 

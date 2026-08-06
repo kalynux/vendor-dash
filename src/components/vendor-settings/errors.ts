@@ -1,28 +1,28 @@
 import { ApiError } from '@/types/api';
-import { AGENCY_CONNECTION_ERROR_LABELS } from '@/services/agency-connections.service';
+import { apiErrorMessage, tStatic } from '@/i18n';
 
-/** Map an API error to a user-facing message, matching the onboarding steps. */
+/**
+ * Map an API error from a profile/settings save to a localized message.
+ *
+ * Kept as a named helper because `VENDOR_BUSINESS_ADDRESS_IN_USE` needs to name
+ * the blocking products, which no static catalog string can do. Everything else
+ * routes through the shared resolver, so the backend's English `message` is
+ * never shown.
+ */
 export function mapProfileError(err: unknown): string {
-    if (err instanceof ApiError) {
-        if (AGENCY_CONNECTION_ERROR_LABELS[err.code]) {
-            return AGENCY_CONNECTION_ERROR_LABELS[err.code];
-        }
-        if (err.isBusinessAddressInUse && err.blockedAddresses?.length) {
-            const list = err.blockedAddresses
-                .map((a) => `"${a.label}" is used as a pickup location on ${a.productCount} product${a.productCount === 1 ? '' : 's'}`)
-                .join('; ');
-            return `Can't remove: ${list}. Reassign those products first.`;
-        }
-        if (err.isConcurrentModification) {
-            return 'Your profile was modified in another session. Please refresh and try again.';
-        }
-        if (err.isValidation && err.details?.length) {
-            return err.details[0].message;
-        }
-        if (err.isServer) {
-            return 'A server error occurred. Please try again.';
-        }
-        return err.message;
+    if (err instanceof ApiError && err.isBusinessAddressInUse && err.blockedAddresses?.length) {
+        const list = err.blockedAddresses
+            .map((a) =>
+                tStatic('account.addresses.blockedByProducts', {
+                    label: a.label,
+                    count: a.productCount,
+                }),
+            )
+            .join('; ');
+        return tStatic('account.addresses.cannotRemove', { list });
     }
-    return 'Something went wrong. Please try again.';
+    return apiErrorMessage(err, {
+        context: 'agencyConnection',
+        fallbackKey: 'errors.unknown',
+    });
 }

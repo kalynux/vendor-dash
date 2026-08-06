@@ -18,47 +18,49 @@ import {
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useInfiniteList } from '@/hooks/use-infinite-list';
-import { ApiError } from '@/types/api';
+import { useTranslation, useFormatters, useApiError, type TranslationKey } from '@/i18n';
 import { fetchBookings } from '@/services/services.service';
 import { BookingStatusBadge, PaymentStatusBadge } from '@/components/services/StatusBadges';
 import { BookingCalendar } from '@/components/services/BookingCalendar';
 import { BookingDetailSheet } from '@/components/services/BookingDetailSheet';
-import { formatDateTime, formatMinor } from '@/components/services/service.constants';
+import {
+  toMajorUnits, BOOKING_STATUS_META, PAYMENT_STATUS_FILTER_KEYS,
+} from '@/components/services/service.constants';
 import type {
   Booking, BookingListMeta, BookingsQueryParams, BookingStatus, PaymentStatus,
 } from '@/types/services.types';
 
 const PAGE_LIMIT = 20;
 
-const STATUS_OPTIONS: { value: BookingStatus | ''; label: string }[] = [
-  { value: '', label: 'All statuses' },
-  { value: 'pending', label: 'Pending' },
-  { value: 'confirmed', label: 'Confirmed' },
-  { value: 'completed', label: 'Completed' },
-  { value: 'no-show', label: 'No-show' },
-  { value: 'cancelled', label: 'Cancelled' },
+const STATUS_OPTIONS: { value: BookingStatus; labelKey: TranslationKey }[] = [
+  { value: 'pending', labelKey: BOOKING_STATUS_META.pending.labelKey },
+  { value: 'confirmed', labelKey: BOOKING_STATUS_META.confirmed.labelKey },
+  { value: 'completed', labelKey: BOOKING_STATUS_META.completed.labelKey },
+  { value: 'no-show', labelKey: BOOKING_STATUS_META['no-show'].labelKey },
+  { value: 'cancelled', labelKey: BOOKING_STATUS_META.cancelled.labelKey },
 ];
 
-const PAYMENT_OPTIONS: { value: PaymentStatus | ''; label: string }[] = [
-  { value: '', label: 'All payments' },
-  { value: 'unpaid', label: 'Unpaid' },
-  { value: 'pending', label: 'Pending' },
-  { value: 'paid', label: 'Paid' },
-  { value: 'disputed', label: 'Disputed' },
-  { value: 'failed', label: 'Failed' },
-  { value: 'refunded', label: 'Refunded' },
+const PAYMENT_OPTIONS: { value: PaymentStatus; labelKey: TranslationKey }[] = [
+  { value: 'unpaid', labelKey: PAYMENT_STATUS_FILTER_KEYS.unpaid },
+  { value: 'pending', labelKey: PAYMENT_STATUS_FILTER_KEYS.pending },
+  { value: 'paid', labelKey: PAYMENT_STATUS_FILTER_KEYS.paid },
+  { value: 'disputed', labelKey: PAYMENT_STATUS_FILTER_KEYS.disputed },
+  { value: 'failed', labelKey: PAYMENT_STATUS_FILTER_KEYS.failed },
+  { value: 'refunded', labelKey: PAYMENT_STATUS_FILTER_KEYS.refunded },
 ];
-
-function productTitle(b: Booking): string {
-  return typeof b.productId === 'object' ? b.productId.title : 'Service';
-}
-function customerEmail(b: Booking): string {
-  return typeof b.userId === 'object' ? b.userId.login_email ?? '—' : '—';
-}
 
 export function BookingsPanel({ openBookingId }: { openBookingId?: string | null } = {}) {
   const isMobile = useIsMobile();
+  const { t } = useTranslation();
+  const fmt = useFormatters();
+  const apiError = useApiError();
   const [view, setView] = useState<'list' | 'calendar'>('list');
+
+  const productTitle = (b: Booking): string =>
+    typeof b.productId === 'object' ? b.productId.title : t('services.bookings.untitledService');
+
+  const customerEmail = (b: Booking): string =>
+    (typeof b.userId === 'object' ? b.userId.login_email : null) ?? t('common.labels.emptyValue');
 
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [meta, setMeta] = useState<BookingListMeta | null>(null);
@@ -95,13 +97,13 @@ export function BookingsPanel({ openBookingId }: { openBookingId?: string | null
       setBookings(result.data);
       setMeta(result.meta);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Failed to load bookings');
+      setError(apiError.resolve(err, { fallbackKey: 'services.errors.loadBookingsFailed' }));
       setBookings([]);
       setMeta(null);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [apiError]);
 
   useEffect(() => {
     if (isMobile || view !== 'list') return;
@@ -141,14 +143,18 @@ export function BookingsPanel({ openBookingId }: { openBookingId?: string | null
   if (statusFilter) {
     filterChips.push({
       key: 'status',
-      label: `Status: ${STATUS_OPTIONS.find((o) => o.value === statusFilter)?.label ?? statusFilter}`,
+      label: t('services.bookings.statusChip', {
+        value: t(BOOKING_STATUS_META[statusFilter].labelKey),
+      }),
       onRemove: () => { setStatusFilter(''); setPage(1); },
     });
   }
   if (paymentFilter) {
     filterChips.push({
       key: 'payment',
-      label: `Payment: ${PAYMENT_OPTIONS.find((o) => o.value === paymentFilter)?.label ?? paymentFilter}`,
+      label: t('services.bookings.paymentChip', {
+        value: t(PAYMENT_STATUS_FILTER_KEYS[paymentFilter]),
+      }),
       onRemove: () => { setPaymentFilter(''); setPage(1); },
     });
   }
@@ -157,25 +163,25 @@ export function BookingsPanel({ openBookingId }: { openBookingId?: string | null
     <FilterSheet
       open={filterSheetOpen}
       onOpenChange={setFilterSheetOpen}
-      title="Filter bookings"
+      title={t('services.bookings.filterTitle')}
       activeCount={activeFilterCount}
       onClear={clearFilters}
-      applyLabel="Show bookings"
+      applyLabel={t('services.bookings.applyFilters')}
     >
-      <FilterSection title="Booking status">
+      <FilterSection title={t('services.bookings.statusSection')}>
         <FilterChips
-          options={STATUS_OPTIONS.filter((o): o is { value: BookingStatus; label: string } => o.value !== '')}
+          options={STATUS_OPTIONS}
           value={statusFilter || undefined}
           onChange={(v) => { setStatusFilter(v ?? ''); setPage(1); }}
-          allLabel="Any status"
+          allLabel={t('services.bookings.anyStatus')}
         />
       </FilterSection>
-      <FilterSection title="Payment status">
+      <FilterSection title={t('services.bookings.paymentSection')}>
         <FilterChips
-          options={PAYMENT_OPTIONS.filter((o): o is { value: PaymentStatus; label: string } => o.value !== '')}
+          options={PAYMENT_OPTIONS}
           value={paymentFilter || undefined}
           onChange={(v) => { setPaymentFilter(v ?? ''); setPage(1); }}
-          allLabel="Any"
+          allLabel={t('services.bookings.anyPayment')}
         />
       </FilterSection>
     </FilterSheet>
@@ -188,14 +194,14 @@ export function BookingsPanel({ openBookingId }: { openBookingId?: string | null
         onClick={() => setView('list')}
         className={cn('flex items-center gap-1.5 px-3 text-sm', view === 'list' ? 'bg-accent' : 'hover:bg-muted/50')}
       >
-        <List className="h-4 w-4" /> List
+        <List className="h-4 w-4" /> {t('services.bookings.viewList')}
       </button>
       <button
         type="button"
         onClick={() => setView('calendar')}
         className={cn('flex items-center gap-1.5 border-l px-3 text-sm', view === 'calendar' ? 'bg-accent' : 'hover:bg-muted/50')}
       >
-        <CalendarDays className="h-4 w-4" /> Calendar
+        <CalendarDays className="h-4 w-4" /> {t('services.bookings.viewCalendar')}
       </button>
     </div>
   );
@@ -206,7 +212,7 @@ export function BookingsPanel({ openBookingId }: { openBookingId?: string | null
         <FilterTriggerButton
           onClick={() => setFilterSheetOpen(true)}
           activeCount={activeFilterCount}
-          label="Filter bookings"
+          label={t('services.bookings.filterTitle')}
         />
         <div className="flex-1" />
         {viewToggle}
@@ -219,9 +225,9 @@ export function BookingsPanel({ openBookingId }: { openBookingId?: string | null
     <Empty className="py-16">
       <EmptyHeader>
         <EmptyMedia variant="icon"><CalendarClock className="h-6 w-6" /></EmptyMedia>
-        <EmptyTitle>No bookings</EmptyTitle>
+        <EmptyTitle>{t('services.bookings.emptyTitle')}</EmptyTitle>
         <EmptyDescription>
-          Bookings appear here once customers reserve a time for your services.
+          {t('services.bookings.emptyDescription')}
         </EmptyDescription>
       </EmptyHeader>
     </Empty>
@@ -236,11 +242,13 @@ export function BookingsPanel({ openBookingId }: { openBookingId?: string | null
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-semibold">{productTitle(b)}</p>
         <p className="truncate text-xs text-muted-foreground">{customerEmail(b)}</p>
-        <p className="truncate text-xs text-muted-foreground">{formatDateTime(b.startAt)}</p>
+        <p className="truncate text-xs text-muted-foreground">{fmt.dateTime(b.startAt)}</p>
       </div>
       <div className="flex flex-col items-end gap-1">
         <BookingStatusBadge status={b.status} />
-        <span className="text-xs font-medium">{formatMinor(b.priceSnapshot, b.currency)}</span>
+        <span className="text-xs font-medium">
+          {fmt.currency(toMajorUnits(b.priceSnapshot), b.currency)}
+        </span>
       </div>
     </button>
   );
@@ -284,12 +292,12 @@ export function BookingsPanel({ openBookingId }: { openBookingId?: string | null
             <table className="w-full text-sm">
               <thead className="border-b bg-muted/40 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 <tr>
-                  <th className="px-4 py-3">Service</th>
-                  <th className="px-4 py-3">Customer</th>
-                  <th className="px-4 py-3">When</th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3">Payment</th>
-                  <th className="px-4 py-3 text-right">Price</th>
+                  <th className="px-4 py-3">{t('services.bookings.columns.service')}</th>
+                  <th className="px-4 py-3">{t('services.bookings.columns.customer')}</th>
+                  <th className="px-4 py-3">{t('services.bookings.columns.when')}</th>
+                  <th className="px-4 py-3">{t('services.bookings.columns.status')}</th>
+                  <th className="px-4 py-3">{t('services.bookings.columns.payment')}</th>
+                  <th className="px-4 py-3 text-right">{t('services.bookings.columns.price')}</th>
                   <th className="w-8 px-4 py-3" />
                 </tr>
               </thead>
@@ -302,10 +310,12 @@ export function BookingsPanel({ openBookingId }: { openBookingId?: string | null
                   >
                     <td className="px-4 py-3 font-medium">{productTitle(b)}</td>
                     <td className="px-4 py-3 text-muted-foreground">{customerEmail(b)}</td>
-                    <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">{formatDateTime(b.startAt)}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">{fmt.dateTime(b.startAt)}</td>
                     <td className="px-4 py-3"><BookingStatusBadge status={b.status} /></td>
                     <td className="px-4 py-3"><PaymentStatusBadge status={b.paymentStatus} /></td>
-                    <td className="px-4 py-3 text-right font-medium">{formatMinor(b.priceSnapshot, b.currency)}</td>
+                    <td className="px-4 py-3 text-right font-medium">
+                      {fmt.currency(toMajorUnits(b.priceSnapshot), b.currency)}
+                    </td>
                     <td className="px-4 py-3 text-right">
                       <ChevronRight className="ml-auto h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
                     </td>
@@ -317,15 +327,20 @@ export function BookingsPanel({ openBookingId }: { openBookingId?: string | null
 
           {meta && (
             <div className="flex flex-col items-center justify-between gap-3 text-sm text-muted-foreground sm:flex-row">
-              <span>Showing {bookings.length} of {meta.total} booking{meta.total !== 1 ? 's' : ''}</span>
+              <span>
+                {t('common.pagination.showingOf', {
+                  shown: bookings.length,
+                  items: t('services.bookings.count', { count: meta.total }),
+                })}
+              </span>
               {meta.totalPages > 1 && (
                 <div className="flex items-center gap-2">
                   <Button variant="outline" size="sm" disabled={meta.page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
-                    Previous
+                    {t('common.pagination.previous')}
                   </Button>
-                  <span>Page {meta.page} of {meta.totalPages}</span>
+                  <span>{t('common.pagination.pageOf', { page: meta.page, total: meta.totalPages })}</span>
                   <Button variant="outline" size="sm" disabled={meta.page >= meta.totalPages} onClick={() => setPage((p) => p + 1)}>
-                    Next
+                    {t('common.pagination.next')}
                   </Button>
                 </div>
               )}
@@ -345,11 +360,12 @@ export function BookingsPanel({ openBookingId }: { openBookingId?: string | null
 }
 
 function ErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
+  const { t } = useTranslation();
   return (
     <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed py-16 text-center">
       <CalendarClock className="h-10 w-10 text-muted-foreground" />
       <p className="text-sm text-muted-foreground">{message}</p>
-      <Button variant="outline" size="sm" onClick={onRetry}>Try again</Button>
+      <Button variant="outline" size="sm" onClick={onRetry}>{t('common.actions.retry')}</Button>
     </div>
   );
 }

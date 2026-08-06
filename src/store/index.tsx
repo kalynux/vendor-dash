@@ -33,6 +33,7 @@ import {
 } from '@/services/orders.service';
 import { toast } from 'sonner';
 import { ApiError } from '@/types/api';
+import { apiErrorMessage, tStatic } from '@/i18n';
 import {
   fetchProducts as apiFetchProducts,
   updateProductStatus as apiUpdateProductStatus,
@@ -220,7 +221,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       const result = await apiFetchStore();
       setStore(result);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Failed to load store.');
+      toast.error(apiErrorMessage(err, { fallbackKey: 'settings.storefront.loadFailed' }));
     } finally {
       setStoreLoading(false);
     }
@@ -241,7 +242,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       setProducts(result.data);
       setProductPagination(result.meta);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Failed to load products.');
+      toast.error(apiErrorMessage(err, { fallbackKey: 'products.errors.loadFailed' }));
     } finally {
       setProductLoading(false);
     }
@@ -258,7 +259,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       setProducts(prev => prev.filter(p => p.id !== id));
       setSelectedProducts(prev => prev.filter(pid => pid !== id));
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Failed to delete product.');
+      toast.error(apiErrorMessage(err, { fallbackKey: 'products.errors.deleteFailed' }));
     } finally {
       setProductLoading(false);
     }
@@ -340,7 +341,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       // Non-fatal: the badge/list just won't refresh. Avoid a toast on every
       // background reconciliation; surface only unexpected errors.
       if (err instanceof ApiError && err.status >= 500) {
-        toast.error('Could not load notifications.');
+        toast.error(tStatic('notifications.errors.loadFailed'));
       }
     } finally {
       setNotificationsLoading(false);
@@ -360,7 +361,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       // Revert on failure.
       setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: false } : n));
       if (wasUnread) setUnreadCount(c => c + 1);
-      toast.error(err instanceof ApiError ? err.message : 'Could not mark as read.');
+      toast.error(apiErrorMessage(err, { fallbackKey: 'notifications.errors.markReadFailed' }));
     }
   }, []);
 
@@ -374,7 +375,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     } catch (err) {
       setNotifications(snapshot);
       setUnreadCount(prevUnread);
-      toast.error(err instanceof ApiError ? err.message : 'Could not mark all as read.');
+      toast.error(apiErrorMessage(err, { fallbackKey: 'notifications.errors.markAllReadFailed' }));
     }
   }, [notifications, unreadCount]);
 

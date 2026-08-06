@@ -15,19 +15,19 @@ import { cn } from '@/lib/utils';
 import { useAgencyConnectionActions } from '@/hooks/useAgencyConnectionActions';
 import { listAgencyConnections, resolveAgencyDisplayForConnections } from '@/services/agency-connections.service';
 import { fileRefUrl } from '@/services/files.service';
-import { ApiError } from '@/types/api';
 import type { AgencyBrowseItemDto, ConnectionDto, ConnectionStatus } from '@/types/agency-connection.types';
+import { useApiError, useTranslation, type TranslationKey } from '@/i18n';
 
 type StatusChip = 'all' | 'pending' | 'active' | 'paused_reapproval' | 'history';
 
 const HISTORY_STATUSES: ConnectionStatus[] = ['rejected', 'withdrawn', 'terminated'];
 
-const CHIPS: { key: StatusChip; label: string }[] = [
-    { key: 'all', label: 'All' },
-    { key: 'pending', label: 'Pending' },
-    { key: 'active', label: 'Active' },
-    { key: 'paused_reapproval', label: 'Paused' },
-    { key: 'history', label: 'History' },
+const CHIPS: { key: StatusChip; labelKey: TranslationKey }[] = [
+    { key: 'all', labelKey: 'common.labels.all' },
+    { key: 'pending', labelKey: 'agency.status.pending' },
+    { key: 'active', labelKey: 'agency.status.active' },
+    { key: 'paused_reapproval', labelKey: 'agency.status.paused' },
+    { key: 'history', labelKey: 'agency.connections.chipHistory' },
 ];
 
 function matchesChip(status: ConnectionStatus, chip: StatusChip): boolean {
@@ -45,13 +45,13 @@ const STATUS_BADGE_CLASS: Record<ConnectionStatus, string> = {
     terminated: 'text-muted-foreground bg-muted border-border',
 };
 
-const STATUS_LABEL: Record<ConnectionStatus, string> = {
-    pending: 'Pending',
-    active: 'Active',
-    paused_reapproval: 'Reapproval needed',
-    rejected: 'Rejected',
-    withdrawn: 'Withdrawn',
-    terminated: 'Terminated',
+const STATUS_LABEL_KEYS: Record<ConnectionStatus, TranslationKey> = {
+    pending: 'agency.status.pending',
+    active: 'agency.status.active',
+    paused_reapproval: 'agency.status.reapprovalNeeded',
+    rejected: 'agency.status.rejected',
+    withdrawn: 'agency.status.withdrawn',
+    terminated: 'agency.status.terminated',
 };
 
 function ReasonPopover({
@@ -111,6 +111,7 @@ function ConnectionRowActions({
     settingDefault: boolean;
     onSetDefault: (agencyId: string) => void;
 }) {
+    const { t } = useTranslation();
     const agencyId = connection.agencyId;
 
     if (connection.status === 'active') {
@@ -119,7 +120,7 @@ function ConnectionRowActions({
             <div className="flex items-center gap-1.5">
                 {isDefault ? (
                     <Badge variant="secondary" className="text-primary bg-primary/10 border-primary/20">
-                        Default
+                        {t('agency.connections.actions.default')}
                     </Badge>
                 ) : (
                     <Button
@@ -128,13 +129,13 @@ function ConnectionRowActions({
                         disabled={settingDefault}
                         onClick={() => onSetDefault(agencyId)}
                     >
-                        {settingDefault ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Set as default'}
+                        {settingDefault ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : t('agency.connections.actions.setAsDefault')}
                     </Button>
                 )}
                 <ReasonPopover
-                    triggerLabel="Terminate"
-                    confirmLabel="Confirm Terminate"
-                    placeholder="Note (optional)"
+                    triggerLabel={t('agency.connections.actions.terminate')}
+                    confirmLabel={t('agency.connections.actions.confirmTerminate')}
+                    placeholder={t('agency.connections.notePlaceholder')}
                     variant="destructive"
                     disabled={actions.pendingKey === terminateKey}
                     onConfirm={(note) => actions.terminate(agencyId, connection.id, note || undefined)}
@@ -153,7 +154,7 @@ function ConnectionRowActions({
                     disabled={actions.pendingKey === key}
                     onClick={() => actions.withdraw(agencyId, connection.id)}
                 >
-                    {actions.pendingKey === key ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Withdraw'}
+                    {actions.pendingKey === key ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : t('agency.connections.actions.withdraw')}
                 </Button>
             );
         }
@@ -166,12 +167,12 @@ function ConnectionRowActions({
                     disabled={actions.pendingKey === approveKey}
                     onClick={() => actions.approve(agencyId, connection.id)}
                 >
-                    {actions.pendingKey === approveKey ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Approve'}
+                    {actions.pendingKey === approveKey ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : t('agency.connections.actions.approve')}
                 </Button>
                 <ReasonPopover
-                    triggerLabel="Reject"
-                    confirmLabel="Confirm Reject"
-                    placeholder="Reason (optional)"
+                    triggerLabel={t('agency.connections.actions.reject')}
+                    confirmLabel={t('agency.connections.actions.confirmReject')}
+                    placeholder={t('agency.connections.reasonPlaceholder')}
                     variant="destructive"
                     disabled={actions.pendingKey === rejectKey}
                     onConfirm={(reason) => actions.reject(agencyId, connection.id, reason || undefined)}
@@ -189,11 +190,11 @@ function ConnectionRowActions({
                     disabled={actions.pendingKey === key}
                     onClick={() => actions.approve(agencyId, connection.id)}
                 >
-                    {actions.pendingKey === key ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Reapprove'}
+                    {actions.pendingKey === key ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : t('agency.connections.actions.reapprove')}
                 </Button>
             );
         }
-        return <Badge variant="secondary">Awaiting agency</Badge>;
+        return <Badge variant="secondary">{t('agency.connections.awaitingAgency')}</Badge>;
     }
 
     // rejected / withdrawn / terminated
@@ -205,7 +206,7 @@ function ConnectionRowActions({
             disabled={actions.pendingKey === key}
             onClick={() => actions.request(agencyId)}
         >
-            {actions.pendingKey === key ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Request Again'}
+            {actions.pendingKey === key ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : t('agency.connections.actions.requestAgain')}
         </Button>
     );
 }
@@ -228,6 +229,8 @@ export function ConnectionsList({
     onSetDefault,
     settingDefaultAgencyId = null,
 }: ConnectionsListProps) {
+    const { t } = useTranslation();
+    const apiError = useApiError();
     const [connections, setConnections] = useState<ConnectionDto[]>([]);
     const [agencyDisplay, setAgencyDisplay] = useState<Map<string, AgencyBrowseItemDto>>(new Map());
     const [isLoading, setIsLoading] = useState(true);
@@ -267,11 +270,11 @@ export function ConnectionsList({
             const { resolved } = await resolveAgencyDisplayForConnections(all);
             setAgencyDisplay(resolved);
         } catch (err) {
-            setLoadError(err instanceof ApiError ? err.message : 'Could not load your connections.');
+            setLoadError(apiError.resolve(err, { fallbackKey: 'agency.errors.loadConnectionsFailed' }));
         } finally {
             setIsLoading(false);
         }
-    }, []);
+    }, [apiError]);
 
     useEffect(() => {
         load();
@@ -292,17 +295,19 @@ export function ConnectionsList({
             <SearchFilterBar
                 value={search}
                 onChange={setSearch}
-                placeholder="Search connections…"
+                placeholder={t('agency.connections.searchPlaceholder')}
                 activeFilterCount={activeFilterCount}
                 onOpenFilters={() => setFiltersOpen(true)}
-                filterLabel="Filter connections"
+                filterLabel={t('agency.connections.filterTitle')}
             />
             <ActiveFilterChips
                 chips={chip === 'all'
                     ? []
                     : [{
                         key: 'status',
-                        label: `Status: ${CHIPS.find((c) => c.key === chip)?.label ?? chip}`,
+                        label: t('agency.connections.statusChip', {
+                            value: t(CHIPS.find((c) => c.key === chip)?.labelKey ?? 'common.labels.all'),
+                        }),
                         onRemove: () => setChip('all'),
                     }]}
             />
@@ -310,34 +315,34 @@ export function ConnectionsList({
             <FilterSheet
                 open={filtersOpen}
                 onOpenChange={setFiltersOpen}
-                title="Filter connections"
+                title={t('agency.connections.filterTitle')}
                 activeCount={activeFilterCount}
                 onClear={() => setChip('all')}
-                applyLabel="Show connections"
+                applyLabel={t('agency.connections.applyLabel')}
             >
-                <FilterSection title="Status">
+                <FilterSection title={t('common.labels.status')}>
                     <FilterChips
-                        options={CHIPS.filter((c) => c.key !== 'all').map((c) => ({ value: c.key, label: c.label }))}
+                        options={CHIPS.filter((c) => c.key !== 'all').map((c) => ({ value: c.key, labelKey: c.labelKey }))}
                         value={chip === 'all' ? undefined : chip}
                         onChange={(v) => setChip(v ?? 'all')}
-                        allLabel="All"
+                        allLabel={t('common.labels.all')}
                     />
                 </FilterSection>
             </FilterSheet>
 
             {isLoading ? (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground py-6">
-                    <Loader2 className="w-4 h-4 animate-spin" /> Loading connections…
+                    <Loader2 className="w-4 h-4 animate-spin" /> {t('agency.connections.loading')}
                 </div>
             ) : loadError ? (
                 <div className="text-center py-8">
                     <p className="text-sm text-muted-foreground mb-4">{loadError}</p>
-                    <Button variant="outline" onClick={load}>Retry</Button>
+                    <Button variant="outline" onClick={load}>{t('common.actions.retry')}</Button>
                 </div>
             ) : filtered.length === 0 ? (
                 <div className="text-center py-10 border border-dashed rounded-xl">
                     <Building2 className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
-                    <p className="text-sm text-muted-foreground">No connections in this category yet.</p>
+                    <p className="text-sm text-muted-foreground">{t('agency.connections.emptyCategory')}</p>
                 </div>
             ) : (
                 <div className="space-y-2">
@@ -362,10 +367,10 @@ export function ConnectionsList({
                                     </div>
                                     <div className="min-w-0">
                                         <p className="text-sm font-medium truncate">
-                                            {agency?.agencyName ?? `Agency ${connection.agencyId.slice(-6)}`}
+                                            {agency?.agencyName ?? t('agency.connections.unnamedAgency', { ref: connection.agencyId.slice(-6) })}
                                         </p>
                                         <Badge variant="secondary" className={cn('text-[10px] mt-0.5', STATUS_BADGE_CLASS[connection.status])}>
-                                            {STATUS_LABEL[connection.status]}
+                                            {t(STATUS_LABEL_KEYS[connection.status])}
                                         </Badge>
                                     </div>
                                 </div>

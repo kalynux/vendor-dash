@@ -15,6 +15,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
+import { useMessage, useTranslation, type TranslationKey } from '@/i18n';
 import { VariantImageStack } from './VariantImageStack';
 import type { VariantRow, VariantRowPatch, DraftOption } from './variant.types';
 import type { ApiFileDetail } from '@/types/product.types';
@@ -64,6 +65,7 @@ export function VariantTable({
   filesByVariantId,
   onVariantImagesChange,
 }: VariantTableProps) {
+  const { t } = useTranslation();
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [bulkPrice, setBulkPrice] = useState('');
   const [bulkStock, setBulkStock] = useState('');
@@ -91,17 +93,17 @@ export function VariantTable({
         <div className="flex items-center gap-1.5 flex-wrap text-xs order-1 md:order-2">
           {persistedRowCount > 0 && (
             <Badge variant="outline" className="border-emerald-500/50 text-emerald-600">
-              {persistedRowCount} saved
+              {t('products.variantTable.saved', { count: persistedRowCount })}
             </Badge>
           )}
           {newRowCount > 0 && (
             <Badge variant="outline" className="border-blue-500/50 text-blue-600">
-              {newRowCount} new
+              {t('products.variantTable.new', { count: newRowCount })}
             </Badge>
           )}
           {modifiedRowCount > 0 && (
             <Badge variant="outline" className="border-amber-500/50 text-amber-600">
-              {modifiedRowCount} modified
+              {t('products.variantTable.modified', { count: modifiedRowCount })}
             </Badge>
           )}
         </div>
@@ -110,18 +112,18 @@ export function VariantTable({
         <div className="grid grid-cols-3 gap-2 md:flex md:items-center md:gap-2 order-2 md:order-1">
           <Button variant="outline" size="sm" onClick={onEditOptions} className="gap-1">
             <Settings2 className="h-4 w-4" />
-            <span>Options</span>
+            <span>{t('products.variantTable.options')}</span>
           </Button>
           <Button variant="outline" size="sm" onClick={onAutoGenerateSkus} className="gap-1">
             <Wand2 className="h-4 w-4" />
-            <span>Auto SKU</span>
+            <span>{t('products.variantTable.autoSku')}</span>
           </Button>
           <Button
             variant="outline"
             size="sm"
             onClick={() => setShowBulkEdit(!showBulkEdit)}
           >
-            Bulk Edit
+            {t('products.variantTable.bulkEdit')}
           </Button>
         </div>
       </div>
@@ -130,11 +132,11 @@ export function VariantTable({
       {showBulkEdit && (
         <div className="flex flex-col gap-3 p-3 bg-muted/50 rounded-lg border md:flex-row md:items-center">
           <span className="text-xs font-medium text-muted-foreground md:shrink-0">
-            Set for all:
+            {t('products.variantTable.setForAll')}
           </span>
           <div className="grid grid-cols-[1fr_auto] gap-2 items-center md:flex md:items-center md:gap-1.5">
             <div className="flex items-center gap-1.5">
-              <Label className="text-xs shrink-0">Price</Label>
+              <Label className="text-xs shrink-0">{t('products.columns.price')}</Label>
               <Input
                 type="number"
                 min={0}
@@ -157,12 +159,12 @@ export function VariantTable({
               }}
               disabled={!bulkPrice}
             >
-              Apply
+              {t('common.actions.apply')}
             </Button>
           </div>
           <div className="grid grid-cols-[1fr_auto] gap-2 items-center md:flex md:items-center md:gap-1.5">
             <div className="flex items-center gap-1.5">
-              <Label className="text-xs shrink-0">Stock</Label>
+              <Label className="text-xs shrink-0">{t('products.columns.stock')}</Label>
               <Input
                 type="number"
                 min={0}
@@ -184,7 +186,7 @@ export function VariantTable({
               }}
               disabled={!bulkStock}
             >
-              Apply
+              {t('common.actions.apply')}
             </Button>
           </div>
         </div>
@@ -193,7 +195,7 @@ export function VariantTable({
       {/* Empty state (shared) */}
       {rows.length === 0 && (
         <div className="border rounded-lg p-8 text-center text-muted-foreground text-sm">
-          No variants. Edit options to generate the variant matrix.
+          {t('products.variantTable.empty')}
         </div>
       )}
 
@@ -233,22 +235,22 @@ export function VariantTable({
                   </th>
                 ))}
                 <th className="text-left p-2 font-medium text-muted-foreground min-w-[140px]">
-                  Name
+                  {t('products.columns.name')}
                 </th>
                 <th className="text-left p-2 font-medium text-muted-foreground min-w-[140px]">
-                  SKU
+                  {t('products.columns.sku')}
                 </th>
                 <th className="text-left p-2 font-medium text-muted-foreground min-w-[100px]">
-                  Price
+                  {t('products.columns.price')}
                 </th>
                 <th className="text-left p-2 font-medium text-muted-foreground min-w-[80px]">
-                  Stock
+                  {t('products.columns.stock')}
                 </th>
                 <th className="text-left p-2 font-medium text-muted-foreground min-w-[90px]">
-                  Images
+                  {t('products.columns.images')}
                 </th>
                 <th className="text-center p-2 font-medium text-muted-foreground w-[70px]">
-                  Status
+                  {t('products.columns.status')}
                 </th>
                 <th className="w-[85px] p-2 text-right" />
               </tr>
@@ -284,12 +286,12 @@ export function VariantTable({
           >
             {isSaving && <Loader2 className="h-4 w-4 animate-spin" />}
             {isSaving
-              ? 'Saving…'
+              ? t('common.actions.saving')
               : hasUnsavedChanges
-                ? `Save ${newRowCount + modifiedRowCount} change${
-                    newRowCount + modifiedRowCount === 1 ? '' : 's'
-                  }`
-                : 'All saved'}
+                ? t('products.variantTable.saveChanges', {
+                    count: newRowCount + modifiedRowCount,
+                  })
+                : t('products.variantTable.allSaved')}
           </Button>
         </div>
       )}
@@ -324,6 +326,7 @@ function VariantRowComponent({
   files,
   onImagesChange,
 }: VariantRowComponentProps) {
+  const { t } = useTranslation();
   const statusBadge = STATUS_BADGE[row.status];
 
   const handleFieldChange = (
@@ -413,7 +416,7 @@ function VariantRowComponent({
 
         <td className="p-2 text-center">
           <Badge variant="outline" className={cn('text-xs', statusBadge.className)}>
-            {statusBadge.label}
+            {t(statusBadge.labelKey)}
           </Badge>
         </td>
 
@@ -422,7 +425,7 @@ function VariantRowComponent({
             onClick={onToggleExpand}
             className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring rounded px-1.5 py-1 hover:bg-muted"
           >
-            <span>{isExpanded ? 'Less' : 'More'}</span>
+            <span>{t(isExpanded ? 'products.variantTable.less' : 'products.variantTable.more')}</span>
             <ChevronDown
               className={cn(
                 'h-3.5 w-3.5 text-muted-foreground transition-transform duration-200',
@@ -458,6 +461,7 @@ function VariantRowCard({
   files,
   onImagesChange,
 }: VariantRowComponentProps) {
+  const { t } = useTranslation();
   const statusBadge = STATUS_BADGE[row.status];
 
   const handleFieldChange = (
@@ -501,12 +505,12 @@ function VariantRowCard({
           })}
         </div>
         <Badge variant="outline" className={cn('text-[10px] shrink-0', statusBadge.className)}>
-          {statusBadge.label}
+          {t(statusBadge.labelKey)}
         </Badge>
       </div>
 
       {/* Name */}
-      <FieldRow label="Name" error={nameError}>
+      <FieldRow label={t('products.columns.name')} error={nameError}>
         <CellInput
           value={row.name}
           error={nameError}
@@ -516,7 +520,7 @@ function VariantRowCard({
       </FieldRow>
 
       {/* SKU */}
-      <FieldRow label="SKU" error={skuError}>
+      <FieldRow label={t('products.columns.sku')} error={skuError}>
         <CellInput
           value={row.sku}
           error={skuError}
@@ -528,7 +532,7 @@ function VariantRowCard({
 
       {/* Price + Stock side by side */}
       <div className="grid grid-cols-2 gap-3">
-        <FieldRow label="Price" error={priceError}>
+        <FieldRow label={t('products.columns.price')} error={priceError}>
           <CellInput
             type="number"
             value={String(row.price)}
@@ -539,10 +543,10 @@ function VariantRowCard({
             fullWidth
           />
         </FieldRow>
-        <FieldRow label="Stock" error={stockError}>
+        <FieldRow label={t('products.columns.stock')} error={stockError}>
           {row.isInfiniteStock ? (
             <div className="h-8 px-3 text-xs text-muted-foreground flex items-center bg-muted/40 rounded-md border border-input">
-              Unlimited (∞)
+              {t('products.variantTable.unlimited')}
             </div>
           ) : (
             <CellInput
@@ -558,7 +562,7 @@ function VariantRowCard({
       </div>
 
       {/* Images */}
-      <FieldRow label="Images">
+      <FieldRow label={t('products.columns.images')}>
         <VariantImageStack
           productId={productId}
           variantId={row.serverId}
@@ -574,7 +578,11 @@ function VariantRowCard({
         onClick={onToggleExpand}
         className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline px-1 py-1 -mx-1 -mb-1"
       >
-        <span>{isExpanded ? 'Hide details' : 'More details'}</span>
+        <span>
+          {t(isExpanded
+            ? 'products.variantTable.hideDetails'
+            : 'products.variantTable.moreDetails')}
+        </span>
         <ChevronDown
           className={cn(
             'h-3.5 w-3.5 text-muted-foreground transition-transform duration-200',
@@ -603,13 +611,14 @@ function FieldRow({
   error?: string;
   children: React.ReactNode;
 }) {
+  const m = useMessage();
   return (
     <div className="space-y-1">
       <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">
         {label}
       </Label>
       {children}
-      {error && <p className="text-[10px] text-destructive">{error}</p>}
+      {error && <p className="text-[10px] text-destructive">{m(error)}</p>}
     </div>
   );
 }
@@ -623,10 +632,11 @@ function SecondaryFields({
   row: VariantRow;
   onChange: (field: keyof VariantRowPatch, value: string | number | boolean | null) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 md:max-w-3xl">
       <div className="space-y-1">
-        <Label className="text-xs">Weight (g)</Label>
+        <Label className="text-xs">{t('products.fields.weightG')}</Label>
         <Input
           type="number"
           min={0}
@@ -639,7 +649,7 @@ function SecondaryFields({
         />
       </div>
       <div className="space-y-1">
-        <Label className="text-xs">Length (cm)</Label>
+        <Label className="text-xs">{t('products.fields.lengthCm')}</Label>
         <Input
           type="number"
           min={0}
@@ -652,7 +662,7 @@ function SecondaryFields({
         />
       </div>
       <div className="space-y-1">
-        <Label className="text-xs">Width (cm)</Label>
+        <Label className="text-xs">{t('products.fields.widthCm')}</Label>
         <Input
           type="number"
           min={0}
@@ -665,7 +675,7 @@ function SecondaryFields({
         />
       </div>
       <div className="space-y-1">
-        <Label className="text-xs">Height (cm)</Label>
+        <Label className="text-xs">{t('products.fields.heightCm')}</Label>
         <Input
           type="number"
           min={0}
@@ -678,7 +688,7 @@ function SecondaryFields({
         />
       </div>
       <div className="space-y-1 col-span-2 md:col-span-1">
-        <Label className="text-xs">Compare at Price</Label>
+        <Label className="text-xs">{t('products.variantTable.secondary.compareAtPrice')}</Label>
         <Input
           type="number"
           min={0}
@@ -699,13 +709,13 @@ function SecondaryFields({
           checked={row.isInfiniteStock}
           onCheckedChange={(checked) => onChange('isInfiniteStock', checked)}
         />
-        <Label className="text-xs">Infinite Stock</Label>
+        <Label className="text-xs">{t('products.variantTable.secondary.infiniteStock')}</Label>
       </div>
 
       {row.serverId && (
         <>
           <div className="space-y-1 col-span-2 md:col-span-1">
-            <Label className="text-xs">Low Stock Alert</Label>
+            <Label className="text-xs">{t('products.variantTable.secondary.lowStockAlert')}</Label>
             <Input
               type="number"
               min={1}
@@ -717,7 +727,7 @@ function SecondaryFields({
                 )
               }
               className="h-8 text-sm"
-              placeholder="None"
+              placeholder={t('products.variantTable.secondary.nonePlaceholder')}
             />
           </div>
           <div className="flex items-center gap-2 col-span-2 md:col-span-1">
@@ -725,7 +735,7 @@ function SecondaryFields({
               checked={row.allowOversell ?? false}
               onCheckedChange={(checked) => onChange('allowOversell', checked)}
             />
-            <Label className="text-xs">Allow Oversell</Label>
+            <Label className="text-xs">{t('products.variantTable.secondary.allowOversell')}</Label>
           </div>
         </>
       )}
@@ -737,23 +747,23 @@ function SecondaryFields({
 
 const STATUS_BADGE: Record<
   VariantRow['status'],
-  { label: string; className: string }
+  { labelKey: TranslationKey; className: string }
 > = {
   persisted: {
-    label: 'Saved',
+    labelKey: 'products.variantTable.rowStatus.persisted',
     className:
       'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
   },
   new: {
-    label: 'New',
+    labelKey: 'products.variantTable.rowStatus.new',
     className: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
   },
   modified: {
-    label: 'Modified',
+    labelKey: 'products.variantTable.rowStatus.modified',
     className: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
   },
   removed: {
-    label: 'Removed',
+    labelKey: 'products.variantTable.rowStatus.removed',
     className: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
   },
 };
@@ -781,6 +791,7 @@ function CellInput({
   step,
   fullWidth,
 }: CellInputProps) {
+  const m = useMessage();
   const [localValue, setLocalValue] = useState(value);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -823,7 +834,7 @@ function CellInput({
       />
       {error && (
         <p className="absolute -bottom-4 left-0 text-[10px] text-destructive whitespace-nowrap">
-          {error}
+          {m(error)}
         </p>
       )}
     </div>

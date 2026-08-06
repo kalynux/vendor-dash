@@ -9,7 +9,14 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { cn } from '@/lib/utils';
 import { formatAgencyAddressDetail, formatAgencyLocality } from '@/lib/agencyAddress';
 import { fileRefUrl } from '@/services/files.service';
+import { useTranslation, useFormatters, type TranslationKey } from '@/i18n';
 import type { VendorAgencyListItemDto } from '@/types/product.types';
+
+const RETURNS_PAYER_KEYS: Record<string, TranslationKey> = {
+    vendor: 'agency.returnsPayer.vendor',
+    agency: 'agency.returnsPayer.agency',
+    customer: 'agency.returnsPayer.customer',
+};
 
 function PolicyRow({ label, value }: { label: string; value: ReactNode }) {
     return (
@@ -29,17 +36,13 @@ export interface AgencyDetailSheetProps {
 }
 
 export function AgencyDetailSheet({ agency, open, onOpenChange, footerSlot }: AgencyDetailSheetProps) {
+    const { t } = useTranslation();
+    const fmt = useFormatters();
     if (!agency) return null;
 
     const hq = agency.headquartersAddress;
     const p = agency.policies;
     const logoUrl = fileRefUrl(agency.logo);
-
-    const returnsPayer: Record<string, string> = {
-        vendor: 'Vendor bears cost',
-        agency: 'Agency bears cost',
-        customer: 'Customer bears cost',
-    };
 
     return (
         <Sheet open={open} onOpenChange={onOpenChange}>
@@ -69,12 +72,12 @@ export function AgencyDetailSheet({ agency, open, onOpenChange, footerSlot }: Ag
                                 {agency.kycVerified ? (
                                     <Badge variant="secondary" className="gap-1 text-xs font-medium text-emerald-700 bg-emerald-50 border-emerald-200 dark:text-emerald-400 dark:bg-emerald-950 dark:border-emerald-800">
                                         <ShieldCheck className="w-3 h-3" />
-                                        KYC Verified
+                                        {t('agency.detail.kycVerified')}
                                     </Badge>
                                 ) : (
                                     <Badge variant="secondary" className="gap-1 text-xs font-medium text-amber-700 bg-amber-50 border-amber-200 dark:text-amber-400 dark:bg-amber-950 dark:border-amber-800">
                                         <Shield className="w-3 h-3" />
-                                        Unverified
+                                        {t('agency.detail.unverified')}
                                     </Badge>
                                 )}
                             </div>
@@ -89,7 +92,7 @@ export function AgencyDetailSheet({ agency, open, onOpenChange, footerSlot }: Ag
                         {hq && (
                             <section>
                                 <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-                                    Headquarters
+                                    {t('agency.detail.headquarters')}
                                 </h3>
                                 <div className="rounded-lg bg-muted/50 p-3 space-y-1">
                                     <p className="text-sm font-medium">{formatAgencyLocality(hq)}</p>
@@ -103,7 +106,7 @@ export function AgencyDetailSheet({ agency, open, onOpenChange, footerSlot }: Ag
                         {agency.coverageAreas.length > 0 && (
                             <section>
                                 <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-                                    Coverage Areas
+                                    {t('agency.detail.coverageAreas')}
                                 </h3>
                                 <div className="flex flex-wrap gap-1.5">
                                     {agency.coverageAreas.map((area) => (
@@ -119,24 +122,28 @@ export function AgencyDetailSheet({ agency, open, onOpenChange, footerSlot }: Ag
                             <>
                                 <section>
                                     <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">
-                                        Pricing
+                                        {t('agency.detail.pricing')}
                                     </h3>
                                     <div className="rounded-lg border divide-y">
                                         <PolicyRow
-                                            label="Storage-based"
+                                            label={t('agency.detail.storageBased')}
                                             value={
                                                 <span className={cn('flex items-center gap-1', p.pricing.storage_based_enabled ? 'text-emerald-600' : 'text-muted-foreground')}>
                                                     <Warehouse className="w-3 h-3" />
-                                                    {p.pricing.storage_based_enabled ? 'Available' : 'Not available'}
+                                                    {p.pricing.storage_based_enabled
+                                                        ? t('agency.detail.available')
+                                                        : t('agency.detail.notAvailable')}
                                                 </span>
                                             }
                                         />
                                         <PolicyRow
-                                            label="Pickup-based"
+                                            label={t('agency.detail.pickupBased')}
                                             value={
                                                 <span className={cn('flex items-center gap-1', p.pricing.pickup_based_enabled ? 'text-emerald-600' : 'text-muted-foreground')}>
                                                     <Truck className="w-3 h-3" />
-                                                    {p.pricing.pickup_based_enabled ? 'Available' : 'Not available'}
+                                                    {p.pricing.pickup_based_enabled
+                                                        ? t('agency.detail.available')
+                                                        : t('agency.detail.notAvailable')}
                                                 </span>
                                             }
                                         />
@@ -150,24 +157,28 @@ export function AgencyDetailSheet({ agency, open, onOpenChange, footerSlot }: Ag
 
                                 <section>
                                     <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">
-                                        Returns
+                                        {t('agency.detail.returns')}
                                     </h3>
                                     <div className="rounded-lg border divide-y">
                                         <PolicyRow
-                                            label="Cost paid by"
+                                            label={t('agency.detail.costPaidBy')}
                                             value={
                                                 <span className="flex items-center gap-1">
                                                     <RotateCcw className="w-3 h-3" />
-                                                    {returnsPayer[p.returns.payer] ?? p.returns.payer}
+                                                    {RETURNS_PAYER_KEYS[p.returns.payer]
+                                                        ? t(RETURNS_PAYER_KEYS[p.returns.payer])
+                                                        : p.returns.payer}
                                                 </span>
                                             }
                                         />
                                         <PolicyRow
-                                            label="Return window"
+                                            label={t('agency.detail.returnWindow')}
                                             value={
                                                 p.returns.return_window_days === 0
-                                                    ? 'No returns accepted'
-                                                    : `${p.returns.return_window_days} days after delivery`
+                                                    ? t('agency.detail.noReturns')
+                                                    : t('agency.detail.returnWindowDays', {
+                                                          count: p.returns.return_window_days,
+                                                      })
                                             }
                                         />
                                         {p.returns.notes && (
@@ -180,21 +191,23 @@ export function AgencyDetailSheet({ agency, open, onOpenChange, footerSlot }: Ag
 
                                 <section>
                                     <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">
-                                        Damage Claims
+                                        {t('agency.detail.damageClaims')}
                                     </h3>
                                     <div className="rounded-lg border divide-y">
                                         <PolicyRow
-                                            label="Claim deadline"
+                                            label={t('agency.detail.claimDeadline')}
                                             value={
                                                 <span className="flex items-center gap-1">
                                                     <AlertCircle className="w-3 h-3" />
-                                                    {p.damage.claim_deadline_days} days after delivery
+                                                    {t('agency.detail.claimDeadlineDays', {
+                                                        count: p.damage.claim_deadline_days,
+                                                    })}
                                                 </span>
                                             }
                                         />
                                         <PolicyRow
-                                            label="Max refund per item"
-                                            value={`${p.damage.max_refund_per_item.toLocaleString()} XAF`}
+                                            label={t('agency.detail.maxRefundPerItem')}
+                                            value={fmt.currency(p.damage.max_refund_per_item)}
                                         />
                                         {p.damage.notes && (
                                             <div className="px-3 py-2">

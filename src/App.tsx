@@ -38,6 +38,9 @@ import { OnboardingGuard } from '@/onboarding/OnboardingGuard';
 import { OnboardingRouter } from '@/onboarding/OnboardingRouter';
 import { OnboardingErrorBoundary } from '@/onboarding/OnboardingErrorBoundary';
 
+// i18n — binds the dashboard language to the vendor's Profile setting
+import { SessionLocaleSync, useTranslation } from '@/i18n';
+
 // StoreStore for the vendor's storefront profile
 import { useStoreStore } from '@/store';
 
@@ -208,6 +211,7 @@ function DashboardShell() {
 // ─── Root App ─────────────────────────────────────────────────────────────────
 
 function AppContent() {
+  const { t } = useTranslation();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const isTablet = useIsTablet();
   // In the tablet range the sidebar is pinned to its icon rail regardless of
@@ -232,7 +236,7 @@ function AppContent() {
   // OnboardingProvider which Sidebar does not access directly.
   const legacyUser = {
     id: 'vendor',
-    name: 'Vendor',
+    name: t('nav.header.vendor'),
     email: '',
     role: 'vendor',
   };
@@ -254,6 +258,8 @@ function AppContent() {
           <>
             <OnboardingErrorBoundary>
               <OnboardingProvider>
+                {/* Applies the vendor's saved language once the session loads. */}
+                <SessionLocaleSync />
                 <Routes>
                   {/* Login — placeholder, auth happens on example.com */}
                   <Route
@@ -268,15 +274,15 @@ function AppContent() {
                               <path d="M16 10a4 4 0 0 1-8 0" />
                             </svg>
                           </div>
-                          <h1 className="text-2xl font-bold">Jovi Mall Vendor</h1>
+                          <h1 className="text-2xl font-bold">{t('nav.login.title')}</h1>
                           <p className="text-muted-foreground text-sm">
-                            Please log in via the main site to access your vendor dashboard.
+                            {t('nav.login.description')}
                           </p>
                           <a
                             href="http://localhost:3000/login"
                             className="inline-flex items-center justify-center gap-2 h-11 px-6 rounded-lg bg-primary text-primary-foreground font-semibold text-sm hover:bg-primary/90 transition-colors w-full"
                           >
-                            Go to login
+                            {t('nav.login.goToLogin')}
                           </a>
                         </div>
                       </div>

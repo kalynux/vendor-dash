@@ -9,6 +9,7 @@ import { AgencyConnectionBrowser } from '@/components/delivery/AgencyConnectionB
 import { ConnectionsList } from '@/components/delivery/ConnectionsList';
 import { mapProfileError } from '@/components/vendor-settings/errors';
 import { MobilePageHeader } from '@/components/layout/MobilePageHeader';
+import { SubPageHeader } from '@/components/layout/SubPageHeader';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent } from '@/components/ui/tabs';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -16,13 +17,22 @@ import { fileRefUrl } from '@/services/files.service';
 import { formatAgencyLocality } from '@/lib/agencyAddress';
 import { cn } from '@/lib/utils';
 import { type DeliveryAgency } from '@/types/api';
+import { useTranslation, type TranslationKey } from '@/i18n';
 
 const VALID_TABS = ['connections', 'browse'] as const;
 const DEFAULT_TAB = 'connections';
 
-const TAB_LABELS: Record<(typeof VALID_TABS)[number], string> = {
-    connections: 'Connection',
-    browse: 'Browse',
+type AgencyTab = (typeof VALID_TABS)[number];
+
+/** Crumb label per tab — the sidebar's own labels, so the two always agree. */
+const TAB_LABEL_KEYS: Record<AgencyTab, TranslationKey> = {
+    connections: 'nav.items.connection',
+    browse: 'nav.items.browse',
+};
+
+const TAB_SUBTITLE_KEYS: Record<AgencyTab, TranslationKey> = {
+    connections: 'agency.tabSubtitles.connections',
+    browse: 'agency.tabSubtitles.browse',
 };
 
 /**
@@ -32,6 +42,7 @@ const TAB_LABELS: Record<(typeof VALID_TABS)[number], string> = {
  * tab list — the URL segment selects the active pane.
  */
 export function Agency() {
+  const { t } = useTranslation();
     const { tab } = useParams();
     const navigate = useNavigate();
     const isMobile = useIsMobile();
@@ -70,12 +81,12 @@ export function Agency() {
             setSettingDefaultAgencyId(agencyId);
             setError(null);
             try {
-                const { message, reassignedOrderItems } = await setDeliveryAgency(agencyId);
+                // The backend's `message` is developer-facing English — resolve our own.
+                const { reassignedOrderItems } = await setDeliveryAgency(agencyId);
                 toast.success(
-                    message ??
-                        (reassignedOrderItems > 0
-                            ? `Default agency updated — ${reassignedOrderItems} order item(s) reassigned.`
-                            : 'Default agency updated'),
+                    reassignedOrderItems > 0
+                        ? `${t('agency.toast.defaultSet')} — ${t('agency.toast.itemsReassigned', { count: reassignedOrderItems })}`
+                        : t('agency.toast.defaultSet'),
                 );
                 setRefreshKey((k) => k + 1);
             } catch (err) {
@@ -87,11 +98,13 @@ export function Agency() {
         [setDeliveryAgency],
     );
 
-    if (!tab || !VALID_TABS.includes(tab as (typeof VALID_TABS)[number])) {
+    if (!tab || !VALID_TABS.includes(tab as AgencyTab)) {
         return <Navigate to={`/dashboard/agency/${DEFAULT_TAB}`} replace />;
     }
 
     if (!roleEntity) return null;
+
+    const activeTab = tab as AgencyTab;
 
     const errorBanner = error && (
         <div
@@ -108,11 +121,11 @@ export function Agency() {
     const currentDefault = (
         <div className={cn(isMobile ? 'border-b bg-muted/30 px-4 py-4' : 'rounded-lg border bg-muted/30 p-4')}>
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
-                Current default
+                {t('agency.page.currentDefault')}
             </p>
             {loadingCurrent ? (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Loader2 className="w-4 h-4 animate-spin" /> Loading…
+                    <Loader2 className="w-4 h-4 animate-spin" /> {t('common.states.loading')}
                 </div>
             ) : current ? (
                 <div className="flex items-center gap-3">
@@ -137,10 +150,7 @@ export function Agency() {
                     </div>
                 </div>
             ) : (
-                <p className="text-sm text-muted-foreground">
-                    No delivery agency set. Your first approved connection automatically becomes
-                    your default — service-only vendors can leave this empty.
-                </p>
+                <p className="text-sm text-muted-foreground">{t('agency.page.noDefault')}</p>
             )}
         </div>
     );
@@ -148,11 +158,8 @@ export function Agency() {
     const panes = (
         <Tabs value={tab} className="w-full">
             <TabsContent value="connections" className={cn('space-y-2 mt-0', isMobile && 'px-4 py-4')}>
-                <p className="text-sm font-medium">Your connections</p>
-                <p className="text-xs text-muted-foreground">
-                    Your first active connection becomes the default automatically — switch it
-                    at any time with "Set as default" below.
-                </p>
+                <p className="text-sm font-medium">{t('agency.page.connectionsTitle')}</p>
+                <p className="text-xs text-muted-foreground">{t('agency.page.connectionsHint')}</p>
                 <ConnectionsList
                     onConnectionChange={handleConnectionChange}
                     defaultAgencyId={currentId}
@@ -162,7 +169,7 @@ export function Agency() {
             </TabsContent>
 
             <TabsContent value="browse" className={cn('space-y-2 mt-0', isMobile && 'px-4 py-4')}>
-                <p className="text-sm font-medium">Search agencies &amp; request a connection</p>
+                <p className="text-sm font-medium">{t('agency.page.browseTitle')}</p>
                 <AgencyConnectionBrowser
                     onConnectionChange={handleConnectionChange}
                     listHeightClass="h-[48vh] min-h-[200px]"
@@ -177,22 +184,22 @@ export function Agency() {
         return (
             <div className="-mx-6 -mt-6">
                 <MobilePageHeader
-                    title="Agency"
+                    title={t(TAB_LABEL_KEYS[activeTab])}
                     subheader={
                         <div className="flex gap-2">
-                            {VALID_TABS.map((t) => (
+                            {VALID_TABS.map((value) => (
                                 <button
-                                    key={t}
+                                    key={value}
                                     type="button"
-                                    onClick={() => navigate(`/dashboard/agency/${t}`)}
+                                    onClick={() => navigate(`/dashboard/agency/${value}`)}
                                     className={cn(
                                         'flex-1 rounded-full border px-4 py-1.5 text-sm font-medium transition-colors',
-                                        tab === t
+                                        activeTab === value
                                             ? 'border-foreground bg-foreground text-background'
                                             : 'border-border bg-background',
                                     )}
                                 >
-                                    {TAB_LABELS[t]}
+                                    {t(TAB_LABEL_KEYS[value])}
                                 </button>
                             ))}
                         </div>
@@ -210,14 +217,12 @@ export function Agency() {
 
     return (
         <div className="space-y-6 animate-fade-in">
-            {/* Header */}
-            <div>
-                <h1 className="text-2xl font-bold">Agency</h1>
-                <p className="text-muted-foreground">
-                    Manage delivery-agency connections and choose the default that fulfils your
-                    physical-product orders.
-                </p>
-            </div>
+            {/* Header — "Agency › <tab>", so the page names the surface you opened. */}
+            <SubPageHeader
+                parent={t('nav.items.agency')}
+                current={t(TAB_LABEL_KEYS[activeTab])}
+                description={t(TAB_SUBTITLE_KEYS[activeTab])}
+            />
 
             <Card>
                 <CardContent className="space-y-5 pt-6">

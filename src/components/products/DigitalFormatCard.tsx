@@ -12,6 +12,7 @@ import { MediaPicker } from '@/components/features/MediaPicker';
 import { updateVariantStatus } from '@/services/products.service';
 import { resolveFileUrl } from '@/services/files.service';
 import { ApiError } from '@/types/api';
+import { useMessage, useTranslation, type TranslationKey } from '@/i18n';
 import type { ApiFile } from '@/types/file.types';
 import type { DigitalFormatRow } from '@/types/product.types';
 
@@ -76,6 +77,8 @@ export function DigitalFormatCard({
   onRemove,
   onStatusSync,
 }: DigitalFormatCardProps) {
+  const { t } = useTranslation();
+  const m = useMessage();
   const nameRef = useRef<HTMLInputElement>(null);
   const skuRef = useRef<HTMLInputElement>(null);
   const priceRef = useRef<HTMLInputElement>(null);
@@ -189,13 +192,11 @@ export function DigitalFormatCard({
         committedRef.current = next;
         onStatusSync(format.tempId, variantId, next);
       } catch (err) {
-        const message =
-          err instanceof ApiError
-            ? err.code === 'CATALOG_VARIANT_NO_DIGITAL_ASSET'
-              ? 'Upload a file before activating this format.'
-              : err.message
-            : 'Could not update the format status.';
-        toast.error(message);
+        toast.error(
+          err instanceof ApiError && err.code === 'CATALOG_VARIANT_NO_DIGITAL_ASSET'
+            ? t('products.digital.activateNeedsFile')
+            : t('products.digital.statusUpdateFailed'),
+        );
         // Revert UI to the last server-confirmed state.
         setPendingStatus(committedRef.current);
       } finally {
@@ -223,15 +224,27 @@ export function DigitalFormatCard({
   const priceError = errors[`${format.tempId}.price`];
 
   // Status pill — reflects the locally-pending status while a debounce/API call is mid-flight.
-  let statusBadge: { label: string; className: string };
+  let statusBadge: { labelKey: TranslationKey; className: string };
   if (hasNewFile) {
-    statusBadge = { label: 'File ready', className: 'text-blue-600 border-blue-200 bg-blue-50' };
+    statusBadge = {
+      labelKey: 'products.digital.badge.fileReady',
+      className: 'text-blue-600 border-blue-200 bg-blue-50',
+    };
   } else if (!hasExistingAsset) {
-    statusBadge = { label: 'Needs file', className: 'text-amber-700 border-amber-200 bg-amber-50' };
+    statusBadge = {
+      labelKey: 'products.digital.badge.needsFile',
+      className: 'text-amber-700 border-amber-200 bg-amber-50',
+    };
   } else if (pendingStatus === 'active') {
-    statusBadge = { label: 'Live', className: 'text-green-700 border-green-200 bg-green-50' };
+    statusBadge = {
+      labelKey: 'products.digital.badge.live',
+      className: 'text-green-700 border-green-200 bg-green-50',
+    };
   } else {
-    statusBadge = { label: 'Paused', className: 'text-muted-foreground border-border bg-muted/40' };
+    statusBadge = {
+      labelKey: 'products.digital.badge.paused',
+      className: 'text-muted-foreground border-border bg-muted/40',
+    };
   }
 
   // The toggle is only meaningful once the variant exists on the server.
@@ -241,26 +254,30 @@ export function DigitalFormatCard({
   const canActivate = hasServerAsset;
   const toggleDisabled =
     isSaving || isStatusUpdating || (pendingStatus === 'archived' && !canActivate);
-  const toggleTitle = !hasServerAsset
-    ? 'Upload a file before activating this format'
-    : pendingStatus === 'active'
-      ? 'Pause this format'
-      : 'Activate this format';
+  const toggleTitle = t(
+    !hasServerAsset
+      ? 'products.digital.toggle.needsFile'
+      : pendingStatus === 'active'
+        ? 'products.digital.toggle.pause'
+        : 'products.digital.toggle.activate',
+  );
 
   return (
     <div className="rounded-xl border border-border bg-card p-4 space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
-          <span className="text-sm font-medium text-muted-foreground">Format {index + 1}</span>
+          <span className="text-sm font-medium text-muted-foreground">
+            {t('products.digital.formatIndex', { index: index + 1 })}
+          </span>
           <Badge variant="outline" className={cn('text-xs', statusBadge.className)}>
-            {statusBadge.label}
+            {t(statusBadge.labelKey)}
           </Badge>
         </div>
         <div className="flex items-center gap-3">
           {showStatusToggle && (
             <div className="flex items-center gap-2" title={toggleTitle}>
-              <Label className="text-xs text-muted-foreground">Active</Label>
+              <Label className="text-xs text-muted-foreground">{t('products.digital.active')}</Label>
               <Switch
                 checked={pendingStatus === 'active'}
                 onCheckedChange={handleStatusToggle}
@@ -276,7 +293,7 @@ export function DigitalFormatCard({
             onClick={() => onRemove(format.tempId)}
             disabled={!canRemove || isSaving}
             className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-            aria-label="Remove format"
+            aria-label={t('products.digital.removeFormat')}
           >
             <Trash2 className="w-4 h-4" />
           </Button>
@@ -287,22 +304,22 @@ export function DigitalFormatCard({
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="space-y-1 sm:col-span-2">
           <Label className="text-xs">
-            Format name <span className="text-destructive">*</span>
+            {t('products.digital.formatName')} <span className="text-destructive">*</span>
           </Label>
           <Input
             ref={nameRef}
             defaultValue={format.name}
-            placeholder="e.g. PDF Edition"
+            placeholder={t('products.digital.formatNamePlaceholder')}
             className={cn('h-9', nameError && 'border-destructive')}
             onBlur={() => onChange(format.tempId, { name: nameRef.current?.value ?? '' })}
           />
-          {nameError && <p className="text-xs text-destructive">{nameError}</p>}
+          {nameError && <p className="text-xs text-destructive">{m(nameError)}</p>}
         </div>
 
         <div className="space-y-1">
           <div className="flex items-center justify-between gap-2">
             <Label className="text-xs">
-              SKU <span className="text-destructive">*</span>
+              {t('products.fields.sku')} <span className="text-destructive">*</span>
             </Label>
             <Button
               type="button"
@@ -310,31 +327,31 @@ export function DigitalFormatCard({
               size="sm"
               onClick={handleGenerateSku}
               disabled={isSaving || !productTitle.trim()}
-              title={
+              title={t(
                 productTitle.trim()
-                  ? 'Generate a SKU from the product name and file'
-                  : 'Set the product name first'
-              }
+                  ? 'products.digital.generateSkuHint'
+                  : 'products.digital.generateSkuBlocked',
+              )}
               className="h-6 gap-1 px-1.5 text-xs text-muted-foreground hover:text-foreground"
             >
               <Wand2 className="w-3 h-3" />
-              Generate
+              {t('products.digital.generateSku')}
             </Button>
           </div>
           <Input
             ref={skuRef}
             defaultValue={format.sku}
-            placeholder="JS-COURSE-PDF"
+            placeholder={t('products.digital.skuPlaceholder')}
             className={cn('h-9 font-mono text-sm', skuError && 'border-destructive')}
             onBlur={() => onChange(format.tempId, { sku: skuRef.current?.value ?? '' })}
           />
-          {skuError && <p className="text-xs text-destructive">{skuError}</p>}
+          {skuError && <p className="text-xs text-destructive">{m(skuError)}</p>}
         </div>
 
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1">
             <Label className="text-xs">
-              Price <span className="text-destructive">*</span>
+              {t('products.fields.price')} <span className="text-destructive">*</span>
             </Label>
             <div className="relative">
               <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
@@ -350,10 +367,10 @@ export function DigitalFormatCard({
                 onBlur={() => onBlurNumber(priceRef, 'price')}
               />
             </div>
-            {priceError && <p className="text-xs text-destructive">{priceError}</p>}
+            {priceError && <p className="text-xs text-destructive">{m(priceError)}</p>}
           </div>
           <div className="space-y-1">
-            <Label className="text-xs">Compare at</Label>
+            <Label className="text-xs">{t('products.digital.compareAt')}</Label>
             <div className="relative">
               <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
               <Input
@@ -374,7 +391,7 @@ export function DigitalFormatCard({
 
       {/* File */}
       <div className="space-y-1.5">
-        <Label className="text-xs">Downloadable file</Label>
+        <Label className="text-xs">{t('products.digital.downloadableFile')}</Label>
         <DigitalAssetUpload
           currentAsset={currentAsset}
           onFileSelect={handleFileSelect}
@@ -383,20 +400,20 @@ export function DigitalFormatCard({
         />
         {!currentAsset && (
           <p className="text-xs text-muted-foreground">
-            Upload a file to make this format available for sale.
+            {t('products.digital.uploadToSell')}
           </p>
         )}
       </div>
 
       {/* Preview image (optional, max 1) */}
       <div className="space-y-1.5">
-        <Label className="text-xs">Preview image (optional)</Label>
+        <Label className="text-xs">{t('products.digital.previewImage')}</Label>
         <div className="flex items-center gap-3">
           {imageSrc ? (
             <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-border bg-muted">
               <img
                 src={imageSrc}
-                alt="Format preview"
+                alt={t('products.digital.previewImageAlt')}
                 crossOrigin="use-credentials"
                 className="h-full w-full object-cover"
               />
@@ -411,7 +428,7 @@ export function DigitalFormatCard({
                 'hover:border-primary/60 hover:text-foreground',
                 isSaving && 'opacity-50 cursor-not-allowed',
               )}
-              aria-label="Add preview image"
+              aria-label={t('products.digital.addPreviewImage')}
             >
               <ImagePlus className="h-5 w-5" />
             </button>
@@ -428,7 +445,7 @@ export function DigitalFormatCard({
                 className="gap-1.5"
               >
                 <RefreshCw className="h-3.5 w-3.5" />
-                Replace
+                {t('products.digital.replaceImage')}
               </Button>
               <Button
                 type="button"
@@ -439,12 +456,12 @@ export function DigitalFormatCard({
                 className="gap-1.5 text-destructive hover:bg-destructive/10 hover:text-destructive"
               >
                 <X className="h-3.5 w-3.5" />
-                Remove
+                {t('common.actions.remove')}
               </Button>
             </div>
           ) : (
             <p className="text-xs text-muted-foreground">
-              A thumbnail shown to buyers for this format.
+              {t('products.digital.previewImageHint')}
             </p>
           )}
         </div>
@@ -466,28 +483,28 @@ export function DigitalFormatCard({
           className="gap-1.5 -ml-2 h-8 text-muted-foreground"
         >
           {showLimits ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-          Download limits (optional)
+          {t('products.digital.downloadLimits')}
         </Button>
         {showLimits && (
           <div className="grid grid-cols-2 gap-3 mt-2 pl-1">
             <div className="space-y-1">
-              <Label className="text-xs">Max downloads</Label>
+              <Label className="text-xs">{t('products.digital.maxDownloads')}</Label>
               <Input
                 type="number"
                 min={1}
                 defaultValue={format.maxDownloads ?? ''}
-                placeholder="Unlimited"
+                placeholder={t('products.digital.maxDownloadsPlaceholder')}
                 className="h-9"
                 onBlur={(e) => onBlurLimit(e.target.value, 'maxDownloads')}
               />
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">Expires after (days)</Label>
+              <Label className="text-xs">{t('products.digital.expiresAfter')}</Label>
               <Input
                 type="number"
                 min={1}
                 defaultValue={format.expiresAfterDays ?? ''}
-                placeholder="Never"
+                placeholder={t('products.digital.expiresAfterPlaceholder')}
                 className="h-9"
                 onBlur={(e) => onBlurLimit(e.target.value, 'expiresAfterDays')}
               />

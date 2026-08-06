@@ -3,6 +3,7 @@ import type { LucideIcon } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { InfoHint } from '@/components/ui/info-hint';
+import { useTranslation } from '@/i18n';
 
 /**
  * Container for a settings surface.
@@ -57,6 +58,8 @@ export function SettingsSection({
   contentClassName,
   ref,
 }: SettingsSectionProps) {
+  const { t } = useTranslation();
+
   return (
     <section
       ref={ref}
@@ -77,7 +80,11 @@ export function SettingsSection({
             <span className="min-w-0">{title}</span>
             {info && (
               <InfoHint
-                label={typeof title === 'string' ? `About ${title}` : 'More information'}
+                label={
+                  typeof title === 'string'
+                    ? t('account.section.aboutTitle', { title })
+                    : t('account.section.moreInformation')
+                }
                 align="start"
               >
                 {info}
@@ -113,6 +120,8 @@ export function SettingsGroup({
   className?: string;
   contentClassName?: string;
 }) {
+  const { t } = useTranslation();
+
   return (
     <div className={className}>
       <div className="mb-3 flex items-center justify-between gap-3">
@@ -120,7 +129,11 @@ export function SettingsGroup({
           <span className="min-w-0">{title}</span>
           {info && (
             <InfoHint
-              label={typeof title === 'string' ? `About ${title}` : 'More information'}
+              label={
+                typeof title === 'string'
+                  ? t('account.section.aboutTitle', { title })
+                  : t('account.section.moreInformation')
+              }
               align="start"
             >
               {info}

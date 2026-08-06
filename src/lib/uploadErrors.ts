@@ -6,21 +6,8 @@
 // a file via `fileIndex`. See `api-doc/errors/README.md` §7. We surface the
 // machine `code` as a readable line, naming the offending file where possible.
 
-import { ApiError, type UploadViolationCode } from '@/types/api';
-
-export const UPLOAD_VIOLATION_MESSAGES: Record<UploadViolationCode, string> = {
-  FILE_TOO_LARGE: 'is too large',
-  MIME_NOT_ALLOWED: 'has an unsupported file type',
-  TOO_MANY_FILES: 'exceeds the maximum number of files',
-  QUOTA_EXCEEDED: 'would exceed your storage quota — free up space in your Media Library or upgrade your plan',
-  VIRUS_DETECTED: 'failed the security scan',
-  PERMISSION_DENIED: 'cannot be uploaded (permission denied)',
-  TOTAL_SIZE_EXCEEDED: 'pushes the upload over the total size limit',
-  DUPLICATE_FILE: 'has already been uploaded',
-  MIME_TYPE_MISMATCH: 'has contents that don’t match its extension',
-  POLYGLOT_DETECTED: 'looks like a disguised file and was rejected',
-  UNDETECTABLE_TYPE: 'has an unrecognised file type',
-};
+import { ApiError } from '@/types/api';
+import { apiErrorMessage, tStatic } from '@/i18n';
 
 function nameForViolation(
   violation: { fileIndex?: number; metadata?: { originalName?: string } },
@@ -38,22 +25,28 @@ function nameForViolation(
 }
 
 /**
- * Build a human-readable message from an upload error.
- * - For `UPLOAD_POLICY_VIOLATION`, maps each `violation` to a per-file line.
- * - Falls back to the error message for any other failure.
+ * Build a localized message from an upload error.
+ *
+ * `UPLOAD_POLICY_VIOLATION` carries one `violation` per rejected file, so this
+ * names each file and says why. The violation reasons live under
+ * `errors.upload.violations` in the catalogs; `files` supplies a name when the
+ * backend didn't echo `metadata.originalName` back.
  */
 export function getUploadErrorMessage(err: unknown, files?: File[]): string {
   if (err instanceof ApiError && err.violations && err.violations.length > 0) {
     const lines = err.violations.map((v) => {
-      const reason = UPLOAD_VIOLATION_MESSAGES[v.code as UploadViolationCode] ?? v.message;
+      const reasonKey = `errors.upload.violations.${v.code}`;
+      const reason = tStatic(reasonKey);
+      // `tStatic` echoes the key back when it is unmapped — fall back then.
+      const text = reason === reasonKey ? tStatic('errors.upload.violations.UNKNOWN') : reason;
       const name = nameForViolation(v, files);
-      return name ? `${name} ${reason}.` : `A file ${reason}.`;
+      return name
+        ? tStatic('errors.upload.namedFile', { name, reason: text })
+        : tStatic('errors.upload.someFile', { reason: text });
     });
     // De-dupe identical lines (common when several files share one reason).
     return Array.from(new Set(lines)).join(' ');
   }
 
-  if (err instanceof ApiError) return err.message;
-  if (err instanceof Error) return err.message;
-  return 'Upload failed. Please try again.';
+  return apiErrorMessage(err, { fallbackKey: 'media.errors.uploadFailed' });
 }

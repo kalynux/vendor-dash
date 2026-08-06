@@ -1,3 +1,4 @@
+import { useTranslation, type TranslationKey } from '@/i18n';
 import { cn } from '@/lib/utils';
 
 interface MobileListFooterProps {
@@ -5,8 +6,12 @@ interface MobileListFooterProps {
   shown: number;
   /** Total number of items available. */
   total: number;
-  /** Plural noun for the items, e.g. "orders", "products", "files". */
-  noun: string;
+  /**
+   * Plural unit key for the items, e.g. `common.units.orders`. Interpolated as a
+   * whole phrase ("247 orders") rather than a bare noun, so the count and the
+   * noun stay grammatically agreed in every language.
+   */
+  nounKey: TranslationKey;
   className?: string;
 }
 
@@ -17,9 +22,10 @@ interface MobileListFooterProps {
 export function MobileListFooter({
   shown,
   total,
-  noun,
+  nounKey,
   className,
 }: MobileListFooterProps) {
+  const { t } = useTranslation();
   if (total <= 0) return null;
   const upper = Math.min(shown, total);
   return (
@@ -29,7 +35,11 @@ export function MobileListFooter({
         className,
       )}
     >
-      Showing 1–{upper} of {total} {noun}
+      {t('common.pagination.showingRange', {
+        from: 1,
+        to: upper,
+        items: t(nounKey, { count: total }),
+      })}
     </div>
   );
 }

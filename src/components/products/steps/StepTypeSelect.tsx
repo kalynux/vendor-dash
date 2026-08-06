@@ -1,5 +1,6 @@
 import { Package, FileDigit } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useTranslation, type TranslationKey } from '@/i18n';
 import type { ApiProductType } from '@/types/product.types';
 
 interface StepTypeSelectProps {
@@ -10,39 +11,40 @@ interface StepTypeSelectProps {
 
 const PRODUCT_TYPES: {
   type: ApiProductType;
-  label: string;
-  description: string;
+  labelKey: TranslationKey;
+  descriptionKey: TranslationKey;
   icon: React.ElementType;
-  examples: string;
+  examplesKey: TranslationKey;
 }[] = [
   {
     type: 'physical',
-    label: 'Physical Product',
-    description: 'A tangible product that gets shipped to the customer.',
+    labelKey: 'products.typeSelect.physical',
+    descriptionKey: 'products.typeSelect.physicalDescription',
     icon: Package,
-    examples: 'Clothing, electronics, furniture, accessories',
+    examplesKey: 'products.typeSelect.physicalExamples',
   },
   {
     type: 'digital',
-    label: 'Digital Product',
-    description: 'A downloadable file or software license delivered electronically.',
+    labelKey: 'products.typeSelect.digital',
+    descriptionKey: 'products.typeSelect.digitalDescription',
     icon: FileDigit,
-    examples: 'Software, e-books, music, templates, courses',
+    examplesKey: 'products.typeSelect.digitalExamples',
   },
 ];
 
 export function StepTypeSelect({ selectedType, onSelect, disabled = false }: StepTypeSelectProps) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-4">
       <div>
-        <h2 className="text-lg font-semibold">Choose product type</h2>
+        <h2 className="text-lg font-semibold">{t('products.typeSelect.title')}</h2>
         <p className="text-sm text-muted-foreground mt-1">
-          The type determines which fields and steps are required. This cannot be changed after creation.
+          {t('products.typeSelect.description')}
         </p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {PRODUCT_TYPES.map(({ type, label, description, icon: Icon, examples }) => {
+        {PRODUCT_TYPES.map(({ type, labelKey, descriptionKey, icon: Icon, examplesKey }) => {
           const isSelected = selectedType === type;
           return (
             <button
@@ -67,9 +69,9 @@ export function StepTypeSelect({ selectedType, onSelect, disabled = false }: Ste
                 <Icon className="w-6 h-6" />
               </div>
               <div className="space-y-1">
-                <p className="font-semibold text-sm">{label}</p>
-                <p className="text-sm text-muted-foreground">{description}</p>
-                <p className="text-xs text-muted-foreground/70 mt-2">{examples}</p>
+                <p className="font-semibold text-sm">{t(labelKey)}</p>
+                <p className="text-sm text-muted-foreground">{t(descriptionKey)}</p>
+                <p className="text-xs text-muted-foreground/70 mt-2">{t(examplesKey)}</p>
               </div>
               <div
                 className={cn(

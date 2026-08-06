@@ -20,6 +20,7 @@ import type {
   VariantPhase2Payload,
 } from '@/components/products/variants';
 import { VARIANT_IMAGE_LIMIT } from '@/components/products/media.constants';
+import { useMessage, useTranslation } from '@/i18n';
 import type { WizardState, ApiProductOption, ApiFileDetail } from '@/types/product.types';
 
 // ─── Props ────────────────────────────────────────────────────────────────────
@@ -55,6 +56,8 @@ export function StepVariants({
   onVariantImagesChange,
   onBack,
 }: StepVariantsProps) {
+  const { t } = useTranslation();
+  const m = useMessage();
   const serverOptions: ApiProductOption[] = serverData.serverOptions ?? [];
   const serverVariants = serverData.serverVariants ?? [];
 
@@ -118,16 +121,16 @@ export function StepVariants({
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-semibold">Options &amp; Variants</h2>
+        <h2 className="text-lg font-semibold">{t('products.options.title')}</h2>
         <p className="text-sm text-muted-foreground mt-1">
-          Define product options (e.g. Size, Color) then configure SKU, price and stock per combination.
+          {t('products.options.description')}
         </p>
       </div>
 
       {stepError && (
         <Alert variant="destructive">
           <AlertCircle className="w-4 h-4" />
-          <AlertDescription>{stepError}</AlertDescription>
+          <AlertDescription>{m(stepError)}</AlertDescription>
         </Alert>
       )}
 
@@ -185,7 +188,7 @@ export function StepVariants({
       <div className="flex items-center justify-between pt-2">
         <Button type="button" variant="ghost" size="sm" onClick={onBack} className="gap-1.5">
           <ChevronLeft className="w-4 h-4" />
-          Back
+          {t('common.actions.back')}
         </Button>
         <Button
           type="button"
@@ -197,10 +200,10 @@ export function StepVariants({
           className="gap-1.5"
         >
           {isSaving
-            ? 'Saving…'
+            ? t('common.actions.saving')
             : mode === 'create' && selectors.visibleRows.length === 0
-              ? 'Skip for now'
-              : 'Continue'}
+              ? t('common.actions.skip')
+              : t('common.actions.continue')}
           {!isSaving && <ChevronRight className="w-4 h-4" />}
         </Button>
       </div>

@@ -11,7 +11,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { convertToAdvanced, getSimpleProductErrorMessage } from '@/services/products.service';
+import { convertToAdvanced } from '@/services/products.service';
+import { useApiError, useTranslation } from '@/i18n';
 import type { ApiProduct } from '@/types/product.types';
 
 interface ConvertToAdvancedDialogProps {
@@ -32,6 +33,8 @@ export function ConvertToAdvancedDialog({
   onOpenChange,
   onConverted,
 }: ConvertToAdvancedDialogProps) {
+  const { t } = useTranslation();
+  const apiError = useApiError();
   const [isConverting, setIsConverting] = useState(false);
 
   async function handleConfirm() {
@@ -42,10 +45,10 @@ export function ConvertToAdvancedDialog({
       // request from `convertEndpoint` — it is a display string carrying the verb
       // and the /api prefix BASE_URL already supplies.
       const product = await convertToAdvanced(productId);
-      toast.success('Switched to the advanced editor.');
+      toast.success(t('products.convert.success'));
       onConverted(product);
     } catch (err: unknown) {
-      toast.error(getSimpleProductErrorMessage(err));
+      apiError.toast(err, { context: 'simpleProduct', fallbackKey: 'products.simple.convertFailed' });
     } finally {
       setIsConverting(false);
     }
@@ -57,21 +60,17 @@ export function ConvertToAdvancedDialog({
         <AlertDialogHeader>
           <AlertDialogTitle className="flex items-center gap-2">
             <Wand2 className="w-4 h-4" />
-            Switch to the advanced editor?
+            {t('products.convert.title')}
           </AlertDialogTitle>
           <AlertDialogDescription asChild>
             <div className="space-y-2 text-sm">
               <p>
-                {productTitle ? `"${productTitle}" ` : 'This product '}will move to the full
-                editor, unlocking variants, options and per-variant images.
+                {productTitle
+                  ? t('products.convert.namedLead', { name: productTitle })
+                  : t('products.convert.genericLead')}
               </p>
-              <p>
-                Nothing else changes — your existing price, stock and images stay exactly as
-                they are.
-              </p>
-              <p className="font-medium text-foreground">
-                This is one-way. There is no way back to the quick editor.
-              </p>
+              <p>{t('products.convert.unchanged')}</p>
+              <p className="font-medium text-foreground">{t('products.convert.oneWay')}</p>
               {convertEndpoint && (
                 <p className="text-xs text-muted-foreground font-mono break-all">
                   {convertEndpoint}
@@ -81,7 +80,7 @@ export function ConvertToAdvancedDialog({
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={isConverting}>Cancel</AlertDialogCancel>
+          <AlertDialogCancel disabled={isConverting}>{t('common.actions.cancel')}</AlertDialogCancel>
           <AlertDialogAction
             onClick={(e) => {
               e.preventDefault();
@@ -90,7 +89,7 @@ export function ConvertToAdvancedDialog({
             disabled={isConverting || !productId}
           >
             {isConverting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-            Switch to the advanced editor
+            {t('products.convert.confirm')}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

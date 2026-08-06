@@ -41,7 +41,7 @@ import type { ServiceConfig } from '@/types/services.types';
 import { ApiError } from '@/types/api';
 import { validateActivation } from '@/components/products/schemas/product.schemas';
 import { fetchDefaultDeliveryAgency } from '@/services/agencies.service';
-import { AGENCY_CONNECTION_ERROR_LABELS } from '@/services/agency-connections.service';
+import { apiErrorMessage, type TranslationKey } from '@/i18n';
 
 // ─── Adapters ─────────────────────────────────────────────────────────────────
 
@@ -463,124 +463,134 @@ export async function retryVectorisation(productId: string): Promise<Vectorisati
 }
 
 // ─── Activation pre-flight ────────────────────────────────────────────────────
-// Map 422 error codes from the status endpoint to human-readable messages.
+// 422 error codes from the status endpoint → the catalog key that explains them.
+// Keys rather than sentences: this module has no React context, so the call site
+// resolves them (`t`, `useMessage`) and they follow a language switch.
 
-export const ACTIVATION_ERROR_MAP: Record<string, string> = {
-  CATALOG_PRODUCT_INVALID_STATE:
-    "This status change isn't allowed from the product's current status",
-  CATALOG_PRODUCT_NO_DESCRIPTION: 'A product description is required',
-  CATALOG_PRODUCT_NO_VARIANTS: 'At least one variant with a price is required',
-  CATALOG_PRODUCT_VARIANT_ZERO_PRICE: 'All active variants must have a price greater than 0',
-  CATALOG_PRODUCT_NO_DEFAULT_VARIANT: 'A default variant must be set',
-  CATALOG_VARIANT_NO_DIGITAL_ASSET: 'Upload a file for each format before publishing',
-  CATALOG_DIGITAL_VARIANT_LIMIT_EXCEEDED: 'A digital product can have at most 5 formats',
-  CATALOG_PRODUCT_NO_DELIVERY_AGENCY:
-    'Your default delivery agency must be active, and this product must have an active delivery agency assigned (its own override or your default)',
-  CATALOG_PRODUCT_NO_PICKUP_LOCATION: 'A pickup location is required for physical products',
-  CATALOG_PRODUCT_INVALID_PICKUP_LOCATION:
-    "This pickup location isn't valid for the assigned delivery agency, or its business address no longer exists",
-  CATALOG_PRODUCT_VECTORISATION_PENDING:
-    'This product is currently processing background operations. Please try again in a few seconds.',
+export const ACTIVATION_ERROR_KEYS: Record<string, TranslationKey> = {
+  CATALOG_PRODUCT_INVALID_STATE: 'errors.codes.CATALOG_PRODUCT_INVALID_STATE',
+  CATALOG_PRODUCT_NO_DESCRIPTION: 'products.activation.noDescription',
+  CATALOG_PRODUCT_NO_VARIANTS: 'errors.codes.CATALOG_PRODUCT_NO_VARIANTS',
+  CATALOG_PRODUCT_VARIANT_ZERO_PRICE: 'products.activation.zeroPrice',
+  CATALOG_PRODUCT_NO_DEFAULT_VARIANT: 'products.activation.noDefaultVariant',
+  CATALOG_VARIANT_NO_DIGITAL_ASSET: 'errors.codes.CATALOG_VARIANT_NO_DIGITAL_ASSET',
+  CATALOG_DIGITAL_VARIANT_LIMIT_EXCEEDED: 'errors.codes.CATALOG_DIGITAL_VARIANT_LIMIT_EXCEEDED',
+  CATALOG_PRODUCT_NO_DELIVERY_AGENCY: 'errors.codes.CATALOG_PRODUCT_NO_DELIVERY_AGENCY',
+  CATALOG_PRODUCT_NO_PICKUP_LOCATION: 'errors.codes.CATALOG_PRODUCT_NO_PICKUP_LOCATION',
+  CATALOG_PRODUCT_INVALID_PICKUP_LOCATION: 'errors.contexts.delivery.CATALOG_PRODUCT_INVALID_PICKUP_LOCATION',
+  CATALOG_PRODUCT_VECTORISATION_PENDING: 'errors.contexts.delivery.CATALOG_PRODUCT_VECTORISATION_PENDING',
   CATALOG_PRODUCT_VECTORISATION_NOT_ELIGIBLE:
-    'Product is not eligible for vectorisation. It must be active, vectorisation enabled, and have a title, description, and category.',
+    'errors.contexts.delivery.CATALOG_PRODUCT_VECTORISATION_NOT_ELIGIBLE',
 };
 
 // Combines the activation error map with agency-connection error labels for
 // use when saving delivery.agencyId / delivery.pickupLocation directly (not
 // just at activation time) — e.g. CONNECTION_NOT_ACTIVE on either write.
 export function getDeliveryErrorMessage(err: unknown): string {
-  if (err instanceof ApiError) {
-    return ACTIVATION_ERROR_MAP[err.code] ?? AGENCY_CONNECTION_ERROR_LABELS[err.code] ?? err.message;
-  }
-  return 'Something went wrong. Please try again.';
+  return apiErrorMessage(err, { context: 'delivery', fallbackKey: 'products.errors.saveFailed' });
 }
 
 // ─── Simple mode errors & guidance ────────────────────────────────────────────
+// Same key-not-sentence rule as ACTIVATION_ERROR_KEYS above: every entry points
+// at `errors.contexts.simpleProduct`, which is where the wording lives.
 
-export const SIMPLE_MODE_ERROR_MAP: Record<string, string> = {
-  VALIDATION_ERROR: 'Some fields need attention — check the highlighted inputs.',
-  CATALOG_IMAGE_LIMIT_EXCEEDED: 'A product can have at most 7 images.',
-  // The doc guarantees the whole transaction rolls back, so the message has to
-  // say nothing was saved — otherwise vendors go hunting for a half-made product.
-  CATALOG_PRODUCT_ACCESS_DENIED:
-    'One of the selected images belongs to another account. Nothing was saved — remove it and try again.',
-  BILLING_LIMIT_EXCEEDED:
-    "You've reached your plan's limit for active products. Upgrade your plan, or archive another product, to publish this one.",
-  CATALOG_PRODUCT_NOT_FOUND: 'This product no longer exists.',
-  CATALOG_VARIANT_SKU_EXISTS:
-    'That SKU is already taken. SKUs are unique across the whole platform — choose another, or leave it blank to generate one automatically.',
+export const SIMPLE_MODE_ERROR_KEYS: Record<string, TranslationKey> = {
+  VALIDATION_ERROR: 'errors.contexts.simpleProduct.VALIDATION_ERROR',
+  CATALOG_IMAGE_LIMIT_EXCEEDED: 'errors.contexts.simpleProduct.CATALOG_IMAGE_LIMIT_EXCEEDED',
+  CATALOG_PRODUCT_ACCESS_DENIED: 'errors.contexts.simpleProduct.CATALOG_PRODUCT_ACCESS_DENIED',
+  BILLING_LIMIT_EXCEEDED: 'errors.contexts.simpleProduct.BILLING_LIMIT_EXCEEDED',
+  CATALOG_PRODUCT_NOT_FOUND: 'errors.contexts.simpleProduct.CATALOG_PRODUCT_NOT_FOUND',
+  CATALOG_VARIANT_SKU_EXISTS: 'errors.contexts.simpleProduct.CATALOG_VARIANT_SKU_EXISTS',
   CATALOG_PRODUCT_SIMPLE_MODE_LOCKED:
-    'This product uses the quick editor, so that action is not available. Switch it to the advanced editor first.',
-  CATALOG_PRODUCT_NOT_SIMPLE_MODE:
-    'This product uses the advanced editor. Open it in the full product editor instead.',
+    'errors.contexts.simpleProduct.CATALOG_PRODUCT_SIMPLE_MODE_LOCKED',
+  CATALOG_PRODUCT_NOT_SIMPLE_MODE: 'errors.contexts.simpleProduct.CATALOG_PRODUCT_NOT_SIMPLE_MODE',
   CATALOG_PRODUCT_VECTORISATION_PENDING:
-    'This product is being indexed for AI search. Please try again in a few seconds.',
+    'errors.contexts.simpleProduct.CATALOG_PRODUCT_VECTORISATION_PENDING',
   CATALOG_PRODUCT_INVALID_PICKUP_LOCATION:
-    "That pickup location isn't valid for the delivery agency handling this product.",
+    'errors.contexts.simpleProduct.CATALOG_PRODUCT_INVALID_PICKUP_LOCATION',
   CATALOG_PRODUCT_NO_DEFAULT_VARIANT:
-    'This product lost its variant. Open it in the advanced editor to repair it.',
+    'errors.contexts.simpleProduct.CATALOG_PRODUCT_NO_DEFAULT_VARIANT',
 };
 
 // Chains through ACTIVATION_ERROR_MAP so blocker codes that also arrive as
 // thrown errors (e.g. from PATCH /products/:id/status) still get a sentence.
 export function getSimpleProductErrorMessage(err: unknown): string {
-  if (err instanceof ApiError) {
-    return SIMPLE_MODE_ERROR_MAP[err.code] ?? ACTIVATION_ERROR_MAP[err.code] ?? err.message;
-  }
-  return 'Something went wrong. Please try again.';
+  return apiErrorMessage(err, {
+    context: 'simpleProduct',
+    fallbackKey: 'products.errors.saveFailed',
+  });
 }
 
 export type PickupGuidanceAction =
   | { kind: 'none' }
   | { kind: 'address_picker' }
-  | { kind: 'link'; to: string; label: string }
+  | { kind: 'link'; to: string; labelKey: TranslationKey }
   | { kind: 'retry' };
 
 export interface PickupReasonGuidance {
-  title: string;
-  body: string;
+  titleKey: TranslationKey;
+  bodyKey: TranslationKey;
   action: PickupGuidanceAction;
 }
+
+/** Stands in for the happy paths, which render nothing. */
+const NO_GUIDANCE = {
+  titleKey: 'common.labels.emptyValue',
+  bodyKey: 'common.labels.emptyValue',
+  action: { kind: 'none' },
+} as const satisfies PickupReasonGuidance;
 
 // What the UI should do about `meta.activation.pickupReason`. The blockers list
 // says what is wrong; this says where to go and fix it.
 export const PICKUP_REASON_GUIDANCE: Record<PickupReason, PickupReasonGuidance> = {
-  derived_single_address: { title: '', body: '', action: { kind: 'none' } },
-  derived_agency_storage: { title: '', body: '', action: { kind: 'none' } },
-  explicit: { title: '', body: '', action: { kind: 'none' } },
+  derived_single_address: NO_GUIDANCE,
+  derived_agency_storage: NO_GUIDANCE,
+  explicit: NO_GUIDANCE,
 
   multiple_addresses: {
-    title: 'Which address should the courier collect from?',
-    body: 'You have several business addresses and none is set as the default, so we did not guess.',
+    titleKey: 'products.delivery.guidance.multipleAddressesTitle',
+    bodyKey: 'products.delivery.guidance.multipleAddressesBody',
     action: { kind: 'address_picker' },
   },
   no_agency: {
-    title: 'No delivery agency yet',
-    body: 'Connect an agency and set it as your default to publish physical products.',
-    action: { kind: 'link', to: '/dashboard/agency/connections', label: 'Set up delivery' },
-  },
-  agency_inactive: {
-    title: 'Your delivery agency is not active',
-    body: 'Reactivate the connection, or connect a different agency.',
-    action: { kind: 'link', to: '/dashboard/agency/connections', label: 'Review connections' },
-  },
-  no_business_address: {
-    title: 'Add a business address',
-    body: 'Your agency only collects from a vendor address, and you have none saved.',
-    action: { kind: 'link', to: '/dashboard/account/addresses', label: 'Add an address' },
-  },
-  agency_offers_neither: {
-    title: 'This agency supports neither pickup model',
-    body: 'It offers neither collection from your address nor storage of your stock. Choose a different agency.',
+    titleKey: 'products.delivery.guidance.noAgencyTitle',
+    bodyKey: 'products.delivery.guidance.noAgencyBody',
     action: {
       kind: 'link',
       to: '/dashboard/agency/connections',
-      label: 'Choose another agency',
+      labelKey: 'products.delivery.guidance.noAgencyAction',
+    },
+  },
+  agency_inactive: {
+    titleKey: 'products.delivery.guidance.agencyInactiveTitle',
+    bodyKey: 'products.delivery.guidance.agencyInactiveBody',
+    action: {
+      kind: 'link',
+      to: '/dashboard/agency/connections',
+      labelKey: 'products.delivery.guidance.agencyInactiveAction',
+    },
+  },
+  no_business_address: {
+    titleKey: 'products.delivery.guidance.noBusinessAddressTitle',
+    bodyKey: 'products.delivery.guidance.noBusinessAddressBody',
+    action: {
+      kind: 'link',
+      to: '/dashboard/account/addresses',
+      labelKey: 'products.delivery.guidance.noBusinessAddressAction',
+    },
+  },
+  agency_offers_neither: {
+    titleKey: 'products.delivery.guidance.agencyOffersNeitherTitle',
+    bodyKey: 'products.delivery.guidance.agencyOffersNeitherBody',
+    action: {
+      kind: 'link',
+      to: '/dashboard/agency/connections',
+      labelKey: 'products.delivery.guidance.agencyOffersNeitherAction',
     },
   },
   resolution_failed: {
-    title: 'We could not work out a pickup location',
-    body: 'This is usually temporary.',
+    titleKey: 'products.delivery.guidance.resolutionFailedTitle',
+    bodyKey: 'products.delivery.guidance.resolutionFailedBody',
     action: { kind: 'retry' },
   },
 };
@@ -605,10 +615,11 @@ export type StatusTransitionIntent =
 export interface StatusTransition {
   intent: StatusTransitionIntent;
   target: ApiProductStatus;
-  label: string;
+  labelKey: TranslationKey;
   destructive: boolean;
   needsPreflight: boolean;
-  confirmMessage?: string;
+  /** Overrides the intent's default confirmation copy. */
+  confirmKey?: TranslationKey;
 }
 
 export const STATUS_TRANSITIONS: Record<ApiProductStatus, StatusTransition[]> = {
@@ -616,44 +627,42 @@ export const STATUS_TRANSITIONS: Record<ApiProductStatus, StatusTransition[]> = 
     {
       intent: 'activate',
       target: 'active',
-      label: 'Publish Product',
+      labelKey: 'products.transitions.activate',
       destructive: false,
       needsPreflight: true,
     },
     {
       intent: 'archive',
       target: 'archived',
-      label: 'Archive Product',
+      labelKey: 'products.transitions.archive',
       destructive: true,
       needsPreflight: false,
-      confirmMessage: 'Archive this product? It will no longer appear in your store.',
+      confirmKey: 'products.transitions.confirm.archive',
     },
   ],
   active: [
     {
       intent: 'demote_to_draft',
       target: 'draft',
-      label: 'Demote to Draft',
+      labelKey: 'products.transitions.demote_to_draft',
       destructive: false,
       needsPreflight: false,
-      confirmMessage:
-        'Demote this product to draft? It will be removed from your storefront until you republish.',
+      confirmKey: 'products.transitions.confirm.demote_to_draft',
     },
     {
       intent: 'archive',
       target: 'archived',
-      label: 'Archive Product',
+      labelKey: 'products.transitions.archive',
       destructive: true,
       needsPreflight: false,
-      confirmMessage:
-        'Archive this live product? It will be removed from your storefront immediately.',
+      confirmKey: 'products.transitions.confirm.archiveActive',
     },
   ],
   archived: [
     {
       intent: 'restore',
       target: 'draft',
-      label: 'Restore to Draft',
+      labelKey: 'products.transitions.restore',
       destructive: false,
       needsPreflight: false,
     },
@@ -671,9 +680,9 @@ export function getAllowedStatusTransitions(status: ApiProductStatus): StatusTra
 }
 
 // Runs the client-side activation checklist from the status flow doc.
-// Returns the list of human-readable errors; empty array means the activation
+// Returns the blockers as translation keys; an empty array means the activation
 // request is safe to send.
-export async function runActivationPreflight(productId: string): Promise<string[]> {
+export async function runActivationPreflight(productId: string): Promise<TranslationKey[]> {
   const [product, variants] = await Promise.all([
     fetchProductById(productId),
     fetchVariants(productId),
@@ -690,11 +699,11 @@ export async function runActivationPreflight(productId: string): Promise<string[
     if (!product.delivery?.agencyId) {
       const defaultAgency = await fetchDefaultDeliveryAgency();
       if (!defaultAgency) {
-        errors.push(ACTIVATION_ERROR_MAP.CATALOG_PRODUCT_NO_DELIVERY_AGENCY);
+        errors.push(ACTIVATION_ERROR_KEYS.CATALOG_PRODUCT_NO_DELIVERY_AGENCY);
       }
     }
     if (!product.delivery?.pickupLocation) {
-      errors.push(ACTIVATION_ERROR_MAP.CATALOG_PRODUCT_NO_PICKUP_LOCATION);
+      errors.push(ACTIVATION_ERROR_KEYS.CATALOG_PRODUCT_NO_PICKUP_LOCATION);
     }
   }
 

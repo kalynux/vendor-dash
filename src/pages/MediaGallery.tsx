@@ -81,7 +81,7 @@ import {
   SearchFilterBar,
   type ActiveFilterChip,
 } from '@/components/filters';
-import { cn, formatFileSize, storagePercent, storageBarColor } from '@/lib/utils';
+import { cn, storagePercent, storageBarColor } from '@/lib/utils';
 import { ApiError } from '@/types/api';
 import { getUploadErrorMessage } from '@/lib/uploadErrors';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -90,6 +90,7 @@ import { useScrollRestoration } from '@/hooks/use-scroll-restoration';
 import { getListCache, setListCache } from '@/lib/listCache';
 import { MobilePageHeader } from '@/components/layout/MobilePageHeader';
 import { MobileListFooter } from '@/components/layout/MobileListFooter';
+import { useTranslation, useApiError, useFormatters, type TranslationKey } from '@/i18n';
 import {
   listFiles,
   getFilesUsage,
@@ -129,12 +130,11 @@ const kindTint: Record<FileKind, string> = {
   document: 'bg-orange-500/10 text-orange-600',
 };
 
-const KIND_FILTERS: { value: FileKind | 'all'; label: string; mime?: string }[] = [
-  { value: 'all', label: 'All' },
-  { value: 'image', label: 'Images', mime: 'image/' },
-  { value: 'video', label: 'Video', mime: 'video/' },
-  { value: 'audio', label: 'Audio', mime: 'audio/' },
-  { value: 'document', label: 'Documents', mime: 'application/' },
+const KIND_FILTERS: { value: FileKind; labelKey: TranslationKey; mime: string }[] = [
+  { value: 'image', labelKey: 'media.filters.kind.image', mime: 'image/' },
+  { value: 'video', labelKey: 'media.filters.kind.video', mime: 'video/' },
+  { value: 'audio', labelKey: 'media.filters.kind.audio', mime: 'audio/' },
+  { value: 'document', labelKey: 'media.filters.kind.document', mime: 'application/' },
 ];
 
 const PROVIDERS: StorageProvider[] = ['local', 's3', 'gcs', 'r2', 'firebase', 'cloudinary'];
@@ -142,13 +142,13 @@ const PROVIDERS: StorageProvider[] = ['local', 's3', 'gcs', 'r2', 'firebase', 'c
 type SortField = 'date' | 'name' | 'size';
 
 /** `field:direction` pairs, so sort is one chip group rather than two controls. */
-const SORT_OPTIONS: { value: string; label: string }[] = [
-  { value: 'date:desc', label: 'Newest first' },
-  { value: 'date:asc', label: 'Oldest first' },
-  { value: 'name:asc', label: 'Name A–Z' },
-  { value: 'name:desc', label: 'Name Z–A' },
-  { value: 'size:desc', label: 'Largest first' },
-  { value: 'size:asc', label: 'Smallest first' },
+const SORT_OPTIONS: { value: string; labelKey: TranslationKey }[] = [
+  { value: 'date:desc', labelKey: 'media.filters.sort.newest' },
+  { value: 'date:asc', labelKey: 'media.filters.sort.oldest' },
+  { value: 'name:asc', labelKey: 'media.filters.sort.nameAsc' },
+  { value: 'name:desc', labelKey: 'media.filters.sort.nameDesc' },
+  { value: 'size:desc', labelKey: 'media.filters.sort.largest' },
+  { value: 'size:asc', labelKey: 'media.filters.sort.smallest' },
 ];
 
 // Small viewport hook — drives the persistent-aside vs slide-over inspector.
@@ -187,43 +187,46 @@ function statusBadgeClass(status?: string): string {
 // so files backing a logo, banner, avatar or ticket read as "used" too — not
 // just catalog media. Falls back to a generic row for a future entity type.
 
-function describeReference(ref: FileReference): { Icon: typeof Package; typeLabel: string } {
+function describeReference(ref: FileReference): { Icon: typeof Package; typeLabelKey: TranslationKey } {
   // The visual slot (field) wins for branding-style attachments, since that is
   // what the vendor recognises ("Store logo") over the raw entity type.
   switch (ref.field) {
     case 'avatar':
-      return { Icon: UserCircle, typeLabel: 'Profile avatar' };
+      return { Icon: UserCircle, typeLabelKey: 'media.references.avatar' };
     case 'logo':
-      return { Icon: Store, typeLabel: 'Store logo' };
+      return { Icon: Store, typeLabelKey: 'media.references.logo' };
     case 'banner':
     case 'cover':
-      return { Icon: ImageIcon, typeLabel: ref.field === 'cover' ? 'Cover image' : 'Store banner' };
+      return {
+        Icon: ImageIcon,
+        typeLabelKey: ref.field === 'cover' ? 'media.references.cover' : 'media.references.banner',
+      };
     case 'attachment':
-      return { Icon: Paperclip, typeLabel: 'Ticket attachment' };
+      return { Icon: Paperclip, typeLabelKey: 'media.references.attachment' };
   }
   switch (ref.entityType) {
     case 'product':
-      return { Icon: Package, typeLabel: 'Product' };
+      return { Icon: Package, typeLabelKey: 'media.references.product' };
     case 'variant':
-      return { Icon: Tag, typeLabel: 'Variant' };
+      return { Icon: Tag, typeLabelKey: 'media.references.variant' };
     case 'digital_asset':
-      return { Icon: FileDown, typeLabel: 'Digital asset' };
+      return { Icon: FileDown, typeLabelKey: 'media.references.digitalAsset' };
     case 'ticket':
-      return { Icon: LifeBuoy, typeLabel: 'Support ticket' };
+      return { Icon: LifeBuoy, typeLabelKey: 'media.references.ticket' };
     case 'store':
-      return { Icon: Store, typeLabel: 'Storefront' };
+      return { Icon: Store, typeLabelKey: 'media.references.store' };
     case 'vendor':
-      return { Icon: UserCircle, typeLabel: 'Your profile' };
+      return { Icon: UserCircle, typeLabelKey: 'media.references.vendor' };
     case 'agency':
-      return { Icon: Building2, typeLabel: 'Agency' };
+      return { Icon: Building2, typeLabelKey: 'media.references.agency' };
     case 'customer':
-      return { Icon: User, typeLabel: 'Customer' };
+      return { Icon: User, typeLabelKey: 'media.references.customer' };
     case 'agent':
-      return { Icon: User, typeLabel: 'Agent' };
+      return { Icon: User, typeLabelKey: 'media.references.agent' };
     case 'admin':
-      return { Icon: ShieldCheck, typeLabel: 'Admin' };
+      return { Icon: ShieldCheck, typeLabelKey: 'media.references.admin' };
     default:
-      return { Icon: Link2, typeLabel: 'In use' };
+      return { Icon: Link2, typeLabelKey: 'media.references.generic' };
   }
 }
 
@@ -319,6 +322,7 @@ function FileArtwork({
 // Rich preview for the inspector: images and videos play inline, audio gets a
 // player, and documents/other hand off to the browser in a new tab (e.g. PDFs).
 function FilePreview({ file }: { file: ApiFile }) {
+  const { t } = useTranslation();
   const kind = kindFromMime(file.mimeType);
   const url = resolveFileUrl(file);
 
@@ -351,7 +355,7 @@ function FilePreview({ file }: { file: ApiFile }) {
       </div>
       <span className="inline-flex items-center gap-1.5 text-sm font-medium text-primary">
         <ExternalLink className="h-4 w-4" />
-        Open in new tab
+        {t('media.library.openInNewTab')}
       </span>
     </a>
   );
@@ -376,6 +380,9 @@ interface MediaDesktopCache {
 }
 
 export function MediaGallery() {
+  const { t } = useTranslation();
+  const fmt = useFormatters();
+  const apiError = useApiError();
   const navigate = useNavigate();
   const isDesktop = useIsDesktop();
   const isMobile = useIsMobile();
@@ -436,11 +443,11 @@ export function MediaGallery() {
         setDetailCache((prev) => ({ ...prev, ...map }));
       }
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Could not load your media library.');
+      apiError.toast(err, { fallbackKey: 'media.errors.loadFailed' });
     } finally {
       setLoading(false);
     }
-  }, [page, activeCategory, provider]);
+  }, [page, activeCategory, provider, apiError]);
 
   useScrollRestoration('media');
 
@@ -573,10 +580,10 @@ export function MediaGallery() {
 
       setUploading(true);
       setUploadPercent(0);
-      setUploadLabel(arr.length === 1 ? arr[0].name : `${arr.length} files`);
+      setUploadLabel(arr.length === 1 ? arr[0].name : t('media.library.fileCount', { count: arr.length }));
       try {
         await uploadMediaWithProgress(arr, setUploadPercent);
-        toast.success(`Uploaded ${arr.length} file${arr.length > 1 ? 's' : ''}.`);
+        toast.success(t('media.library.uploaded', { count: arr.length }));
         if (isMobile) infinite.reload();
         else if (page !== 1) setPage(1);
         else await loadPage();
@@ -588,7 +595,7 @@ export function MediaGallery() {
         setUploadLabel('');
       }
     },
-    [page, loadPage, isMobile, infinite],
+    [page, loadPage, isMobile, infinite, t],
   );
 
   const onInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -612,11 +619,11 @@ export function MediaGallery() {
           const detail = await getFile(id);
           setDetailCache((prev) => ({ ...prev, [id]: detail }));
         } catch (err) {
-          toast.error(err instanceof ApiError ? err.message : 'Could not load file details.');
+          apiError.toast(err, { fallbackKey: 'media.errors.loadDetailFailed' });
         }
       }
     },
-    [detailCache],
+    [detailCache, apiError],
   );
 
   const handleRename = useCallback(async (id: string, name: string) => {
@@ -631,20 +638,20 @@ export function MediaGallery() {
         prev[id] ? { ...prev, [id]: { ...prev[id], originalName: trimmed } } : prev,
       );
       if (isMobile) infinite.reload();
-      toast.success('File renamed.');
+      toast.success(t('media.toast.renamed'));
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Could not rename file.');
+      apiError.toast(err, { fallbackKey: 'media.errors.renameFailed' });
     }
-  }, [isMobile, infinite]);
+  }, [isMobile, infinite, t, apiError]);
 
   const handleDelete = useCallback(
     async (id: string) => {
       const detail = detailCache[id];
       if (detail && detail.usage.totalReferences > 0) {
-        toast.error('Detach this file from everything using it before deleting it.');
+        toast.error(t('media.errors.detachFirst'));
         return;
       }
-      if (!confirm('Delete this file? This cannot be undone.')) return;
+      if (!confirm(t('media.details.deleteConfirm'))) return;
       const removed = files.find((f) => f.id === id);
       try {
         await deleteFile(id);
@@ -671,16 +678,16 @@ export function MediaGallery() {
         });
         if (inspectId === id) setInspectId(null);
         if (isMobile) infinite.reload();
-        toast.success('File deleted.');
+        toast.success(t('media.toast.fileDeleted'));
       } catch (err) {
         if (err instanceof ApiError && err.status === 409) {
-          toast.error('This file is still in use. Detach it from everything using it first.');
+          toast.error(t('media.errors.stillReferenced'));
         } else {
-          toast.error(err instanceof ApiError ? err.message : 'Could not delete file.');
+          apiError.toast(err, { fallbackKey: 'media.errors.deleteFailed' });
         }
       }
     },
-    [files, detailCache, inspectId, isMobile, infinite],
+    [files, detailCache, inspectId, isMobile, infinite, t, apiError],
   );
 
   // ─── Render helpers ──────────────────────────────────────────────────────────
@@ -702,7 +709,7 @@ export function MediaGallery() {
       </Badge>
     ) : (
       <Badge variant="secondary" className="text-[11px]">
-        Unused
+        {t('media.library.unused')}
       </Badge>
     );
   };
@@ -727,21 +734,31 @@ export function MediaGallery() {
   if (kind !== 'all') {
     filterChips.push({
       key: 'kind',
-      label: `Type: ${KIND_FILTERS.find((k) => k.value === kind)?.label ?? kind}`,
+      label: t('media.filters.chipType', {
+        value: (() => {
+          const match = KIND_FILTERS.find((k) => k.value === kind);
+          return match ? t(match.labelKey) : kind;
+        })(),
+      }),
       onRemove: () => { setKind('all'); setPage(1); },
     });
   }
   if (provider !== 'all') {
     filterChips.push({
       key: 'provider',
-      label: `Provider: ${provider.toUpperCase()}`,
+      label: t('media.filters.chipProvider', { value: provider.toUpperCase() }),
       onRemove: () => { setProvider('all'); setPage(1); },
     });
   }
   if (sortValue !== 'date:desc') {
     filterChips.push({
       key: 'sort',
-      label: `Sort: ${SORT_OPTIONS.find((o) => o.value === sortValue)?.label ?? sortValue}`,
+      label: t('media.filters.chipSort', {
+        value: (() => {
+          const match = SORT_OPTIONS.find((o) => o.value === sortValue);
+          return match ? t(match.labelKey) : sortValue;
+        })(),
+      }),
       onRemove: () => { setSortField('date'); setSortAsc(false); },
     });
   }
@@ -749,10 +766,10 @@ export function MediaGallery() {
   const viewToggle = (
     <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as 'grid' | 'list')}>
       <TabsList className="h-11 rounded-xl">
-        <TabsTrigger value="grid" aria-label="Grid view">
+        <TabsTrigger value="grid" aria-label={t('media.library.gridView')}>
           <Grid3X3 className="h-4 w-4" />
         </TabsTrigger>
-        <TabsTrigger value="list" aria-label="List view">
+        <TabsTrigger value="list" aria-label={t('media.library.listView')}>
           <List className="h-4 w-4" />
         </TabsTrigger>
       </TabsList>
@@ -764,10 +781,10 @@ export function MediaGallery() {
       <SearchFilterBar
         value={search}
         onChange={setSearch}
-        placeholder="Search by name or type…"
+        placeholder={t('media.library.searchPlaceholder')}
         activeFilterCount={activeFilterCount}
         onOpenFilters={() => setFilterSheetOpen(true)}
-        filterLabel="Filter files"
+        filterLabel={t('media.filters.open')}
         trailing={withViewToggle ? viewToggle : undefined}
       />
       <ActiveFilterChips chips={filterChips} onClearAll={clearFilters} />
@@ -778,33 +795,29 @@ export function MediaGallery() {
     <FilterSheet
       open={filterSheetOpen}
       onOpenChange={setFilterSheetOpen}
-      title="Filter media"
+      title={t('media.filters.title')}
       activeCount={activeFilterCount}
       onClear={clearFilters}
-      applyLabel="Show files"
+      applyLabel={t('media.filters.apply')}
     >
-      <FilterSection title="File type">
+      <FilterSection title={t('media.filters.fileType')}>
         <FilterChips
-          options={KIND_FILTERS.filter((k) => k.value !== 'all').map((k) => ({
-            value: k.value as FileKind,
-            label: k.label,
-          }))}
+          options={KIND_FILTERS}
           value={kind === 'all' ? undefined : kind}
           onChange={(v) => { setKind(v ?? 'all'); setPage(1); }}
-          allLabel="All"
         />
       </FilterSection>
 
-      <FilterSection title="Storage provider">
+      <FilterSection title={t('media.filters.storageProvider')}>
         <FilterChips
           options={PROVIDERS.map((p) => ({ value: p, label: p.toUpperCase() }))}
           value={provider === 'all' ? undefined : provider}
           onChange={(v) => { setProvider(v ?? 'all'); setPage(1); }}
-          allLabel="All providers"
+          allLabel={t('media.filters.allProviders')}
         />
       </FilterSection>
 
-      <FilterSection title="Sort by">
+      <FilterSection title={t('media.filters.sortBy')}>
         <FilterChips
           options={SORT_OPTIONS}
           value={sortValue}
@@ -844,13 +857,13 @@ export function MediaGallery() {
         {/* Mobile sticky header */}
         {isMobile && (
           <MobilePageHeader
-            title="Media"
+            title={t('media.library.titleShort')}
             actions={
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={uploading}
-                aria-label="Upload"
+                aria-label={t('media.library.upload')}
                 className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-accent transition-colors disabled:opacity-50"
               >
                 {uploading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Upload className="h-5 w-5" />}
@@ -864,14 +877,12 @@ export function MediaGallery() {
         {!isMobile && (
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h1 className="text-2xl font-bold tracking-tight">Media Library</h1>
-              <p className="text-muted-foreground">
-                Manage every file you've uploaded and see exactly where each one is attached.
-              </p>
+              <h1 className="text-2xl font-bold tracking-tight">{t('media.title')}</h1>
+              <p className="text-muted-foreground">{t('media.library.description')}</p>
             </div>
             <Button onClick={() => fileInputRef.current?.click()} disabled={uploading} className="gap-2">
               {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-              Upload
+              {t('media.library.upload')}
             </Button>
           </div>
         )}
@@ -881,7 +892,7 @@ export function MediaGallery() {
           <Card className={cn(isMobile && 'mx-4')}>
             <CardContent className="space-y-2 p-4">
               <div className="flex items-center justify-between text-sm">
-                <span className="font-medium truncate">Uploading {uploadLabel}…</span>
+                <span className="font-medium truncate">{t('media.library.uploadingFile', { name: uploadLabel })}</span>
                 <span className="text-muted-foreground">{uploadPercent}%</span>
               </div>
               <Progress value={uploadPercent} className="h-2" />
@@ -891,41 +902,18 @@ export function MediaGallery() {
 
         {/* Overview (desktop only) */}
         {!isMobile && (
-        <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <StatCard icon={Layers} label="Total files" value={String(totalCount)} />
-            <StatCard
-              icon={HardDrive}
-              label="Storage used"
-              value={
-                storage
-                  ? storage.limitBytes !== null
-                    ? `${formatFileSize(storage.usedBytes)} / ${formatFileSize(storage.limitBytes)}`
-                    : formatFileSize(storage.usedBytes)
-                  : formatFileSize(pageStats.bytes)
-              }
-            />
-            <StatCard
-              icon={Link2}
-              label="Attached (page)"
-              value={pageStats.resolved ? String(pageStats.attached) : '—'}
-            />
-            <StatCard
-              icon={Inbox}
-              label="Unused (page)"
-              value={pageStats.resolved ? String(pageStats.unused) : '—'}
-            />
-          </div>
-          {storage && storage.limitBytes !== null && (
-            <StorageBar storage={storage} />
-          )}
-        </div>
+          <MediaOverview
+            storage={storage}
+            fallbackBytes={pageStats.bytes}
+            totalCount={totalCount}
+            stats={pageStats}
+          />
         )}
 
-        {/* Storage bar (mobile) */}
+        {/* Storage meter (mobile) */}
         {isMobile && storage && storage.limitBytes !== null && (
-          <div className="px-4">
-            <StorageBar storage={storage} />
+          <div className="px-4 pt-3">
+            <MobileStorageMeter storage={storage} />
           </div>
         )}
 
@@ -969,17 +957,16 @@ export function MediaGallery() {
                         </div>
                         <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
                           <span className="rounded-full bg-white/90 px-3 py-1.5 text-xs font-medium text-black">
-                            Inspect
+                            {t('media.library.inspect')}
                           </span>
                         </div>
                       </div>
                       <div className="p-3">
                         <p className="truncate text-sm font-medium">
-                          {file.originalName ?? 'Untitled'}
+                          {file.originalName ?? t('media.details.untitled')}
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          {formatFileSize(file.size)} ·{' '}
-                          {new Date(file.createdAt).toLocaleDateString()}
+                          {fmt.fileSize(file.size)} · {fmt.date(file.createdAt)}
                         </p>
                       </div>
                     </button>
@@ -1006,11 +993,12 @@ export function MediaGallery() {
                           </div>
                           <div className="min-w-0 flex-1">
                             <p className="truncate text-sm font-medium">
-                              {file.originalName ?? 'Untitled'}
+                              {file.originalName ?? t('media.details.untitled')}
                             </p>
                             <p className="text-xs text-muted-foreground">
-                              {kindFromMime(file.mimeType)} · {formatFileSize(file.size)} ·{' '}
-                              {new Date(file.createdAt).toLocaleDateString()}
+                              {t(KIND_FILTERS.find((k) => k.value === kindFromMime(file.mimeType))!.labelKey)}
+                              {' · '}
+                              {fmt.fileSize(file.size)} · {fmt.date(file.createdAt)}
                             </p>
                           </div>
                           <StatusChip fileId={file.id} />
@@ -1027,7 +1015,7 @@ export function MediaGallery() {
                             <DropdownMenuContent align="end">
                               <DropdownMenuItem onClick={(e) => { e.stopPropagation(); openInspector(file.id); }}>
                                 <Link2 className="mr-2 h-4 w-4" />
-                                Inspect
+                                {t('media.library.inspect')}
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem
@@ -1035,7 +1023,7 @@ export function MediaGallery() {
                                 onClick={(e) => { e.stopPropagation(); handleDelete(file.id); }}
                               >
                                 <Trash2 className="mr-2 h-4 w-4" />
-                                Delete
+                                {t('common.actions.delete')}
                               </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
@@ -1051,8 +1039,11 @@ export function MediaGallery() {
             {!isMobile && pagination && pagination.pages > 1 && (
               <div className="mt-4 flex items-center justify-between">
                 <p className="text-sm text-muted-foreground">
-                  Page {pagination.page} of {pagination.pages} ·{' '}
-                  {visibleFiles.length} on this page · {pagination.total} total
+                  {t('common.pagination.pageOf', { page: pagination.page, total: pagination.pages })}
+                  {' · '}
+                  {t('media.library.onThisPage', { count: visibleFiles.length })}
+                  {' · '}
+                  {t('media.picker.totalFiles', { count: pagination.total })}
                 </p>
                 <div className="flex items-center gap-2">
                   <Button
@@ -1063,7 +1054,7 @@ export function MediaGallery() {
                     className="gap-1"
                   >
                     <ChevronLeft className="h-4 w-4" />
-                    Prev
+                    {t('common.pagination.previous')}
                   </Button>
                   <Button
                     variant="outline"
@@ -1072,7 +1063,7 @@ export function MediaGallery() {
                     onClick={() => setPage((p) => p + 1)}
                     className="gap-1"
                   >
-                    Next
+                    {t('common.pagination.next')}
                     <ChevronRight className="h-4 w-4" />
                   </Button>
                 </div>
@@ -1113,7 +1104,7 @@ export function MediaGallery() {
                         <ImageIcon className="h-8 w-8 text-muted-foreground" />
                       </div>
                       <p className="text-sm text-muted-foreground">
-                        Select a file to inspect its details and see where it's attached.
+                        {t('media.library.selectFileHint')}
                       </p>
                     </div>
                   )}
@@ -1131,7 +1122,7 @@ export function MediaGallery() {
               className="h-[90vh] p-0 rounded-t-2xl [&>button]:top-4 [&>button]:right-3"
             >
               <SheetHeader className="border-b p-4 pr-12">
-                <SheetTitle>File details</SheetTitle>
+                <SheetTitle>{t('media.details.title')}</SheetTitle>
               </SheetHeader>
               {inspectId && (
                 <SheetBody>
@@ -1159,69 +1150,170 @@ export function MediaGallery() {
           <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-primary/10 backdrop-blur-sm">
             <div className="rounded-2xl border-2 border-dashed border-primary bg-background px-10 py-8 text-center shadow-lg">
               <Upload className="mx-auto mb-3 h-10 w-10 text-primary" />
-              <p className="text-lg font-semibold">Drop to upload</p>
-              <p className="text-sm text-muted-foreground">Up to {MAX_FILES_PER_UPLOAD} files (500 MB each) or 3 videos (70 MB each)</p>
+              <p className="text-lg font-semibold">{t('media.library.dropToUpload')}</p>
+              <p className="text-sm text-muted-foreground">
+                {t('media.upload.limits', { maxFiles: MAX_FILES_PER_UPLOAD })}
+              </p>
             </div>
           </div>
         )}
 
         {isMobile && (
-          <MobileListFooter shown={visibleFiles.length} total={totalCount} noun="files" />
+          <MobileListFooter shown={visibleFiles.length} total={totalCount} nounKey="common.units.files" />
         )}
       </div>
     </TooltipProvider>
   );
 }
 
-// ─── Stat card ────────────────────────────────────────────────────────────────
+// ─── Overview strip ───────────────────────────────────────────────────────────
+// One card instead of four stat tiles plus a full-width meter: the counters lead
+// (that is what the vendor scans for) and the consumed volume still reads as a
+// bar — just a hairline one sitting under the number it belongs to.
 
-function StorageBar({ storage }: { storage: StorageUsage }) {
-  const pct = storagePercent(storage.usedBytes, storage.limitBytes);
+function usagePercentClass(pct: number): string {
+  if (pct >= 90) return 'text-destructive';
+  if (pct >= 80) return 'text-amber-600';
+  return 'text-muted-foreground';
+}
+
+function MediaOverview({
+  storage,
+  fallbackBytes,
+  totalCount,
+  stats,
+}: {
+  storage: StorageUsage | null;
+  /** Used when the backend omits account usage — sum of the loaded page. */
+  fallbackBytes: number;
+  totalCount: number;
+  stats: { attached: number; unused: number; resolved: number };
+}) {
+  const { t } = useTranslation();
+  const fmt = useFormatters();
+  const hasLimit = !!storage && storage.limitBytes !== null;
+  const pct = hasLimit ? storagePercent(storage.usedBytes, storage.limitBytes) : 0;
+  const dash = t('common.labels.emptyValue');
+
   return (
     <Card>
-      <CardContent className="space-y-2 p-4">
-        <div className="flex items-center justify-between text-sm">
-          <span className="flex items-center gap-1.5 text-muted-foreground">
-            <HardDrive className="h-4 w-4" /> Media storage
-          </span>
-          <span className="font-medium">
-            {formatFileSize(storage.usedBytes)} of {formatFileSize(storage.limitBytes ?? 0)} ({pct}%)
-          </span>
-        </div>
-        <Progress value={pct} indicatorClassName={storageBarColor(pct)} />
-        {pct >= 80 && (
-          <p className="text-xs text-muted-foreground">
-            {pct >= 100
-              ? 'Storage is full — delete unused media to upload more.'
-              : 'Storage is nearly full. Delete unused media or upgrade your plan.'}
+      <CardContent className="flex flex-col gap-4 p-4 md:flex-row md:items-center md:gap-6">
+        {/* Storage */}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center justify-between gap-3">
+            <span className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              <HardDrive className="h-3.5 w-3.5" />
+              {t('media.storageBar.label')}
+            </span>
+            {hasLimit && (
+              <span className={cn('text-xs font-semibold tabular-nums', usagePercentClass(pct))}>
+                {t('media.storageBar.percent', { percent: pct })}
+              </span>
+            )}
+          </div>
+          <p className="mt-1 flex items-baseline gap-1.5">
+            <span className="text-xl font-semibold leading-none tabular-nums">
+              {fmt.fileSize(storage ? storage.usedBytes : fallbackBytes)}
+            </span>
+            {hasLimit && (
+              <span className="truncate text-xs text-muted-foreground">
+                {t('media.storageBar.of', { limit: fmt.fileSize(storage.limitBytes ?? 0) })}
+              </span>
+            )}
           </p>
-        )}
+          {hasLimit && (
+            <Progress
+              value={pct}
+              className="mt-2 h-1.5"
+              indicatorClassName={storageBarColor(pct)}
+            />
+          )}
+          {hasLimit && pct >= 80 && (
+            <p className="mt-1.5 text-[11px] leading-tight text-muted-foreground">
+              {t(pct >= 100 ? 'media.storageBar.full' : 'media.storageBar.nearlyFull')}
+            </p>
+          )}
+        </div>
+
+        <div className="hidden h-10 w-px shrink-0 bg-border md:block" />
+
+        {/* Counters — attached/unused only cover the loaded page, hence the hint. */}
+        <div className="flex shrink-0 items-center divide-x">
+          <OverviewStat
+            icon={Layers}
+            label={t('media.library.stats.files')}
+            value={String(totalCount)}
+          />
+          <OverviewStat
+            icon={Link2}
+            label={t('media.library.stats.attached')}
+            value={stats.resolved ? String(stats.attached) : dash}
+            hint={t('media.library.stats.pageScopeHint')}
+          />
+          <OverviewStat
+            icon={Inbox}
+            label={t('media.library.stats.unused')}
+            value={stats.resolved ? String(stats.unused) : dash}
+            hint={t('media.library.stats.pageScopeHint')}
+          />
+        </div>
       </CardContent>
     </Card>
   );
 }
 
-function StatCard({
+function OverviewStat({
   icon: Icon,
   label,
   value,
+  hint,
 }: {
   icon: typeof Layers;
   label: string;
   value: string;
+  hint?: string;
 }) {
+  const body = (
+    <div className="px-3 first:pl-0 last:pr-0 sm:px-4">
+      <p className="text-lg font-semibold leading-none tabular-nums">{value}</p>
+      <p className="mt-1.5 flex items-center gap-1 whitespace-nowrap text-[11px] text-muted-foreground">
+        <Icon className="h-3 w-3" />
+        {label}
+      </p>
+    </div>
+  );
+  if (!hint) return body;
   return (
-    <Card>
-      <CardContent className="flex items-center gap-3 p-4">
-        <div className="rounded-lg bg-primary/10 p-2 text-primary">
-          <Icon className="h-5 w-5" />
+    <Tooltip>
+      <TooltipTrigger asChild>{body}</TooltipTrigger>
+      <TooltipContent side="bottom">{hint}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+// Mobile keeps the meter only — one hairline row above the grid, no card chrome.
+function MobileStorageMeter({ storage }: { storage: StorageUsage }) {
+  const { t } = useTranslation();
+  const fmt = useFormatters();
+  const pct = storagePercent(storage.usedBytes, storage.limitBytes);
+  return (
+    <div className="flex items-center gap-2.5 rounded-xl border bg-card px-3 py-2.5">
+      <HardDrive className="h-4 w-4 shrink-0 text-muted-foreground" />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-baseline justify-between gap-2 text-xs">
+          <span className="truncate font-semibold tabular-nums">
+            {fmt.fileSize(storage.usedBytes)}
+            <span className="ml-1 font-normal text-muted-foreground">
+              {t('media.storageBar.of', { limit: fmt.fileSize(storage.limitBytes ?? 0) })}
+            </span>
+          </span>
+          <span className={cn('shrink-0 font-semibold tabular-nums', usagePercentClass(pct))}>
+            {t('media.storageBar.percent', { percent: pct })}
+          </span>
         </div>
-        <div className="min-w-0">
-          <p className="truncate text-xs text-muted-foreground">{label}</p>
-          <p className="text-lg font-semibold">{value}</p>
-        </div>
-      </CardContent>
-    </Card>
+        <Progress value={pct} className="mt-1.5 h-1" indicatorClassName={storageBarColor(pct)} />
+      </div>
+    </div>
   );
 }
 
@@ -1246,6 +1338,8 @@ function InspectorBody({
   onClose: () => void;
   hideClose?: boolean;
 }) {
+  const { t } = useTranslation();
+  const fmt = useFormatters();
   const [editing, setEditing] = useState(false);
   const [nameDraft, setNameDraft] = useState(file?.originalName ?? '');
 
@@ -1318,7 +1412,7 @@ function InspectorBody({
           ) : (
             <div className="flex items-start justify-between gap-2">
               <h3 className="break-words text-base font-semibold leading-tight">
-                {display.originalName ?? 'Untitled'}
+                {display.originalName ?? t('media.details.untitled')}
               </h3>
               <Button
                 variant="ghost"
@@ -1337,21 +1431,18 @@ function InspectorBody({
 
         {/* Metadata */}
         <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
-          <Meta label="Type" value={<span className="capitalize">{kind}</span>} />
-          <Meta label="Size" value={formatFileSize(display.size)} />
-          <Meta label="MIME" value={<span className="break-all">{display.mimeType}</span>} />
-          <Meta label="Provider" value={<span className="uppercase">{display.provider}</span>} />
+          <Meta label={t('media.details.fileType')} value={<span className="capitalize">{kind}</span>} />
+          <Meta label={t('media.details.fileSize')} value={fmt.fileSize(display.size)} />
+          <Meta label={t('media.details.mime')} value={<span className="break-all">{display.mimeType}</span>} />
+          <Meta label={t('media.details.provider')} value={<span className="uppercase">{display.provider}</span>} />
+          <Meta label={t('media.details.uploaded')} value={fmt.date(display.createdAt)} />
           <Meta
-            label="Uploaded"
-            value={new Date(display.createdAt).toLocaleDateString()}
-          />
-          <Meta
-            label="References"
+            label={t('media.details.references')}
             value={detail ? String(detail.usage.totalReferences) : '…'}
           />
           {detail?.checksum && (
             <div className="col-span-2">
-              <dt className="text-xs text-muted-foreground">Checksum</dt>
+              <dt className="text-xs text-muted-foreground">{t('media.details.checksum')}</dt>
               <dd className="break-all font-mono text-xs">{detail.checksum}</dd>
             </div>
           )}
@@ -1359,7 +1450,7 @@ function InspectorBody({
 
         {/* Where used */}
         <div>
-          <h4 className="mb-2 text-sm font-semibold">Where it's used</h4>
+          <h4 className="mb-2 text-sm font-semibold">{t('media.details.whereUsed')}</h4>
           {loadingUsage ? (
             <div className="space-y-2">
               <Skeleton className="h-14 w-full" />
@@ -1367,20 +1458,20 @@ function InspectorBody({
             </div>
           ) : !attached ? (
             <div className="rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">
-              Not attached to anything. This file can be safely deleted.
+              {t('media.details.notAttached')}
             </div>
           ) : detail!.usage.references && detail!.usage.references.length > 0 ? (
             // Preferred: the full reference list (covers logo/banner/avatar/tickets).
             <div className="space-y-2">
               {detail!.usage.references.map((ref, i) => {
-                const { Icon, typeLabel } = describeReference(ref);
+                const { Icon, typeLabelKey } = describeReference(ref);
                 const productId = referenceProductId(ref, detail!);
                 return (
                   <UsageRow
                     key={`${ref.entityType}-${ref.entityId}-${ref.field}-${i}`}
                     file={display}
                     icon={Icon}
-                    typeLabel={typeLabel}
+                    typeLabelKey={typeLabelKey}
                     name={ref.label}
                     onOpen={productId ? () => onNavigate(productId) : undefined}
                   />
@@ -1395,7 +1486,7 @@ function InspectorBody({
                   key={`p-${p.id}`}
                   file={display}
                   icon={Package}
-                  typeLabel="Product"
+                  typeLabelKey="media.references.product"
                   name={p.title}
                   status={p.status}
                   onOpen={() => onNavigate(p.id)}
@@ -1406,7 +1497,7 @@ function InspectorBody({
                   key={`v-${v.id}`}
                   file={display}
                   icon={Tag}
-                  typeLabel="Variant"
+                  typeLabelKey="media.references.variant"
                   name={v.sku}
                   status={v.status}
                   onOpen={() => onNavigate(v.productId)}
@@ -1417,8 +1508,8 @@ function InspectorBody({
                   key={`d-${d.id}`}
                   file={display}
                   icon={FileDown}
-                  typeLabel="Digital asset"
-                  name={d.name ?? 'Downloadable file'}
+                  typeLabelKey="media.references.digitalAsset"
+                  name={d.name ?? t('media.references.downloadableFile')}
                   status={d.status}
                   onOpen={d.productId ? () => onNavigate(d.productId!) : undefined}
                 />
@@ -1435,12 +1526,12 @@ function InspectorBody({
                 <span className="block">
                   <Button variant="outline" disabled className="w-full gap-2">
                     <Trash2 className="h-4 w-4" />
-                    Delete
+                    {t('common.actions.delete')}
                   </Button>
                 </span>
               </TooltipTrigger>
               <TooltipContent side="top">
-                Detach this file from everything using it before deleting.
+                {t('media.details.deleteBlocked')}
               </TooltipContent>
             </Tooltip>
           ) : (
@@ -1451,7 +1542,7 @@ function InspectorBody({
               className="w-full gap-2 text-destructive hover:bg-destructive/10 hover:text-destructive"
             >
               <Trash2 className="h-4 w-4" />
-              Delete file
+              {t('media.details.deleteFile')}
             </Button>
           )}
         </div>
@@ -1472,18 +1563,19 @@ function Meta({ label, value }: { label: string; value: React.ReactNode }) {
 function UsageRow({
   file,
   icon: Icon,
-  typeLabel,
+  typeLabelKey,
   name,
   status,
   onOpen,
 }: {
   file: ApiFile;
   icon: typeof Package;
-  typeLabel: string;
+  typeLabelKey: TranslationKey;
   name: string;
   status?: string;
   onOpen?: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center gap-3 rounded-lg border p-2">
       <div className="h-10 w-10 shrink-0 overflow-hidden rounded-md border bg-muted">
@@ -1493,7 +1585,7 @@ function UsageRow({
         <div className="flex items-center gap-1.5">
           <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
           <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
-            {typeLabel}
+            {t(typeLabelKey)}
           </span>
         </div>
         <p className="truncate text-sm font-medium">{name}</p>
@@ -1558,25 +1650,26 @@ function EmptyState({
   hasFilters: boolean;
   onClear: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex flex-col items-center justify-center rounded-xl border border-dashed py-16 text-center">
       <div className="mb-4 rounded-full bg-muted p-4">
         <ImageIcon className="h-10 w-10 text-muted-foreground" />
       </div>
-      <p className="mb-1 font-medium">{hasFilters ? 'No files match your filters' : 'Your library is empty'}</p>
+      <p className="mb-1 font-medium">
+        {t(hasFilters ? 'media.library.emptyFiltered' : 'media.library.emptyTitle')}
+      </p>
       <p className="mb-4 max-w-sm text-sm text-muted-foreground">
-        {hasFilters
-          ? 'Try clearing the search or filters to see more files.'
-          : 'Upload images, videos, audio or documents to start building your library.'}
+        {t(hasFilters ? 'media.library.emptyFilteredHint' : 'media.library.emptyHint')}
       </p>
       {hasFilters ? (
         <Button variant="outline" onClick={onClear}>
-          Clear filters
+          {t('media.library.clearFilters')}
         </Button>
       ) : (
         <Button onClick={onUpload} className="gap-2">
           <Upload className="h-4 w-4" />
-          Upload files
+          {t('media.library.uploadFiles')}
         </Button>
       )}
     </div>

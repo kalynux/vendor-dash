@@ -63,7 +63,18 @@ export interface StripeInstance {
    * Create an Elements group. Pass `{ clientSecret }` to bind it to a
    * PaymentIntent (required for the Payment Element + `confirmPayment` flow).
    */
-  elements(options?: { clientSecret?: string; appearance?: Record<string, unknown> } & Record<string, unknown>): StripeElements;
+  elements(
+    options?: {
+      clientSecret?: string;
+      appearance?: Record<string, unknown>;
+      /**
+       * Language for Stripe's own field labels and validation messages. Always
+       * pass the dashboard locale — omitted, Stripe follows the *browser*, so a
+       * French vendor on an English machine gets an English card form.
+       */
+      locale?: string;
+    } & Record<string, unknown>,
+  ): StripeElements;
   createPaymentMethod(params: {
     type: 'card';
     card: StripeCardElement;

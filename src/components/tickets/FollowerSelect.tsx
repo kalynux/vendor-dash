@@ -4,7 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { ActorAvatar } from '@/components/tickets/ActorAvatar';
-import { ROLE_LABELS } from '@/components/tickets/ticket.constants';
+import { ROLE_LABEL_KEYS } from '@/components/tickets/ticket.constants';
+import { useTranslation } from '@/i18n';
 import type { TicketActor } from '@/types/tickets.types';
 
 interface FollowerSelectProps {
@@ -20,6 +21,7 @@ interface FollowerSelectProps {
  * offered as explicit viewers.
  */
 export function FollowerSelect({ followers, value, onChange, disabled }: FollowerSelectProps) {
+  const { t } = useTranslation();
   const options = useMemo(() => followers.filter((f) => f.role !== 'admin'), [followers]);
   const selected = useMemo(() => new Set(value), [value]);
 
@@ -31,8 +33,8 @@ export function FollowerSelect({ followers, value, onChange, disabled }: Followe
   }
 
   const label = value.length === 0
-    ? 'Everyone (admins only)'
-    : `${value.length} follower${value.length !== 1 ? 's' : ''}`;
+    ? t('tickets.followers.everyone')
+    : t('tickets.followers.count', { count: value.length });
 
   return (
     <Popover>
@@ -53,7 +55,7 @@ export function FollowerSelect({ followers, value, onChange, disabled }: Followe
       </PopoverTrigger>
       <PopoverContent align="start" className="w-64 p-1">
         <p className="px-2 py-1.5 text-xs text-muted-foreground">
-          Who can see this private item? Admins always can.
+          {t('tickets.detail.followerHint')}
         </p>
         <ul className="max-h-56 overflow-y-auto">
           {options.map((f) => {
@@ -68,7 +70,7 @@ export function FollowerSelect({ followers, value, onChange, disabled }: Followe
                   <ActorAvatar actor={f} className="h-6 w-6" />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate">{f.name}</span>
-                    <span className="block text-xs text-muted-foreground">{ROLE_LABELS[f.role]}</span>
+                    <span className="block text-xs text-muted-foreground">{t(ROLE_LABEL_KEYS[f.role])}</span>
                   </span>
                   <span
                     className={cn(

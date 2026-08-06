@@ -1,4 +1,5 @@
 import { cn } from '@/lib/utils';
+import { useTranslation, type TranslationKey } from '@/i18n';
 
 export type PlatformHealth = 'online' | 'degraded' | 'offline';
 
@@ -15,11 +16,11 @@ function usePlatformStatus(): PlatformHealth {
 
 const STATUS_META: Record<
   PlatformHealth,
-  { dot: string; label: string }
+  { dot: string; labelKey: TranslationKey }
 > = {
-  online: { dot: 'bg-emerald-500', label: 'All systems operational' },
-  degraded: { dot: 'bg-amber-500', label: 'Degraded performance' },
-  offline: { dot: 'bg-red-500', label: 'Offline' },
+  online: { dot: 'bg-emerald-500', labelKey: 'nav.platformStatus.online' },
+  degraded: { dot: 'bg-amber-500', labelKey: 'nav.platformStatus.degraded' },
+  offline: { dot: 'bg-red-500', labelKey: 'nav.platformStatus.offline' },
 };
 
 interface PlatformStatusProps {
@@ -29,13 +30,15 @@ interface PlatformStatusProps {
 }
 
 export function PlatformStatus({ compact, className }: PlatformStatusProps) {
+  const { t } = useTranslation();
   const status = usePlatformStatus();
   const meta = STATUS_META[status];
+  const label = t(meta.labelKey);
 
   return (
     <div
       className={cn('flex items-center gap-2', compact && 'justify-center', className)}
-      title={meta.label}
+      title={label}
     >
       <span className="relative flex h-2.5 w-2.5 flex-shrink-0">
         {status === 'online' && (
@@ -44,7 +47,7 @@ export function PlatformStatus({ compact, className }: PlatformStatusProps) {
         <span className={cn('relative inline-flex h-2.5 w-2.5 rounded-full', meta.dot)} />
       </span>
       {!compact && (
-        <span className="truncate text-xs text-muted-foreground">{meta.label}</span>
+        <span className="truncate text-xs text-muted-foreground">{label}</span>
       )}
     </div>
   );

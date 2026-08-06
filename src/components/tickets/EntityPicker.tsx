@@ -6,7 +6,7 @@ import { Command, CommandInput, CommandList } from '@/components/ui/command';
 import { ResponsiveModal } from '@/components/services/ResponsiveModal';
 import { cn } from '@/lib/utils';
 import { fetchReferenceOrders, fetchReferenceProducts } from '@/services/tickets.service';
-import { ApiError } from '@/types/api';
+import { tStatic, useApiError, useTranslation } from '@/i18n';
 import type { OrderTrackingOption, TicketEntityType } from '@/types/tickets.types';
 
 /** Normalised, display-ready option for the searchable order/product picker. */
@@ -41,11 +41,16 @@ const SEARCHABLE: Record<string, true> = { ORDER: true, PRODUCT: true };
 const PAGE_LIMIT = 50;
 
 export function EntityPicker({ entityType, value, onChange, onOrderSelected, invalid }: EntityPickerProps) {
+  const { t } = useTranslation();
   // `booking`, `account`, `other` have no list API — fall back to a free-text id.
   if (!SEARCHABLE[entityType]) {
     return (
       <Input
-        placeholder={entityType === 'OTHER' ? 'Optional — leave blank to use your account' : 'Enter the related entity ID'}
+        placeholder={
+          entityType === 'OTHER'
+            ? t('tickets.entityPicker.optionalOwnAccount')
+            : t('tickets.entityPicker.enterEntityId')
+        }
         value={value}
         onChange={(e) => onChange(e.target.value)}
         aria-invalid={invalid}
@@ -67,6 +72,8 @@ export function EntityPicker({ entityType, value, onChange, onOrderSelected, inv
 }
 
 function SearchablePicker({ entityType, value, onChange, onOrderSelected, invalid }: EntityPickerProps) {
+  const { t } = useTranslation();
+  const apiError = useApiError();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<EntityOption[]>([]);
@@ -74,8 +81,28 @@ function SearchablePicker({ entityType, value, onChange, onOrderSelected, invali
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<EntityOption | null>(null);
 
-  // Lowercased entity type for user-facing copy (values are UPPERCASE on the wire).
-  const noun = entityType.toLowerCase();
+  // Copy is keyed per entity type: interpolating a noun into one sentence
+  // cannot carry gender/article agreement in French.
+  const isProduct = entityType === 'PRODUCT';
+  const copy = isProduct
+    ? {
+        select: 'tickets.entityPicker.selectProduct',
+        title: 'tickets.entityPicker.titleProduct',
+        description: 'tickets.entityPicker.descriptionProduct',
+        searchPlaceholder: 'tickets.entityPicker.searchProduct',
+        loading: 'tickets.entityPicker.loadingProducts',
+        empty: 'tickets.entityPicker.noProducts',
+        loadFailed: 'tickets.entityPicker.loadProductsFailed',
+      } as const
+    : {
+        select: 'tickets.entityPicker.selectOrder',
+        title: 'tickets.entityPicker.titleOrder',
+        description: 'tickets.entityPicker.descriptionOrder',
+        searchPlaceholder: 'tickets.entityPicker.searchOrder',
+        loading: 'tickets.entityPicker.loadingOrders',
+        empty: 'tickets.entityPicker.noOrders',
+        loadFailed: 'tickets.entityPicker.loadOrdersFailed',
+      } as const;
 
   // Load results (server-side search) whenever the modal is open and the query changes.
   // setState is kept inside the deferred timer / promise callbacks (not the effect body).
@@ -90,7 +117,7 @@ function SearchablePicker({ entityType, value, onChange, onOrderSelected, invali
         .then((opts) => active && setResults(opts))
         .catch((err) => {
           if (!active) return;
-          setError(err instanceof ApiError ? err.message : `Couldn't load ${noun}s`);
+          setError(apiError.resolve(err, { fallbackKey: copy.loadFailed }));
           setResults([]);
         })
         .finally(() => active && setLoading(false));
@@ -130,7 +157,7 @@ function SearchablePicker({ entityType, value, onChange, onOrderSelected, invali
             )}
           </span>
         ) : (
-          <span>Select {noun}…</span>
+          <span>{t(copy.select)}</span>
         )}
         <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
       </Button>
@@ -138,21 +165,15 @@ function SearchablePicker({ entityType, value, onChange, onOrderSelected, invali
       <ResponsiveModal
         open={open}
         onOpenChange={setOpen}
-        title={`Select ${noun}`}
-        description={
-          entityType === 'PRODUCT'
-            ? 'Search your catalogue by name, category, or tag.'
-            : 'Search your orders by order number or customer.'
-        }
+        title={t(copy.title)}
+        description={t(copy.description)}
         desktopClassName="sm:max-w-lg"
       >
         <Command shouldFilter={false} className="bg-transparent">
           <CommandInput
             value={query}
             onValueChange={setQuery}
-            placeholder={
-              entityType === 'PRODUCT' ? 'Search by name, category, or tag…' : 'Search by order number or customer…'
-            }
+            placeholder={t(copy.searchPlaceholder)}
           />
           <CommandList className="max-h-[55vh]">
             {error ? (
@@ -162,10 +183,10 @@ function SearchablePicker({ entityType, value, onChange, onOrderSelected, invali
               </div>
             ) : loading && results.length === 0 ? (
               <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" /> Loading {noun}s…
+                <Loader2 className="h-4 w-4 animate-spin" /> {t(copy.loading)}
               </div>
             ) : results.length === 0 ? (
-              <div className="py-10 text-center text-sm text-muted-foreground">No {noun}s found.</div>
+              <div className="py-10 text-center text-sm text-muted-foreground">{t(copy.empty)}</div>
             ) : (
               <div className="p-1">
                 {results.map((option) => {
@@ -237,8 +258,10 @@ async function searchEntities(entityType: TicketEntityType, query: string): Prom
     return data.map((o) => ({
       id: o.id,
       kind: 'order' as const,
-      title: o.customerName?.trim() || 'Unknown customer',
-      subtitle: `Delivery: ${titleCase(o.fulfillmentStatus)}`,
+      title: o.customerName?.trim() || tStatic('orders.list.unknownCustomer'),
+      subtitle: tStatic('tickets.entityPicker.deliveryStatus', {
+        status: titleCase(o.fulfillmentStatus),
+      }),
       caption: o.orderNumber,
       imageUrl: o.customerAvatarUrl,
       trackingOptions: o.shipments

@@ -6,6 +6,7 @@ import {
   type StripeElements,
   type StripePaymentElement as StripePaymentElementInstance,
 } from '@/lib/stripe';
+import { useLocale, useTranslation } from '@/i18n';
 
 /** Outcome of confirming the card payment in-page. */
 export type StripeConfirmOutcome =
@@ -40,6 +41,8 @@ interface StripePaymentElementProps {
  */
 export const StripePaymentElement = forwardRef<StripePaymentElementHandle, StripePaymentElementProps>(
   function StripePaymentElement({ clientSecret, disabled, onReady }, ref) {
+    const { t } = useTranslation();
+    const { locale } = useLocale();
     const mountRef = useRef<HTMLDivElement>(null);
     const stripeRef = useRef<StripeInstance | null>(null);
     const elementsRef = useRef<StripeElements | null>(null);
@@ -54,12 +57,13 @@ export const StripePaymentElement = forwardRef<StripePaymentElementHandle, Strip
           const stripe = await getStripe();
           if (cancelled) return;
           if (!stripe || !mountRef.current) {
-            setLoadError('Card payments are unavailable right now.');
+            setLoadError(t('billing.cardForm.unavailable'));
             setLoading(false);
             return;
           }
           stripeRef.current = stripe;
-          const elements = stripe.elements({ clientSecret });
+          // Stripe renders its own labels/errors — bind it to the dashboard locale.
+          const elements = stripe.elements({ clientSecret, locale });
           const paymentEl = elements.create('payment', {
             layout: 'tabs',
           });
@@ -74,7 +78,7 @@ export const StripePaymentElement = forwardRef<StripePaymentElementHandle, Strip
           paymentElRef.current = paymentEl;
         } catch {
           if (!cancelled) {
-            setLoadError('Could not load the card form. Please try again.');
+            setLoadError(t('billing.cardForm.loadFailed'));
             setLoading(false);
           }
         }
@@ -92,7 +96,7 @@ export const StripePaymentElement = forwardRef<StripePaymentElementHandle, Strip
     useImperativeHandle(ref, () => ({
       async confirm(returnUrl: string): Promise<StripeConfirmOutcome> {
         if (!stripeRef.current || !elementsRef.current) {
-          throw new Error('Card form is not ready yet.');
+          throw new Error(t('billing.cardForm.notReady'));
         }
         const { error, paymentIntent } = await stripeRef.current.confirmPayment({
           elements: elementsRef.current,
@@ -102,7 +106,7 @@ export const StripePaymentElement = forwardRef<StripePaymentElementHandle, Strip
         });
 
         if (error) {
-          throw new Error(error.message ?? 'Your card could not be charged. Please try again.');
+          throw new Error(error.message ?? t('billing.cardForm.chargeFailed'));
         }
         // No error and no paymentIntent → Stripe is navigating to return_url (3-D Secure).
         if (!paymentIntent) return { status: 'redirecting' };
@@ -116,7 +120,7 @@ export const StripePaymentElement = forwardRef<StripePaymentElementHandle, Strip
             // A redirect-based action took over.
             return { status: 'redirecting' };
           default:
-            throw new Error('The card payment was not completed. Please try again.');
+            throw new Error(t('billing.cardForm.notCompleted'));
         }
       },
     }));
@@ -133,7 +137,7 @@ export const StripePaymentElement = forwardRef<StripePaymentElementHandle, Strip
         >
           {loading && (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" /> Loading secure card form…
+              <Loader2 className="h-4 w-4 animate-spin" /> {t('billing.cardForm.loadingSecure')}
             </div>
           )}
           <div ref={mountRef} className={loading ? 'hidden' : ''} />

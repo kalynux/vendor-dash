@@ -1,6 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { getStripe, type StripeCardElement, type StripeInstance } from '@/lib/stripe';
+import { useLocale, useTranslation } from '@/i18n';
 
 /** Card display metadata + instrument id captured when saving a card. */
 export interface SavedCardResult {
@@ -29,6 +30,8 @@ export interface StripeCardFieldHandle {
  */
 export const StripeCardField = forwardRef<StripeCardFieldHandle, { disabled?: boolean }>(
   function StripeCardField({ disabled }, ref) {
+    const { t } = useTranslation();
+    const { locale } = useLocale();
     const mountRef = useRef<HTMLDivElement>(null);
     const stripeRef = useRef<StripeInstance | null>(null);
     const cardRef = useRef<StripeCardElement | null>(null);
@@ -43,12 +46,13 @@ export const StripeCardField = forwardRef<StripeCardFieldHandle, { disabled?: bo
           const stripe = await getStripe();
           if (cancelled) return;
           if (!stripe || !mountRef.current) {
-            setLoadError('Card payments are unavailable right now.');
+            setLoadError(t('billing.cardForm.unavailable'));
             setLoading(false);
             return;
           }
           stripeRef.current = stripe;
-          const elements = stripe.elements();
+          // Stripe renders its own labels/errors — bind it to the dashboard locale.
+          const elements = stripe.elements({ locale });
           const card = elements.create('card', {
             style: {
               base: { fontSize: '16px', color: '#111827', '::placeholder': { color: '#9ca3af' } },
@@ -60,7 +64,7 @@ export const StripeCardField = forwardRef<StripeCardFieldHandle, { disabled?: bo
           setLoading(false);
         } catch {
           if (!cancelled) {
-            setLoadError('Could not load the card form. Please try again.');
+            setLoadError(t('billing.cardForm.loadFailed'));
             setLoading(false);
           }
         }
@@ -70,12 +74,13 @@ export const StripeCardField = forwardRef<StripeCardFieldHandle, { disabled?: bo
         cardRef.current?.destroy();
         cardRef.current = null;
       };
+      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     useImperativeHandle(ref, () => ({
       async createPaymentMethod(holderName?: string) {
         if (!stripeRef.current || !cardRef.current) {
-          throw new Error('Card form is not ready yet.');
+          throw new Error(t('billing.cardForm.notReady'));
         }
         const { paymentMethod, error } = await stripeRef.current.createPaymentMethod({
           type: 'card',
@@ -83,7 +88,7 @@ export const StripeCardField = forwardRef<StripeCardFieldHandle, { disabled?: bo
           billing_details: holderName ? { name: holderName } : undefined,
         });
         if (error || !paymentMethod) {
-          const msg = error?.message ?? 'Could not validate the card.';
+          const msg = error?.message ?? t('billing.cardForm.invalidCard');
           setCardError(msg);
           throw new Error(msg);
         }
@@ -109,7 +114,7 @@ export const StripeCardField = forwardRef<StripeCardFieldHandle, { disabled?: bo
         >
           {loading && (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" /> Loading card form…
+              <Loader2 className="h-4 w-4 animate-spin" /> {t('billing.cardForm.loading')}
             </div>
           )}
           <div ref={mountRef} className={loading ? 'hidden' : ''} />

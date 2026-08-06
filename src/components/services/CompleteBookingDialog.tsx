@@ -8,18 +8,34 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { ApiError } from '@/types/api';
-import { completeBooking, BOOKING_ERROR_MAP } from '@/services/services.service';
-import { formatMinor } from '@/components/services/service.constants';
+import { useTranslation, useFormatters, useApiError, type TranslationKey } from '@/i18n';
+import { completeBooking } from '@/services/services.service';
+import { toMajorUnits } from '@/components/services/service.constants';
 import type { Booking, CompleteBookingPayload, CompleteBookingResult } from '@/types/services.types';
 
 type Mode = 'asBooked' | 'actualEnd' | 'extraMinutes' | 'fixedPrice';
 
-const MODES: { value: Mode; label: string; hint: string }[] = [
-  { value: 'asBooked', label: 'Settle as booked', hint: 'Charge the originally booked duration.' },
-  { value: 'actualEnd', label: 'Actual end time', hint: 'Recompute from when the service really ended.' },
-  { value: 'extraMinutes', label: 'Extra minutes', hint: 'Add minutes beyond the booked end.' },
-  { value: 'fixedPrice', label: 'Fixed price', hint: 'Charge a flat final amount.' },
+const MODES: { value: Mode; labelKey: TranslationKey; hintKey: TranslationKey }[] = [
+  {
+    value: 'asBooked',
+    labelKey: 'services.complete.modes.asBooked',
+    hintKey: 'services.complete.modes.asBookedHint',
+  },
+  {
+    value: 'actualEnd',
+    labelKey: 'services.complete.modes.actualEnd',
+    hintKey: 'services.complete.modes.actualEndHint',
+  },
+  {
+    value: 'extraMinutes',
+    labelKey: 'services.complete.modes.extraMinutes',
+    hintKey: 'services.complete.modes.extraMinutesHint',
+  },
+  {
+    value: 'fixedPrice',
+    labelKey: 'services.complete.modes.fixedPrice',
+    hintKey: 'services.complete.modes.fixedPriceHint',
+  },
 ];
 
 interface CompleteBookingDialogProps {
@@ -31,6 +47,9 @@ interface CompleteBookingDialogProps {
 }
 
 export function CompleteBookingDialog({ booking, open, onOpenChange, onCompleted }: CompleteBookingDialogProps) {
+  const { t } = useTranslation();
+  const fmt = useFormatters();
+  const apiError = useApiError();
   const [mode, setMode] = useState<Mode>('asBooked');
   const [actualEndAt, setActualEndAt] = useState('');
   const [additionalMinutes, setAdditionalMinutes] = useState('');
@@ -56,29 +75,31 @@ export function CompleteBookingDialog({ booking, open, onOpenChange, onCompleted
     if (!booking) return;
     const payload: CompleteBookingPayload = {};
     if (mode === 'actualEnd') {
-      if (!actualEndAt) { toast.error('Pick the actual end time'); return; }
+      if (!actualEndAt) { toast.error(t('services.complete.errors.actualEndRequired')); return; }
       payload.actualEndAt = new Date(actualEndAt).toISOString();
     } else if (mode === 'extraMinutes') {
       const n = Number(additionalMinutes);
-      if (!Number.isFinite(n) || n <= 0) { toast.error('Enter the extra minutes'); return; }
+      if (!Number.isFinite(n) || n <= 0) { toast.error(t('services.complete.errors.extraMinutesRequired')); return; }
       payload.additionalMinutes = n;
     } else if (mode === 'fixedPrice') {
       const n = Number(fixedPrice);
-      if (!Number.isFinite(n) || n < 0) { toast.error('Enter a valid price'); return; }
+      if (!Number.isFinite(n) || n < 0) { toast.error(t('services.complete.errors.priceInvalid')); return; }
       payload.fixedPrice = n;
     }
     setBusy(true);
     try {
       const res = await completeBooking(booking._id, payload);
       setResult(res);
-      toast.success('Booking completed');
+      toast.success(t('services.complete.resultTitle'));
       onCompleted();
     } catch (err) {
-      toast.error(err instanceof ApiError ? BOOKING_ERROR_MAP[err.code] ?? err.message : 'Failed to complete');
+      apiError.toast(err, { fallbackKey: 'services.errors.completeFailed' });
     } finally {
       setBusy(false);
     }
   }
+
+  const money = (amount: number) => fmt.currency(toMajorUnits(amount), currency);
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!busy) onOpenChange(o); }}>
@@ -88,17 +109,17 @@ export function CompleteBookingDialog({ booking, open, onOpenChange, onCompleted
           <>
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
-                <CheckCircle2 className="h-5 w-5 text-emerald-600" /> Booking completed
+                <CheckCircle2 className="h-5 w-5 text-emerald-600" /> {t('services.complete.resultTitle')}
               </DialogTitle>
-              <DialogDescription>The final price has been settled.</DialogDescription>
+              <DialogDescription>{t('services.complete.resultDescription')}</DialogDescription>
             </DialogHeader>
             <div className="space-y-2 rounded-lg border p-3 text-sm">
-              <Row label="Originally booked" value={formatMinor(result.priceSnapshot, currency)} />
-              <Row label="Final price" value={formatMinor(result.finalPrice, currency)} strong />
+              <Row label={t('services.complete.originallyBooked')} value={money(result.priceSnapshot)} />
+              <Row label={t('services.complete.finalPrice')} value={money(result.finalPrice)} strong />
               {result.breakdown?.peakHoursSurcharge > 0 && (
                 <Row
-                  label="Incl. peak surcharge"
-                  value={formatMinor(result.breakdown.peakHoursSurcharge, currency)}
+                  label={t('services.complete.peakSurcharge')}
+                  value={money(result.breakdown.peakHoursSurcharge)}
                   muted
                 />
               )}
@@ -108,40 +129,39 @@ export function CompleteBookingDialog({ booking, open, onOpenChange, onCompleted
                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
                 <div>
                   <p className="font-medium text-amber-800 dark:text-amber-300">
-                    {formatMinor(result.additionalAmountDue, currency)} additional due
+                    {t('services.complete.additionalDue', {
+                      amount: money(result.additionalAmountDue),
+                    })}
                   </p>
                   <p className="mt-0.5 text-xs text-amber-700 dark:text-amber-400">
-                    The shortfall is recorded on the booking, but automatic collection isn’t enabled
-                    yet — arrange the extra payment with the customer directly.
+                    {t('services.complete.additionalDueHelp')}
                   </p>
                 </div>
               </div>
             )}
             <DialogFooter>
-              <Button onClick={() => onOpenChange(false)}>Done</Button>
+              <Button onClick={() => onOpenChange(false)}>{t('common.actions.done')}</Button>
             </DialogFooter>
           </>
         ) : (
           // ── Settlement form ────────────────────────────────────────────
           <>
             <DialogHeader>
-              <DialogTitle>Complete &amp; settle</DialogTitle>
-              <DialogDescription>
-                Choose how to settle the final price. The amount is recomputed by the system.
-              </DialogDescription>
+              <DialogTitle>{t('services.complete.title')}</DialogTitle>
+              <DialogDescription>{t('services.complete.description')}</DialogDescription>
             </DialogHeader>
 
             <RadioGroup value={mode} onValueChange={(v) => setMode(v as Mode)} className="gap-2">
-              {MODES.map((m) => (
+              {MODES.map((option) => (
                 <Label
-                  key={m.value}
-                  htmlFor={`complete-${m.value}`}
+                  key={option.value}
+                  htmlFor={`complete-${option.value}`}
                   className="flex cursor-pointer items-start gap-3 rounded-lg border p-3 hover:bg-accent has-[:checked]:border-primary"
                 >
-                  <RadioGroupItem id={`complete-${m.value}`} value={m.value} className="mt-0.5" />
+                  <RadioGroupItem id={`complete-${option.value}`} value={option.value} className="mt-0.5" />
                   <span className="space-y-0.5">
-                    <span className="block text-sm font-medium">{m.label}</span>
-                    <span className="block text-xs text-muted-foreground">{m.hint}</span>
+                    <span className="block text-sm font-medium">{t(option.labelKey)}</span>
+                    <span className="block text-xs text-muted-foreground">{t(option.hintKey)}</span>
                   </span>
                 </Label>
               ))}
@@ -149,35 +169,37 @@ export function CompleteBookingDialog({ booking, open, onOpenChange, onCompleted
 
             {mode === 'actualEnd' && (
               <div className="space-y-1.5">
-                <Label className="text-sm">Actual end time</Label>
+                <Label className="text-sm">{t('services.complete.actualEndLabel')}</Label>
                 <Input type="datetime-local" value={actualEndAt} onChange={(e) => setActualEndAt(e.target.value)} />
               </div>
             )}
             {mode === 'extraMinutes' && (
               <div className="space-y-1.5">
-                <Label className="text-sm">Extra minutes</Label>
+                <Label className="text-sm">{t('services.complete.extraMinutesLabel')}</Label>
                 <Input
-                  type="number" min={1} placeholder="e.g. 30"
+                  type="number" min={1} placeholder={t('services.complete.extraMinutesPlaceholder')}
                   value={additionalMinutes} onChange={(e) => setAdditionalMinutes(e.target.value)}
                 />
               </div>
             )}
             {mode === 'fixedPrice' && (
               <div className="space-y-1.5">
-                <Label className="text-sm">Final price ({currency})</Label>
+                <Label className="text-sm">{t('services.complete.fixedPriceLabel', { currency })}</Label>
                 <Input
                   type="number" min={0} step="0.01" placeholder="0.00"
                   value={fixedPrice} onChange={(e) => setFixedPrice(e.target.value)}
                 />
-                <p className="text-xs text-muted-foreground">Amount in the smallest currency unit.</p>
+                <p className="text-xs text-muted-foreground">{t('services.complete.fixedPriceHelp')}</p>
               </div>
             )}
 
             <DialogFooter>
-              <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>Cancel</Button>
+              <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
+                {t('common.actions.cancel')}
+              </Button>
               <Button onClick={handleSubmit} disabled={busy}>
                 {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Complete booking
+                {t('services.complete.submit')}
               </Button>
             </DialogFooter>
           </>

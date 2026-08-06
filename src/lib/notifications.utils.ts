@@ -19,6 +19,7 @@ import type {
   NotificationType,
   NotificationAggregateType,
 } from '@/types/notifications.types';
+import type { TranslationKey } from '@/i18n';
 
 /**
  * Absolute in-app route for a notification, derived from its aggregate.
@@ -127,15 +128,27 @@ export function notificationVisual(n: Pick<VendorNotification, 'type' | 'aggrega
   return TYPE_VISUALS[n.type] ?? (n.aggregateType ? AGGREGATE_FALLBACK[n.aggregateType] : undefined) ?? DEFAULT_VISUAL;
 }
 
-/** Relative "time ago" label for a notification timestamp. */
-export function notificationTimeAgo(dateStr: string): string {
+/**
+ * Relative "time ago" label for a notification timestamp.
+ *
+ * Takes the translator and a bound date formatter as parameters rather than
+ * reaching for hooks: this module is imported from both the header dropdown and
+ * the notifications page, and has no React context of its own. Passing
+ * `fmt.date` (not `toLocaleDateString`) keeps the fallback on the dashboard's
+ * locale instead of the browser's.
+ */
+export function notificationTimeAgo(
+  dateStr: string,
+  t: (key: TranslationKey, params?: Record<string, string | number>) => string,
+  formatDate: (iso: string) => string,
+): string {
   const diff = Date.now() - new Date(dateStr).getTime();
   const minutes = Math.floor(diff / 60000);
   const hours = Math.floor(diff / 3600000);
   const days = Math.floor(diff / 86400000);
-  if (minutes < 1) return 'just now';
-  if (minutes < 60) return `${minutes}m ago`;
-  if (hours < 24) return `${hours}h ago`;
-  if (days < 7) return `${days}d ago`;
-  return new Date(dateStr).toLocaleDateString();
+  if (minutes < 1) return t('notifications.time.justNow');
+  if (minutes < 60) return t('notifications.time.minutesAgo', { count: minutes });
+  if (hours < 24) return t('notifications.time.hoursAgo', { count: hours });
+  if (days < 7) return t('notifications.time.daysAgo', { count: days });
+  return formatDate(dateStr);
 }

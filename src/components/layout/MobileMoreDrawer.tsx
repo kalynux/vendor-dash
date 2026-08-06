@@ -7,6 +7,7 @@ import { useAuth } from '@/App';
 import { useNotificationStore } from '@/store';
 import { PRIMARY_NAV, FOOTER_NAV, type NavItem, type NavChild, type NavBadge } from '@/config/navigation';
 import { cn } from '@/lib/utils';
+import { useTranslation } from '@/i18n';
 
 // Items already present in the bottom tab bar — hidden from "More".
 const TAB_BAR_PATHS = new Set(['/dashboard', '/dashboard/orders', '/dashboard/products']);
@@ -17,6 +18,7 @@ interface NavHandlers {
 }
 
 function MenuRow({ item, handlers }: { item: NavItem; handlers: NavHandlers }) {
+  const { t } = useTranslation();
   const Icon = item.icon;
   const hasChildren = !!item.children?.length;
   const [open, setOpen] = useState(false);
@@ -41,7 +43,7 @@ function MenuRow({ item, handlers }: { item: NavItem; handlers: NavHandlers }) {
         <div className="w-9 h-9 rounded-xl bg-muted flex items-center justify-center flex-shrink-0">
           <Icon className="w-4 h-4" />
         </div>
-        <span className="flex-1 text-left text-sm font-medium">{item.name}</span>
+        <span className="flex-1 text-left text-sm font-medium">{t(item.labelKey)}</span>
         {badge > 0 && (
           <span className="w-5 h-5 rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold flex items-center justify-center mr-1">
             {badge > 9 ? '9+' : badge}
@@ -63,7 +65,7 @@ function MenuRow({ item, handlers }: { item: NavItem; handlers: NavHandlers }) {
             const childBadge = handlers.badgeCount(child.badge);
             return (
               <button
-                key={child.name}
+                key={child.id}
                 disabled={child.disabled}
                 onClick={() => {
                   if (child.disabled) return;
@@ -77,7 +79,7 @@ function MenuRow({ item, handlers }: { item: NavItem; handlers: NavHandlers }) {
                 <div className="w-7 h-7 rounded-lg bg-card border flex items-center justify-center flex-shrink-0">
                   <ChildIcon className="w-3.5 h-3.5" />
                 </div>
-                <span className="flex-1 text-left text-sm">{child.name}</span>
+                <span className="flex-1 text-left text-sm">{t(child.labelKey)}</span>
                 {childBadge > 0 && (
                   <span className="w-5 h-5 rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold flex items-center justify-center">
                     {childBadge > 9 ? '9+' : childBadge}
@@ -97,7 +99,7 @@ function MenuGroup({ items, handlers }: { items: NavItem[]; handlers: NavHandler
   return (
     <div className="bg-card rounded-xl mx-4 mb-3 overflow-hidden border divide-y">
       {items.map((item) => (
-        <MenuRow key={item.name} item={item} handlers={handlers} />
+        <MenuRow key={item.id} item={item} handlers={handlers} />
       ))}
     </div>
   );
@@ -110,6 +112,7 @@ interface MobileMoreDrawerProps {
 
 export function MobileMoreDrawer({ open, onOpenChange }: MobileMoreDrawerProps) {
   const { user } = useAuth();
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { unreadCount } = useNotificationStore();
 
@@ -130,7 +133,7 @@ export function MobileMoreDrawer({ open, onOpenChange }: MobileMoreDrawerProps) 
         <div className="flex flex-col h-full">
           {/* Header */}
           <div className="px-4 py-4 border-b flex-shrink-0">
-            <h2 className="text-xl font-bold">More</h2>
+            <h2 className="text-xl font-bold">{t('nav.mobile.more')}</h2>
           </div>
 
           <div className="flex-1 overflow-y-auto min-h-0 pb-safe">
@@ -145,7 +148,7 @@ export function MobileMoreDrawer({ open, onOpenChange }: MobileMoreDrawerProps) 
               <div className="flex-1 min-w-0">
                 <p className="font-semibold truncate">{user?.name}</p>
                 <p className="text-sm text-muted-foreground">
-                  {user?.name ?? 'My Store'} · Vendor
+                  {user?.name ?? t('nav.sidebar.defaultStoreName')} · {t('nav.header.vendor')}
                 </p>
               </div>
               <Button

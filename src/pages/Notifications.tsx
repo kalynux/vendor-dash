@@ -17,8 +17,11 @@ import { cn } from '@/lib/utils';
 import { notificationRoute, notificationVisual, notificationTimeAgo, notificationActionLabel } from '@/lib/notifications.utils';
 import { PushPermissionBanner } from '@/components/notifications/PushPermissionBanner';
 import type { VendorNotification } from '@/types/notifications.types';
+import { useFormatters, useTranslation } from '@/i18n';
 
 export function Notifications() {
+  const { t } = useTranslation();
+  const fmt = useFormatters();
   const { notifications, unreadCount, fetchNotifications, markAsRead, markAllAsRead } = useNotificationStore();
   const isMobile = useIsMobile();
   const navigate = useNavigate();
@@ -77,7 +80,7 @@ export function Notifications() {
               <p className="text-sm text-muted-foreground mt-1">{notification.message}</p>
             </div>
             <span className="text-xs text-muted-foreground flex-shrink-0">
-              {notificationTimeAgo(notification.createdAt)}
+              {notificationTimeAgo(notification.createdAt, t, (iso) => fmt.date(iso))}
             </span>
           </div>
           {hasTarget && (
@@ -104,7 +107,7 @@ export function Notifications() {
               e.stopPropagation();
               markAsRead(notification.id);
             }}
-            aria-label="Mark as read"
+            aria-label={t('notifications.actions.markRead')}
           >
             <Check className="w-4 h-4" />
           </Button>
@@ -117,14 +120,14 @@ export function Notifications() {
     <div className={cn('animate-fade-in', isMobile ? '-mx-6 -mt-6' : 'space-y-6')}>
       {isMobile ? (
         <MobilePageHeader
-          title="Notifications"
+          title={t('notifications.title')}
           actions={
             <>
               {unreadCount > 0 && (
                 <button
                   type="button"
                   onClick={() => markAllAsRead()}
-                  aria-label="Mark all as read"
+                  aria-label={t('notifications.actions.markAllRead')}
                   className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-accent transition-colors"
                 >
                   <Check className="w-5 h-5" />
@@ -132,7 +135,7 @@ export function Notifications() {
               )}
               <button
                 type="button"
-                aria-label="Notification settings"
+                aria-label={t('notifications.settings.title')}
                 onClick={() => navigate('/dashboard/settings/notifications')}
                 className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-accent transition-colors"
               >
@@ -144,22 +147,20 @@ export function Notifications() {
       ) : (
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold">Notifications</h1>
-            <p className="text-muted-foreground">
-              Stay updated with your store activity
-            </p>
+            <h1 className="text-2xl font-bold">{t('notifications.title')}</h1>
+            <p className="text-muted-foreground">{t('notifications.subtitle')}</p>
           </div>
           <div className="flex items-center gap-3">
             {unreadCount > 0 && (
               <Button variant="outline" onClick={() => markAllAsRead()}>
                 <Check className="w-4 h-4 mr-2" />
-                Mark all as read
+                {t('notifications.actions.markAllRead')}
               </Button>
             )}
             <Button
               variant="outline"
               size="icon"
-              aria-label="Notification settings"
+              aria-label={t('notifications.settings.title')}
               onClick={() => navigate('/dashboard/settings/notifications')}
             >
               <Settings className="w-4 h-4" />
@@ -177,7 +178,7 @@ export function Notifications() {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Unread</p>
+                <p className="text-sm text-muted-foreground">{t('notifications.stats.unread')}</p>
                 <p className="text-2xl font-bold">{unreadCount}</p>
               </div>
               <div className="p-3 bg-primary/10 rounded-lg">
@@ -190,7 +191,7 @@ export function Notifications() {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Total</p>
+                <p className="text-sm text-muted-foreground">{t('notifications.stats.total')}</p>
                 <p className="text-2xl font-bold">{notifications.length}</p>
               </div>
               <div className="p-3 bg-blue-100 rounded-lg">
@@ -206,14 +207,14 @@ export function Notifications() {
       <Tabs defaultValue="all" className={cn('w-full', isMobile && 'px-4 pt-3 pb-28')}>
         <TabsList>
           <TabsTrigger value="all" className="gap-2">
-            All
+            {t('notifications.tabs.all')}
             <Badge variant="secondary">{notifications.length}</Badge>
           </TabsTrigger>
           <TabsTrigger value="unread" className="gap-2">
-            Unread
+            {t('notifications.tabs.unread')}
             {unreadCount > 0 && <Badge variant="destructive">{unreadCount}</Badge>}
           </TabsTrigger>
-          <TabsTrigger value="read">Read</TabsTrigger>
+          <TabsTrigger value="read">{t('notifications.tabs.read')}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="all" className="mt-4">
@@ -222,7 +223,7 @@ export function Notifications() {
               {notifications.length === 0 ? (
                 <div className="py-12 text-center">
                   <Bell className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-                  <p className="text-muted-foreground">No notifications yet</p>
+                  <p className="text-muted-foreground">{t('notifications.empty.all')}</p>
                 </div>
               ) : (
                 <div className="divide-y">
@@ -241,7 +242,7 @@ export function Notifications() {
               {unreadNotifications.length === 0 ? (
                 <div className="py-12 text-center">
                   <Check className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-                  <p className="text-muted-foreground">All caught up!</p>
+                  <p className="text-muted-foreground">{t('notifications.empty.unread')}</p>
                 </div>
               ) : (
                 <div className="divide-y">
@@ -260,7 +261,7 @@ export function Notifications() {
               {readNotifications.length === 0 ? (
                 <div className="py-12 text-center">
                   <Bell className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-                  <p className="text-muted-foreground">No read notifications</p>
+                  <p className="text-muted-foreground">{t('notifications.empty.read')}</p>
                 </div>
               ) : (
                 <div className="divide-y">

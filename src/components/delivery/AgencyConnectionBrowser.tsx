@@ -13,8 +13,8 @@ import { AgencyFiltersPanel } from '@/components/delivery/AgencyFiltersPanel';
 import { countActiveAgencyFilters, INITIAL_AGENCY_FILTERS, type AgencyFilters } from '@/components/delivery/agencyFilters';
 import { useAgencyConnectionActions } from '@/hooks/useAgencyConnectionActions';
 import { browseAgencyConnections, getAgencyConnection } from '@/services/agency-connections.service';
-import { ApiError } from '@/types/api';
 import type { AgencyBrowseItemDto, AgencyConnectionListMeta, ConnectionDto } from '@/types/agency-connection.types';
+import { useApiError, useTranslation } from '@/i18n';
 
 // ─── Per-card action slot ───────────────────────────────────────────────────────
 // `browse` only annotates { id, status } — pending/paused_reapproval need the full
@@ -30,6 +30,7 @@ function ConnectionActionSlot({
     actions: ReturnType<typeof useAgencyConnectionActions>;
     onConnectionChange?: (agencyId: string, dto: ConnectionDto) => void;
 }) {
+    const { t } = useTranslation();
     const [detail, setDetail] = useState<ConnectionDto | null>(null);
     const [loadingDetail, setLoadingDetail] = useState(false);
     const [rejectReason, setRejectReason] = useState('');
@@ -68,7 +69,7 @@ function ConnectionActionSlot({
                 disabled={actions.pendingKey === key}
                 onClick={() => actions.request(agency.id).then(handleChange)}
             >
-                {actions.pendingKey === key ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Request'}
+                {actions.pendingKey === key ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : t('agency.browse.request')}
             </Button>
         );
     }
@@ -76,7 +77,7 @@ function ConnectionActionSlot({
     if (connection.status === 'active') {
         return (
             <Badge variant="secondary" className="text-emerald-700 bg-emerald-50 border-emerald-200 dark:text-emerald-400 dark:bg-emerald-950 dark:border-emerald-800">
-                Connected
+                {t('agency.browse.connected')}
             </Badge>
         );
     }
@@ -90,7 +91,7 @@ function ConnectionActionSlot({
                 disabled={actions.pendingKey === key}
                 onClick={() => actions.request(agency.id).then(handleChange)}
             >
-                {actions.pendingKey === key ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Request Again'}
+                {actions.pendingKey === key ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : t('agency.connections.actions.requestAgain')}
             </Button>
         );
     }
@@ -102,9 +103,9 @@ function ConnectionActionSlot({
                 {loadingDetail ? (
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
                 ) : connection.status === 'pending' ? (
-                    'Pending…'
+                    t('agency.status.pending')
                 ) : (
-                    'Reapproval needed'
+                    t('agency.status.reapprovalNeeded')
                 )}
             </Button>
         );
@@ -120,7 +121,7 @@ function ConnectionActionSlot({
                     disabled={actions.pendingKey === key}
                     onClick={() => actions.withdraw(agency.id, connection.id).then(handleChange)}
                 >
-                    {actions.pendingKey === key ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Withdraw'}
+                    {actions.pendingKey === key ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : t('agency.connections.actions.withdraw')}
                 </Button>
             );
         }
@@ -133,16 +134,16 @@ function ConnectionActionSlot({
                     disabled={actions.pendingKey === approveKey}
                     onClick={() => actions.approve(agency.id, connection.id).then(handleChange)}
                 >
-                    {actions.pendingKey === approveKey ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Approve'}
+                    {actions.pendingKey === approveKey ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : t('agency.connections.actions.approve')}
                 </Button>
                 <Popover open={rejectOpen} onOpenChange={setRejectOpen}>
                     <PopoverTrigger asChild>
-                        <Button size="sm" variant="outline">Reject</Button>
+                        <Button size="sm" variant="outline">{t('agency.connections.actions.reject')}</Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-64 space-y-2" align="end">
-                        <p className="text-xs font-medium">Reject this request?</p>
+                        <p className="text-xs font-medium">{t('agency.browse.rejectTitle')}</p>
                         <Textarea
-                            placeholder="Reason (optional)"
+                            placeholder={t('agency.browse.reasonPlaceholder')}
                             value={rejectReason}
                             onChange={(e) => setRejectReason(e.target.value)}
                             className="text-xs min-h-16"
@@ -159,7 +160,7 @@ function ConnectionActionSlot({
                                 })
                             }
                         >
-                            {actions.pendingKey === rejectKey ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Confirm Reject'}
+                            {actions.pendingKey === rejectKey ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : t('agency.connections.actions.confirmReject')}
                         </Button>
                     </PopoverContent>
                 </Popover>
@@ -176,11 +177,11 @@ function ConnectionActionSlot({
                 disabled={actions.pendingKey === key}
                 onClick={() => actions.approve(agency.id, connection.id).then(handleChange)}
             >
-                {actions.pendingKey === key ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Reapprove'}
+                {actions.pendingKey === key ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : t('agency.connections.actions.reapprove')}
             </Button>
         );
     }
-    return <Badge variant="secondary">Awaiting agency</Badge>;
+    return <Badge variant="secondary">{t('agency.browse.awaitingAgency')}</Badge>;
 }
 
 // ─── Browser ────────────────────────────────────────────────────────────────────
@@ -204,6 +205,8 @@ export function AgencyConnectionBrowser({
     listHeightClass = 'h-[42vh] min-h-[160px]',
     scrollable = true,
 }: AgencyConnectionBrowserProps) {
+    const { t } = useTranslation();
+    const apiError = useApiError();
     const [agencies, setAgencies] = useState<AgencyBrowseItemDto[]>([]);
     const [meta, setMeta] = useState<AgencyConnectionListMeta | null>(null);
     const [loadingAgencies, setLoadingAgencies] = useState(false);
@@ -252,13 +255,11 @@ export function AgencyConnectionBrowser({
             setAgencies(res.data ?? []);
             setMeta(res.meta ?? null);
         } catch (err) {
-            setFetchError(
-                err instanceof ApiError ? err.message : 'Failed to load delivery agencies. Please try again.',
-            );
+            setFetchError(apiError.resolve(err, { fallbackKey: 'agency.errors.loadFailed' }));
         } finally {
             setLoadingAgencies(false);
         }
-    }, []);
+    }, [apiError]);
 
     useEffect(() => {
         loadAgencies(appliedFilters, appliedSearch, page);
@@ -303,19 +304,19 @@ export function AgencyConnectionBrowser({
             <SearchFilterBar
                 value={search}
                 onChange={handleSearchChange}
-                placeholder="Search agencies…"
+                placeholder={t('agency.browse.searchPlaceholder')}
                 activeFilterCount={activeFilterCount}
                 onOpenFilters={() => setFiltersOpen(true)}
-                filterLabel="Filter agencies"
+                filterLabel={t('agency.browse.filterTitle')}
             />
 
             <FilterSheet
                 open={filtersOpen}
                 onOpenChange={setFiltersOpen}
-                title="Filter agencies"
+                title={t('agency.browse.filterTitle')}
                 activeCount={activeFilterCount}
                 onClear={handleClearFilters}
-                applyLabel="Show agencies"
+                applyLabel={t('agency.browse.applyLabel')}
             >
                 <AgencyFiltersPanel filters={filters} onChange={handleFilterChange} />
             </FilterSheet>
@@ -333,7 +334,7 @@ export function AgencyConnectionBrowser({
                 <div className="text-center py-8">
                     <p className="text-sm text-muted-foreground mb-4">{fetchError}</p>
                     <Button variant="outline" onClick={() => loadAgencies(appliedFilters, appliedSearch, page)}>
-                        Retry
+                        {t('common.actions.retry')}
                     </Button>
                 </div>
             ) : loadingAgencies && agencies.length === 0 ? (
@@ -345,8 +346,8 @@ export function AgencyConnectionBrowser({
                     <Building2 className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
                     <p className="text-sm text-muted-foreground">
                         {activeFilterCount > 0 || appliedSearch
-                            ? 'No agencies match your search or filters.'
-                            : 'No delivery agencies are available in your area yet.'}
+                            ? t('agency.browse.emptyFiltered')
+                            : t('agency.browse.emptyNone')}
                     </p>
                     {(activeFilterCount > 0 || appliedSearch) && (
                         <button
@@ -354,7 +355,7 @@ export function AgencyConnectionBrowser({
                             onClick={() => { handleSearchChange(''); handleClearFilters(); }}
                             className="mt-2 text-xs text-primary hover:underline"
                         >
-                            Clear all filters
+                            {t('agency.browse.clearAllFilters')}
                         </button>
                     )}
                 </div>
@@ -385,10 +386,10 @@ export function AgencyConnectionBrowser({
                         disabled={page <= 1 || loadingAgencies}
                         onClick={() => setPage(p => p - 1)}
                     >
-                        Previous
+                        {t('common.pagination.previous')}
                     </Button>
                     <span className="text-xs text-muted-foreground">
-                        Page {page} of {meta.totalPages}
+                        {t('common.pagination.pageOf', { page, total: meta.totalPages })}
                     </span>
                     <Button
                         type="button"
@@ -397,7 +398,7 @@ export function AgencyConnectionBrowser({
                         disabled={page >= meta.totalPages || loadingAgencies}
                         onClick={() => setPage(p => p + 1)}
                     >
-                        Next
+                        {t('common.pagination.next')}
                     </Button>
                 </div>
             )}

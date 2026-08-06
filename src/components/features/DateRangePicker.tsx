@@ -4,19 +4,10 @@ import type { DateRange as DayPickerRange } from 'react-day-picker';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { DATE_RANGE_PRESETS, presetRange } from '@/services/analytics.service';
+import { DATE_RANGE_PRESETS, DATE_RANGE_PRESET_KEYS, presetRange } from '@/services/analytics.service';
 import type { DateRange } from '@/types';
+import { useFormatters, useTranslation } from '@/i18n';
 import { cn } from '@/lib/utils';
-
-function formatDay(d: Date): string {
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
-
-function formatRange(from: Date, to: Date): string {
-  return from.toDateString() === to.toDateString()
-    ? formatDay(from)
-    : `${formatDay(from)} – ${formatDay(to)}`;
-}
 
 interface DateRangePickerProps {
   value: DateRange;
@@ -24,7 +15,14 @@ interface DateRangePickerProps {
 }
 
 export function DateRangePicker({ value, onChange }: DateRangePickerProps) {
+  const { t } = useTranslation();
+  const fmt = useFormatters();
   const [open, setOpen] = useState(false);
+
+  const formatRange = (from: Date, to: Date): string =>
+    from.toDateString() === to.toDateString()
+      ? fmt.date(from, 'dayMonth')
+      : `${fmt.date(from, 'dayMonth')} – ${fmt.date(to, 'dayMonth')}`;
   const [showCustom, setShowCustom] = useState(false);
   const [draft, setDraft] = useState<DayPickerRange | undefined>({ from: value.from, to: value.to });
 
@@ -50,7 +48,10 @@ export function DateRangePicker({ value, onChange }: DateRangePickerProps) {
     setOpen(false);
   };
 
-  const triggerLabel = value.label === 'Custom' ? formatRange(value.from, value.to) : value.label;
+  const triggerLabel =
+    value.label === 'Custom'
+      ? formatRange(value.from, value.to)
+      : t(DATE_RANGE_PRESET_KEYS[value.label] ?? 'common.time.custom');
 
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
@@ -75,7 +76,7 @@ export function DateRangePicker({ value, onChange }: DateRangePickerProps) {
                   value.label === preset && !showCustom && 'bg-muted font-medium'
                 )}
               >
-                {preset}
+                {t(DATE_RANGE_PRESET_KEYS[preset])}
               </button>
             ))}
             <button
@@ -85,7 +86,7 @@ export function DateRangePicker({ value, onChange }: DateRangePickerProps) {
                 (showCustom || value.label === 'Custom') && 'bg-muted font-medium'
               )}
             >
-              Custom
+              {t('common.time.custom')}
             </button>
           </div>
 
@@ -101,10 +102,10 @@ export function DateRangePicker({ value, onChange }: DateRangePickerProps) {
               />
               <div className="flex justify-end gap-2 border-t p-2">
                 <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>
-                  Cancel
+                  {t('common.actions.cancel')}
                 </Button>
                 <Button size="sm" onClick={applyCustom} disabled={!draft?.from}>
-                  Apply
+                  {t('common.actions.apply')}
                 </Button>
               </div>
             </div>

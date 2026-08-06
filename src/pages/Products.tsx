@@ -74,54 +74,66 @@ import {
   runActivationPreflight,
   getAllowedStatusTransitions,
   bulkArchiveProducts,
-  ACTIVATION_ERROR_MAP,
+  ACTIVATION_ERROR_KEYS,
   type StatusTransition,
   type StatusTransitionIntent,
 } from '@/services/products.service';
 import { ApiError } from '@/types/api';
 import type { ProductListItem, ApiVectorisationStatus } from '@/types/product.types';
 import { cn } from '@/lib/utils';
+import { Trans, useApiError, useTranslation, type TranslationKey } from '@/i18n';
 
-const STATUS_OPTIONS: { value: string; label: string }[] = [
-  { value: 'active', label: 'Active' },
-  { value: 'draft', label: 'Draft' },
-  { value: 'archived', label: 'Archived' },
-  { value: 'pending_review', label: 'Pending Review' },
-  { value: 'suspended', label: 'Suspended' },
+const STATUS_OPTIONS: { value: string; labelKey: TranslationKey }[] = [
+  { value: 'active', labelKey: 'products.status.active' },
+  { value: 'draft', labelKey: 'products.status.draft' },
+  { value: 'archived', labelKey: 'products.status.archived' },
+  { value: 'pending_review', labelKey: 'products.status.pendingReview' },
+  { value: 'suspended', labelKey: 'products.status.suspended' },
 ];
 
 const STATUS_TRANSITION_META: Record<
   StatusTransitionIntent,
   {
     Icon: React.ComponentType<{ className?: string }>;
-    defaultConfirm: string;
-    confirmCta: string;
+    defaultConfirmKey: TranslationKey;
+    confirmCtaKey: TranslationKey;
   }
 > = {
   activate: {
     Icon: Send,
-    defaultConfirm:
-      'Publish this product? It will become visible in your storefront immediately.',
-    confirmCta: 'Publish',
+    defaultConfirmKey: 'products.transitions.confirm.activate',
+    confirmCtaKey: 'products.transitions.cta.activate',
   },
   demote_to_draft: {
     Icon: Pencil,
-    defaultConfirm:
-      'Move this product back to draft? It will be removed from your storefront until you republish.',
-    confirmCta: 'Demote to draft',
+    defaultConfirmKey: 'products.transitions.confirm.demote_to_draft',
+    confirmCtaKey: 'products.transitions.cta.demote_to_draft',
   },
   restore: {
     Icon: ArchiveRestore,
-    defaultConfirm:
-      'Restore this product from archive? It will be set back to draft so you can edit it.',
-    confirmCta: 'Restore',
+    defaultConfirmKey: 'products.transitions.confirm.restore',
+    confirmCtaKey: 'products.transitions.cta.restore',
   },
   archive: {
     Icon: Trash2,
-    defaultConfirm:
-      'Archive this product? It will no longer appear in your store.',
-    confirmCta: 'Archive',
+    defaultConfirmKey: 'products.transitions.confirm.archive',
+    confirmCtaKey: 'products.transitions.cta.archive',
   },
+};
+
+/** Maps a backend product status onto its catalog key. */
+const STATUS_LABEL_KEYS: Record<string, TranslationKey> = {
+  active: 'products.status.active',
+  draft: 'products.status.draft',
+  archived: 'products.status.archived',
+  pending_review: 'products.status.pendingReview',
+  suspended: 'products.status.suspended',
+};
+
+const TYPE_LABEL_KEYS: Record<string, TranslationKey> = {
+  physical: 'products.type.physical',
+  digital: 'products.type.digital',
+  service: 'products.type.service',
 };
 
 const STATUS_BADGE_CLASSES: Record<string, string> = {
@@ -133,36 +145,43 @@ const STATUS_BADGE_CLASSES: Record<string, string> = {
 };
 
 function StatusBadge({ status }: { status: string }) {
+  const { t } = useTranslation();
   return (
     <span
-      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${STATUS_BADGE_CLASSES[status] ?? 'bg-muted text-muted-foreground'}`}
+      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${STATUS_BADGE_CLASSES[status] ?? 'bg-muted text-muted-foreground'}`}
     >
-      {status.replace('_', ' ')}
+      {STATUS_LABEL_KEYS[status] ? t(STATUS_LABEL_KEYS[status]) : status}
     </span>
   );
 }
 
+/** Product type, translated — a capitalized raw enum is English-only. */
+function TypeLabel({ type }: { type: string }) {
+  const { t } = useTranslation();
+  return <>{TYPE_LABEL_KEYS[type] ? t(TYPE_LABEL_KEYS[type]) : type}</>;
+}
+
 const VECTORISATION_META: Record<
   ApiVectorisationStatus,
-  { label: string; className: string; Icon: React.ComponentType<{ className?: string }> }
+  { labelKey: TranslationKey; className: string; Icon: React.ComponentType<{ className?: string }> }
 > = {
   not_started: {
-    label: 'Not indexed',
+    labelKey: 'products.ai.notIndexed',
     className: 'bg-muted text-muted-foreground',
     Icon: Sparkles,
   },
   pending: {
-    label: 'Indexing…',
+    labelKey: 'products.ai.indexing',
     className: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
     Icon: Loader2,
   },
   completed: {
-    label: 'AI search ready',
+    labelKey: 'products.ai.ready',
     className: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
     Icon: CheckCircle2,
   },
   failed: {
-    label: 'Indexing failed',
+    labelKey: 'products.ai.failed',
     className: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
     Icon: XCircle,
   },
@@ -175,6 +194,7 @@ function VectorisationBadge({
   enabled: boolean;
   status: ApiVectorisationStatus;
 }) {
+  const { t } = useTranslation();
   if (!enabled) return null;
   const meta = VECTORISATION_META[status];
   const { Icon } = meta;
@@ -183,7 +203,7 @@ function VectorisationBadge({
       className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium ${meta.className}`}
     >
       <Icon className={`w-3 h-3 ${status === 'pending' ? 'animate-spin' : ''}`} />
-      {meta.label}
+      {t(meta.labelKey)}
     </span>
   );
 }
@@ -194,6 +214,8 @@ function VectorisationBadge({
 const PRODUCTS_VIEW_KEY = 'products-view-mode';
 
 export function Products() {
+  const { t } = useTranslation();
+  const apiError = useApiError();
   const {
     products,
     selectedProducts,
@@ -231,7 +253,8 @@ export function Products() {
   const [transitionState, setTransitionState] = useState<{
     product: ProductListItem;
     transition: StatusTransition;
-    preflightErrors?: string[];
+    /** Catalog keys, resolved in the dialog — see runActivationPreflight. */
+    preflightErrors?: TranslationKey[];
     loading?: boolean;
   } | null>(null);
 
@@ -323,7 +346,7 @@ export function Products() {
   const handleEdit = useCallback(
     (product: ProductListItem) => {
       if (product.vectorisationStatus === 'pending') {
-        toast.error('Product is being indexed, please try again later');
+        toast.error(t('products.ai.indexingToast'));
         return;
       }
       // All four Edit entry points funnel through here, so the branch lands
@@ -334,7 +357,7 @@ export function Products() {
           : `/dashboard/product-edit/${product.id}`,
       );
     },
-    [navigate],
+    [navigate, t],
   );
 
   const confirmDelete = useCallback(async () => {
@@ -351,25 +374,29 @@ export function Products() {
   const [isBulkArchiving, setIsBulkArchiving] = useState(false);
   const handleBulkArchive = useCallback(async () => {
     if (isBulkArchiving || selectedProducts.length === 0) return;
-    if (!confirm(`Archive ${selectedProducts.length} product(s)?`)) return;
+    if (!confirm(t('products.bulk.confirm', { count: selectedProducts.length }))) return;
     setIsBulkArchiving(true);
     try {
       const result = await bulkArchiveProducts(selectedProducts);
       if (result.failed > 0) {
         toast.warning(
-          `Archived ${result.success} of ${result.total} product(s) — ${result.failed} skipped (only draft or active products can be archived).`,
+          t('products.bulk.partial', {
+            success: result.success,
+            total: result.total,
+            failed: result.failed,
+          }),
         );
       } else {
-        toast.success(`Archived ${result.success} product(s).`);
+        toast.success(t('products.bulk.done', { count: result.success }));
       }
       clearSelection();
       reloadList();
     } catch (err: unknown) {
-      toast.error(err instanceof ApiError ? err.message : 'Could not archive products.');
+      toast.error(apiError.resolve(err, { fallbackKey: 'products.errors.bulkArchiveFailed' }));
     } finally {
       setIsBulkArchiving(false);
     }
-  }, [isBulkArchiving, selectedProducts, clearSelection, reloadList]);
+  }, [isBulkArchiving, selectedProducts, clearSelection, reloadList, t, apiError]);
 
   const requestStatusTransition = useCallback(
     async (product: ProductListItem, transition: StatusTransition) => {
@@ -387,16 +414,14 @@ export function Products() {
           }
           setTransitionState({ product, transition });
         } catch (err: unknown) {
-          const msg =
-            err instanceof Error ? err.message : 'Could not validate product.';
-          toast.error(msg);
+          toast.error(apiError.resolve(err, { fallbackKey: 'products.errors.validateFailed' }));
           setTransitionState(null);
         }
         return;
       }
       setTransitionState({ product, transition });
     },
-    [],
+    [apiError],
   );
 
   const confirmStatusTransition = useCallback(async () => {
@@ -406,43 +431,44 @@ export function Products() {
     try {
       await updateProductStatus(product.id, transition.target);
       toast.success(
-        `"${product.title}" is now ${transition.target.replace('_', ' ')}.`,
+        t('products.toast.statusChanged', {
+          name: product.title,
+          status: t(STATUS_LABEL_KEYS[transition.target] ?? 'products.status.draft'),
+        }),
       );
       setTransitionState(null);
       reloadList();
     } catch (err: unknown) {
-      const mapped =
-        err instanceof ApiError && ACTIVATION_ERROR_MAP[err.code]
-          ? ACTIVATION_ERROR_MAP[err.code]
-          : err instanceof Error
-            ? err.message
-            : 'Could not change product status.';
-      toast.error(mapped);
+      const activationKey =
+        err instanceof ApiError ? ACTIVATION_ERROR_KEYS[err.code] : undefined;
+      toast.error(
+        activationKey
+          ? t(activationKey)
+          : apiError.resolve(err, { fallbackKey: 'products.errors.statusChangeFailed' }),
+      );
       setTransitionState(null);
     }
-  }, [transitionState, reloadList]);
+  }, [transitionState, reloadList, t, apiError]);
 
   const handleVectorisationAction = useCallback(
     async (id: string, action: 'enable' | 'disable' | 'retry') => {
       try {
         if (action === 'enable') {
           await setVectorisationEnabled(id, true);
-          toast.success('AI search enabled — indexing started.');
+          toast.success(t('products.ai.enabled'));
         } else if (action === 'disable') {
           await setVectorisationEnabled(id, false);
-          toast.success('AI search disabled.');
+          toast.success(t('products.ai.disabled'));
         } else {
           await retryVectorisation(id);
-          toast.success('Retry queued — indexing started.');
+          toast.success(t('products.ai.retryQueued'));
         }
         reloadList();
       } catch (err: unknown) {
-        const msg =
-          err instanceof ApiError ? err.message : 'Could not update AI search.';
-        toast.error(msg);
+        toast.error(apiError.resolve(err, { fallbackKey: 'products.ai.updateFailed' }));
       }
     },
-    [reloadList],
+    [reloadList, t, apiError],
   );
 
   const toggleStatusFilter = useCallback((status: string) => {
@@ -475,12 +501,12 @@ export function Products() {
     <FilterSheet
       open={filterSheetOpen}
       onOpenChange={setFilterSheetOpen}
-      title="Filter products"
+      title={t('products.search.filterTitle')}
       activeCount={activeFilterCount}
       onClear={() => setStatusFilter([])}
-      applyLabel="Show products"
+      applyLabel={t('products.search.applyLabel')}
     >
-      <FilterSection title="Status">
+      <FilterSection title={t('products.columns.status')}>
         <FilterMultiChips
           options={STATUS_OPTIONS}
           values={statusFilter}
@@ -492,11 +518,14 @@ export function Products() {
 
   const productFilterChips = (
     <ActiveFilterChips
-      chips={statusFilter.map((value) => ({
-        key: value,
-        label: STATUS_OPTIONS.find((o) => o.value === value)?.label ?? value,
-        onRemove: () => toggleStatusFilter(value),
-      }))}
+      chips={statusFilter.map((value) => {
+        const labelKey = STATUS_OPTIONS.find((o) => o.value === value)?.labelKey;
+        return {
+          key: value,
+          label: labelKey ? t(labelKey) : value,
+          onRemove: () => toggleStatusFilter(value),
+        };
+      })}
       onClearAll={() => setStatusFilter([])}
     />
   );
@@ -544,46 +573,44 @@ export function Products() {
               </div>
               <DialogTitle>
                 {isErrorState
-                  ? 'Cannot publish yet'
-                  : `${transition.label}?`}
+                  ? t('products.activation.cannotPublishTitle')
+                  : t('products.transitions.confirmTitle', { action: t(transition.labelKey) })}
               </DialogTitle>
             </div>
             <DialogDescription className="pt-3 text-left">
               {isErrorState ? (
-                <>
-                  Fix the following before publishing{' '}
-                  <span className="font-semibold text-foreground">
-                    {product.title}
-                  </span>
-                  :
-                </>
+                <Trans
+                  i18nKey="products.activation.cannotPublishDescription"
+                  params={{ name: product.title }}
+                  components={[<span className="font-semibold text-foreground" />]}
+                />
               ) : (
                 <>
                   <span className="font-semibold text-foreground">
                     {product.title}
                   </span>
                   {' — '}
-                  {transition.confirmMessage ?? meta.defaultConfirm}
+                  {t(transition.confirmKey ?? meta.defaultConfirmKey)}
                 </>
               )}
             </DialogDescription>
           </DialogHeader>
           {isErrorState && (
             <ul className="list-disc pl-5 space-y-1 text-sm text-muted-foreground">
-              {preflightErrors!.map((err, i) => (
-                <li key={i}>{err}</li>
+              {preflightErrors!.map((key, i) => (
+                <li key={i}>{t(key)}</li>
               ))}
             </ul>
           )}
           <DialogFooter>
             {isErrorState ? (
               <DialogClose asChild onClick={() => setTransitionState(null)}>
-                <Button variant="outline">Got it</Button>
+                <Button variant="outline">{t('common.actions.gotIt')}</Button>
               </DialogClose>
             ) : (
               <>
                 <DialogClose asChild disabled={loading}>
-                  <Button variant="outline">Cancel</Button>
+                  <Button variant="outline">{t('common.actions.cancel')}</Button>
                 </DialogClose>
                 <Button
                   disabled={loading}
@@ -596,7 +623,7 @@ export function Products() {
                   {loading ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
                   ) : (
-                    meta.confirmCta
+                    t(meta.confirmCtaKey)
                   )}
                 </Button>
               </>
@@ -635,22 +662,22 @@ export function Products() {
             <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center text-orange-600 flex-shrink-0">
               <Trash2 className="w-5 h-5" />
             </div>
-            <DialogTitle>Archive Product?</DialogTitle>
+            <DialogTitle>{t('products.archiveDialog.title')}</DialogTitle>
           </div>
           <DialogDescription className="pt-3 text-left">
-            Archive{' '}
-            <span className="font-semibold text-foreground">
-              {productToDelete?.title}
-            </span>
-            ? It will no longer appear in your store.
+            <Trans
+              i18nKey="products.archiveDialog.description"
+              params={{ name: productToDelete?.title ?? '' }}
+              components={[<span className="font-semibold text-foreground" />]}
+            />
           </DialogDescription>
         </DialogHeader>
         <DialogFooter className="flex sm:justify-end gap-2 pt-2">
           <DialogClose asChild>
-            <Button variant="outline">Keep Product</Button>
+            <Button variant="outline">{t('products.archiveDialog.keep')}</Button>
           </DialogClose>
           <Button variant="destructive" onClick={confirmDelete}>
-            Yes, Archive
+            {t('products.archiveDialog.confirm')}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -661,11 +688,11 @@ export function Products() {
     return (
       <div className="-mx-6 -mt-6">
         <MobilePageHeader
-          title="Products"
+          title={t('products.title')}
           actions={
             <button
               onClick={() => legacyNavigate('product-upload')}
-              aria-label="Add product"
+              aria-label={t('products.actions.addProduct')}
               className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-accent transition-colors"
             >
               <Plus className="w-5 h-5" />
@@ -676,10 +703,10 @@ export function Products() {
               <SearchFilterBar
                 value={searchQuery}
                 onChange={setSearchQuery}
-                placeholder="Search products…"
+                placeholder={t('products.search.placeholder')}
                 activeFilterCount={activeFilterCount}
                 onOpenFilters={() => setFilterSheetOpen(true)}
-                filterLabel="Filter products"
+                filterLabel={t('products.search.filterTitle')}
               />
               {productFilterChips}
             </div>
@@ -702,12 +729,12 @@ export function Products() {
             <div className="flex flex-col items-center gap-3 py-16 text-center">
               <TriangleAlert className="w-10 h-10 text-muted-foreground" />
               <p className="text-sm text-muted-foreground">{infinite.error}</p>
-              <Button variant="outline" size="sm" onClick={infinite.reload}>Try again</Button>
+              <Button variant="outline" size="sm" onClick={infinite.reload}>{t('common.actions.retry')}</Button>
             </div>
           ) : mobileItems.length === 0 ? (
             <div className="flex flex-col items-center gap-3 py-16 text-center">
               <Package className="w-12 h-12 text-muted-foreground" />
-              <p className="text-muted-foreground">No products found</p>
+              <p className="text-muted-foreground">{t('products.empty.title')}</p>
             </div>
           ) : (
             <>
@@ -715,7 +742,7 @@ export function Products() {
                 const editLocked = product.vectorisationStatus === 'pending';
                 const openEdit = () => {
                   if (editLocked) {
-                    toast.error('Editing is locked while AI indexing is in progress.');
+                    toast.error(t('products.ai.editLockedToast'));
                     return;
                   }
                   handleEdit(product);
@@ -737,7 +764,7 @@ export function Products() {
                     <ProductThumbnail product={product} size="lg" />
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold text-sm truncate">{product.title}</p>
-                      <p className="text-xs text-muted-foreground mt-0.5 capitalize">{product.type}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5"><TypeLabel type={product.type} /></p>
                       <p className="text-xs text-muted-foreground mt-0.5">{product.category}</p>
                     </div>
                     <div className="flex items-center gap-1 flex-shrink-0">
@@ -755,7 +782,7 @@ export function Products() {
                           setActionsSheetProduct(product);
                         }}
                         className="w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-full hover:bg-accent transition-colors -mr-1"
-                        aria-label="Product actions"
+                        aria-label={t('products.actions.productActions')}
                       >
                         <MoreHorizontal className="w-5 h-5 text-muted-foreground" />
                       </button>
@@ -773,7 +800,7 @@ export function Products() {
           )}
         </div>
 
-        <MobileListFooter shown={mobileItems.length} total={infinite.total} noun="products" />
+        <MobileListFooter shown={mobileItems.length} total={infinite.total} nounKey="common.units.products" />
 
         {productFilterSheet}
 
@@ -809,19 +836,19 @@ export function Products() {
                   <div className="flex flex-col py-2 pb-6">
                     <SheetActionButton
                       icon={<Edit className="w-5 h-5" />}
-                      label={editLocked ? 'Edit (locked — indexing)' : 'Edit'}
+                      label={editLocked ? t('products.ai.editLocked') : t('common.actions.edit')}
                       disabled={editLocked}
                       onClick={() => { close(); handleEdit(p); }}
                     />
                     <SheetActionButton
                       icon={<Eye className="w-5 h-5" />}
-                      label="Preview"
+                      label={t('products.actions.preview')}
                       onClick={close}
                     />
                     {p.mode === 'simple' && (
                       <SheetActionButton
                         icon={<Wand2 className="w-5 h-5" />}
-                        label="Convert to advanced"
+                        label={t('products.actions.convertToAdvanced')}
                         onClick={() => { close(); setProductToConvert(p); }}
                       />
                     )}
@@ -832,7 +859,7 @@ export function Products() {
                         <SheetActionButton
                           key={transition.intent}
                           icon={<Icon className="w-5 h-5" />}
-                          label={transition.label}
+                          label={t(transition.labelKey)}
                           onClick={() => {
                             close();
                             requestStatusTransition(p, transition);
@@ -843,28 +870,28 @@ export function Products() {
                     {showEnable && (
                       <SheetActionButton
                         icon={<Sparkles className="w-5 h-5" />}
-                        label="Enable AI search"
+                        label={t('products.ai.enable')}
                         onClick={() => { close(); handleVectorisationAction(p.id, 'enable'); }}
                       />
                     )}
                     {showRetry && (
                       <SheetActionButton
                         icon={<RotateCw className="w-5 h-5" />}
-                        label="Retry AI search"
+                        label={t('products.ai.retry')}
                         onClick={() => { close(); handleVectorisationAction(p.id, 'retry'); }}
                       />
                     )}
                     {showDisable && (
                       <SheetActionButton
                         icon={<XCircle className="w-5 h-5" />}
-                        label="Disable AI search"
+                        label={t('products.ai.disable')}
                         onClick={() => { close(); handleVectorisationAction(p.id, 'disable'); }}
                       />
                     )}
                     {archiveTransition && (
                       <SheetActionButton
                         icon={<Trash2 className="w-5 h-5" />}
-                        label={archiveTransition.label}
+                        label={t(archiveTransition.labelKey)}
                         destructive
                         onClick={() => {
                           close();
@@ -893,12 +920,12 @@ export function Products() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Products</h1>
-          <p className="text-muted-foreground">Manage your product catalog</p>
+          <h1 className="text-2xl font-bold">{t('products.title')}</h1>
+          <p className="text-muted-foreground">{t('products.subtitle')}</p>
         </div>
         <Button onClick={() => legacyNavigate('product-upload')} className="gap-2">
           <Plus className="w-4 h-4" />
-          Add Product
+          {t('products.actions.addProduct')}
         </Button>
       </div>
 
@@ -907,17 +934,17 @@ export function Products() {
         <SearchFilterBar
           value={searchQuery}
           onChange={setSearchQuery}
-          placeholder="Search products…"
+          placeholder={t('products.search.placeholder')}
           activeFilterCount={activeFilterCount}
           onOpenFilters={() => setFilterSheetOpen(true)}
-          filterLabel="Filter products"
+          filterLabel={t('products.search.filterTitle')}
           trailing={
             <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as 'grid' | 'list')}>
               <TabsList className="h-11 rounded-xl">
-                <TabsTrigger value="grid" aria-label="Grid view">
+                <TabsTrigger value="grid" aria-label={t('products.actions.gridView')}>
                   <Grid3X3 className="w-4 h-4" />
                 </TabsTrigger>
-                <TabsTrigger value="list" aria-label="List view">
+                <TabsTrigger value="list" aria-label={t('products.actions.listView')}>
                   <List className="w-4 h-4" />
                 </TabsTrigger>
               </TabsList>
@@ -932,7 +959,9 @@ export function Products() {
       {/* Bulk action bar */}
       {selectedProducts.length > 0 && (
         <div className="flex items-center gap-2 p-4 bg-muted/50 rounded-lg">
-          <span className="text-sm text-muted-foreground">{selectedProducts.length} selected</span>
+          <span className="text-sm text-muted-foreground">
+            {t('common.pagination.selected', { count: selectedProducts.length })}
+          </span>
           <div className="flex-1" />
           <Button
             variant="destructive"
@@ -946,7 +975,7 @@ export function Products() {
             ) : (
               <Trash2 className="w-4 h-4" />
             )}
-            Archive selected
+            {t('products.actions.archiveSelected')}
           </Button>
         </div>
       )}
@@ -969,12 +998,12 @@ export function Products() {
               ? (
                 <div className="col-span-full py-12 text-center">
                   <Package className="w-16 h-16 mx-auto text-muted-foreground mb-4" />
-                  <p className="text-muted-foreground mb-4">No products found</p>
+                  <p className="text-muted-foreground mb-4">{t('products.empty.title')}</p>
                   <Button
                     variant="outline"
                     onClick={() => { setSearchQuery(''); setStatusFilter([]); }}
                   >
-                    Clear filters
+                    {t('products.actions.clearFilters')}
                   </Button>
                 </div>
               )
@@ -1010,9 +1039,9 @@ export function Products() {
                       }}
                     />
                   </th>
-                  <th className="text-left p-4 text-sm font-medium">Product</th>
-                  <th className="text-left p-4 text-sm font-medium">Status</th>
-                  <th className="text-left p-4 text-sm font-medium">Type</th>
+                  <th className="text-left p-4 text-sm font-medium">{t('products.columns.product')}</th>
+                  <th className="text-left p-4 text-sm font-medium">{t('products.columns.status')}</th>
+                  <th className="text-left p-4 text-sm font-medium">{t('products.columns.type')}</th>
                   {/* <th className="text-left p-4 text-sm font-medium">Variants</th> */}
                   <th className="w-12 p-4" />
                 </tr>
@@ -1031,7 +1060,7 @@ export function Products() {
                       <tr>
                         <td colSpan={6} className="p-8 text-center">
                           <Package className="w-12 h-12 mx-auto text-muted-foreground mb-3" />
-                          <p className="text-muted-foreground">No products found</p>
+                          <p className="text-muted-foreground">{t('products.empty.title')}</p>
                         </td>
                       </tr>
                     )
@@ -1066,7 +1095,7 @@ export function Products() {
                           </div>
                         </td>
                         <td className="p-4">
-                          <span className="text-sm capitalize">{product.type}</span>
+                          <span className="text-sm"><TypeLabel type={product.type} /></span>
                         </td>
                         {/* <td className="p-4">
                         {product.hasVariants ? (
@@ -1105,9 +1134,7 @@ export function Products() {
       {/* Pagination */}
       {pagination && pagination.totalPages > 1 && (
         <div className="flex items-center justify-between text-sm text-muted-foreground">
-          <span>
-            {pagination.total} product{pagination.total !== 1 ? 's' : ''}
-          </span>
+          <span>{t('common.units.products', { count: pagination.total })}</span>
           <div className="flex items-center gap-2">
             <Button
               variant="outline"
@@ -1115,10 +1142,13 @@ export function Products() {
               disabled={pagination.page <= 1}
               onClick={() => fetchProducts({ page: pagination.page - 1 })}
             >
-              Previous
+              {t('common.pagination.previous')}
             </Button>
             <span>
-              Page {pagination.page} of {pagination.totalPages}
+              {t('common.pagination.pageOf', {
+                page: pagination.page,
+                total: pagination.totalPages,
+              })}
             </span>
             <Button
               variant="outline"
@@ -1126,7 +1156,7 @@ export function Products() {
               disabled={pagination.page >= pagination.totalPages}
               onClick={() => fetchProducts({ page: pagination.page + 1 })}
             >
-              Next
+              {t('common.pagination.next')}
             </Button>
           </div>
         </div>
@@ -1176,6 +1206,7 @@ function ProductGridCard({
   onStatusTransition,
   onConvertToAdvanced,
 }: ProductGridCardProps) {
+  const { t } = useTranslation();
   return (
     <div className="animate-fade-in">
       <Card onClick={onEdit} className="group hover:shadow-lg transition-all overflow-hidden gap-0">
@@ -1215,7 +1246,7 @@ function ProductGridCard({
           <div className="flex items-start justify-between gap-2">
             <div className="flex-1 min-w-0">
               <h3 className="font-medium truncate text-sm">{product.title}</h3>
-              <p className="text-xs text-muted-foreground capitalize">{product.type}</p>
+              <p className="text-xs text-muted-foreground"><TypeLabel type={product.type} /></p>
             </div>
             <ProductActionsMenu
               product={product}
@@ -1231,7 +1262,7 @@ function ProductGridCard({
             </Badge>
             {product.mode === 'simple' && (
               <Badge variant="outline" className="text-xs">
-                Quick
+                {t('products.wizard.modeQuick')}
               </Badge>
             )}
             {/* {product.hasVariants && (
@@ -1261,6 +1292,7 @@ function ProductActionsMenu({
   onStatusTransition,
   onConvertToAdvanced,
 }: ProductActionsMenuProps) {
+  const { t } = useTranslation();
   const editLocked = product.vectorisationStatus === 'pending';
 
   const showEnable = !product.vectorisationEnabled;
@@ -1286,17 +1318,17 @@ function ProductActionsMenu({
           disabled={editLocked}
         >
           <Edit className="w-4 h-4 mr-2" />
-          {editLocked ? 'Edit (locked — indexing)' : 'Edit'}
+          {editLocked ? t('products.ai.editLocked') : t('common.actions.edit')}
         </DropdownMenuItem>
         <DropdownMenuItem>
           <Eye className="w-4 h-4 mr-2" />
-          Preview
+          {t('products.actions.preview')}
         </DropdownMenuItem>
 
         {product.mode === 'simple' && (
           <DropdownMenuItem onClick={onConvertToAdvanced}>
             <Wand2 className="w-4 h-4 mr-2" />
-            Convert to advanced
+            {t('products.actions.convertToAdvanced')}
           </DropdownMenuItem>
         )}
 
@@ -1309,7 +1341,7 @@ function ProductActionsMenu({
               onClick={() => onStatusTransition(transition)}
             >
               <Icon className="w-4 h-4 mr-2" />
-              {transition.label}
+              {t(transition.labelKey)}
             </DropdownMenuItem>
           );
         })}
@@ -1317,19 +1349,19 @@ function ProductActionsMenu({
         {showEnable && (
           <DropdownMenuItem onClick={() => onVectorisationAction('enable')}>
             <Sparkles className="w-4 h-4 mr-2" />
-            Enable AI search
+            {t('products.ai.enable')}
           </DropdownMenuItem>
         )}
         {showRetry && (
           <DropdownMenuItem onClick={() => onVectorisationAction('retry')}>
             <RotateCw className="w-4 h-4 mr-2" />
-            Retry AI search
+            {t('products.ai.retry')}
           </DropdownMenuItem>
         )}
         {showDisable && (
           <DropdownMenuItem onClick={() => onVectorisationAction('disable')}>
             <XCircle className="w-4 h-4 mr-2" />
-            Disable AI search
+            {t('products.ai.disable')}
           </DropdownMenuItem>
         )}
 
@@ -1339,7 +1371,7 @@ function ProductActionsMenu({
             className="text-destructive"
           >
             <Trash2 className="w-4 h-4 mr-2" />
-            {archiveTransition.label}
+            {t(archiveTransition.labelKey)}
           </DropdownMenuItem>
         )}
       </DropdownMenuContent>

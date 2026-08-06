@@ -5,6 +5,7 @@
 
 import { api, BASE_URL } from './api';
 import { ApiError, type ApiErrorDetail, type UploadViolation } from '@/types/api';
+import { tStatic } from '@/i18n';
 import type {
   ApiFile,
   ApiFileDetail,
@@ -196,22 +197,24 @@ export function validateMediaSelection(files: File[]): string | null {
   const others = files.filter((f) => !isVideoUpload(f));
 
   if (others.length > MAX_FILES_PER_UPLOAD) {
-    return `You can upload at most ${MAX_FILES_PER_UPLOAD} files at once.`;
+    return tStatic('media.upload.validation.tooManyFiles', { max: MAX_FILES_PER_UPLOAD });
   }
   if (videos.length > MAX_VIDEOS_PER_UPLOAD) {
-    return `You can upload at most ${MAX_VIDEOS_PER_UPLOAD} videos at once.`;
+    return tStatic('media.upload.validation.tooManyVideos', { max: MAX_VIDEOS_PER_UPLOAD });
   }
 
   const tooBig = others.find((f) => f.size > VENDOR_MAX_BYTES);
-  if (tooBig) return `"${tooBig.name}" exceeds the 500 MB limit.`;
+  if (tooBig) return tStatic('media.upload.validation.fileTooLarge', { name: tooBig.name });
 
   const bigVideo = videos.find((f) => f.size > VIDEO_MAX_BYTES);
-  if (bigVideo) return `"${bigVideo.name}" exceeds the 70 MB video limit.`;
+  if (bigVideo) return tStatic('media.upload.validation.videoTooLarge', { name: bigVideo.name });
 
   const badFormat = videos.find(
     (f) => f.type && !(VIDEO_MIME_TYPES as readonly string[]).includes(f.type),
   );
-  if (badFormat) return `"${badFormat.name}" is not a supported video (use MP4, MOV or WebM).`;
+  if (badFormat) {
+    return tStatic('media.upload.validation.videoFormat', { name: badFormat.name });
+  }
 
   return null;
 }

@@ -16,6 +16,7 @@ import {
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
 import { ProductMediaUpload } from '@/components/products/ProductMediaUpload';
+import { useTranslation, useMessage } from '@/i18n';
 import { PRODUCT_IMAGE_LIMIT } from '@/components/products/media.constants';
 import {
   simpleProductSchema,
@@ -92,6 +93,8 @@ export function SimpleProductForm({
   onCancel,
   children,
 }: SimpleProductFormProps) {
+  const { t } = useTranslation();
+  const m = useMessage();
   const isEdit = mode === 'edit';
   const tagInputRef = useRef<HTMLInputElement>(null);
   const [moreOpen, setMoreOpen] = useState(false);
@@ -184,16 +187,15 @@ export function SimpleProductForm({
       {formError && (
         <Alert variant="destructive">
           <AlertCircle className="w-4 h-4" />
-          <AlertDescription>{formError}</AlertDescription>
+          <AlertDescription>{m(formError)}</AlertDescription>
         </Alert>
       )}
 
       {/* Photos */}
       <div className="space-y-1.5">
-        <Label>Photos</Label>
+        <Label>{t('products.fields.photos')}</Label>
         <p className="text-xs text-muted-foreground">
-          Up to {PRODUCT_IMAGE_LIMIT.physical}. The first one is your thumbnail — drag to
-          reorder.
+          {t('products.fields.photosHint', { max: PRODUCT_IMAGE_LIMIT.physical })}
         </p>
         <ProductMediaUpload
           existingFiles={existingFiles}
@@ -202,43 +204,43 @@ export function SimpleProductForm({
           onMediaChange={(ids) => setValue('fileIds', ids, { shouldDirty: true })}
         />
         {errors.fileIds && (
-          <p className="text-xs text-destructive">{errors.fileIds.message as string}</p>
+          <p className="text-xs text-destructive">{m(errors.fileIds.message as string)}</p>
         )}
       </div>
 
       {/* Title */}
       <div className="space-y-1.5">
         <Label htmlFor="title">
-          Product name <span className="text-destructive">*</span>
+          {t('products.fields.productName')} <span className="text-destructive">*</span>
         </Label>
         <Input
           id="title"
-          placeholder="e.g. Nike Air Max 90"
+          placeholder={t('products.fields.namePlaceholder')}
           disabled={isBusy}
           {...register('title')}
           aria-invalid={!!errors.title}
         />
-        {errors.title && <p className="text-xs text-destructive">{errors.title.message}</p>}
+        {errors.title && <p className="text-xs text-destructive">{m(errors.title.message)}</p>}
       </div>
 
       {/* Description */}
       <div className="space-y-1.5">
         <Label htmlFor="description">
-          Description <span className="text-destructive">*</span>
+          {t('products.fields.description')} <span className="text-destructive">*</span>
         </Label>
         <Textarea
           id="description"
-          placeholder="Describe your product — materials, features, use cases…"
+          placeholder={t('products.fields.descriptionHelp')}
           rows={4}
           disabled={isBusy}
           {...register('description')}
           aria-invalid={!!errors.description}
         />
         {errors.description ? (
-          <p className="text-xs text-destructive">{errors.description.message}</p>
+          <p className="text-xs text-destructive">{m(errors.description.message)}</p>
         ) : (
           <p className="text-xs text-muted-foreground">
-            Required — a product with no description cannot be published.
+            {t('products.fields.descriptionRequired')}
           </p>
         )}
       </div>
@@ -246,23 +248,23 @@ export function SimpleProductForm({
       {/* Category */}
       <div className="space-y-1.5">
         <Label htmlFor="category">
-          Category <span className="text-destructive">*</span>
+          {t('products.fields.category')} <span className="text-destructive">*</span>
         </Label>
         <Input
           id="category"
-          placeholder="e.g. Apparel, Electronics, Footwear"
+          placeholder={t('products.fields.categoryPlaceholder')}
           disabled={isBusy}
           {...register('category')}
           aria-invalid={!!errors.category}
         />
-        {errors.category && <p className="text-xs text-destructive">{errors.category.message}</p>}
+        {errors.category && <p className="text-xs text-destructive">{m(errors.category.message)}</p>}
       </div>
 
       {/* Price / compare-at / stock */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="space-y-1.5">
           <Label htmlFor="price">
-            Price <span className="text-destructive">*</span>
+            {t('products.fields.price')} <span className="text-destructive">*</span>
           </Label>
           <Input
             id="price"
@@ -275,38 +277,38 @@ export function SimpleProductForm({
             {...register('price')}
             aria-invalid={!!errors.price}
           />
-          {errors.price && <p className="text-xs text-destructive">{errors.price.message}</p>}
+          {errors.price && <p className="text-xs text-destructive">{m(errors.price.message)}</p>}
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="compareAtPrice">Compare-at price</Label>
+          <Label htmlFor="compareAtPrice">{t('products.fields.compareAtPrice')}</Label>
           <Input
             id="compareAtPrice"
             type="number"
             min={0}
             step="any"
             inputMode="decimal"
-            placeholder="Optional"
+            placeholder={t('products.fields.compareAtOptional')}
             disabled={isBusy}
             {...register('compareAtPrice')}
             aria-invalid={!!errors.compareAtPrice}
           />
           {errors.compareAtPrice ? (
-            <p className="text-xs text-destructive">{errors.compareAtPrice.message}</p>
+            <p className="text-xs text-destructive">{m(errors.compareAtPrice.message)}</p>
           ) : (
             <p className="text-xs text-muted-foreground">
               {typeof compareAtPrice === 'number' &&
               typeof price === 'number' &&
               compareAtPrice > 0 &&
               compareAtPrice <= price
-                ? 'Customers only see a discount when this is higher than the price.'
-                : 'Shown struck through when higher than the price.'}
+                ? t('products.fields.compareAtTooLowHint')
+                : t('products.fields.compareAtHigherHint')}
             </p>
           )}
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="stock">Stock</Label>
+          <Label htmlFor="stock">{t('products.fields.stock')}</Label>
           <Input
             id="stock"
             type="number"
@@ -318,13 +320,15 @@ export function SimpleProductForm({
             {...register('stock')}
             aria-invalid={!!errors.stock}
           />
-          {errors.stock && <p className="text-xs text-destructive">{errors.stock.message}</p>}
+          {errors.stock && <p className="text-xs text-destructive">{m(errors.stock.message)}</p>}
         </div>
 
         <div className="flex items-center justify-between gap-3 rounded-lg border border-border px-4 py-3 self-end">
           <div className="min-w-0">
-            <p className="text-sm font-medium">Unlimited stock</p>
-            <p className="text-xs text-muted-foreground mt-0.5">Never runs out.</p>
+            <p className="text-sm font-medium">{t('products.fields.unlimitedStock')}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {t('products.fields.unlimitedStockHint')}
+            </p>
           </div>
           <Switch
             checked={isInfiniteStock === true}
@@ -332,7 +336,7 @@ export function SimpleProductForm({
               setValue('isInfiniteStock', checked, { shouldDirty: true })
             }
             disabled={isBusy}
-            aria-label="Unlimited stock"
+            aria-label={t('products.fields.unlimitedStock')}
           />
         </div>
       </div>
@@ -342,7 +346,7 @@ export function SimpleProductForm({
         <CollapsibleTrigger asChild>
           <Button type="button" variant="outline" size="sm" className="gap-1.5 w-full sm:w-auto">
             <Settings2 className="w-3.5 h-3.5" />
-            More options
+            {t('products.fields.moreOptions')}
             <ChevronDown
               className={cn('w-3.5 h-3.5 transition-transform', moreOpen && 'rotate-180')}
             />
@@ -352,23 +356,23 @@ export function SimpleProductForm({
         <CollapsibleContent className="space-y-6 pt-4">
           {/* SKU */}
           <div className="space-y-1.5">
-            <Label htmlFor="sku">SKU</Label>
+            <Label htmlFor="sku">{t('products.fields.sku')}</Label>
             <Input
               id="sku"
-              placeholder={
-                isEdit ? 'Product SKU' : 'Leave blank to generate one automatically'
-              }
+              placeholder={t(
+                isEdit
+                  ? 'products.fields.skuPlaceholderEdit'
+                  : 'products.fields.skuPlaceholderCreate',
+              )}
               disabled={isBusy}
               {...register('sku')}
               aria-invalid={!!errors.sku}
             />
             {errors.sku ? (
-              <p className="text-xs text-destructive">{errors.sku.message}</p>
+              <p className="text-xs text-destructive">{m(errors.sku.message)}</p>
             ) : (
               <p className="text-xs text-muted-foreground">
-                {isEdit
-                  ? 'Orders and your storefront reference this SKU. Change it only if you are sure.'
-                  : 'SKUs are unique across the whole platform.'}
+                {t(isEdit ? 'products.fields.skuHintEdit' : 'products.fields.skuHintCreate')}
               </p>
             )}
           </div>
@@ -377,28 +381,28 @@ export function SimpleProductForm({
           {isEdit && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <Label htmlFor="lowStockThreshold">Low-stock alert at</Label>
+                <Label htmlFor="lowStockThreshold">{t('products.fields.lowStockAlertAt')}</Label>
                 <Input
                   id="lowStockThreshold"
                   type="number"
                   min={0}
                   step={1}
                   inputMode="numeric"
-                  placeholder="No alert"
+                  placeholder={t('products.fields.noAlert')}
                   disabled={isBusy}
                   {...register('lowStockThreshold')}
                   aria-invalid={!!errors.lowStockThreshold}
                 />
                 {errors.lowStockThreshold && (
-                  <p className="text-xs text-destructive">{errors.lowStockThreshold.message}</p>
+                  <p className="text-xs text-destructive">{m(errors.lowStockThreshold.message)}</p>
                 )}
               </div>
 
               <div className="flex items-center justify-between gap-3 rounded-lg border border-border px-4 py-3 self-end">
                 <div className="min-w-0">
-                  <p className="text-sm font-medium">Allow overselling</p>
+                  <p className="text-sm font-medium">{t('products.fields.allowOversell')}</p>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Accept orders past your stock count.
+                    {t('products.fields.allowOversellHint')}
                   </p>
                 </div>
                 <Switch
@@ -407,7 +411,7 @@ export function SimpleProductForm({
                     setValue('allowOversell', checked, { shouldDirty: true })
                   }
                   disabled={isBusy}
-                  aria-label="Allow overselling"
+                  aria-label={t('products.fields.allowOversell')}
                 />
               </div>
             </div>
@@ -415,7 +419,7 @@ export function SimpleProductForm({
 
           {/* Tags */}
           <div className="space-y-1.5">
-            <Label>Tags</Label>
+            <Label>{t('products.fields.tags')}</Label>
             <div className="flex flex-wrap gap-1.5 mb-2">
               {tags.map((tag, i) => (
                 <Badge key={`${tag}-${i}`} variant="secondary" className="gap-1 text-xs">
@@ -434,7 +438,7 @@ export function SimpleProductForm({
             <div className="flex gap-2">
               <Input
                 ref={tagInputRef}
-                placeholder="Add tag, press Enter or comma"
+                placeholder={t('products.fields.addTagPlaceholder')}
                 className="h-8"
                 disabled={isBusy}
                 onKeyDown={onTagKeyDown}
@@ -448,29 +452,29 @@ export function SimpleProductForm({
                 className="gap-1.5 shrink-0"
               >
                 <Plus className="w-3.5 h-3.5" />
-                Add
+                {t('common.actions.add')}
               </Button>
             </div>
             {errors.tags?.message && (
-              <p className="text-xs text-destructive">{errors.tags.message as string}</p>
+              <p className="text-xs text-destructive">{m(errors.tags.message as string)}</p>
             )}
           </div>
 
           {/* Shipping dimensions */}
           <div className="rounded-lg border border-border p-4 space-y-4">
-            <p className="text-sm font-medium">Weight &amp; dimensions (optional)</p>
+            <p className="text-sm font-medium">{t('products.fields.dimensionsTitle')}</p>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {(
                 [
-                  ['weight', 'Weight (g)'],
-                  ['length', 'Length (cm)'],
-                  ['width', 'Width (cm)'],
-                  ['height', 'Height (cm)'],
+                  ['weight', 'products.fields.weightG'],
+                  ['length', 'products.fields.lengthCm'],
+                  ['width', 'products.fields.widthCm'],
+                  ['height', 'products.fields.heightCm'],
                 ] as const
-              ).map(([field, label]) => (
+              ).map(([field, labelKey]) => (
                 <div key={field} className="space-y-1.5">
                   <Label htmlFor={field} className="text-xs text-muted-foreground">
-                    {label}
+                    {t(labelKey)}
                   </Label>
                   <Input
                     id={field}
@@ -483,7 +487,7 @@ export function SimpleProductForm({
                     aria-invalid={!!errors[field]}
                   />
                   {errors[field] && (
-                    <p className="text-xs text-destructive">{errors[field]?.message}</p>
+                    <p className="text-xs text-destructive">{m(errors[field]?.message)}</p>
                   )}
                 </div>
               ))}
@@ -492,34 +496,38 @@ export function SimpleProductForm({
 
           {/* SEO */}
           <div className="rounded-lg border border-border p-4 space-y-4">
-            <p className="text-sm font-medium">SEO (optional)</p>
+            <p className="text-sm font-medium">{t('products.fields.seoTitle')}</p>
 
             <div className="space-y-1.5">
               <Label htmlFor="seoTitle" className="text-xs text-muted-foreground">
-                SEO title{' '}
-                <span className="text-muted-foreground/60">({seoTitle.length}/60)</span>
+                {t('products.fields.seoTitleLabel')}{' '}
+                <span className="text-muted-foreground/60">
+                  {t('products.fields.charCount', { used: seoTitle.length, max: 60 })}
+                </span>
               </Label>
               <Input
                 id="seoTitle"
-                placeholder="Leave blank to use the product name"
+                placeholder={t('products.fields.seoTitlePlaceholder')}
                 maxLength={60}
                 disabled={isBusy}
                 {...register('seoTitle')}
                 aria-invalid={!!errors.seoTitle}
               />
               {errors.seoTitle && (
-                <p className="text-xs text-destructive">{errors.seoTitle.message}</p>
+                <p className="text-xs text-destructive">{m(errors.seoTitle.message)}</p>
               )}
             </div>
 
             <div className="space-y-1.5">
               <Label htmlFor="seoDescription" className="text-xs text-muted-foreground">
-                SEO description{' '}
-                <span className="text-muted-foreground/60">({seoDesc.length}/160)</span>
+                {t('products.fields.seoDescriptionLabel')}{' '}
+                <span className="text-muted-foreground/60">
+                  {t('products.fields.charCount', { used: seoDesc.length, max: 160 })}
+                </span>
               </Label>
               <Textarea
                 id="seoDescription"
-                placeholder="Brief description for search engines"
+                placeholder={t('products.fields.seoDescriptionPlaceholder')}
                 maxLength={160}
                 rows={2}
                 disabled={isBusy}
@@ -527,7 +535,7 @@ export function SimpleProductForm({
                 aria-invalid={!!errors.seoDescription}
               />
               {errors.seoDescription && (
-                <p className="text-xs text-destructive">{errors.seoDescription.message}</p>
+                <p className="text-xs text-destructive">{m(errors.seoDescription.message)}</p>
               )}
             </div>
           </div>
@@ -539,7 +547,7 @@ export function SimpleProductForm({
       {/* Action bar */}
       <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-2 pt-2 border-t border-border">
         <Button type="button" variant="ghost" size="sm" onClick={onCancel} disabled={isSubmitting}>
-          Cancel
+          {t('common.actions.cancel')}
         </Button>
 
         <div className="flex flex-col-reverse sm:flex-row gap-2">
@@ -552,11 +560,11 @@ export function SimpleProductForm({
                   disabled={isBusy}
                   onClick={() => submitWith('publish')}
                 >
-                  Save &amp; publish
+                  {t('products.simple.savePublish')}
                 </Button>
               )}
               <Button type="submit" disabled={isBusy} onClick={() => submitWith('save')}>
-                {isSubmitting ? 'Saving…' : 'Save changes'}
+                {isSubmitting ? t('common.actions.saving') : t('common.actions.saveChanges')}
               </Button>
             </>
           ) : (
@@ -567,10 +575,10 @@ export function SimpleProductForm({
                 disabled={isBusy}
                 onClick={() => submitWith('draft')}
               >
-                Save draft
+                {t('products.wizard.saveDraft')}
               </Button>
               <Button type="submit" disabled={isBusy} onClick={() => submitWith('publish')}>
-                {isSubmitting ? 'Publishing…' : 'Publish'}
+                {isSubmitting ? t('products.simple.publishing') : t('products.actions.publish')}
               </Button>
             </>
           )}

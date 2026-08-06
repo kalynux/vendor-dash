@@ -8,6 +8,8 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 
+import type { TranslationKey } from '@/i18n';
+
 export type QuickActionRoute =
   | 'product-upload'
   | 'orders'
@@ -18,8 +20,9 @@ export type QuickActionRoute =
 
 export interface QuickAction {
   id: string;
-  label: string;
-  description: string;
+  /** Translation keys — resolved at render time so the menu follows the locale. */
+  labelKey: TranslationKey;
+  descriptionKey: TranslationKey;
   icon: LucideIcon;
   /** Legacy route name to navigate to. */
   route: QuickActionRoute;
@@ -37,45 +40,45 @@ export interface QuickAction {
 export const QUICK_ACTIONS: QuickAction[] = [
   {
     id: 'add-product',
-    label: 'Add Product',
-    description: 'Create a new listing',
+    labelKey: 'nav.quickActions.addProduct',
+    descriptionKey: 'nav.quickActions.addProductDescription',
     icon: Box,
     route: 'product-upload',
   },
   {
     id: 'create-order',
-    label: 'Create Order',
-    description: 'Draft an order for a customer',
+    labelKey: 'nav.quickActions.createOrder',
+    descriptionKey: 'nav.quickActions.createOrderDescription',
     icon: ShoppingBag,
     route: 'orders',
   },
   {
     id: 'add-service',
-    label: 'Add Service',
-    description: 'Create a bookable service',
+    labelKey: 'nav.quickActions.addService',
+    descriptionKey: 'nav.quickActions.addServiceDescription',
     icon: CalendarClock,
     route: 'services',
     intent: 'create',
   },
   {
     id: 'new-ticket',
-    label: 'New Ticket',
-    description: 'Get help from the team',
+    labelKey: 'nav.quickActions.newTicket',
+    descriptionKey: 'nav.quickActions.newTicketDescription',
     icon: Ticket,
     route: 'tickets',
     intent: 'create',
   },
   {
     id: 'add-customer',
-    label: 'Add Customer',
-    description: 'Save a new contact',
+    labelKey: 'nav.quickActions.addCustomer',
+    descriptionKey: 'nav.quickActions.addCustomerDescription',
     icon: UserPlus,
     route: 'customers',
   },
   {
     id: 'upload-media',
-    label: 'Upload Media',
-    description: 'Add product photos or banners',
+    labelKey: 'nav.quickActions.uploadMedia',
+    descriptionKey: 'nav.quickActions.uploadMediaDescription',
     icon: ImageIcon,
     route: 'media',
   },

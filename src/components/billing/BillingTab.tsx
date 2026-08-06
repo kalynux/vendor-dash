@@ -14,7 +14,7 @@ import {
 } from '@/services/billing.service';
 import { fetchProducts } from '@/services/products.service';
 import { fetchStorageUsage } from '@/services/files.service';
-import { ApiError } from '@/types/api';
+import { useTranslation, useFormatters, useApiError, type TranslationKey } from '@/i18n';
 import type {
   CurrentPlanData,
   PricingPlan,
@@ -38,7 +38,6 @@ import {
   SettingsSections,
 } from '@/components/vendor-settings/SettingsSection';
 import {
-  formatCredits,
   readStripeResume,
   clearStripeResume,
   type StripeResumeKind,
@@ -49,13 +48,16 @@ interface PaymentRequest {
   summary: string;
   amount: number;
   currency: string;
-  successLabel: string;
+  successLabelKey: TranslationKey;
   paymentKind: StripeResumeKind;
   initiate: (gateway: PaymentGateway, channel: PaymentChannel) => Promise<PaymentInitResult>;
   verify: (id: string) => Promise<{ status: PaymentStatus }>;
 }
 
 export function BillingTab() {
+  const { t } = useTranslation();
+  const fmt = useFormatters();
+  const apiError = useApiError();
   const [current, setCurrent] = useState<CurrentPlanData | null>(null);
   const [plans, setPlans] = useState<PricingPlan[]>([]);
   const [balance, setBalance] = useState<number | null>(null);
@@ -88,7 +90,9 @@ export function BillingTab() {
       setPacks(packList);
       setStorage(storageData);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Failed to load billing information.');
+      setError(
+        apiError.resolve(err, { context: 'billing', fallbackKey: 'billing.errors.loadFailed' }),
+      );
     } finally {
       setLoading(false);
     }
@@ -100,7 +104,7 @@ export function BillingTab() {
     } catch {
       setProductCount(null);
     }
-  }, []);
+  }, [apiError]);
 
   useEffect(() => {
     load();
@@ -122,13 +126,17 @@ export function BillingTab() {
           const { status } = await verify(marker.id);
           if (status === 'paid') {
             if (!cancelled) {
-              toast.success(marker.kind === 'plan' ? 'Plan purchased' : 'Credits added');
+              toast.success(
+                marker.kind === 'plan'
+                  ? t('billing.toast.planPurchased')
+                  : t('billing.toast.creditsAdded'),
+              );
               await refreshAfterPayment();
             }
             return;
           }
           if (status === 'failed' || status === 'reversed') {
-            if (!cancelled) toast.error('The card payment was not completed.');
+            if (!cancelled) toast.error(t('billing.checkout.resumeFailed'));
             return;
           }
         } catch {
@@ -137,7 +145,7 @@ export function BillingTab() {
         await new Promise((r) => setTimeout(r, 3000));
       }
       if (!cancelled) {
-        toast.info("We're still confirming your card payment — it'll update here shortly.");
+        toast.info(t('billing.checkout.resumePending'));
       }
     })();
     return () => {
@@ -169,11 +177,11 @@ export function BillingTab() {
 
   function openPlanPurchase(plan: PricingPlan) {
     setPayment({
-      title: `Switch to ${plan.name}`,
-      summary: `${plan.name} plan`,
+      title: t('billing.plans.switchTo', { name: plan.name }),
+      summary: t('billing.plans.planSummary', { name: plan.name }),
       amount: plan.price,
       currency: plan.currency,
-      successLabel: 'Plan purchased',
+      successLabelKey: 'billing.toast.planPurchased',
       paymentKind: 'plan',
       initiate: (gateway, channel) => initiatePlanPurchase(plan._id, { gateway, channel }),
       verify: verifyPlanPurchase,
@@ -183,11 +191,11 @@ export function BillingTab() {
 
   function openPackPurchase(pack: CreditPack) {
     setPayment({
-      title: 'Buy credits',
-      summary: `${formatCredits(pack.credits)} credits`,
+      title: t('billing.credits.buyTitle'),
+      summary: t('billing.credits.packCredits', { credits: fmt.number(pack.credits) }),
       amount: pack.price,
       currency: pack.currency,
-      successLabel: 'Credits added',
+      successLabelKey: 'billing.toast.creditsAdded',
       paymentKind: 'topup',
       initiate: (gateway, channel) => initiateTopup({ packCode: pack.code, gateway, channel }),
       verify: verifyTopup,
@@ -213,7 +221,7 @@ export function BillingTab() {
         <AlertCircle className="h-8 w-8 text-destructive" />
         <p className="text-sm text-destructive">{error}</p>
         <Button variant="outline" size="sm" onClick={load}>
-          Retry
+          {t('common.actions.retry')}
         </Button>
       </div>
     );
@@ -235,8 +243,8 @@ export function BillingTab() {
 
         <SettingsSection
           ref={plansRef}
-          title="Plans"
-          info="Upgrade any time. A paid plan you buy now doesn't cut your current one short — it's queued and starts the day the current one ends."
+          title={t('billing.plans.title')}
+          info={t('billing.plans.info')}
         >
           <PlansCatalog plans={plans} current={current} onBuy={openPlanPurchase} />
         </SettingsSection>
@@ -254,7 +262,7 @@ export function BillingTab() {
           summary={payment.summary}
           amount={payment.amount}
           currency={payment.currency}
-          successLabel={payment.successLabel}
+          successLabelKey={payment.successLabelKey}
           paymentKind={payment.paymentKind}
           initiate={payment.initiate}
           verify={payment.verify}

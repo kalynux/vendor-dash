@@ -7,6 +7,7 @@ import { BrandingFields } from '@/components/vendor-settings/forms/BrandingField
 import { mapProfileError } from '@/components/vendor-settings/errors';
 import { UnsavedChangesBar } from '@/components/vendor-settings/UnsavedChangesBar';
 import { SettingsSection } from '@/components/vendor-settings/SettingsSection';
+import { useTranslation } from '@/i18n';
 
 const FORM_ID = 'settings-addresses-form';
 
@@ -17,6 +18,7 @@ const FORM_ID = 'settings-addresses-form';
  * other profile fields (PATCH /vendor/profile uses full-replace semantics per field).
  */
 export function BusinessAddressSettings() {
+    const { t } = useTranslation();
     const { session, updateVendorProfile } = useOnboarding();
     const roleEntity = session?.role_entity;
     const [saving, setSaving] = useState(false);
@@ -44,7 +46,7 @@ export function BusinessAddressSettings() {
                         (a) => a.address_line1.trim().length > 0,
                     ),
                 });
-                toast.success('Business addresses updated');
+                toast.success(t('settings.addresses.saved'));
                 // Reset the dirty state by remounting against the freshly-saved session.
                 setDirty(false);
                 setFormKey((k) => k + 1);
@@ -76,21 +78,12 @@ export function BusinessAddressSettings() {
     return (
         <>
             <SettingsSection
-                title="Business Addresses"
+                title={t('settings.addresses.title')}
                 info={
                     <div className="space-y-2">
-                        <p>
-                            Your physical pickup locations. Customers won&apos;t see a pickup point on your
-                            products until you add at least one.
-                        </p>
-                        <p>
-                            Every new or edited address has to be picked from the search box so we can pin
-                            it on the map, and it must sit inside your registered country.
-                        </p>
-                        <p>
-                            Removing an address that a product still uses as its pickup point will block
-                            the save until you reassign that product.
-                        </p>
+                        <p>{t('settings.addresses.info1')}</p>
+                        <p>{t('settings.addresses.info2')}</p>
+                        <p>{t('settings.addresses.info3')}</p>
                     </div>
                 }
                 contentClassName="space-y-6"

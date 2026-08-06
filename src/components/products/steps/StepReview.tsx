@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { validateActivation } from '@/components/products/schemas/product.schemas';
 import { AgencySelector } from '@/components/products/review/AgencySelector';
+import { useMessage, useTranslation, type TranslationKey } from '@/i18n';
 import type { WizardState, VendorAgencyListItemDto, ApiPickupLocation } from '@/types/product.types';
 import { getProductFileCount } from '@/types/product.types';
 
@@ -33,6 +34,8 @@ export function StepReview({
   onFreeDeliveryChange,
   onPickupLocationChange,
 }: StepReviewProps) {
+  const { t } = useTranslation();
+  const m = useMessage();
   const product = serverData.serverProduct;
   const variants = serverData.serverVariants ?? [];
   const isDigital = product?.type === 'digital';
@@ -49,14 +52,14 @@ export function StepReview({
     setVectorisationEnabled(product?.vectorisationEnabled ?? false);
   }, [product?.vectorisationEnabled, product?.id]);
 
-  const activationErrors = product
+  const activationErrors: TranslationKey[] = product
     ? validateActivation({
       productType: product.type,
       description: product.description,
       variants: variants.map((v) => ({ price: v.price, status: v.status })),
       defaultVariantId: product.defaultVariantId,
     })
-    : ['Product has not been created yet'];
+    : ['products.activation.notCreated'];
 
   const liveFormatCount = variants.filter((v) => v.status === 'active').length;
 
@@ -66,10 +69,10 @@ export function StepReview({
   const effectiveAgencyId = productAgencyId ?? defaultAgency?.id ?? null;
   const physicalNeedsAgency = isPhysical && !effectiveAgencyId;
   if (physicalNeedsAgency) {
-    activationErrors.push('A delivery agency must be assigned before publishing');
+    activationErrors.push('products.activation.noAgency');
   }
   if (isPhysical && !physicalNeedsAgency && !productPickupLocation) {
-    activationErrors.push('A pickup location must be set before publishing');
+    activationErrors.push('products.activation.noPickupLocation');
   }
 
   const canPublish = activationErrors.length === 0;
@@ -87,6 +90,14 @@ export function StepReview({
   const showSaveChanges = productStatus === 'active' || productStatus === 'suspended';
   const controlsDisabled = isSaving || isLockedForVectorisation || isReadOnlyStatus;
 
+  const statusLabelKeys: Record<string, TranslationKey> = {
+    draft: 'products.status.draft',
+    active: 'products.status.active',
+    archived: 'products.status.archived',
+    pending_review: 'products.status.pendingReview',
+    suspended: 'products.status.suspended',
+  };
+
   const statusColors: Record<string, string> = {
     draft: 'bg-muted text-muted-foreground',
     active: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
@@ -98,16 +109,16 @@ export function StepReview({
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-semibold">Review & publish</h2>
+        <h2 className="text-lg font-semibold">{t('products.review.title')}</h2>
         <p className="text-sm text-muted-foreground mt-1">
-          Review your product before publishing. You can always save as draft and publish later.
+          {t('products.review.description')}
         </p>
       </div>
 
       {stepError && (
         <Alert variant="destructive">
           <AlertCircle className="w-4 h-4" />
-          <AlertDescription>{stepError}</AlertDescription>
+          <AlertDescription>{m(stepError)}</AlertDescription>
         </Alert>
       )}
 
@@ -115,7 +126,7 @@ export function StepReview({
         <Alert>
           <AlertCircle className="w-4 h-4" />
           <AlertDescription>
-            This product is being indexed for AI search. Editing is temporarily disabled.
+            {t('products.review.lockedIndexing')}
           </AlertDescription>
         </Alert>
       )}
@@ -124,8 +135,7 @@ export function StepReview({
         <Alert>
           <AlertCircle className="w-4 h-4" />
           <AlertDescription>
-            This product is archived and read-only. Restore it to draft from the
-            products list to edit or publish it.
+            {t('products.review.archivedNotice')}
           </AlertDescription>
         </Alert>
       )}
@@ -133,8 +143,7 @@ export function StepReview({
         <Alert>
           <AlertCircle className="w-4 h-4" />
           <AlertDescription>
-            This product is awaiting admin review and is read-only until moderation
-            completes.
+            {t('products.review.pendingReviewNotice')}
           </AlertDescription>
         </Alert>
       )}
@@ -142,9 +151,7 @@ export function StepReview({
         <Alert>
           <AlertCircle className="w-4 h-4" />
           <AlertDescription>
-            This product is suspended because of a delivery-agency issue. You can
-            still edit it — assigning a working delivery agency restores it
-            automatically.
+            {t('products.review.suspendedNotice')}
           </AlertDescription>
         </Alert>
       )}
@@ -167,9 +174,11 @@ export function StepReview({
                 <span
                   className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusColors[product.status] ?? ''}`}
                 >
-                  {product.status.replace('_', ' ')}
+                  {t(statusLabelKeys[product.status] ?? 'products.status.draft')}
                 </span>
-                <span className="text-xs text-muted-foreground capitalize">{product.type}</span>
+                <span className="text-xs text-muted-foreground">
+                  {t(`products.type.${product.type}` as TranslationKey)}
+                </span>
                 <span className="text-xs text-muted-foreground">{product.category}</span>
               </div>
             </div>
@@ -179,27 +188,36 @@ export function StepReview({
           <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
             <div>
               <span className="text-muted-foreground text-xs">
-                {isDigital ? 'Formats' : 'Variants'}
+                {t(isDigital ? 'products.review.summaryFormats' : 'products.review.summaryVariants')}
               </span>
               <p className="font-medium">
-                {isDigital ? `${variants.length} · ${liveFormatCount} live` : variants.length}
+                {isDigital
+                  ? t('products.review.formatsLive', {
+                      total: variants.length,
+                      live: liveFormatCount,
+                    })
+                  : variants.length}
               </p>
             </div>
             <div>
-              <span className="text-muted-foreground text-xs">Images</span>
+              <span className="text-muted-foreground text-xs">{t('products.review.summaryImages')}</span>
               <p className="font-medium">{getProductFileCount(product)}</p>
             </div>
             {isDigital && (
               <div>
-                <span className="text-muted-foreground text-xs">Downloads</span>
+                <span className="text-muted-foreground text-xs">
+                  {t('products.review.summaryDownloads')}
+                </span>
                 <p className="font-medium">
-                  {product.digitalConfig?.isActive === false ? 'Paused' : 'Enabled'}
+                  {t(product.digitalConfig?.isActive === false
+                    ? 'products.review.downloadsPaused'
+                    : 'products.review.downloadsEnabled')}
                 </p>
               </div>
             )}
             {product.tags.length > 0 && (
               <div className="col-span-2">
-                <span className="text-muted-foreground text-xs">Tags</span>
+                <span className="text-muted-foreground text-xs">{t('products.review.tags')}</span>
                 <div className="flex flex-wrap gap-1 mt-1">
                   {product.tags.map((tag) => (
                     <Badge key={tag} variant="secondary" className="text-xs font-normal">
@@ -235,18 +253,16 @@ export function StepReview({
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="font-medium text-sm">Enable AI vectorisation</p>
+                <p className="font-medium text-sm">{t('products.review.vectorisationTitle')}</p>
                 <p className="text-xs text-muted-foreground mt-0.5 max-w-md">
-                  When enabled and the product is complete and active, product data
-                  is sent for vectorisation so customers can find it via AI search.
-                  Status and retry options are available from the product card.
+                  {t('products.review.vectorisationDescription')}
                 </p>
               </div>
               <Switch
                 checked={vectorisationEnabled}
                 onCheckedChange={setVectorisationEnabled}
                 disabled={controlsDisabled}
-                aria-label="Enable AI vectorisation"
+                aria-label={t('products.review.vectorisationTitle')}
               />
             </div>
           </div>
@@ -255,18 +271,18 @@ export function StepReview({
 
       {/* Activation checklist */}
       <div className="space-y-2">
-        <p className="text-sm font-medium">Publishing requirements</p>
+        <p className="text-sm font-medium">{t('products.review.requirements')}</p>
         {canPublish ? (
           <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
             <CheckCircle2 className="w-4 h-4" />
-            All requirements met — ready to publish
+            {t('products.review.requirementsMet')}
           </div>
         ) : (
           <ul className="space-y-1.5">
-            {activationErrors.map((err, i) => (
+            {activationErrors.map((key, i) => (
               <li key={i} className="flex items-start gap-2 text-sm text-destructive">
                 <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
-                {err}
+                {t(key)}
               </li>
             ))}
           </ul>
@@ -277,7 +293,7 @@ export function StepReview({
       <div className="flex items-center justify-between pt-2">
         <Button type="button" variant="ghost" size="sm" onClick={onBack} className="gap-1.5">
           <ChevronLeft className="w-4 h-4" />
-          Back
+          {t('common.actions.back')}
         </Button>
         <div className="flex items-center gap-2">
           {product?.status === 'draft' && (
@@ -287,7 +303,7 @@ export function StepReview({
               onClick={() => onSaveDraft({ vectorisationEnabled })}
               disabled={isSaving || isLockedForVectorisation}
             >
-              Keep as draft
+              {t('products.review.keepAsDraft')}
             </Button>
           )}
           {showPublish && (
@@ -298,11 +314,11 @@ export function StepReview({
               className="gap-1.5"
             >
               {isSaving ? (
-                'Publishing…'
+                t('products.review.publishing')
               ) : (
                 <>
                   <Globe className="w-4 h-4" />
-                  Publish
+                  {t('products.actions.publish')}
                 </>
               )}
             </Button>
@@ -314,7 +330,7 @@ export function StepReview({
               disabled={isSaving || isLockedForVectorisation}
               className="gap-1.5"
             >
-              {isSaving ? 'Saving…' : 'Save changes'}
+              {isSaving ? t('common.actions.saving') : t('common.actions.saveChanges')}
             </Button>
           )}
         </div>

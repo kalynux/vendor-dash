@@ -3,8 +3,8 @@ import { Send, Clock, Moon, Sun } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { onboardingService } from '@/services/onboarding.service';
-import { mapProfileError } from '@/components/vendor-settings/errors';
 import { useUIStore } from '@/store';
+import { useTranslation, useApiError } from '@/i18n';
 import { UnsavedChangesBar } from '@/components/vendor-settings/UnsavedChangesBar';
 import {
   SettingsSection,
@@ -26,6 +26,8 @@ const MIN_CANCEL_DAYS = 1;
 const MAX_CANCEL_DAYS = 90;
 
 export function PreferencesSettings() {
+  const { t } = useTranslation();
+  const apiError = useApiError();
   const { theme, setTheme } = useUIStore();
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -63,7 +65,7 @@ export function PreferencesSettings() {
         setSaved({ autoRedirect: redirectEnabled, threshold: thresholdStr, cancelDays: daysStr });
       })
       .catch((err) => {
-        if (active) setLoadError(mapProfileError(err));
+        if (active) setLoadError(apiError.resolve(err));
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -71,7 +73,7 @@ export function PreferencesSettings() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [apiError]);
 
   const redirectDirty = autoRedirect !== saved.autoRedirect || threshold !== saved.threshold;
   const cancelDirty = cancelDays !== saved.cancelDays;
@@ -122,28 +124,28 @@ export function PreferencesSettings() {
       setThreshold(nextThreshold);
       setCancelDays(nextDays);
       setSaved({ autoRedirect: nextRedirect, threshold: nextThreshold, cancelDays: nextDays });
-      toast.success('Preferences saved');
+      toast.success(t('settings.preferences.saved'));
     } catch (err) {
-      setError(mapProfileError(err));
+      setError(apiError.resolve(err));
     } finally {
       setSaving(false);
     }
   }, [
     autoRedirect, threshold, thresholdNum, thresholdInvalid,
-    cancelDays, daysNum, daysInvalid, redirectDirty, cancelDirty,
+    cancelDays, daysNum, daysInvalid, redirectDirty, cancelDirty, apiError, t,
   ]);
 
   const appearanceSection = (
     <SettingsSection
-      title="Appearance"
-      info="Applies to this dashboard only, on this browser. “System” follows your device's light/dark setting."
+      title={t('settings.preferences.appearance.title')}
+      info={t('settings.preferences.appearance.info')}
     >
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-lg bg-muted text-muted-foreground flex-shrink-0">
               {theme === 'dark' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
             </div>
-            <p className="font-medium">Theme</p>
+            <p className="font-medium">{t('settings.preferences.appearance.theme')}</p>
           </div>
           <Select
             value={theme}
@@ -153,9 +155,9 @@ export function PreferencesSettings() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="light">Light</SelectItem>
-              <SelectItem value="dark">Dark</SelectItem>
-              <SelectItem value="system">System</SelectItem>
+              <SelectItem value="light">{t('settings.preferences.appearance.light')}</SelectItem>
+              <SelectItem value="dark">{t('settings.preferences.appearance.dark')}</SelectItem>
+              <SelectItem value="system">{t('settings.preferences.appearance.system')}</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -166,7 +168,10 @@ export function PreferencesSettings() {
     return (
       <SettingsSections>
         {appearanceSection}
-        <SettingsSection title="Order Automation" contentClassName="space-y-4">
+        <SettingsSection
+          title={t('settings.preferences.orderAutomation.title')}
+          contentClassName="space-y-4"
+        >
           <Skeleton className="h-16 w-full rounded-lg" />
           <Skeleton className="h-16 w-full rounded-lg" />
         </SettingsSection>
@@ -179,8 +184,8 @@ export function PreferencesSettings() {
       <SettingsSections>
         {appearanceSection}
         <SettingsSection
-          title="Order Automation"
-          info="Two hands-off rules that keep your order list clean: one moves paid orders on to the delivery agency for you, the other cancels orders customers never paid for."
+          title={t('settings.preferences.orderAutomation.title')}
+          info={t('settings.preferences.orderAutomation.info')}
           contentClassName="space-y-6"
         >
           {(error || loadError) && (
@@ -200,18 +205,16 @@ export function PreferencesSettings() {
                   <Send className="w-4 h-4" />
                 </div>
                 <div className="flex min-w-0 items-center gap-1">
-                  <p className="font-medium">Auto-dispatch paid orders</p>
-                  <InfoHint label="About auto-dispatch">
-                    As soon as a physical order is paid, it moves straight to the delivery agency in
-                    charge instead of waiting in your queue. Off by default — leave it off if you want
-                    to check each order before it ships.
+                  <p className="font-medium">{t('settings.preferences.orderAutomation.autoDispatch')}</p>
+                  <InfoHint label={t('settings.preferences.orderAutomation.autoDispatchHintLabel')}>
+                    {t('settings.preferences.orderAutomation.autoDispatchHint')}
                   </InfoHint>
                 </div>
               </div>
               <Switch
                 checked={autoRedirect}
                 onCheckedChange={setAutoRedirect}
-                aria-label="Auto-dispatch paid orders"
+                aria-label={t('settings.preferences.orderAutomation.autoDispatch')}
               />
             </div>
 
@@ -219,17 +222,17 @@ export function PreferencesSettings() {
               <LabelWithHint
                 htmlFor="auto-redirect-threshold"
                 optional
-                hintLabel="About the maximum order total"
-                hint="A safety cap. Set it to 50 000 and orders up to 50 000 dispatch themselves, while a 75 000 order stays pending so you can look at it first. Leave it empty and every paid order dispatches, whatever the total."
+                hintLabel={t('settings.preferences.orderAutomation.maxOrderTotalHintLabel')}
+                hint={t('settings.preferences.orderAutomation.maxOrderTotalHint')}
               >
-                Maximum order total
+                {t('settings.preferences.orderAutomation.maxOrderTotal')}
               </LabelWithHint>
               <Input
                 id="auto-redirect-threshold"
                 type="number"
                 inputMode="numeric"
                 min={0}
-                placeholder="No cap"
+                placeholder={t('settings.preferences.orderAutomation.maxOrderTotalPlaceholder')}
                 value={threshold}
                 onChange={(e) => setThreshold(e.target.value)}
                 disabled={!autoRedirect}
@@ -245,20 +248,22 @@ export function PreferencesSettings() {
                 <Clock className="w-4 h-4" />
               </div>
               <div className="flex min-w-0 items-center gap-1">
-                <p className="font-medium">Auto-cancel unpaid orders</p>
-                <InfoHint label="About auto-cancel">
-                  Orders that are still unpaid after the number of days below are cancelled
-                  automatically and their reserved stock is released back to your inventory.
+                <p className="font-medium">{t('settings.preferences.orderAutomation.autoCancel')}</p>
+                <InfoHint label={t('settings.preferences.orderAutomation.autoCancelHintLabel')}>
+                  {t('settings.preferences.orderAutomation.autoCancelHint')}
                 </InfoHint>
               </div>
             </div>
             <div className="sm:pl-12 space-y-1.5">
               <LabelWithHint
                 htmlFor="auto-cancel-days"
-                hintLabel="About days before cancel"
-                hint={`How long an unpaid order is held before it is cancelled and its stock released. Set it to 3 and an order placed Monday is cancelled Thursday if it's still unpaid. Between ${MIN_CANCEL_DAYS} and ${MAX_CANCEL_DAYS} days.`}
+                hintLabel={t('settings.preferences.orderAutomation.daysBeforeCancelHintLabel')}
+                hint={t('settings.preferences.orderAutomation.daysBeforeCancelHint', {
+                  min: MIN_CANCEL_DAYS,
+                  max: MAX_CANCEL_DAYS,
+                })}
               >
-                Days before cancel
+                {t('settings.preferences.orderAutomation.daysBeforeCancel')}
               </LabelWithHint>
               <Input
                 id="auto-cancel-days"

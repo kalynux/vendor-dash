@@ -1,12 +1,19 @@
 import { ApiError } from '@/types/api';
 import {
-  SIMPLE_MODE_ERROR_MAP,
+  SIMPLE_MODE_ERROR_KEYS,
   getSimpleProductErrorMessage,
 } from '@/services/products.service';
 import type { SimpleProductFormValues } from '@/components/products/schemas/simple-product.schemas';
 import type { SimpleFieldErrors } from './SimpleProductForm';
 
-/** What the page should render after a failed simple-mode write. */
+/**
+ * What the page should render after a failed simple-mode write.
+ *
+ * `formError` and each `fieldErrors` entry may be either a translation key or a
+ * message the backend already gave us in words; `SimpleProductForm` runs both
+ * through `useMessage()`, which resolves the first kind and passes the second
+ * through untouched.
+ */
 export interface SimpleErrorProjection {
   formError: string | null;
   fieldErrors?: SimpleFieldErrors;
@@ -49,7 +56,7 @@ export function projectSimpleError(err: unknown): SimpleErrorProjection {
     case 'CATALOG_VARIANT_SKU_EXISTS':
       return {
         formError: null,
-        fieldErrors: { sku: SIMPLE_MODE_ERROR_MAP.CATALOG_VARIANT_SKU_EXISTS },
+        fieldErrors: { sku: SIMPLE_MODE_ERROR_KEYS.CATALOG_VARIANT_SKU_EXISTS },
         offerDraftFallback: false,
       };
 
@@ -57,21 +64,21 @@ export function projectSimpleError(err: unknown): SimpleErrorProjection {
     // still valid and retrying is safe. Implicate the media section explicitly.
     case 'CATALOG_PRODUCT_ACCESS_DENIED':
       return {
-        formError: SIMPLE_MODE_ERROR_MAP.CATALOG_PRODUCT_ACCESS_DENIED,
-        fieldErrors: { fileIds: 'One of these images is not yours.' },
+        formError: SIMPLE_MODE_ERROR_KEYS.CATALOG_PRODUCT_ACCESS_DENIED,
+        fieldErrors: { fileIds: 'products.simple.imageNotYours' },
         offerDraftFallback: false,
       };
 
     case 'CATALOG_IMAGE_LIMIT_EXCEEDED':
       return {
-        formError: SIMPLE_MODE_ERROR_MAP.CATALOG_IMAGE_LIMIT_EXCEEDED,
-        fieldErrors: { fileIds: SIMPLE_MODE_ERROR_MAP.CATALOG_IMAGE_LIMIT_EXCEEDED },
+        formError: SIMPLE_MODE_ERROR_KEYS.CATALOG_IMAGE_LIMIT_EXCEEDED,
+        fieldErrors: { fileIds: SIMPLE_MODE_ERROR_KEYS.CATALOG_IMAGE_LIMIT_EXCEEDED },
         offerDraftFallback: false,
       };
 
     case 'BILLING_LIMIT_EXCEEDED':
       return {
-        formError: SIMPLE_MODE_ERROR_MAP.BILLING_LIMIT_EXCEEDED,
+        formError: SIMPLE_MODE_ERROR_KEYS.BILLING_LIMIT_EXCEEDED,
         offerDraftFallback: true,
       };
 

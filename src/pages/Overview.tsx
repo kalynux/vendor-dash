@@ -26,7 +26,6 @@ import { MobileOrderDetailSheet } from '@/components/orders/MobileOrderDetailShe
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useRouter } from '@/App';
 import { cn } from '@/lib/utils';
-import { formatMoney } from '@/components/customers/customer.constants';
 import {
   AreaChart,
   Area,
@@ -34,9 +33,9 @@ import {
 } from 'recharts';
 import type { Order } from '@/types';
 import type { StockAlert } from '@/types/inventory.types';
-import { toast } from 'sonner';
-import { getOrderErrorMessage } from '@/services/orders.service';
 import { fetchStockAlerts } from '@/services/inventory.service';
+import { DATE_RANGE_PRESET_KEYS } from '@/services/analytics.service';
+import { useTranslation, useApiError, useFormatters } from '@/i18n';
 
 interface MetricCardProps {
   title: string;
@@ -48,6 +47,8 @@ interface MetricCardProps {
 }
 
 function MetricCard({ title, value, change, changeType, icon: Icon, isLoading }: MetricCardProps) {
+  const { t } = useTranslation();
+
   if (isLoading) {
     return (
       <Card>
@@ -84,7 +85,7 @@ function MetricCard({ title, value, change, changeType, icon: Icon, isLoading }:
                   ) : null}
                   {change > 0 ? '+' : ''}{change}%
                 </span>
-                <span className="text-xs text-muted-foreground">vs last period</span>
+                <span className="text-xs text-muted-foreground">{t('overview.metrics.vsLastPeriod')}</span>
               </div>
             </div>
             <div className="p-3 bg-primary/10 text-primary rounded-xl ring-1 ring-primary/10 transition-colors group-hover:bg-primary/15">
@@ -104,6 +105,7 @@ function MetricCard({ title, value, change, changeType, icon: Icon, isLoading }:
 const LOW_STOCK_PREVIEW = 5;
 
 function LowStockWidget() {
+  const { t } = useTranslation();
   const { navigate } = useRouter();
   const [alerts, setAlerts] = useState<StockAlert[]>([]);
   const [total, setTotal] = useState(0);
@@ -133,9 +135,9 @@ function LowStockWidget() {
       <CardHeader className="flex flex-row items-center justify-between space-y-0">
         <div>
           <CardTitle className="flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 text-amber-500" /> Low Stock
+            <AlertTriangle className="w-4 h-4 text-amber-500" /> {t('overview.lowStock.title')}
           </CardTitle>
-          <CardDescription>Variants at or below their threshold</CardDescription>
+          <CardDescription>{t('overview.lowStock.description')}</CardDescription>
         </div>
         {total > 0 && <Badge variant="destructive">{total}</Badge>}
       </CardHeader>
@@ -148,7 +150,7 @@ function LowStockWidget() {
           </div>
         ) : alerts.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted-foreground">
-            All variants are above their stock thresholds.
+            {t('overview.lowStock.empty')}
           </p>
         ) : (
           <div className="space-y-0">
@@ -161,7 +163,9 @@ function LowStockWidget() {
                     <p className="text-xs font-mono text-muted-foreground truncate">{a.sku}</p>
                   </div>
                   <Badge variant={out ? 'destructive' : 'secondary'} className={cn('flex-shrink-0', !out && 'text-amber-600')}>
-                    {out ? 'Out of stock' : `${a.availableStock} left`}
+                    {out
+                      ? t('overview.lowStock.outOfStock')
+                      : t('overview.lowStock.unitsLeft', { count: a.availableStock })}
                   </Badge>
                 </div>
               );
@@ -170,7 +174,7 @@ function LowStockWidget() {
         )}
         {!loading && (
           <Button variant="outline" size="sm" className="w-full mt-3 gap-1" onClick={() => navigate('inventory')}>
-            Manage inventory <ArrowRight className="w-3.5 h-3.5" />
+            {t('overview.lowStock.manageInventory')} <ArrowRight className="w-3.5 h-3.5" />
           </Button>
         )}
       </CardContent>
@@ -179,6 +183,9 @@ function LowStockWidget() {
 }
 
 export function Overview() {
+  const { t } = useTranslation();
+  const apiError = useApiError();
+  const fmt = useFormatters();
   const { metrics, salesData, topProducts, dateRange, setDateRange, fetchAnalytics, isLoading, notReady } = useAnalyticsStore();
   const { orders, fetchOrders, isLoading: isOrderLoading, fetchOrderById } = useOrderStore();
   const { store } = useStoreStore();
@@ -208,7 +215,7 @@ export function Overview() {
       const full = await fetchOrderById(order.id);
       setSelectedOrder(full);
     } catch (err) {
-      toast.error(getOrderErrorMessage(err));
+      apiError.toast(err, { fallbackKey: 'orders.errors.loadDetailFailed' });
       setOrderSheetOpen(false);
     } finally {
       setIsDetailLoading(false);
@@ -216,8 +223,8 @@ export function Overview() {
   };
 
   // Analytics metrics carry no currency (platform default XAF); order rows do —
-  // pass order.currency at those call sites. Uses the shared currency-aware formatter.
-  const formatCurrency = (value: number, currency?: string) => formatMoney(value, currency);
+  // pass order.currency at those call sites. Uses the shared locale-aware formatter.
+  const formatCurrency = (value: number, currency?: string) => fmt.currency(value, currency);
 
   // ─── Mobile Layout ─────────────────────────────────────────────────────────
   if (isMobile) {
@@ -235,8 +242,8 @@ export function Overview() {
               />
             ) : null}
             <div className="min-w-0">
-              <p className="text-sm text-muted-foreground">Welcome back</p>
-              <h1 className="text-xl font-bold truncate">{store?.name ?? 'My Store'}</h1>
+              <p className="text-sm text-muted-foreground">{t('overview.welcomeBack')}</p>
+              <h1 className="text-xl font-bold truncate">{store?.name ?? t('overview.myStore')}</h1>
             </div>
           </div>
           {store?.publicUrl && (
@@ -247,7 +254,7 @@ export function Overview() {
               className="flex-shrink-0 flex items-center gap-1.5 text-xs font-medium border rounded-full px-3 py-1.5 bg-background hover:bg-accent transition-colors"
             >
               <ExternalLink className="w-3 h-3" />
-              My Store
+              {t('overview.myStore')}
             </a>
           )}
         </div>
@@ -262,9 +269,7 @@ export function Overview() {
           <Card className="border-amber-200 bg-amber-50">
             <CardContent className="flex items-center gap-3 p-4 text-amber-800">
               <AlertCircle className="w-5 h-5 flex-shrink-0" />
-              <p className="text-sm">
-                Analytics for this period aren&apos;t ready yet. Please check back shortly.
-              </p>
+              <p className="text-sm">{t('overview.notReady.short')}</p>
             </CardContent>
           </Card>
         )}
@@ -274,7 +279,12 @@ export function Overview() {
           <CardContent className="p-4">
             <div className="flex justify-between items-start mb-3">
               <div>
-                <p className="text-xs text-muted-foreground">Total sales · {dateRange.label}</p>
+                <p className="text-xs text-muted-foreground">
+                  {/* `label` is a preset *id* ("Last 7 days"), not display copy. */}
+                  {t('overview.metrics.totalSalesForRange', {
+                    range: t(DATE_RANGE_PRESET_KEYS[dateRange.label] ?? 'common.time.custom'),
+                  })}
+                </p>
                 <p className="text-3xl font-display font-bold tracking-tight tabular-nums mt-1">
                   {formatCurrency(metrics.totalSales.value)}
                 </p>
@@ -320,7 +330,7 @@ export function Overview() {
         <div className="grid grid-cols-2 gap-3">
           <Card>
             <CardContent className="p-4">
-              <p className="text-xs text-muted-foreground">Orders</p>
+              <p className="text-xs text-muted-foreground">{t('overview.metrics.orders')}</p>
               <p className="text-2xl font-bold mt-1">{metrics.totalOrders.value}</p>
               <p
                 className={cn(
@@ -337,7 +347,7 @@ export function Overview() {
           </Card>
           <Card>
             <CardContent className="p-4">
-              <p className="text-xs text-muted-foreground">Avg. order</p>
+              <p className="text-xs text-muted-foreground">{t('overview.metrics.averageOrderShort')}</p>
               <p className="text-2xl font-bold mt-1">
                 {formatCurrency(metrics.averageOrderValue.value)}
               </p>
@@ -356,7 +366,7 @@ export function Overview() {
           </Card>
           <Card className="col-span-2">
             <CardContent className="p-4">
-              <p className="text-xs text-muted-foreground">Net revenue</p>
+              <p className="text-xs text-muted-foreground">{t('overview.metrics.netRevenueShort')}</p>
               <p className="text-2xl font-bold mt-1">
                 {formatCurrency(metrics.netRevenue.value)}
               </p>
@@ -377,7 +387,7 @@ export function Overview() {
 
         {/* Top products */}
         <div>
-          <h2 className="font-semibold mb-2">Top products</h2>
+          <h2 className="font-semibold mb-2">{t('overview.charts.topProductsShort')}</h2>
           <Card>
             <CardContent className="p-2">
               <TopProductsList products={topProducts} isLoading={isLoading} />
@@ -387,9 +397,9 @@ export function Overview() {
 
         {/* Recent orders */}
         <div className="flex justify-between items-center">
-          <h2 className="font-semibold">Recent orders</h2>
+          <h2 className="font-semibold">{t('overview.recentOrders.titleShort')}</h2>
           <Button variant="ghost" size="sm" className="gap-1" onClick={() => navigate('orders')}>
-            View all
+            {t('common.actions.viewAll')}
             <ArrowRight className="w-3 h-3" />
           </Button>
         </div>
@@ -412,7 +422,7 @@ export function Overview() {
                 </div>
                 <div className="flex justify-between mt-0.5">
                   <p className="text-xs text-muted-foreground">
-                    {order.customer.name} · {order.items.length} items
+                    {order.customer.name} · {t('overview.recentOrders.itemCount', { count: order.items.length })}
                   </p>
                   <OrderStatusBadge status={order.status} size="xs" />
                 </div>
@@ -440,10 +450,8 @@ export function Overview() {
       {/* Header row */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="space-y-1">
-          <h1 className="text-3xl font-bold tracking-tight">Overview</h1>
-          <p className="text-muted-foreground">
-            Welcome back! Here&apos;s what&apos;s happening with your store.
-          </p>
+          <h1 className="text-3xl font-bold tracking-tight">{t('overview.title')}</h1>
+          <p className="text-muted-foreground">{t('overview.subtitle')}</p>
         </div>
         <DateRangePicker value={dateRange} onChange={setDateRange} />
       </div>
@@ -453,10 +461,7 @@ export function Overview() {
         <Card className="border-amber-200 bg-amber-50">
           <CardContent className="flex items-center gap-3 p-4 text-amber-800">
             <AlertCircle className="w-5 h-5 flex-shrink-0" />
-            <p className="text-sm">
-              Analytics for this period aren&apos;t ready yet. Data is aggregated daily — please
-              check back shortly.
-            </p>
+            <p className="text-sm">{t('overview.notReady.long')}</p>
           </CardContent>
         </Card>
       )}
@@ -464,7 +469,7 @@ export function Overview() {
       {/* KPI cards — 4 columns */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <MetricCard
-          title="Total Sales"
+          title={t('overview.metrics.totalSales')}
           value={formatCurrency(metrics.totalSales.value)}
           change={metrics.totalSales.change}
           changeType={metrics.totalSales.changeType}
@@ -472,7 +477,7 @@ export function Overview() {
           isLoading={isLoading}
         />
         <MetricCard
-          title="Total Orders"
+          title={t('overview.metrics.totalOrders')}
           value={metrics.totalOrders.value.toString()}
           change={metrics.totalOrders.change}
           changeType={metrics.totalOrders.changeType}
@@ -480,7 +485,7 @@ export function Overview() {
           isLoading={isLoading}
         />
         <MetricCard
-          title="Net Revenue"
+          title={t('overview.metrics.netRevenue')}
           value={formatCurrency(metrics.netRevenue.value)}
           change={metrics.netRevenue.change}
           changeType={metrics.netRevenue.changeType}
@@ -488,7 +493,7 @@ export function Overview() {
           isLoading={isLoading}
         />
         <MetricCard
-          title="Average Order Value"
+          title={t('overview.metrics.averageOrderValue')}
           value={formatCurrency(metrics.averageOrderValue.value)}
           change={metrics.averageOrderValue.change}
           changeType={metrics.averageOrderValue.changeType}
@@ -502,17 +507,17 @@ export function Overview() {
         <Card className="lg:col-span-2">
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
-              <CardTitle>Sales Performance</CardTitle>
-              <CardDescription>Daily sales and order trends</CardDescription>
+              <CardTitle>{t('overview.charts.salesTitle')}</CardTitle>
+              <CardDescription>{t('overview.charts.salesDescription')}</CardDescription>
             </div>
             <div className="flex items-center gap-2">
               <Badge variant="secondary" className="gap-1">
                 <div className="w-2 h-2 rounded-full bg-foreground" />
-                Sales
+                {t('overview.charts.legendSales')}
               </Badge>
               <Badge variant="outline" className="gap-1">
                 <div className="w-2 h-2 rounded-full bg-blue-400" />
-                Orders
+                {t('overview.charts.legendOrders')}
               </Badge>
             </div>
           </CardHeader>
@@ -523,8 +528,8 @@ export function Overview() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Top Products</CardTitle>
-            <CardDescription>Best sellers by revenue this period</CardDescription>
+            <CardTitle>{t('overview.charts.topProductsTitle')}</CardTitle>
+            <CardDescription>{t('overview.charts.topProductsDescription')}</CardDescription>
           </CardHeader>
           <CardContent>
             <TopProductsList products={topProducts} isLoading={isLoading} />
@@ -538,11 +543,11 @@ export function Overview() {
         <Card className="lg:col-span-3">
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
-              <CardTitle>Recent Orders</CardTitle>
-              <CardDescription>Latest orders from your customers</CardDescription>
+              <CardTitle>{t('overview.recentOrders.title')}</CardTitle>
+              <CardDescription>{t('overview.recentOrders.description')}</CardDescription>
             </div>
             <Button variant="ghost" size="sm" className="gap-1">
-              View all
+              {t('common.actions.viewAll')}
               <ArrowRight className="w-4 h-4" />
             </Button>
           </CardHeader>
@@ -560,7 +565,7 @@ export function Overview() {
                     <div>
                       <p className="font-medium text-sm">{order.orderNumber}</p>
                       <p className="text-xs text-muted-foreground">
-                        {order.customer.name} · {order.items.length} items
+                        {order.customer.name} · {t('overview.recentOrders.itemCount', { count: order.items.length })}
                       </p>
                     </div>
                   </div>
@@ -579,37 +584,37 @@ export function Overview() {
           {/* Quick Actions */}
           <Card>
             <CardHeader>
-              <CardTitle>Quick Actions</CardTitle>
-              <CardDescription>Common tasks you might want to perform</CardDescription>
+              <CardTitle>{t('overview.quickActions.title')}</CardTitle>
+              <CardDescription>{t('overview.quickActions.description')}</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 gap-3">
                 <button className="flex items-center gap-3 p-3 rounded-lg border hover:bg-accent transition-colors text-left">
                   <Package className="w-5 h-5 text-muted-foreground flex-shrink-0" />
                   <div>
-                    <p className="text-sm font-medium">Add Product</p>
-                    <p className="text-xs text-muted-foreground">Create new listing</p>
+                    <p className="text-sm font-medium">{t('overview.quickActions.addProduct')}</p>
+                    <p className="text-xs text-muted-foreground">{t('overview.quickActions.addProductDescription')}</p>
                   </div>
                 </button>
                 <button className="flex items-center gap-3 p-3 rounded-lg border hover:bg-accent transition-colors text-left">
                   <RefreshCw className="w-5 h-5 text-muted-foreground flex-shrink-0" />
                   <div>
-                    <p className="text-sm font-medium">Process Refund</p>
-                    <p className="text-xs text-muted-foreground">Handle returns</p>
+                    <p className="text-sm font-medium">{t('overview.quickActions.processRefund')}</p>
+                    <p className="text-xs text-muted-foreground">{t('overview.quickActions.processRefundDescription')}</p>
                   </div>
                 </button>
                 <button className="flex items-center gap-3 p-3 rounded-lg border hover:bg-accent transition-colors text-left">
                   <AlertCircle className="w-5 h-5 text-muted-foreground flex-shrink-0" />
                   <div>
-                    <p className="text-sm font-medium">Abandoned Carts</p>
-                    <p className="text-xs text-muted-foreground">12 need attention</p>
+                    <p className="text-sm font-medium">{t('overview.quickActions.abandonedCarts')}</p>
+                    <p className="text-xs text-muted-foreground">{t('overview.quickActions.abandonedCartsDescription', { count: 12 })}</p>
                   </div>
                 </button>
                 <button className="flex items-center gap-3 p-3 rounded-lg border hover:bg-accent transition-colors text-left">
                   <TrendingUp className="w-5 h-5 text-muted-foreground flex-shrink-0" />
                   <div>
-                    <p className="text-sm font-medium">View Reports</p>
-                    <p className="text-xs text-muted-foreground">Analytics & insights</p>
+                    <p className="text-sm font-medium">{t('overview.quickActions.viewReports')}</p>
+                    <p className="text-xs text-muted-foreground">{t('overview.quickActions.viewReportsDescription')}</p>
                   </div>
                 </button>
               </div>

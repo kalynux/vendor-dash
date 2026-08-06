@@ -5,6 +5,7 @@ import { AlertCircle, ChevronRight, ChevronLeft } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { ServiceConfigFields } from '@/components/services/ServiceConfigFields';
+import { useTranslation } from '@/i18n';
 import {
   serviceSettingsSchema, type ServiceSettingsFormValues,
 } from '@/components/services/schemas/service.schemas';
@@ -27,6 +28,7 @@ export function StepServiceBooking({
   onBack,
   mode = 'create',
 }: StepServiceBookingProps) {
+  const { t } = useTranslation();
   const form = useForm<ServiceSettingsFormValues>({
     resolver: zodResolver(serviceSettingsSchema),
     defaultValues,
@@ -35,9 +37,9 @@ export function StepServiceBooking({
   return (
     <form onSubmit={form.handleSubmit(onSaveComplete)} className="space-y-6">
       <div>
-        <h2 className="text-lg font-semibold">Booking settings</h2>
+        <h2 className="text-lg font-semibold">{t('services.booking.settingsTitle')}</h2>
         <p className="text-sm text-muted-foreground mt-1">
-          Set the session length, price, and how customers can book this service.
+          {t('services.booking.settingsDescription')}
         </p>
       </div>
 
@@ -54,10 +56,14 @@ export function StepServiceBooking({
       <div className="flex items-center justify-between pt-2">
         <Button type="button" variant="ghost" size="sm" onClick={onBack} className="gap-1.5">
           <ChevronLeft className="w-4 h-4" />
-          Back
+          {t('common.actions.back')}
         </Button>
         <Button type="submit" disabled={isSaving} className="gap-1.5">
-          {isSaving ? 'Saving…' : mode === 'edit' ? 'Save' : 'Save & Continue'}
+          {isSaving
+            ? t('common.actions.saving')
+            : mode === 'edit'
+              ? t('common.actions.save')
+              : t('services.wizard.saveAndContinue')}
           {!isSaving && <ChevronRight className="w-4 h-4" />}
         </Button>
       </div>

@@ -6,6 +6,7 @@ import {
 } from '@/components/ui/command';
 import { ResponsiveModal } from '@/components/services/ResponsiveModal';
 import { cn } from '@/lib/utils';
+import { useTranslation } from '@/i18n';
 
 export interface PickerOption {
   value: string;
@@ -41,6 +42,7 @@ interface SearchSelectFieldProps {
 export function SearchSelectField({
   groups, value, onChange, modalTitle, modalDescription, placeholder, searchPlaceholder, invalid,
 }: SearchSelectFieldProps) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
 
   const selectedLabel = useMemo(() => {
@@ -80,7 +82,7 @@ export function SearchSelectField({
         <Command className="bg-transparent">
           <CommandInput placeholder={searchPlaceholder ?? 'Search…'} />
           <CommandList className="max-h-[55vh]">
-            <CommandEmpty>No matches found.</CommandEmpty>
+            <CommandEmpty>{t('tickets.detail.noMatches')}</CommandEmpty>
             {groups.map((group, i) => (
               <CommandGroup key={group.label ?? i} heading={group.label}>
                 {group.options.map((option) => {

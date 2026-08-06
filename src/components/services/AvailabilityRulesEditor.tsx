@@ -8,25 +8,16 @@ import { Switch } from '@/components/ui/switch';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { ApiError } from '@/types/api';
+import { useTranslation, useApiError } from '@/i18n';
 import {
   fetchRules, createRules, updateRule, toggleRule, deleteRule,
-  AVAILABILITY_ERROR_MAP,
 } from '@/services/services.service';
 import {
-  DAY_ORDER, DAY_LABELS, browserTimezone, getAvailabilityRuleId,
+  DAY_ORDER, DAY_LABEL_KEYS, browserTimezone, getAvailabilityRuleId,
 } from '@/components/services/service.constants';
 import type {
   AvailabilityRule, CreateAvailabilityRulePayload, DayOfWeek,
 } from '@/types/services.types';
-
-// Maps an API error to a short reason for the per-day failure summary.
-function reasonFor(err: unknown): string {
-  if (err instanceof ApiError) {
-    if (err.code === 'AVAILABILITY_TIME_OVERLAP') return 'overlaps existing hours';
-    return AVAILABILITY_ERROR_MAP[err.code] ?? err.message;
-  }
-  return 'failed to save';
-}
 
 // Default hours used when a day is first opened or a new set is added.
 const DEFAULT_OPEN = '09:00';
@@ -125,6 +116,8 @@ export const AvailabilityRulesEditor = forwardRef<
   AvailabilityRulesEditorHandle,
   AvailabilityRulesEditorProps
 >(function AvailabilityRulesEditor({ productId, showSaveButton = true, onSaved }, ref) {
+  const { t } = useTranslation();
+  const apiError = useApiError();
   const [schedule, setSchedule] = useState<Schedule>(emptySchedule);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -133,6 +126,17 @@ export const AvailabilityRulesEditor = forwardRef<
 
   // Snapshot of the rules as loaded — used to diff deletions / time edits / activation.
   const initialRulesRef = useRef<AvailabilityRule[]>([]);
+
+  // Short reason shown in the per-day failure summary.
+  const reasonFor = useCallback(
+    (err: unknown): string => {
+      if (err instanceof ApiError && err.code === 'AVAILABILITY_TIME_OVERLAP') {
+        return t('services.availability.overlapReason');
+      }
+      return apiError.resolve(err, { fallbackKey: 'services.availability.genericReason' });
+    },
+    [t, apiError],
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -149,11 +153,11 @@ export const AvailabilityRulesEditor = forwardRef<
         setDirty(false);
       }
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Failed to load availability');
+      setError(apiError.resolve(err, { fallbackKey: 'services.errors.loadAvailabilityFailed' }));
     } finally {
       setLoading(false);
     }
-  }, [productId]);
+  }, [productId, apiError]);
 
   useEffect(() => {
     load();
@@ -198,10 +202,12 @@ export const AvailabilityRulesEditor = forwardRef<
     // Pre-flight: every open set needs close > open.
     const invalidDays = DAY_ORDER.filter(
       (day) => schedule[day].open && schedule[day].sets.some(isSetInvalid),
-    ).map((day) => DAY_LABELS[day]);
+    ).map((day) => t(DAY_LABEL_KEYS[day]));
     if (invalidDays.length > 0) {
-      toast.error('Fix opening hours', {
-        description: `${invalidDays.join(', ')}: close time must be after open time.`,
+      toast.error(t('services.availability.fixHoursTitle'), {
+        description: t('services.availability.fixHoursDescription', {
+          days: invalidDays.join(', '),
+        }),
       });
       return false;
     }
@@ -222,7 +228,9 @@ export const AvailabilityRulesEditor = forwardRef<
           try {
             await deleteRule(rid);
           } catch {
-            failures.push(`${DAY_LABELS[r.dayOfWeek]} (remove)`);
+            failures.push(
+              t('services.availability.removeFailure', { day: t(DAY_LABEL_KEYS[r.dayOfWeek]) }),
+            );
           }
         }
       }
@@ -247,7 +255,12 @@ export const AvailabilityRulesEditor = forwardRef<
               await toggleRule(set.serverId, false);
             }
           } catch (err) {
-            failures.push(`${DAY_LABELS[day]} (${reasonFor(err)})`);
+            failures.push(
+              t('services.availability.dayFailure', {
+                day: t(DAY_LABEL_KEYS[day]),
+                reason: reasonFor(err),
+              }),
+            );
           }
         }
       }
@@ -275,14 +288,16 @@ export const AvailabilityRulesEditor = forwardRef<
           await createRules(productId, toCreate);
         } catch (err) {
           // Atomic: if any new rule is invalid/overlaps, none are created.
-          failures.push(`New hours (${reasonFor(err)})`);
+          failures.push(t('services.availability.createFailure', { reason: reasonFor(err) }));
         }
       }
 
       if (failures.length > 0) {
-        toast.error('Some hours could not be saved', { description: failures.join('; ') });
+        toast.error(t('services.availability.partialFailure'), {
+          description: failures.join('; '),
+        });
       } else {
-        toast.success('Availability saved');
+        toast.success(t('services.availability.saved'));
       }
       await load();
       onSaved?.();
@@ -290,7 +305,7 @@ export const AvailabilityRulesEditor = forwardRef<
     } finally {
       setSaving(false);
     }
-  }, [schedule, productId, load, onSaved]);
+  }, [schedule, productId, load, onSaved, t, reasonFor]);
 
   useImperativeHandle(ref, () => ({ save: persist, isDirty: dirty }), [persist, dirty]);
 
@@ -311,7 +326,7 @@ export const AvailabilityRulesEditor = forwardRef<
       <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed py-10 text-center">
         <CalendarRange className="h-8 w-8 text-muted-foreground" />
         <p className="text-sm text-muted-foreground">{error}</p>
-        <Button variant="outline" size="sm" onClick={load}>Try again</Button>
+        <Button variant="outline" size="sm" onClick={load}>{t('common.actions.retry')}</Button>
       </div>
     );
   }
@@ -325,8 +340,12 @@ export const AvailabilityRulesEditor = forwardRef<
             <div key={day} className="flex items-start justify-between gap-4 py-5">
               <div className="min-w-0 flex-1 space-y-3">
                 <div>
-                  <p className="font-medium leading-tight">{DAY_LABELS[day]}</p>
-                  {!d.open && <p className="text-sm text-muted-foreground">Closed</p>}
+                  <p className="font-medium leading-tight">{t(DAY_LABEL_KEYS[day])}</p>
+                  {!d.open && (
+                    <p className="text-sm text-muted-foreground">
+                      {t('services.availability.closed')}
+                    </p>
+                  )}
                 </div>
 
                 {d.open && (
@@ -337,14 +356,14 @@ export const AvailabilityRulesEditor = forwardRef<
                         <div key={set.uid} className="space-y-1">
                           <div className="flex items-center gap-2">
                             <TimeField
-                              label="Open"
+                              label={t('services.availability.open')}
                               value={set.startTime}
                               invalid={invalid}
                               onChange={(v) => patchSet(day, set.uid, { startTime: v })}
                             />
                             <span className="text-muted-foreground">–</span>
                             <TimeField
-                              label="Close"
+                              label={t('services.availability.close')}
                               value={set.endTime}
                               invalid={invalid}
                               onChange={(v) => patchSet(day, set.uid, { endTime: v })}
@@ -353,7 +372,7 @@ export const AvailabilityRulesEditor = forwardRef<
                               <button
                                 type="button"
                                 onClick={() => removeSet(day, set.uid)}
-                                aria-label="Remove this set of hours"
+                                aria-label={t('services.availability.removeHours')}
                                 className="rounded-md p-1.5 text-muted-foreground transition hover:bg-accent hover:text-destructive"
                               >
                                 <X className="h-4 w-4" />
@@ -362,7 +381,7 @@ export const AvailabilityRulesEditor = forwardRef<
                           </div>
                           {invalid && (
                             <p className="text-xs text-destructive">
-                              Close time must be after open time.
+                              {t('services.availability.invalidRange')}
                             </p>
                           )}
                         </div>
@@ -375,7 +394,7 @@ export const AvailabilityRulesEditor = forwardRef<
                       className="flex items-center gap-2 text-sm font-medium transition-colors hover:text-primary"
                     >
                       <Plus className="h-4 w-4" />
-                      Add a set of hours
+                      {t('services.availability.addHours')}
                     </button>
                   </div>
                 )}
@@ -384,7 +403,11 @@ export const AvailabilityRulesEditor = forwardRef<
               <Switch
                 checked={d.open}
                 onCheckedChange={() => toggleDay(day)}
-                aria-label={`${DAY_LABELS[day]} ${d.open ? 'open' : 'closed'}`}
+                aria-label={
+                  d.open
+                    ? t('services.availability.dayOpen', { day: t(DAY_LABEL_KEYS[day]) })
+                    : t('services.availability.dayClosed', { day: t(DAY_LABEL_KEYS[day]) })
+                }
                 className="mt-1 shrink-0"
               />
             </div>
@@ -402,7 +425,7 @@ export const AvailabilityRulesEditor = forwardRef<
             size="lg"
           >
             {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Save
+            {t('common.actions.save')}
           </Button>
         </div>
       )}

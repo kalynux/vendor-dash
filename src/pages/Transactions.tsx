@@ -2,8 +2,10 @@ import { Receipt } from 'lucide-react';
 import { TransactionsTab } from '@/components/transactions/TransactionsTab';
 import { MobilePageHeader } from '@/components/layout/MobilePageHeader';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useTranslation } from '@/i18n';
 
 export function Transactions() {
+  const { t } = useTranslation();
   const isMobile = useIsMobile();
 
   // Mobile: full-bleed list — the page header replaces the card header and the
@@ -11,7 +13,7 @@ export function Transactions() {
   if (isMobile) {
     return (
       <div className="-mx-6 -mt-6">
-        <MobilePageHeader title="Transactions" />
+        <MobilePageHeader title={t('transactions.title')} />
         <div className="pb-28">
           <TransactionsTab />
         </div>
@@ -26,10 +28,8 @@ export function Transactions() {
           <Receipt className="h-5 w-5 text-primary" />
         </div>
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Transactions</h1>
-          <p className="text-sm text-muted-foreground">
-            Your payment and payout transaction history.
-          </p>
+          <h1 className="text-2xl font-bold tracking-tight">{t('transactions.title')}</h1>
+          <p className="text-sm text-muted-foreground">{t('transactions.subtitle')}</p>
         </div>
       </div>
 

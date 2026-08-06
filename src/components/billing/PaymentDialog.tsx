@@ -30,6 +30,9 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
+import { isValidPhone, toE164 } from '@/lib/phone';
+import { PhoneInput } from '@/components/phone';
+import { useTranslation, useFormatters, useApiError, type TranslationKey } from '@/i18n';
 import type {
   PaymentChannel,
   PaymentGateway,
@@ -47,8 +50,6 @@ import {
   GATEWAYS,
   PAYMENT_POLL_INTERVAL_MS,
   PAYMENT_POLL_TIMEOUT_MS,
-  billingErrorMessage,
-  formatMoney,
   formatCharged,
   saveStripeResume,
   clearStripeResume,
@@ -81,10 +82,10 @@ export interface PaymentDialogProps {
   verify: (id: string) => Promise<{ status: PaymentStatus }>;
   /** Called once the payment is confirmed paid (refresh balances/plan). */
   onPaid: () => void;
-  successLabel?: string;
+  /** Success toast + result heading. Defaults to a generic confirmation. */
+  successLabelKey?: TranslationKey;
 }
 
-const PHONE_RE = /^\+?\d{8,15}$/;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /** Gateways selectable in the checkout (Stripe hidden when not configured). */
@@ -126,8 +127,12 @@ export function PaymentDialog({
   initiate,
   verify,
   onPaid,
-  successLabel = 'Payment confirmed',
+  successLabelKey = 'billing.checkout.successTitle',
 }: PaymentDialogProps) {
+  const { t } = useTranslation();
+  const fmt = useFormatters();
+  const apiError = useApiError();
+  const successLabel = t(successLabelKey);
   const gateways = availableGateways();
 
   const [gateway, setGateway] = useState<PaymentGateway>(gateways[0]?.value ?? 'NOTCHPAY');
@@ -252,7 +257,7 @@ export function PaymentDialog({
     if (isStripe) {
       // Stripe collects the card client-side — send only identification fields.
       if (email.trim() && !EMAIL_RE.test(email.trim())) {
-        setFormError('Enter a valid email, or leave it blank.');
+        setFormError(t('billing.validation.email'));
         return null;
       }
       const channel: PaymentChannel = {};
@@ -260,12 +265,13 @@ export function PaymentDialog({
       if (holderName.trim()) channel.customerName = holderName.trim();
       return channel;
     }
-    // Mobile money — phone + operator are required.
-    if (!PHONE_RE.test(phone.trim())) {
-      setFormError('Enter a valid phone number (e.g. +237650000000).');
+    // Mobile money — phone + operator are required. The gateway is given E.164.
+    const phoneNumber = toE164(phone);
+    if (!phoneNumber) {
+      setFormError(t('common.validation.phone'));
       return null;
     }
-    return { phoneNumber: phone.trim(), phoneOperator: operator };
+    return { phoneNumber, phoneOperator: operator };
   }
 
   /** Step 1: initiate the payment server-side. */
@@ -306,12 +312,14 @@ export function PaymentDialog({
       // Mobile money (or a gateway that already confirmed): show instructions + poll.
       setUssd(result.instructions?.ussdCode ?? null);
       setInstructionMsg(
-        result.instructions?.message ?? 'Confirm the payment prompt on your phone.',
+        result.instructions?.message ?? t('billing.checkout.phonePrompt'),
       );
       setPhase('processing');
       startPolling(result.id);
     } catch (err) {
-      setFormError(billingErrorMessage(err));
+      setFormError(
+        apiError.resolve(err, { context: 'billing', fallbackKey: 'billing.errors.paymentFailed' }),
+      );
     } finally {
       setSubmitting(false);
     }
@@ -334,7 +342,7 @@ export function PaymentDialog({
 
       if (outcome.status === 'redirecting') {
         // Stripe is navigating to the bank — leave the marker, the page will unload.
-        setInstructionMsg('Redirecting you to your bank to confirm the payment…');
+        setInstructionMsg(t('billing.checkout.redirectingToBank'));
         return;
       }
 
@@ -342,14 +350,16 @@ export function PaymentDialog({
       clearStripeResume();
       setInstructionMsg(
         outcome.status === 'succeeded'
-          ? 'Card confirmed — applying your purchase…'
-          : 'Confirming your payment…',
+          ? t('billing.checkout.cardConfirmed')
+          : t('billing.checkout.confirmingPayment'),
       );
       setPhase('processing');
       startPolling(stripeInit.id);
     } catch (err) {
       clearStripeResume();
-      setCardError(err instanceof Error ? err.message : 'The card payment failed. Please try again.');
+      // Stripe's own decline text is already localized by Stripe.js and is more
+      // specific than anything we could substitute, so it is surfaced as-is.
+      setCardError(err instanceof Error ? err.message : t('billing.cardForm.failed'));
       setSubmitting(false);
     }
   }
@@ -369,8 +379,9 @@ export function PaymentDialog({
 
   const chargedLine =
     stripeInit?.chargedAmount != null
-      ? formatCharged(stripeInit.chargedAmount, stripeInit.chargedCurrency)
+      ? formatCharged(stripeInit.chargedAmount, stripeInit.chargedCurrency, fmt.currency)
       : null;
+  const amountLine = fmt.currency(amount, currency);
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -378,8 +389,7 @@ export function PaymentDialog({
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>
-            {summary} ·{' '}
-            <span className="font-medium text-foreground">{formatMoney(amount, currency)}</span>
+            {summary} · <span className="font-medium text-foreground">{amountLine}</span>
           </DialogDescription>
         </DialogHeader>
 
@@ -388,7 +398,7 @@ export function PaymentDialog({
             {/* Saved-method quick-select row */}
             {savedMethods.length > 0 && (
               <div className="space-y-1.5">
-                <Label>Payment method</Label>
+                <Label>{t('billing.checkout.savedMethods')}</Label>
                 <div className="flex flex-wrap gap-2">
                   {savedMethods.map((m) => (
                     <SavedChip
@@ -408,7 +418,7 @@ export function PaymentDialog({
                         : 'border-border text-muted-foreground hover:bg-muted',
                     )}
                   >
-                    <Plus className="h-4 w-4" /> New
+                    <Plus className="h-4 w-4" /> {t('billing.checkout.newMethod')}
                   </button>
                 </div>
               </div>
@@ -416,7 +426,7 @@ export function PaymentDialog({
 
             {/* Gateway-first selection */}
             <div className="space-y-1.5">
-              <Label>Pay with</Label>
+              <Label>{t('billing.checkout.payWith')}</Label>
               <div className="grid grid-cols-3 gap-2">
                 {gateways.map((g) => (
                   <button
@@ -438,7 +448,7 @@ export function PaymentDialog({
                     ) : (
                       <Smartphone className="h-4 w-4" />
                     )}
-                    {g.label}
+                    {t(g.labelKey)}
                     <span className="text-[10px] font-normal text-muted-foreground">
                       {g.chargeCurrency}
                     </span>
@@ -450,18 +460,16 @@ export function PaymentDialog({
             {methodType === 'mobile_money' ? (
               <div className="space-y-3">
                 <div className="space-y-1.5">
-                  <Label htmlFor="pay-phone">Mobile money number</Label>
-                  <Input
+                  <Label htmlFor="pay-phone">{t('billing.checkout.phone')}</Label>
+                  <PhoneInput
                     id="pay-phone"
-                    inputMode="tel"
-                    placeholder="+237650000000"
                     value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    aria-invalid={!!formError}
+                    onChange={setPhone}
+                    required
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="pay-operator">Operator</Label>
+                  <Label htmlFor="pay-operator">{t('billing.checkout.operator')}</Label>
                   <Select value={operator} onValueChange={(v) => setOperator(v as PhoneOperator)}>
                     <SelectTrigger id="pay-operator">
                       <SelectValue />
@@ -469,7 +477,7 @@ export function PaymentDialog({
                     <SelectContent>
                       {PHONE_OPERATORS.map((op) => (
                         <SelectItem key={op.value} value={op.value}>
-                          {op.label}
+                          {t(op.labelKey)}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -481,28 +489,24 @@ export function PaymentDialog({
                 {/* Card payments are charged in USD — make that explicit up front. */}
                 <div className="flex gap-2 rounded-lg border border-blue-500/30 bg-blue-500/5 p-3 text-xs text-muted-foreground">
                   <Info className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
-                  <span>
-                    Card payments are processed in <span className="font-medium text-foreground">USD</span>;
-                    your bank may apply its own conversion. We'll show the exact dollar amount on the
-                    next step.
-                  </span>
+                  <span>{t('billing.checkout.usdNotice')}</span>
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="pay-name">Name on card (optional)</Label>
+                  <Label htmlFor="pay-name">{t('billing.checkout.nameOnCard')}</Label>
                   <Input
                     id="pay-name"
-                    placeholder="Jane's Store"
+                    placeholder={t('billing.checkout.nameOnCardPlaceholder')}
                     value={holderName}
                     onChange={(e) => setHolderName(e.target.value)}
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="pay-email">Email for receipt (optional)</Label>
+                  <Label htmlFor="pay-email">{t('billing.checkout.receiptEmail')}</Label>
                   <Input
                     id="pay-email"
                     type="email"
                     inputMode="email"
-                    placeholder="vendor@example.com"
+                    placeholder={t('billing.checkout.receiptEmailPlaceholder')}
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     aria-invalid={!!formError}
@@ -515,11 +519,18 @@ export function PaymentDialog({
 
             <DialogFooter>
               <Button variant="outline" onClick={() => handleClose(false)} disabled={submitting}>
-                Cancel
+                {t('common.actions.cancel')}
               </Button>
-              <Button onClick={handleInitiate} disabled={submitting}>
+              <Button
+                onClick={handleInitiate}
+                // An incomplete mobile-money number can't be charged — don't let
+                // it reach the gateway.
+                disabled={submitting || (!isStripe && !isValidPhone(phone))}
+              >
                 {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {isStripe ? 'Continue to card' : `Confirm Payment · ${formatMoney(amount, currency)}`}
+                {isStripe
+                  ? t('billing.checkout.continueToCard')
+                  : t('billing.checkout.confirmPayment', { amount: amountLine })}
               </Button>
             </DialogFooter>
           </div>
@@ -533,26 +544,28 @@ export function PaymentDialog({
             <div className="rounded-lg border bg-muted/30 p-3 text-center">
               {chargedLine ? (
                 <>
-                  <p className="text-sm text-muted-foreground">You'll be charged</p>
+                  <p className="text-sm text-muted-foreground">
+                    {t('billing.checkout.willBeCharged')}
+                  </p>
                   <p className="text-2xl font-bold">{chargedLine}</p>
                   <p className="text-xs text-muted-foreground">
-                    for {summary} ({formatMoney(amount, currency)})
+                    {t('billing.checkout.forSummary', { summary, amount: amountLine })}
                   </p>
                 </>
               ) : (
                 <p className="text-sm text-muted-foreground">
-                  Completing payment for {summary} ({formatMoney(amount, currency)})
+                  {t('billing.checkout.completingFor', { summary, amount: amountLine })}
                 </p>
               )}
             </div>
 
             <div className="flex gap-2 rounded-lg border border-blue-500/30 bg-blue-500/5 p-3 text-xs text-muted-foreground">
               <Info className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
-              <span>Charged in USD; your bank may apply its own currency conversion.</span>
+              <span>{t('billing.checkout.usdNoticeShort')}</span>
             </div>
 
             <div className="space-y-1.5">
-              <Label>Card details</Label>
+              <Label>{t('billing.checkout.cardDetails')}</Label>
               <StripePaymentElement
                 ref={cardRef}
                 clientSecret={stripeInit.clientSecret}
@@ -565,11 +578,13 @@ export function PaymentDialog({
 
             <DialogFooter>
               <Button variant="outline" onClick={backToForm} disabled={submitting}>
-                <ArrowLeft className="mr-1 h-4 w-4" /> Back
+                <ArrowLeft className="mr-1 h-4 w-4" /> {t('common.actions.back')}
               </Button>
               <Button onClick={handleCardConfirm} disabled={submitting || !cardReady}>
                 {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {chargedLine ? `Pay ${chargedLine}` : 'Pay now'}
+                {chargedLine
+                  ? t('billing.checkout.pay', { amount: chargedLine })
+                  : t('billing.checkout.payNow')}
               </Button>
             </DialogFooter>
           </div>
@@ -579,19 +594,15 @@ export function PaymentDialog({
           <div className="space-y-4 py-2 text-center">
             <Loader2 className="mx-auto h-10 w-10 animate-spin text-primary" />
             <div className="space-y-1">
-              <p className="font-medium">Waiting for payment…</p>
+              <p className="font-medium">{t('billing.checkout.waiting')}</p>
               {instructionMsg && <p className="text-sm text-muted-foreground">{instructionMsg}</p>}
-              {ussd && (
-                <p className="text-sm">
-                  Dial <span className="font-mono font-semibold">{ussd}</span> to approve.
-                </p>
-              )}
+              {ussd && <p className="text-sm">{t('billing.checkout.dialUssd', { code: ussd })}</p>}
             </div>
             <p className="text-xs text-muted-foreground">
-              This can take up to a couple of minutes. Keep this window open.
+              {t('billing.checkout.keepOpen')}
             </p>
             <Button variant="ghost" size="sm" onClick={() => handleClose(false)}>
-              Close (we'll keep processing)
+              {t('billing.checkout.closeKeepProcessing')}
             </Button>
           </div>
         )}
@@ -600,22 +611,22 @@ export function PaymentDialog({
           <ResultState
             icon={<CheckCircle2 className="mx-auto h-10 w-10 text-green-600" />}
             title={successLabel}
-            description="Your account has been updated."
-            action={<Button onClick={() => handleClose(false)}>Done</Button>}
+            description={t('billing.checkout.successDescription')}
+            action={<Button onClick={() => handleClose(false)}>{t('common.actions.done')}</Button>}
           />
         )}
 
         {phase === 'failed' && (
           <ResultState
             icon={<XCircle className="mx-auto h-10 w-10 text-destructive" />}
-            title="Payment failed"
-            description="The payment was not completed. No charge was made — you can try again."
+            title={t('billing.checkout.failedTitle')}
+            description={t('billing.checkout.failedDescription')}
             action={
               <>
                 <Button variant="outline" onClick={() => handleClose(false)}>
-                  Close
+                  {t('common.actions.close')}
                 </Button>
-                <Button onClick={backToForm}>Try again</Button>
+                <Button onClick={backToForm}>{t('common.actions.retry')}</Button>
               </>
             }
           />
@@ -624,14 +635,14 @@ export function PaymentDialog({
         {phase === 'timeout' && (
           <ResultState
             icon={<Clock className="mx-auto h-10 w-10 text-amber-500" />}
-            title="Still processing"
-            description="We couldn't confirm the payment in time. If you completed it, your balance will update shortly — check your history."
+            title={t('billing.checkout.timeoutTitle')}
+            description={t('billing.checkout.timeoutDescription')}
             action={
               <>
                 <Button variant="outline" onClick={() => handleClose(false)}>
-                  Close
+                  {t('common.actions.close')}
                 </Button>
-                <Button onClick={backToForm}>Start over</Button>
+                <Button onClick={backToForm}>{t('billing.checkout.startOver')}</Button>
               </>
             }
           />

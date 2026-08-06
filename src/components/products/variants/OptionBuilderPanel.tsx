@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import type { DraftOption, DraftOptionValue } from './variant.types';
 import { MAX_OPTIONS, MAX_VARIANTS } from './variant.engine';
+import { useTranslation } from '@/i18n';
 
 // ─── Props ───────────────────────────────────────────────────────────────────
 
@@ -45,6 +46,7 @@ export function OptionBuilderPanel({
   onSetSkuPrefix,
   onApplyAndGenerate,
 }: OptionBuilderPanelProps) {
+  const { t } = useTranslation();
   const [newOptionName, setNewOptionName] = useState('');
   const canAddOption = options.length < MAX_OPTIONS;
   const hasValidOptions = options.length > 0 && options.every((o) => o.values.length > 0);
@@ -66,17 +68,17 @@ export function OptionBuilderPanel({
       {/* SKU Prefix */}
       <div className="space-y-2">
         <Label htmlFor="sku-prefix" className="text-sm font-medium">
-          SKU Prefix
+          {t('products.options.skuPrefix')}
         </Label>
         <Input
           id="sku-prefix"
-          placeholder="e.g. TSHIRT"
+          placeholder={t('products.options.skuPrefixPlaceholder')}
           value={skuPrefix}
           onChange={(e) => onSetSkuPrefix(e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, ''))}
           className="w-full sm:max-w-[200px] font-mono text-sm"
         />
         <p className="text-xs text-muted-foreground">
-          Auto-generated SKUs will start with this prefix
+          {t('products.options.skuPrefixHint')}
         </p>
       </div>
 
@@ -103,7 +105,7 @@ export function OptionBuilderPanel({
       {canAddOption && (
         <div className="flex items-center gap-2">
           <Input
-            placeholder="Option name (e.g. Color, Size)"
+            placeholder={t('products.options.namePlaceholder')}
             value={newOptionName}
             onChange={(e) => setNewOptionName(e.target.value)}
             onKeyDown={(e) => {
@@ -122,14 +124,14 @@ export function OptionBuilderPanel({
             className="shrink-0"
           >
             <Plus className="h-4 w-4 sm:mr-1" />
-            <span className="hidden sm:inline">Add Option</span>
+            <span className="hidden sm:inline">{t('products.options.addOption')}</span>
           </Button>
         </div>
       )}
 
       {!canAddOption && (
         <p className="text-xs text-muted-foreground">
-          Maximum of {MAX_OPTIONS} options per product
+          {t('products.options.maxOptions', { max: MAX_OPTIONS })}
         </p>
       )}
 
@@ -138,7 +140,7 @@ export function OptionBuilderPanel({
         <div className="pt-4 border-t space-y-3">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="space-y-1">
-              <p className="text-sm font-medium">Variant Preview</p>
+              <p className="text-sm font-medium">{t('products.options.preview')}</p>
               <p
                 className={cn(
                   'text-sm',
@@ -146,13 +148,13 @@ export function OptionBuilderPanel({
                 )}
               >
                 {combinationCount > 0
-                  ? `${combinationCount} variant${combinationCount === 1 ? '' : 's'} will be generated`
-                  : 'Add values to generate variants'}
+                  ? t('products.options.willGenerate', { count: combinationCount })
+                  : t('products.options.addValuesToGenerate')}
               </p>
               {exceedsLimit && (
                 <p className="text-xs text-destructive flex items-center gap-1">
                   <AlertTriangle className="h-3 w-3" />
-                  Exceeds maximum of {MAX_VARIANTS} variants
+                  {t('products.options.exceedsLimit', { max: MAX_VARIANTS })}
                 </p>
               )}
             </div>
@@ -161,7 +163,7 @@ export function OptionBuilderPanel({
               disabled={!hasValidOptions || exceedsLimit}
               className="w-full sm:w-auto"
             >
-              Apply &amp; Generate Variants
+              {t('products.options.applyAndGenerate')}
             </Button>
           </div>
         </div>
@@ -189,6 +191,7 @@ function OptionCard({
   onRemoveValue,
   onRenameValue,
 }: OptionCardProps) {
+  const { t } = useTranslation();
   const [isEditingName, setIsEditingName] = useState(false);
   const [editName, setEditName] = useState(option.name);
   const [valueInput, setValueInput] = useState('');
@@ -263,7 +266,9 @@ function OptionCard({
                       'inline-block w-1.5 h-1.5 rounded-full',
                       isRenamed ? 'bg-amber-500' : 'bg-emerald-500',
                     )}
-                    title={isRenamed ? 'Renamed (unsaved)' : 'Saved'}
+                    title={t(isRenamed
+                      ? 'products.options.renamedUnsaved'
+                      : 'products.options.savedMarker')}
                   />
                 )}
               </CardTitle>
@@ -291,7 +296,7 @@ function OptionCard({
                 onRename={(newValue) => onRenameValue(val.localId, newValue)}
               />
             ))) : (
-            <p className="text-xs text-red-500">No values added yet</p>
+            <p className="text-xs text-red-500">{t('products.options.noValues')}</p>
           )}
         </div>
 
@@ -299,7 +304,7 @@ function OptionCard({
         <div className="flex items-center gap-2">
           <Input
             ref={valueInputRef}
-            placeholder="Add value, press Enter"
+            placeholder={t('products.options.valuePlaceholder')}
             value={valueInput}
             onChange={(e) => setValueInput(e.target.value)}
             onKeyDown={handleValueKeyDown}

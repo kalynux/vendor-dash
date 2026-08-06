@@ -1,16 +1,19 @@
 import { Package } from 'lucide-react';
 import type { TopProduct } from '@/types';
-import { formatMoney } from '@/components/customers/customer.constants';
+import { useTranslation, useFormatters } from '@/i18n';
 
 interface TopProductsListProps {
   products: TopProduct[];
   isLoading?: boolean;
 }
 
-// Top-product revenue carries no per-currency field; platform default (XAF).
-const formatCurrency = (value: number) => formatMoney(value);
-
 export function TopProductsList({ products, isLoading }: TopProductsListProps) {
+  const { t } = useTranslation();
+  const fmt = useFormatters();
+
+  // Top-product revenue carries no per-currency field; platform default (XAF).
+  const formatCurrency = (value: number) => fmt.currency(value);
+
   if (isLoading) {
     return (
       <div className="space-y-3">
@@ -25,7 +28,7 @@ export function TopProductsList({ products, isLoading }: TopProductsListProps) {
     return (
       <div className="flex flex-col items-center justify-center py-10 text-center text-muted-foreground">
         <Package className="w-8 h-8 mb-2 opacity-50" />
-        <p className="text-sm">No product sales in this period.</p>
+        <p className="text-sm">{t('overview.topProducts.empty')}</p>
       </div>
     );
   }
@@ -44,7 +47,7 @@ export function TopProductsList({ products, isLoading }: TopProductsListProps) {
             <div className="min-w-0">
               <p className="font-medium text-sm truncate">{product.productTitle}</p>
               <p className="text-xs text-muted-foreground truncate">
-                {product.variantTitle} · {product.quantity} sold
+                {product.variantTitle} · {t('overview.topProducts.sold', { count: product.quantity })}
               </p>
             </div>
           </div>

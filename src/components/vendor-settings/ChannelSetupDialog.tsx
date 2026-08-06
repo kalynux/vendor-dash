@@ -28,6 +28,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
+import { Trans, useFormatters, useMessage, useTranslation } from '@/i18n';
 
 const CHANNEL_LABELS: Record<SecondaryChannel, string> = {
   email: 'Email',
@@ -59,6 +60,9 @@ export function ChannelSetupDialog({
   onRefresh,
   onClose,
 }: ChannelSetupDialogProps) {
+  const { t } = useTranslation();
+  const m = useMessage();
+  const fmt = useFormatters();
   const [phase, setPhase] = useState<Phase>('initiating');
   const [error, setError] = useState<string | null>(null);
   const [actionUrl, setActionUrl] = useState<string | null>(null);
@@ -118,14 +122,14 @@ export function ChannelSetupDialog({
       if (nowVerified) {
         setPhase('verified');
       } else {
-        toast.info('Not verified yet — finish the steps, then check again.');
+        toast.info(t('notifications.settings.setup.notVerifiedYet'));
       }
     } catch (err) {
       setError(mapProfileError(err));
     } finally {
       setRefreshing(false);
     }
-  }, [onRefresh]);
+  }, [onRefresh, t]);
 
   const copyCommand = useCallback(() => {
     if (!waCommand) return;
@@ -143,18 +147,20 @@ export function ChannelSetupDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>
-            {phase === 'verified' ? `${label} connected` : `Connect ${label}`}
+            {t(phase === 'verified'
+              ? 'notifications.settings.setup.connectedTitle'
+              : 'notifications.settings.setup.connectTitle', { channel: label })}
           </DialogTitle>
           <DialogDescription>
-            {phase === 'verified'
-              ? `Your ${label} is verified. You can now enable it as your delivery channel.`
-              : `Link your ${label} to receive notifications there. This is a one-time setup.`}
+            {t(phase === 'verified'
+              ? 'notifications.settings.setup.connectedDescription'
+              : 'notifications.settings.setup.connectDescription', { channel: label })}
           </DialogDescription>
         </DialogHeader>
 
         {error && (
           <div role="alert" className="p-3 text-sm bg-destructive/10 text-destructive rounded-lg border border-destructive/20">
-            {error}
+            {m(error)}
           </div>
         )}
 
@@ -163,11 +169,13 @@ export function ChannelSetupDialog({
             <div className="p-3 rounded-full bg-emerald-100 text-emerald-600">
               <CheckCircle2 className="w-8 h-8" />
             </div>
-            <p className="text-sm text-muted-foreground">All set — close this and choose {label} as your channel.</p>
+            <p className="text-sm text-muted-foreground">
+              {t('notifications.settings.setup.allSet', { channel: label })}
+            </p>
           </div>
         ) : phase === 'initiating' ? (
           <div className="flex items-center justify-center gap-2 py-8 text-muted-foreground">
-            <Loader2 className="w-5 h-5 animate-spin" /> Preparing…
+            <Loader2 className="w-5 h-5 animate-spin" /> {t('notifications.settings.setup.preparing')}
           </div>
         ) : (
           <div className="space-y-4 py-1">
@@ -176,17 +184,22 @@ export function ChannelSetupDialog({
                 <li className="flex gap-3">
                   <span className="flex-shrink-0 w-5 h-5 rounded-full bg-primary/10 text-primary text-xs font-semibold flex items-center justify-center">1</span>
                   <span>
-                    We sent a verification link to{' '}
-                    <span className="font-medium text-foreground">{vendorEmail ?? 'your email'}</span>.
+                    <Trans
+                      i18nKey="notifications.settings.setup.emailStep1"
+                      params={{
+                        email: vendorEmail ?? t('notifications.settings.setup.emailFallback'),
+                      }}
+                      components={[<span className="font-medium text-foreground" />]}
+                    />
                   </span>
                 </li>
                 <li className="flex gap-3">
                   <span className="flex-shrink-0 w-5 h-5 rounded-full bg-primary/10 text-primary text-xs font-semibold flex items-center justify-center">2</span>
-                  <span>Open the email and click the link to verify, then refresh below.</span>
+                  <span>{t('notifications.settings.setup.emailStep2')}</span>
                 </li>
                 <li>
                   <Button variant="outline" size="sm" className="gap-2" onClick={() => initiate('email')}>
-                    <Mail className="w-4 h-4" /> Resend email
+                    <Mail className="w-4 h-4" /> {t('notifications.settings.setup.resendEmail')}
                   </Button>
                 </li>
               </ol>
@@ -196,25 +209,32 @@ export function ChannelSetupDialog({
               <ol className="space-y-3 text-sm">
                 <li className="flex gap-3">
                   <span className="flex-shrink-0 w-5 h-5 rounded-full bg-primary/10 text-primary text-xs font-semibold flex items-center justify-center">1</span>
-                  <span>Open our Telegram bot and press <span className="font-medium text-foreground">Start</span>.</span>
+                  <span>
+                    <Trans
+                      i18nKey="notifications.settings.setup.telegramStep1"
+                      components={[<span className="font-medium text-foreground" />]}
+                    />
+                  </span>
                 </li>
                 {actionUrl && (
                   <li>
                     <Button asChild variant="outline" size="sm" className="gap-2">
                       <a href={actionUrl} target="_blank" rel="noopener noreferrer">
-                        <ExternalLink className="w-4 h-4" /> Open Telegram
+                        <ExternalLink className="w-4 h-4" /> {t('notifications.settings.setup.openTelegram')}
                       </a>
                     </Button>
                     {expiresAt && (
                       <p className="text-xs text-muted-foreground mt-1.5">
-                        Link expires {new Date(expiresAt).toLocaleTimeString()}.
+                        {t('notifications.settings.setup.linkExpires', {
+                          time: fmt.time(expiresAt),
+                        })}
                       </p>
                     )}
                   </li>
                 )}
                 <li className="flex gap-3">
                   <span className="flex-shrink-0 w-5 h-5 rounded-full bg-primary/10 text-primary text-xs font-semibold flex items-center justify-center">2</span>
-                  <span>Once the bot confirms, refresh below.</span>
+                  <span>{t('notifications.settings.setup.telegramStep2')}</span>
                 </li>
               </ol>
             )}
@@ -223,13 +243,13 @@ export function ChannelSetupDialog({
               <ol className="space-y-3 text-sm">
                 <li className="flex gap-3">
                   <span className="flex-shrink-0 w-5 h-5 rounded-full bg-primary/10 text-primary text-xs font-semibold flex items-center justify-center">1</span>
-                  <span>Open WhatsApp and send the pre-filled command to our bot.</span>
+                  <span>{t('notifications.settings.setup.whatsappStep1')}</span>
                 </li>
                 {actionUrl && (
                   <li>
                     <Button asChild variant="outline" size="sm" className="gap-2">
                       <a href={actionUrl} target="_blank" rel="noopener noreferrer">
-                        <ExternalLink className="w-4 h-4" /> Open WhatsApp
+                        <ExternalLink className="w-4 h-4" /> {t('notifications.settings.setup.openWhatsapp')}
                       </a>
                     </Button>
                   </li>
@@ -237,14 +257,14 @@ export function ChannelSetupDialog({
                 {waCommand && (
                   <li className="flex items-center gap-2">
                     <code className="flex-1 px-2.5 py-1.5 rounded bg-muted text-xs font-mono truncate">{waCommand}</code>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 flex-shrink-0" onClick={copyCommand} aria-label="Copy command">
+                    <Button variant="ghost" size="icon" className="h-8 w-8 flex-shrink-0" onClick={copyCommand} aria-label={t('notifications.settings.setup.copyCommand')}>
                       {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
                     </Button>
                   </li>
                 )}
                 <li className="flex gap-3">
                   <span className="flex-shrink-0 w-5 h-5 rounded-full bg-primary/10 text-primary text-xs font-semibold flex items-center justify-center">2</span>
-                  <span>After the bot replies, refresh below.</span>
+                  <span>{t('notifications.settings.setup.whatsappStep2')}</span>
                 </li>
               </ol>
             )}
@@ -253,13 +273,13 @@ export function ChannelSetupDialog({
 
         <DialogFooter>
           {phase === 'verified' ? (
-            <Button onClick={onClose}>Done</Button>
+            <Button onClick={onClose}>{t('common.actions.done')}</Button>
           ) : (
             <>
-              <Button variant="outline" onClick={onClose}>Cancel</Button>
+              <Button variant="outline" onClick={onClose}>{t('common.actions.cancel')}</Button>
               <Button onClick={handleRefresh} disabled={refreshing || phase === 'initiating'} className="gap-2">
                 {refreshing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                I've done this — check
+                {t('notifications.settings.setup.checkAgain')}
               </Button>
             </>
           )}

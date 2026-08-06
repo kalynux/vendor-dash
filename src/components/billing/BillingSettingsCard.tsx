@@ -9,21 +9,26 @@ import { Input } from '@/components/ui/input';
 import { LabelWithHint } from '@/components/ui/info-hint';
 import { toast } from 'sonner';
 import { fetchBillingSettings, updateBillingSettings } from '@/services/billing.service';
-import { ApiError } from '@/types/api';
+import { useTranslation, useMessage, useApiError } from '@/i18n';
 import { CardSkeleton } from './BillingSkeletons';
-import { NOTIFY_DAYS_MIN, NOTIFY_DAYS_MAX, billingErrorMessage } from './billing.constants';
+import { NOTIFY_DAYS_MIN, NOTIFY_DAYS_MAX } from './billing.constants';
 
+// Messages are translation keys, resolved at render by `useMessage()` — the
+// schema is built at module load, before any locale exists.
 const schema = z.object({
   notifyDaysBeforeExpiry: z
-    .number({ message: 'Enter a number of days' })
-    .int('Must be a whole number')
-    .min(NOTIFY_DAYS_MIN, `Must be at least ${NOTIFY_DAYS_MIN}`)
-    .max(NOTIFY_DAYS_MAX, `Must be at most ${NOTIFY_DAYS_MAX}`),
+    .number({ message: 'billing.validation.daysRequired' })
+    .int('billing.validation.daysInteger')
+    .min(NOTIFY_DAYS_MIN, 'billing.validation.daysMin')
+    .max(NOTIFY_DAYS_MAX, 'billing.validation.daysMax'),
 });
 
 type FormValues = z.infer<typeof schema>;
 
 export function BillingSettingsCard() {
+  const { t } = useTranslation();
+  const m = useMessage();
+  const apiError = useApiError();
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -44,7 +49,9 @@ export function BillingSettingsCard() {
         const settings = await fetchBillingSettings();
         if (!cancelled) reset({ notifyDaysBeforeExpiry: settings.notifyDaysBeforeExpiry });
       } catch (err) {
-        if (!cancelled) setLoadError(err instanceof ApiError ? err.message : 'Failed to load settings.');
+        if (!cancelled) {
+          setLoadError(apiError.resolve(err, { fallbackKey: 'billing.errors.loadSettingsFailed' }));
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -52,15 +59,15 @@ export function BillingSettingsCard() {
     return () => {
       cancelled = true;
     };
-  }, [reset]);
+  }, [reset, apiError]);
 
   async function onSubmit(values: FormValues) {
     try {
       const updated = await updateBillingSettings(values.notifyDaysBeforeExpiry);
       reset({ notifyDaysBeforeExpiry: updated.notifyDaysBeforeExpiry });
-      toast.success('Settings updated');
+      toast.success(t('billing.toast.settingsUpdated'));
     } catch (err) {
-      toast.error(billingErrorMessage(err, 'Failed to update settings.'));
+      apiError.toast(err, { fallbackKey: 'billing.errors.updateSettingsFailed' });
     }
   }
 
@@ -68,8 +75,8 @@ export function BillingSettingsCard() {
 
   return (
     <SettingsSection
-      title="Expiry reminders"
-      info={`How far ahead of your plan's expiry date we warn you, so a lapse never catches you off guard. Set it to 7 and a plan ending on the 30th triggers a reminder on the 23rd. Between ${NOTIFY_DAYS_MIN} and ${NOTIFY_DAYS_MAX} days.`}
+      title={t('billing.settings.title')}
+      info={t('billing.settings.info', { min: NOTIFY_DAYS_MIN, max: NOTIFY_DAYS_MAX })}
     >
         {loadError ? (
           <p className="text-sm text-destructive">{loadError}</p>
@@ -78,10 +85,10 @@ export function BillingSettingsCard() {
             <div className="space-y-1.5 sm:max-w-[200px]">
               <LabelWithHint
                 htmlFor="notify-days"
-                hintLabel="About the reminder window"
-                hint={`Days of notice before the plan expires. Between ${NOTIFY_DAYS_MIN} and ${NOTIFY_DAYS_MAX}.`}
+                hintLabel={t('billing.settings.hintLabel')}
+                hint={t('billing.settings.hint', { min: NOTIFY_DAYS_MIN, max: NOTIFY_DAYS_MAX })}
               >
-                Days before expiry
+                {t('billing.settings.daysLabel')}
               </LabelWithHint>
               <Input
                 id="notify-days"
@@ -92,12 +99,14 @@ export function BillingSettingsCard() {
                 aria-invalid={!!errors.notifyDaysBeforeExpiry}
               />
               {errors.notifyDaysBeforeExpiry && (
-                <p className="text-xs text-destructive">{errors.notifyDaysBeforeExpiry.message}</p>
+                <p className="text-xs text-destructive">
+                  {m(errors.notifyDaysBeforeExpiry.message)}
+                </p>
               )}
             </div>
             <Button type="submit" disabled={isSubmitting || !isDirty}>
               {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Save
+              {t('common.actions.save')}
             </Button>
           </form>
         )}

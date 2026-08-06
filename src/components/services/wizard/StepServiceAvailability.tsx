@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { ChevronRight, ChevronLeft, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useTranslation } from '@/i18n';
 import {
   AvailabilityRulesEditor,
   type AvailabilityRulesEditorHandle,
@@ -17,6 +18,7 @@ export function StepServiceAvailability({
   onContinue,
   onBack,
 }: StepServiceAvailabilityProps) {
+  const { t } = useTranslation();
   const editorRef = useRef<AvailabilityRulesEditorHandle>(null);
   const [saving, setSaving] = useState(false);
 
@@ -38,10 +40,9 @@ export function StepServiceAvailability({
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-semibold">Select hours</h2>
+        <h2 className="text-lg font-semibold">{t('services.availability.stepTitle')}</h2>
         <p className="text-sm text-muted-foreground mt-1">
-          Set the weekly hours customers can book. Toggle a day open to add its hours, or leave it
-          closed — you can refine this later.
+          {t('services.availability.stepDescription')}
         </p>
       </div>
 
@@ -51,17 +52,17 @@ export function StepServiceAvailability({
       <div className="flex items-center justify-between pt-2">
         <Button type="button" variant="ghost" size="sm" onClick={onBack} className="gap-1.5" disabled={saving}>
           <ChevronLeft className="w-4 h-4" />
-          Back
+          {t('common.actions.back')}
         </Button>
         <Button type="button" onClick={handleContinue} className="gap-1.5" disabled={saving}>
           {saving ? (
             <>
               <Loader2 className="w-4 h-4 animate-spin" />
-              Saving…
+              {t('common.actions.saving')}
             </>
           ) : (
             <>
-              Save &amp; Continue
+              {t('services.wizard.saveAndContinue')}
               <ChevronRight className="w-4 h-4" />
             </>
           )}

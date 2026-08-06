@@ -1,6 +1,7 @@
 import { Zap, Package, FileDigit } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
+import { useTranslation, type TranslationKey } from '@/i18n';
 
 /**
  * What the vendor picked on step 0. 'simple' hands off to the one-shot quick-add
@@ -15,49 +16,49 @@ interface StepProductModeProps {
 
 const CHOICES: {
   choice: ProductCreationChoice;
-  label: string;
-  description: string;
+  labelKey: TranslationKey;
+  descriptionKey: TranslationKey;
   icon: React.ElementType;
-  examples: string;
+  examplesKey: TranslationKey;
   recommended?: boolean;
 }[] = [
   {
     choice: 'simple',
-    label: 'Quick add',
-    description: 'One page, one price, one stock count. Publishes as soon as it is ready.',
+    labelKey: 'products.mode.simple',
+    descriptionKey: 'products.mode.simpleDescription',
     icon: Zap,
-    examples: 'A single pair of shoes, one book, one bag',
+    examplesKey: 'products.mode.simpleExamples',
     recommended: true,
   },
   {
     choice: 'physical',
-    label: 'Physical with variants',
-    description: 'Sizes, colours and per-variant stock, images and pricing.',
+    labelKey: 'products.mode.physical',
+    descriptionKey: 'products.mode.physicalDescription',
     icon: Package,
-    examples: 'A t-shirt in 4 sizes × 3 colours',
+    examplesKey: 'products.mode.physicalExamples',
   },
   {
     choice: 'digital',
-    label: 'Digital product',
-    description: 'Downloadable files with per-format pricing and download limits.',
+    labelKey: 'products.mode.digital',
+    descriptionKey: 'products.mode.digitalDescription',
     icon: FileDigit,
-    examples: 'Software, e-books, music, templates, courses',
+    examplesKey: 'products.mode.digitalExamples',
   },
 ];
 
 export function StepProductMode({ onSelect, disabled = false }: StepProductModeProps) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-4">
       <div>
-        <h2 className="text-lg font-semibold">What are you adding?</h2>
+        <h2 className="text-lg font-semibold">{t('products.mode.title')}</h2>
         <p className="text-sm text-muted-foreground mt-1">
-          Quick add covers most products. Pick one of the others if you need variants or
-          downloadable files — this cannot be changed after creation.
+          {t('products.mode.description')}
         </p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {CHOICES.map(({ choice, label, description, icon: Icon, examples, recommended }) => (
+        {CHOICES.map(({ choice, labelKey, descriptionKey, icon: Icon, examplesKey, recommended }) => (
           <button
             key={choice}
             type="button"
@@ -83,15 +84,15 @@ export function StepProductMode({ onSelect, disabled = false }: StepProductModeP
             </div>
             <div className="space-y-1">
               <div className="flex items-center gap-2 flex-wrap">
-                <p className="font-semibold text-sm">{label}</p>
+                <p className="font-semibold text-sm">{t(labelKey)}</p>
                 {recommended && (
                   <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                    Recommended
+                    {t('products.mode.recommended')}
                   </Badge>
                 )}
               </div>
-              <p className="text-sm text-muted-foreground">{description}</p>
-              <p className="text-xs text-muted-foreground/70 mt-2">{examples}</p>
+              <p className="text-sm text-muted-foreground">{t(descriptionKey)}</p>
+              <p className="text-xs text-muted-foreground/70 mt-2">{t(examplesKey)}</p>
             </div>
           </button>
         ))}

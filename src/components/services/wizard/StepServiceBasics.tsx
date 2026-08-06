@@ -8,6 +8,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
+import { useTranslation, useMessage } from '@/i18n';
+import {
+  SEO_TITLE_MAX, SEO_DESCRIPTION_MAX,
+} from '@/components/services/service.constants';
 import {
   serviceBasicsSchema, type ServiceBasicsFormValues,
 } from '@/components/services/schemas/service.schemas';
@@ -30,6 +34,8 @@ export function StepServiceBasics({
   onBack,
   mode = 'create',
 }: StepServiceBasicsProps) {
+  const { t } = useTranslation();
+  const m = useMessage();
   const tagInputRef = useRef<HTMLInputElement>(null);
 
   const {
@@ -72,9 +78,9 @@ export function StepServiceBasics({
   return (
     <form onSubmit={handleSubmit(onSaveComplete)} className="space-y-6">
       <div>
-        <h2 className="text-lg font-semibold">Service details</h2>
+        <h2 className="text-lg font-semibold">{t('services.basics.title')}</h2>
         <p className="text-sm text-muted-foreground mt-1">
-          Core details about your bookable service. You can update these later.
+          {t('services.basics.description')}
         </p>
       </div>
 
@@ -88,51 +94,51 @@ export function StepServiceBasics({
       {/* Title */}
       <div className="space-y-1.5">
         <Label htmlFor="title">
-          Service name <span className="text-destructive">*</span>
+          {t('services.basics.name')} <span className="text-destructive">*</span>
         </Label>
         <Input
           id="title"
-          placeholder="e.g. 1-Hour Consultation"
+          placeholder={t('services.basics.namePlaceholder')}
           {...register('title')}
           aria-invalid={!!errors.title}
         />
-        {errors.title && <p className="text-xs text-destructive">{errors.title.message}</p>}
+        {errors.title && <p className="text-xs text-destructive">{m(errors.title.message)}</p>}
       </div>
 
       {/* Category */}
       <div className="space-y-1.5">
         <Label htmlFor="category">
-          Category <span className="text-destructive">*</span>
+          {t('services.basics.category')} <span className="text-destructive">*</span>
         </Label>
         <Input
           id="category"
-          placeholder="e.g. Coaching, Consulting, Wellness"
+          placeholder={t('services.basics.categoryPlaceholder')}
           {...register('category')}
           aria-invalid={!!errors.category}
         />
-        {errors.category && <p className="text-xs text-destructive">{errors.category.message}</p>}
+        {errors.category && <p className="text-xs text-destructive">{m(errors.category.message)}</p>}
       </div>
 
       {/* Description */}
       <div className="space-y-1.5">
         <Label htmlFor="description">
-          Description <span className="text-destructive">*</span>
+          {t('services.basics.descriptionLabel')} <span className="text-destructive">*</span>
         </Label>
         <Textarea
           id="description"
-          placeholder="What does this booking include?"
+          placeholder={t('services.basics.descriptionPlaceholder')}
           rows={4}
           {...register('description')}
           aria-invalid={!!errors.description}
         />
         {errors.description && (
-          <p className="text-xs text-destructive">{errors.description.message}</p>
+          <p className="text-xs text-destructive">{m(errors.description.message)}</p>
         )}
       </div>
 
       {/* Tags */}
       <div className="space-y-1.5">
-        <Label>Tags</Label>
+        <Label>{t('services.basics.tags')}</Label>
         <div className="flex flex-wrap gap-1.5 mb-2">
           {(tags ?? []).map((tag, i) => (
             <Badge key={`${tag}-${i}`} variant="secondary" className="gap-1 text-xs">
@@ -150,51 +156,62 @@ export function StepServiceBasics({
         <div className="flex gap-2">
           <Input
             ref={tagInputRef}
-            placeholder="Add tag, press Enter or comma"
+            placeholder={t('services.basics.tagPlaceholder')}
             className="h-8"
             onKeyDown={onTagKeyDown}
           />
           <Button type="button" variant="outline" size="sm" onClick={addTag} className="gap-1.5 shrink-0">
             <Plus className="w-3.5 h-3.5" />
-            Add
+            {t('common.actions.add')}
           </Button>
         </div>
-        {errors.tags?.root && <p className="text-xs text-destructive">{errors.tags.root.message}</p>}
-        {errors.tags?.message && <p className="text-xs text-destructive">{errors.tags.message as string}</p>}
+        {errors.tags?.root && <p className="text-xs text-destructive">{m(errors.tags.root.message)}</p>}
+        {errors.tags?.message && (
+          <p className="text-xs text-destructive">{m(errors.tags.message as string)}</p>
+        )}
       </div>
 
       {/* SEO (optional) */}
       <div className="rounded-lg border border-border p-4 space-y-4">
-        <p className="text-sm font-medium">SEO (optional)</p>
+        <p className="text-sm font-medium">{t('services.basics.seoSection')}</p>
 
         <div className="space-y-1.5">
           <Label htmlFor="seoTitle" className="text-xs text-muted-foreground">
-            SEO title <span className="text-muted-foreground/60">({seoTitle.length}/60)</span>
+            {t('services.basics.seoTitle')}{' '}
+            <span className="text-muted-foreground/60">
+              {t('services.basics.charCount', { current: seoTitle.length, max: SEO_TITLE_MAX })}
+            </span>
           </Label>
           <Input
             id="seoTitle"
-            placeholder="Leave blank to use service name"
-            maxLength={60}
+            placeholder={t('services.basics.seoTitlePlaceholder')}
+            maxLength={SEO_TITLE_MAX}
             {...register('seoTitle')}
             aria-invalid={!!errors.seoTitle}
           />
-          {errors.seoTitle && <p className="text-xs text-destructive">{errors.seoTitle.message}</p>}
+          {errors.seoTitle && <p className="text-xs text-destructive">{m(errors.seoTitle.message)}</p>}
         </div>
 
         <div className="space-y-1.5">
           <Label htmlFor="seoDescription" className="text-xs text-muted-foreground">
-            SEO description <span className="text-muted-foreground/60">({seoDesc.length}/160)</span>
+            {t('services.basics.seoDescription')}{' '}
+            <span className="text-muted-foreground/60">
+              {t('services.basics.charCount', {
+                current: seoDesc.length,
+                max: SEO_DESCRIPTION_MAX,
+              })}
+            </span>
           </Label>
           <Textarea
             id="seoDescription"
-            placeholder="Brief description for search engines"
-            maxLength={160}
+            placeholder={t('services.basics.seoDescriptionPlaceholder')}
+            maxLength={SEO_DESCRIPTION_MAX}
             rows={2}
             {...register('seoDescription')}
             aria-invalid={!!errors.seoDescription}
           />
           {errors.seoDescription && (
-            <p className="text-xs text-destructive">{errors.seoDescription.message}</p>
+            <p className="text-xs text-destructive">{m(errors.seoDescription.message)}</p>
           )}
         </div>
       </div>
@@ -203,10 +220,14 @@ export function StepServiceBasics({
       <div className="flex items-center justify-between pt-2">
         <Button type="button" variant="ghost" size="sm" onClick={onBack} className="gap-1.5">
           <ChevronLeft className="w-4 h-4" />
-          Back
+          {t('common.actions.back')}
         </Button>
         <Button type="submit" disabled={isSaving} className="gap-1.5">
-          {isSaving ? 'Saving…' : mode === 'edit' ? 'Save' : 'Save & Continue'}
+          {isSaving
+            ? t('common.actions.saving')
+            : mode === 'edit'
+              ? t('common.actions.save')
+              : t('services.wizard.saveAndContinue')}
           {!isSaving && <ChevronRight className="w-4 h-4" />}
         </Button>
       </div>

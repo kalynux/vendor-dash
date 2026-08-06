@@ -10,10 +10,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
-  formatMoney, REFUND_REASON_LABELS, REFUND_REASON_MAX,
+  REFUND_REASON_KEYS, REFUND_REASON_MAX,
 } from '@/components/customers/customer.constants';
+import { useTranslation, useFormatters, useApiError, type TranslationKey } from '@/i18n';
 import { fetchRefundEligibility, refundOrder } from '@/services/customers.service';
-import { ApiError } from '@/types/api';
 import type { RefundEligibility, RefundResult, ReturnShippingPayer } from '@/types/customers.types';
 
 interface RefundDialogProps {
@@ -25,26 +25,16 @@ interface RefundDialogProps {
   onRefunded: (result: RefundResult) => void;
 }
 
-const REFUND_ERROR_LABELS: Record<string, string> = {
-  REFUND_POLICY_DISABLED: 'Refunds are disabled by your return policy.',
-  REFUND_WINDOW_EXPIRED: 'The return window for this order has expired.',
-  REFUND_NOT_ELIGIBLE: 'This order is not eligible for a refund.',
-  REFUND_ORDER_NOT_PAID: 'This order has not been paid.',
-  REFUND_ALREADY_FULLY_REFUNDED: 'This order has already been fully refunded.',
-  REFUND_PAYMENT_NOT_FOUND: 'No successful payment to refund.',
-  REFUND_AMOUNT_EXCEEDS_MAX: 'The amount exceeds the maximum you can refund.',
-  REFUND_GATEWAY_NOT_SUPPORTED: 'This payment gateway does not support refunds.',
-  REFUND_GATEWAY_FAILED: 'The payment gateway rejected the refund. Try again later.',
-  ORDER_NOT_FOUND: 'Order not found.',
-};
-
-const RETURN_SHIPPING_PAYER_LABELS: Record<ReturnShippingPayer, string> = {
-  vendor: 'You (vendor)',
-  customer: 'Customer',
-  customer_reimbursed_if_defect: 'Customer (reimbursed if defective)',
+const RETURN_SHIPPING_PAYER_KEYS: Record<ReturnShippingPayer, TranslationKey> = {
+  vendor: 'customers.returnPayer.vendor',
+  customer: 'customers.returnPayer.customer',
+  customer_reimbursed_if_defect: 'customers.returnPayer.customer_reimbursed_if_defect',
 };
 
 export function RefundDialog({ orderId, orderNumber, open, onOpenChange, onRefunded }: RefundDialogProps) {
+  const { t } = useTranslation();
+  const fmt = useFormatters();
+  const apiError = useApiError();
   const [loading, setLoading] = useState(false);
   const [eligibility, setEligibility] = useState<RefundEligibility | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -67,13 +57,13 @@ export function RefundDialog({ orderId, orderNumber, open, onOpenChange, onRefun
         setAmount(data.eligible ? String(data.maxRefundable) : '');
       })
       .catch((err) => {
-        if (active) setLoadError(err instanceof ApiError ? err.message : 'Failed to check eligibility');
+        if (active) setLoadError(apiError.resolve(err, { fallbackKey: 'customers.errors.eligibilityFailed' }));
       })
       .finally(() => active && setLoading(false));
     return () => {
       active = false;
     };
-  }, [open, orderId]);
+  }, [open, orderId, apiError]);
 
   const currency = eligibility?.currency ?? 'XAF';
   const max = eligibility?.maxRefundable ?? 0;
@@ -89,14 +79,15 @@ export function RefundDialog({ orderId, orderNumber, open, onOpenChange, onRefun
         amount: amountNum,
         reason: reason.trim() || undefined,
       });
-      toast.success(result.fullyRefunded ? 'Order fully refunded' : 'Partial refund processed');
+      toast.success(
+        result.fullyRefunded
+          ? t('customers.refund.fullyRefunded')
+          : t('customers.refund.partiallyRefunded'),
+      );
       onRefunded(result);
       onOpenChange(false);
     } catch (err) {
-      const code = err instanceof ApiError ? err.code : '';
-      toast.error(
-        REFUND_ERROR_LABELS[code] ?? (err instanceof ApiError ? err.message : 'Refund failed'),
-      );
+      apiError.toast(err, { fallbackKey: 'customers.errors.refundFailed' });
       // Re-check eligibility — state may have changed (e.g. now fully refunded).
       if (orderId) fetchRefundEligibility(orderId).then(setEligibility).catch(() => {});
     } finally {
@@ -110,11 +101,11 @@ export function RefundDialog({ orderId, orderNumber, open, onOpenChange, onRefun
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <RotateCcw className="h-5 w-5" />
-            Refund {orderNumber ?? 'order'}
+            {t('customers.refund.title', {
+              order: orderNumber ?? t('customers.refund.fallbackOrder'),
+            })}
           </DialogTitle>
-          <DialogDescription>
-            Refunds are processed live through the payment gateway and can't be undone.
-          </DialogDescription>
+          <DialogDescription>{t('customers.refund.description')}</DialogDescription>
         </DialogHeader>
 
         {loading ? (
@@ -133,11 +124,11 @@ export function RefundDialog({ orderId, orderNumber, open, onOpenChange, onRefun
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
               <Ban className="h-6 w-6 text-muted-foreground" />
             </div>
-            <p className="text-sm font-medium">This order can't be refunded</p>
+            <p className="text-sm font-medium">{t('customers.refund.notRefundable')}</p>
             <p className="text-sm text-muted-foreground">
               {eligibility.reasonCode
-                ? REFUND_REASON_LABELS[eligibility.reasonCode]
-                : 'It is not currently eligible for a refund.'}
+                ? t(REFUND_REASON_KEYS[eligibility.reasonCode])
+                : t('customers.refund.notEligible')}
             </p>
           </div>
         ) : eligibility ? (
@@ -145,12 +136,12 @@ export function RefundDialog({ orderId, orderNumber, open, onOpenChange, onRefun
             {/* Balance summary */}
             <div className="grid grid-cols-2 gap-3">
               <div className="rounded-lg border p-3">
-                <p className="text-xs text-muted-foreground">Max refundable</p>
-                <p className="text-lg font-semibold">{formatMoney(eligibility.maxRefundable, currency)}</p>
+                <p className="text-xs text-muted-foreground">{t('customers.refund.maxRefundable')}</p>
+                <p className="text-lg font-semibold">{fmt.currency(eligibility.maxRefundable, currency)}</p>
               </div>
               <div className="rounded-lg border p-3">
-                <p className="text-xs text-muted-foreground">Remaining balance</p>
-                <p className="text-lg font-semibold">{formatMoney(eligibility.remaining, currency)}</p>
+                <p className="text-xs text-muted-foreground">{t('customers.refund.remaining')}</p>
+                <p className="text-lg font-semibold">{fmt.currency(eligibility.remaining, currency)}</p>
               </div>
             </div>
 
@@ -158,12 +149,13 @@ export function RefundDialog({ orderId, orderNumber, open, onOpenChange, onRefun
             {(eligibility.refundProcessingDays != null || eligibility.returnShippingPayer != null) && (
               <div className="space-y-1 text-xs text-muted-foreground">
                 {eligibility.refundProcessingDays != null && (
-                  <p>Refund settles in ~{eligibility.refundProcessingDays} days.</p>
+                  <p>{t('customers.refund.settlesIn', { days: eligibility.refundProcessingDays })}</p>
                 )}
                 {eligibility.returnShippingPayer != null && (
                   <p>
-                    Return shipping paid by{' '}
-                    {RETURN_SHIPPING_PAYER_LABELS[eligibility.returnShippingPayer]}.
+                    {t('customers.refund.returnShipping', {
+                      payer: t(RETURN_SHIPPING_PAYER_KEYS[eligibility.returnShippingPayer]),
+                    })}
                   </p>
                 )}
               </div>
@@ -171,7 +163,7 @@ export function RefundDialog({ orderId, orderNumber, open, onOpenChange, onRefun
 
             {/* Amount */}
             <div className="space-y-1.5">
-              <Label htmlFor="refund-amount">Amount ({currency})</Label>
+              <Label htmlFor="refund-amount">{t('customers.refund.amount', { currency })}</Label>
               <Input
                 id="refund-amount"
                 type="number"
@@ -183,20 +175,20 @@ export function RefundDialog({ orderId, orderNumber, open, onOpenChange, onRefun
                 aria-invalid={amountInvalid && amount.trim() !== ''}
               />
               <p className="text-xs text-muted-foreground">
-                You can refund up to {formatMoney(max, currency)}. Lower it for a partial refund.
+                {t('customers.refund.amountHelp', { max: fmt.currency(max, currency) })}
               </p>
             </div>
 
             {/* Reason */}
             <div className="space-y-1.5">
-              <Label htmlFor="refund-reason">Reason (optional)</Label>
+              <Label htmlFor="refund-reason">{t('customers.refund.reason')}</Label>
               <Textarea
                 id="refund-reason"
                 rows={3}
                 maxLength={REFUND_REASON_MAX}
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
-                placeholder="Shared with the payment gateway and stored on the refund."
+                placeholder={t('customers.refund.reasonPlaceholder')}
               />
             </div>
           </div>
@@ -204,12 +196,14 @@ export function RefundDialog({ orderId, orderNumber, open, onOpenChange, onRefun
 
         <DialogFooter className="gap-2 sm:gap-2">
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
-            {eligibility?.eligible ? 'Cancel' : 'Close'}
+            {eligibility?.eligible ? t('common.actions.cancel') : t('common.actions.close')}
           </Button>
           {eligibility?.eligible && (
             <Button onClick={handleRefund} disabled={submitting || amountInvalid}>
               {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RotateCcw className="mr-2 h-4 w-4" />}
-              Refund {amount && !amountInvalid ? formatMoney(amountNum, currency) : ''}
+              {amount && !amountInvalid
+                ? t('customers.refund.submitAmount', { amount: fmt.currency(amountNum, currency) })
+                : t('customers.refund.submit')}
             </Button>
           )}
         </DialogFooter>

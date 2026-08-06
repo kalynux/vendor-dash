@@ -15,6 +15,7 @@ import { Badge } from '@/components/ui/badge';
 import { CheckCircle2, PlusCircle, AlertTriangle, Loader2 } from 'lucide-react';
 import type { ReconciliationResult } from './variant.types';
 import { buildVariantName } from './variant.engine';
+import { useTranslation } from '@/i18n';
 
 // ─── Props ───────────────────────────────────────────────────────────────────
 
@@ -37,6 +38,7 @@ export function RegenerateDialog({
   onConfirm,
   onCancel,
 }: RegenerateDialogProps) {
+  const { t } = useTranslation();
   if (!result) return null;
 
   const { kept, toArchive, toCreate, totalExpected } = result;
@@ -47,12 +49,14 @@ export function RegenerateDialog({
       <AlertDialogContent className="max-w-lg">
         <AlertDialogHeader>
           <AlertDialogTitle>
-            {hasDestructive ? 'Regenerate Variants?' : 'Generate Variants'}
+            {t(hasDestructive
+              ? 'products.regenerate.titleDestructive'
+              : 'products.regenerate.title')}
           </AlertDialogTitle>
           <AlertDialogDescription>
             {hasDestructive
-              ? 'Regenerating the variant matrix will modify existing variants. Review the changes below.'
-              : `${totalExpected} variant${totalExpected === 1 ? '' : 's'} will be generated from your options.`}
+              ? t('products.regenerate.descriptionDestructive')
+              : t('products.regenerate.description', { count: totalExpected })}
           </AlertDialogDescription>
         </AlertDialogHeader>
 
@@ -62,9 +66,7 @@ export function RegenerateDialog({
             <div className="space-y-2">
               <div className="flex items-center gap-2 text-sm font-medium text-emerald-600 dark:text-emerald-400">
                 <CheckCircle2 className="h-4 w-4" />
-                <span>
-                  Keep {kept.length} unchanged variant{kept.length === 1 ? '' : 's'}
-                </span>
+                <span>{t('products.regenerate.keep', { count: kept.length })}</span>
               </div>
               <div className="pl-6 text-xs text-muted-foreground space-y-0.5">
                 {kept.slice(0, PREVIEW_LIMIT).map((row) => (
@@ -72,14 +74,14 @@ export function RegenerateDialog({
                     {buildVariantName(row.combo.comboValues)}
                     {row.serverId && (
                       <Badge variant="outline" className="ml-1.5 text-[10px] px-1 py-0">
-                        saved
+                        {t('products.regenerate.savedBadge')}
                       </Badge>
                     )}
                   </div>
                 ))}
                 {kept.length > PREVIEW_LIMIT && (
                   <div className="text-muted-foreground/70">
-                    and {kept.length - PREVIEW_LIMIT} more…
+                    {t('products.regenerate.andMore', { count: kept.length - PREVIEW_LIMIT })}
                   </div>
                 )}
               </div>
@@ -91,9 +93,7 @@ export function RegenerateDialog({
             <div className="space-y-2">
               <div className="flex items-center gap-2 text-sm font-medium text-blue-600 dark:text-blue-400">
                 <PlusCircle className="h-4 w-4" />
-                <span>
-                  Create {toCreate.length} new variant{toCreate.length === 1 ? '' : 's'}
-                </span>
+                <span>{t('products.regenerate.create', { count: toCreate.length })}</span>
               </div>
               <div className="pl-6 text-xs text-muted-foreground space-y-0.5">
                 {toCreate.slice(0, PREVIEW_LIMIT).map((combo) => (
@@ -103,7 +103,7 @@ export function RegenerateDialog({
                 ))}
                 {toCreate.length > PREVIEW_LIMIT && (
                   <div className="text-muted-foreground/70">
-                    and {toCreate.length - PREVIEW_LIMIT} more…
+                    {t('products.regenerate.andMore', { count: toCreate.length - PREVIEW_LIMIT })}
                   </div>
                 )}
               </div>
@@ -115,9 +115,7 @@ export function RegenerateDialog({
             <div className="space-y-2">
               <div className="flex items-center gap-2 text-sm font-medium text-destructive">
                 <AlertTriangle className="h-4 w-4" />
-                <span>
-                  Archive {toArchive.length} variant{toArchive.length === 1 ? '' : 's'}
-                </span>
+                <span>{t('products.regenerate.archive', { count: toArchive.length })}</span>
               </div>
               <div className="pl-6 text-xs text-muted-foreground space-y-0.5">
                 {toArchive.slice(0, PREVIEW_LIMIT).map((row) => (
@@ -125,26 +123,26 @@ export function RegenerateDialog({
                     {buildVariantName(row.combo.comboValues)}
                     {row.serverId && (
                       <span className="text-destructive/70 ml-1">
-                        (SKU: {row.sku})
+                        {t('products.regenerate.skuHint', { sku: row.sku })}
                       </span>
                     )}
                   </div>
                 ))}
                 {toArchive.length > PREVIEW_LIMIT && (
                   <div className="text-muted-foreground/70">
-                    and {toArchive.length - PREVIEW_LIMIT} more…
+                    {t('products.regenerate.andMore', { count: toArchive.length - PREVIEW_LIMIT })}
                   </div>
                 )}
               </div>
               <p className="pl-6 text-xs text-destructive/80">
-                Archived variants will be removed from the storefront but data is preserved.
+                {t('products.regenerate.archiveNote')}
               </p>
             </div>
           )}
         </div>
 
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={isSaving}>Cancel</AlertDialogCancel>
+          <AlertDialogCancel disabled={isSaving}>{t('common.actions.cancel')}</AlertDialogCancel>
           <AlertDialogAction
             onClick={(e) => {
               e.preventDefault(); // prevent auto-close; we'll close after save
@@ -156,12 +154,12 @@ export function RegenerateDialog({
             {isSaving ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin mr-1" />
-                Applying…
+                {t('products.regenerate.applying')}
               </>
-            ) : hasDestructive ? (
-              'Confirm & Regenerate'
             ) : (
-              'Generate Variants'
+              t(hasDestructive
+                ? 'products.regenerate.confirmDestructive'
+                : 'products.regenerate.confirm')
             )}
           </AlertDialogAction>
         </AlertDialogFooter>

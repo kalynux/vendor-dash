@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { AlertCircle, CircleDashed, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { getPickupGuidance } from '@/services/products.service';
+import { useTranslation } from '@/i18n';
 import { PickupAddressPicker } from './PickupAddressPicker';
 import type { ApiPickupLocation, SimpleActivationMeta } from '@/types/product.types';
 
@@ -30,6 +31,7 @@ export function ActivationBlockersPanel({
   onPickupLocationChosen,
   onDone,
 }: ActivationBlockersPanelProps) {
+  const { t } = useTranslation();
   if (activation.published) return null;
 
   const guidance = getPickupGuidance(activation.pickupReason);
@@ -40,7 +42,7 @@ export function ActivationBlockersPanel({
         <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-500 mt-0.5 shrink-0" />
         <div className="min-w-0">
           <p className="font-medium text-sm">
-            {demoted ? 'This product was moved back to draft' : 'Saved as a draft'}
+            {t(demoted ? 'products.blockers.demoted' : 'products.blockers.savedAsDraft')}
           </p>
           {message && <p className="text-sm text-muted-foreground mt-0.5">{message}</p>}
         </div>
@@ -62,8 +64,8 @@ export function ActivationBlockersPanel({
       {guidance && (
         <div className="pl-8 space-y-2 pt-1 border-t border-border/60">
           <div className="pt-3">
-            <p className="text-sm font-medium">{guidance.title}</p>
-            <p className="text-xs text-muted-foreground mt-0.5">{guidance.body}</p>
+            <p className="text-sm font-medium">{t(guidance.titleKey)}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">{t(guidance.bodyKey)}</p>
           </div>
 
           {guidance.action.kind === 'address_picker' && (
@@ -72,7 +74,7 @@ export function ActivationBlockersPanel({
 
           {guidance.action.kind === 'link' && (
             <Button asChild size="sm" variant="outline">
-              <Link to={guidance.action.to}>{guidance.action.label}</Link>
+              <Link to={guidance.action.to}>{t(guidance.action.labelKey)}</Link>
             </Button>
           )}
         </div>
@@ -80,11 +82,11 @@ export function ActivationBlockersPanel({
 
       <div className="flex flex-col-reverse sm:flex-row sm:items-center gap-2 pl-8 pt-1">
         <Button size="sm" variant="outline" onClick={onDone} disabled={isBusy}>
-          Done, back to products
+          {t('products.blockers.done')}
         </Button>
         <Button size="sm" onClick={() => void onRetryPublish()} disabled={isBusy}>
           {isBusy && <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />}
-          Try publishing again
+          {t('products.blockers.retryPublish')}
         </Button>
       </div>
     </div>

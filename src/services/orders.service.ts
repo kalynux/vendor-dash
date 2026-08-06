@@ -1,5 +1,5 @@
 import { api } from './api';
-import { ApiError } from '@/types/api';
+import { apiErrorMessage, tStatic, type TranslationKey } from '@/i18n';
 import { fileRefUrl } from '@/services/files.service';
 import type { FileRef } from '@/types/file.types';
 import type { Order, OrderItem, Customer, OrderTimelineEvent, Entitlement, TimelineEventType, DisputeHold, OrderItemDelivery, OrderDeliveryTimelineEntry, VendorSettableStatus, PaymentMethod } from '@/types';
@@ -32,10 +32,13 @@ export const ORDER_ERROR_LABELS: Record<string, string> = {
   DIGITAL_ENTITLEMENT_UNAUTHORIZED: "You don't have access to this entitlement.",
 };
 
-/** Resolve a user-facing message for any error thrown by an order API call. */
+/**
+ * Resolve a localized, user-safe message for any error thrown by an order API
+ * call. Order-specific wording lives under `errors.contexts.order` in the
+ * catalogs; everything else falls through to the shared code messages.
+ */
 export function getOrderErrorMessage(err: unknown): string {
-  if (err instanceof ApiError) return ORDER_ERROR_LABELS[err.code] ?? err.message;
-  return 'Something went wrong. Please try again.';
+  return apiErrorMessage(err, { context: 'order', fallbackKey: 'orders.errors.loadFailed' });
 }
 
 // ─── API Response Types ────────────────────────────────────────────────────────
@@ -508,31 +511,38 @@ function adaptDetailToOrder(detail: ApiOrderDetail): Order {
   };
 }
 
+/** Event type → catalog key. Anything unmapped falls back to the raw type. */
+const TIMELINE_EVENT_KEYS: Record<string, TranslationKey> = {
+  'order.created': 'orders.timeline.orderCreated',
+  'payment.updated': 'orders.timeline.paymentUpdated',
+  'delivery.agency_updated': 'orders.timeline.agencyAssigned',
+  'note.added': 'orders.timeline.noteAdded',
+  'entitlement.revoked': 'orders.timeline.entitlementRevoked',
+  'entitlement.restored': 'orders.timeline.entitlementRestored',
+  'system.action': 'orders.timeline.systemAction',
+};
+
 function adaptTimelineEvent(event: ApiTimelineEvent): OrderTimelineEvent {
-  let message: string;
+  let messageKey: TranslationKey | null;
+  let messageParams: Record<string, string> | undefined;
+
   if (event.eventType === 'fulfillment.updated' && event.oldValue && event.newValue) {
-    message = `Fulfillment status changed from "${event.oldValue}" to "${event.newValue}"`;
+    messageKey = 'orders.timeline.fulfillmentChanged';
+    messageParams = { from: event.oldValue, to: event.newValue };
   } else {
-    const labels: Record<string, string> = {
-      'order.created': 'Order was placed',
-      'payment.updated': 'Payment status updated',
-      'delivery.agency_updated': 'Delivery agency assigned',
-      'note.added': 'Internal note added',
-      'entitlement.revoked': 'Digital entitlement revoked',
-      'entitlement.restored': 'Digital entitlement restored',
-      'system.action': 'Automated system action',
-    };
-    message = labels[event.eventType] ?? event.eventType.replace(/\./g, ' ');
+    messageKey = TIMELINE_EVENT_KEYS[event.eventType] ?? null;
   }
 
   return {
     id: event._id,
     // type: 'order_placed',
     type: event.eventType,
-    message,
+    messageKey,
+    messageParams,
+    messageFallback: event.eventType.replace(/\./g, ' '),
     description: event.description ?? null,
     createdAt: event.created_at,
-    actor: event.actor.name ?? 'System',
+    actor: event.actor.name ?? tStatic('orders.timeline.systemActor'),
     noteId: event.noteId ?? null,
   };
 }

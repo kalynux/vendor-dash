@@ -15,14 +15,14 @@ import {
   Popover, PopoverContent, PopoverTrigger,
 } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
+import { formatPhoneInternational } from '@/lib/phone';
 import { CustomerAvatar } from '@/components/customers/CustomerAvatar';
 import { FlagBadge, FlagDot } from '@/components/customers/FlagBadge';
 import { RefundDialog } from '@/components/customers/RefundDialog';
-import {
-  formatMoney, formatDate, responsiveSheetProps,
-} from '@/components/customers/customer.constants';
+import { responsiveSheetProps } from '@/components/customers/customer.constants';
 import { OrderStatusBadge } from '@/components/orders/OrderStatusBadge';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useTranslation, useFormatters, useApiError, type TranslationKey } from '@/i18n';
 import {
   fetchCustomerById, updateCustomerName, updateCustomerFlags,
 } from '@/services/customers.service';
@@ -52,6 +52,9 @@ export function CustomerDetailSheet({
   customerId, open, onOpenChange, availableFlags, onUpdated, onManageFlags,
 }: CustomerDetailSheetProps) {
   const isMobile = useIsMobile();
+  const { t } = useTranslation();
+  const fmt = useFormatters();
+  const apiError = useApiError();
   const sheet = responsiveSheetProps(isMobile, 'sm:max-w-2xl');
 
   const [customer, setCustomer] = useState<CustomerDetail | null>(null);
@@ -84,9 +87,9 @@ export function CustomerDetailSheet({
         setOrders(r.data);
         setOrdersTotal(r.meta.total);
       })
-      .catch((err) => setOrdersError(err instanceof ApiError ? err.message : 'Failed to load orders'))
+      .catch((err) => setOrdersError(apiError.resolve(err, { fallbackKey: 'customers.errors.loadOrdersFailed' })))
       .finally(() => setOrdersLoading(false));
-  }, []);
+  }, [apiError]);
 
   useEffect(() => {
     if (!open || !customerId) return;
@@ -103,14 +106,14 @@ export function CustomerDetailSheet({
         setDraftName(data.displayName);
       })
       .catch((err) => {
-        if (active) setError(err instanceof ApiError ? err.message : 'Failed to load customer');
+        if (active) setError(apiError.resolve(err, { fallbackKey: 'customers.errors.loadDetailFailed' }));
       })
       .finally(() => active && setLoading(false));
     loadOrders(customerId);
     return () => {
       active = false;
     };
-  }, [open, customerId, loadOrders]);
+  }, [open, customerId, loadOrders, apiError]);
 
   function applyDetail(detail: CustomerDetail) {
     setCustomer(detail);
@@ -126,9 +129,11 @@ export function CustomerDetailSheet({
       const updated = await updateCustomerName(customer.customerId, { displayName: next || null });
       applyDetail(updated);
       setEditingName(false);
-      toast.success(next ? 'Display name updated' : 'Display name reset to real name');
+      toast.success(
+        next ? t('customers.toast.nameUpdated') : t('customers.toast.nameReset'),
+      );
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Failed to update name');
+      apiError.toast(err, { fallbackKey: 'customers.errors.updateNameFailed' });
     } finally {
       setSavingName(false);
     }
@@ -141,9 +146,9 @@ export function CustomerDetailSheet({
       const updated = await updateCustomerName(customer.customerId, { displayName: null });
       applyDetail(updated);
       setEditingName(false);
-      toast.success('Display name reset to real name');
+      toast.success(t('customers.toast.nameReset'));
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Failed to reset name');
+      apiError.toast(err, { fallbackKey: 'customers.errors.resetNameFailed' });
     } finally {
       setSavingName(false);
     }
@@ -161,9 +166,9 @@ export function CustomerDetailSheet({
       applyDetail(updated);
     } catch (err) {
       if (err instanceof ApiError && err.code === 'VENDOR_CUSTOMER_FLAG_NOT_FOUND') {
-        toast.error('That flag no longer exists. Refresh your flags.');
+        toast.error(t('customers.flags.stale'));
       } else {
-        toast.error(err instanceof ApiError ? err.message : 'Failed to update flags');
+        apiError.toast(err, { fallbackKey: 'customers.errors.updateFlagsFailed' });
       }
     } finally {
       setFlagsBusy(false);
@@ -181,7 +186,7 @@ export function CustomerDetailSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side={sheet.side} className={cn('p-0', sheet.className)}>
         <SheetHeader className="border-b pr-12">
-          <SheetTitle>Customer</SheetTitle>
+          <SheetTitle>{t('customers.detail.title')}</SheetTitle>
         </SheetHeader>
 
         <SheetBody className="p-4">
@@ -191,7 +196,9 @@ export function CustomerDetailSheet({
             <div className="flex flex-col items-center gap-3 py-16 text-center">
               <XCircle className="h-8 w-8 text-destructive" />
               <p className="text-sm text-muted-foreground">{error}</p>
-              <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>Close</Button>
+              <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
+                {t('common.actions.close')}
+              </Button>
             </div>
           ) : customer ? (
             <div className="space-y-6">
@@ -215,7 +222,7 @@ export function CustomerDetailSheet({
                       <div className="flex flex-wrap items-center gap-2">
                         <Button size="sm" onClick={saveName} disabled={savingName}>
                           {savingName ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1.5 h-3.5 w-3.5" />}
-                          Save
+                          {t('common.actions.save')}
                         </Button>
                         <Button
                           size="sm"
@@ -223,11 +230,11 @@ export function CustomerDetailSheet({
                           onClick={() => { setEditingName(false); setDraftName(customer.displayName); }}
                           disabled={savingName}
                         >
-                          <X className="mr-1.5 h-3.5 w-3.5" /> Cancel
+                          <X className="mr-1.5 h-3.5 w-3.5" /> {t('common.actions.cancel')}
                         </Button>
                         {customer.hasNameOverride && (
                           <Button size="sm" variant="ghost" className="text-muted-foreground" onClick={clearName} disabled={savingName}>
-                            Reset to “{customer.realName}”
+                            {t('customers.detail.resetToRealName', { name: customer.realName })}
                           </Button>
                         )}
                       </div>
@@ -239,7 +246,7 @@ export function CustomerDetailSheet({
                         <button
                           type="button"
                           onClick={() => { setEditingName(true); setDraftName(customer.hasNameOverride ? customer.displayName : ''); }}
-                          aria-label="Edit display name"
+                          aria-label={t('customers.detail.editName')}
                           className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-70 transition hover:bg-accent hover:opacity-100"
                         >
                           <Pencil className="h-4 w-4" />
@@ -247,7 +254,7 @@ export function CustomerDetailSheet({
                       </div>
                       {customer.hasNameOverride && (
                         <p className="text-xs text-muted-foreground">
-                          Override of <span className="font-medium">{customer.realName}</span> · only you see this name
+                          {t('customers.detail.overrideNote', { name: customer.realName })}
                         </p>
                       )}
                       {customer.email && (
@@ -260,33 +267,41 @@ export function CustomerDetailSheet({
 
               {/* Stats */}
               <section className="grid grid-cols-2 gap-3">
-                <StatCard icon={<ShoppingBag className="h-4 w-4" />} label="Total orders" value={String(customer.orderCount)} />
-                <StatCard icon={<Wallet className="h-4 w-4" />} label="Total spent" value={formatMoney(customer.totalSpent)} />
+                <StatCard
+                  icon={<ShoppingBag className="h-4 w-4" />}
+                  label={t('customers.detail.totalOrders')}
+                  value={fmt.number(customer.orderCount)}
+                />
+                <StatCard
+                  icon={<Wallet className="h-4 w-4" />}
+                  label={t('customers.detail.totalSpent')}
+                  value={fmt.currency(customer.totalSpent)}
+                />
               </section>
 
               {/* Flags */}
               <section className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-semibold">Flags</h3>
+                  <h3 className="text-sm font-semibold">{t('customers.detail.flags')}</h3>
                   <Popover open={flagPickerOpen} onOpenChange={setFlagPickerOpen}>
                     <PopoverTrigger asChild>
                       <Button variant="outline" size="sm" className="h-7 gap-1.5" disabled={flagsBusy}>
                         {flagsBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
-                        Assign
+                        {t('customers.detail.assignFlag')}
                         <ChevronDown className="h-3.5 w-3.5 opacity-60" />
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent align="end" className="w-64 p-1">
                       {availableFlags.length === 0 ? (
                         <div className="space-y-2 p-3 text-center">
-                          <p className="text-sm text-muted-foreground">No flags created yet.</p>
+                          <p className="text-sm text-muted-foreground">{t('customers.detail.noFlagsCreated')}</p>
                           <Button
                             size="sm"
                             variant="outline"
                             className="w-full gap-1.5"
                             onClick={() => { setFlagPickerOpen(false); onManageFlags(); }}
                           >
-                            <Tag className="h-3.5 w-3.5" /> Manage flags
+                            <Tag className="h-3.5 w-3.5" /> {t('customers.list.manageFlags')}
                           </Button>
                         </div>
                       ) : (
@@ -314,7 +329,7 @@ export function CustomerDetailSheet({
                   </Popover>
                 </div>
                 {customer.flags.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No flags assigned.</p>
+                  <p className="text-sm text-muted-foreground">{t('customers.detail.noFlagsAssigned')}</p>
                 ) : (
                   <div className="flex flex-wrap gap-2">
                     {customer.flags.map((flag) => (
@@ -326,9 +341,9 @@ export function CustomerDetailSheet({
 
               {/* Contact + address */}
               <section className="space-y-3 border-t pt-4">
-                <h3 className="text-sm font-semibold">Contact</h3>
-                <InfoRow icon={<Mail className="h-4 w-4" />} value={customer.email ?? '—'} />
-                <InfoRow icon={<Phone className="h-4 w-4" />} value={customer.phone ?? '—'} />
+                <h3 className="text-sm font-semibold">{t('customers.detail.contact')}</h3>
+                <InfoRow icon={<Mail className="h-4 w-4" />} value={customer.email ?? t('common.labels.emptyValue')} />
+                <InfoRow icon={<Phone className="h-4 w-4" />} value={customer.phone ? formatPhoneInternational(customer.phone) : t('common.labels.emptyValue')} />
                 {customer.shippingAddress ? (
                   <div className="flex items-start gap-3 text-sm">
                     <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
@@ -343,17 +358,19 @@ export function CustomerDetailSheet({
                     </div>
                   </div>
                 ) : (
-                  <InfoRow icon={<MapPin className="h-4 w-4" />} value="No saved address" />
+                  <InfoRow icon={<MapPin className="h-4 w-4" />} value={t('customers.detail.noAddress')} />
                 )}
               </section>
 
               {/* Orders */}
               <section className="space-y-3 border-t pt-4">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-semibold">Orders</h3>
+                  <h3 className="text-sm font-semibold">{t('customers.detail.orders')}</h3>
                   {ordersTotal > 0 && (
                     <span className="text-xs text-muted-foreground">
-                      {orders.length < ordersTotal ? `Latest ${orders.length} of ${ordersTotal}` : `${ordersTotal} total`}
+                      {orders.length < ordersTotal
+                        ? t('customers.detail.latestOf', { shown: orders.length, total: ordersTotal })
+                        : t('customers.detail.totalCount', { count: ordersTotal })}
                     </span>
                   )}
                 </div>
@@ -365,11 +382,13 @@ export function CustomerDetailSheet({
                 ) : ordersError ? (
                   <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed py-8 text-center">
                     <p className="text-sm text-muted-foreground">{ordersError}</p>
-                    <Button variant="outline" size="sm" onClick={() => customerId && loadOrders(customerId)}>Try again</Button>
+                    <Button variant="outline" size="sm" onClick={() => customerId && loadOrders(customerId)}>
+                      {t('common.actions.retry')}
+                    </Button>
                   </div>
                 ) : orders.length === 0 ? (
                   <p className="rounded-lg border border-dashed py-8 text-center text-sm text-muted-foreground">
-                    No orders found for this customer.
+                    {t('customers.detail.noOrders')}
                   </p>
                 ) : (
                   <ul className="space-y-2">
@@ -381,18 +400,18 @@ export function CustomerDetailSheet({
                               <span className="truncate text-sm font-medium">{order.orderNumber}</span>
                               {order.orderType === 'digital' ? (
                                 <Badge variant="outline" className="h-4 gap-1 border-violet-300 bg-violet-50 px-1.5 py-0 text-[10px] text-violet-700">
-                                  <Download className="h-2.5 w-2.5" />Digital
+                                  <Download className="h-2.5 w-2.5" />{t('customers.detail.digital')}
                                 </Badge>
                               ) : (
                                 <Badge variant="outline" className="h-4 gap-1 border-blue-300 bg-blue-50 px-1.5 py-0 text-[10px] text-blue-700">
-                                  <Package className="h-2.5 w-2.5" />Physical
+                                  <Package className="h-2.5 w-2.5" />{t('customers.detail.physical')}
                                 </Badge>
                               )}
                             </div>
-                            <p className="mt-0.5 text-xs text-muted-foreground">{formatDate(order.createdAt)}</p>
+                            <p className="mt-0.5 text-xs text-muted-foreground">{fmt.date(order.createdAt)}</p>
                           </div>
                           <div className="text-right">
-                            <p className="text-sm font-semibold">{formatMoney(order.total, order.currency)}</p>
+                            <p className="text-sm font-semibold">{fmt.currency(order.total, order.currency)}</p>
                           </div>
                         </div>
                         <div className="mt-2 flex items-center justify-between gap-2">
@@ -407,7 +426,7 @@ export function CustomerDetailSheet({
                               className="h-7 gap-1.5 text-xs"
                               onClick={() => setRefundOrderTarget(order)}
                             >
-                              <RotateCcw className="h-3.5 w-3.5" /> Refund
+                              <RotateCcw className="h-3.5 w-3.5" /> {t('customers.detail.refund')}
                             </Button>
                           )}
                         </div>
@@ -465,17 +484,19 @@ const PAYMENT_PILL_CLASSES: Record<string, string> = {
   failed: 'border-red-500 text-red-600 bg-red-50',
 };
 
-const PAYMENT_PILL_LABELS: Record<string, string> = {
-  paid: 'Paid',
-  partially_refunded: 'Partially refunded',
-  refunded: 'Refunded',
-  pending: 'Unpaid',
-  authorized: 'Authorized',
-  disputed: 'Disputed',
-  failed: 'Failed',
+const PAYMENT_PILL_KEYS: Record<string, TranslationKey> = {
+  paid: 'customers.paymentStatus.paid',
+  partially_refunded: 'customers.paymentStatus.partially_refunded',
+  refunded: 'customers.paymentStatus.refunded',
+  pending: 'customers.paymentStatus.pending',
+  authorized: 'customers.paymentStatus.authorized',
+  disputed: 'customers.paymentStatus.disputed',
+  failed: 'customers.paymentStatus.failed',
 };
 
 function PaymentPill({ status }: { status: string }) {
+  const { t } = useTranslation();
+  const labelKey = PAYMENT_PILL_KEYS[status];
   return (
     <span
       className={cn(
@@ -483,7 +504,7 @@ function PaymentPill({ status }: { status: string }) {
         PAYMENT_PILL_CLASSES[status] ?? 'border-border text-muted-foreground',
       )}
     >
-      {PAYMENT_PILL_LABELS[status] ?? status}
+      {labelKey ? t(labelKey) : status}
     </span>
   );
 }

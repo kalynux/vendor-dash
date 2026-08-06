@@ -53,6 +53,7 @@ import {
 } from '@/components/vendor-settings/SettingsSection';
 import { InfoHint } from '@/components/ui/info-hint';
 import { cn } from '@/lib/utils';
+import { useMessage, useTranslation, type TranslationKey } from '@/i18n';
 
 // ─── Static config ──────────────────────────────────────────────────────────
 
@@ -70,7 +71,8 @@ const WhatsappIcon = ({ className }: { className?: string }) => (
 
 type ChannelMeta = {
   value: SecondaryChannel;
-  label: string;
+  /** Brand names (Telegram, WhatsApp) still go through the catalog so a locale can transliterate them. */
+  labelKey: TranslationKey;
   Icon: (props: { className?: string }) => React.JSX.Element;
   iconWrap: string;
   verifyKey: 'emailVerified' | 'telegramVerified' | 'whatsappVerified';
@@ -81,7 +83,7 @@ type ChannelMeta = {
 const SECONDARY_CHANNELS: ChannelMeta[] = [
   {
     value: 'telegram',
-    label: 'Telegram',
+    labelKey: 'notifications.settings.channels.telegram',
     Icon: TelegramIcon,
     iconWrap: 'bg-[#0088cc]/10 text-[#0088cc]',
     verifyKey: 'telegramVerified',
@@ -89,7 +91,7 @@ const SECONDARY_CHANNELS: ChannelMeta[] = [
   },
   {
     value: 'email',
-    label: 'Email',
+    labelKey: 'notifications.settings.channels.email',
     Icon: ({ className }) => <Mail className={className} />,
     iconWrap: 'bg-primary/10 text-primary',
     verifyKey: 'emailVerified',
@@ -97,7 +99,7 @@ const SECONDARY_CHANNELS: ChannelMeta[] = [
   },
   {
     value: 'whatsapp',
-    label: 'WhatsApp',
+    labelKey: 'notifications.settings.channels.whatsapp',
     Icon: WhatsappIcon,
     iconWrap: 'bg-[#25D366]/10 text-[#25D366]',
     verifyKey: 'whatsappVerified',
@@ -105,20 +107,25 @@ const SECONDARY_CHANNELS: ChannelMeta[] = [
   },
 ];
 
-type EventMeta = { key: NotificationEventKey; label: string; description: string; Icon: LucideIcon };
+type EventMeta = {
+  key: NotificationEventKey;
+  labelKey: TranslationKey;
+  descriptionKey: TranslationKey;
+  Icon: LucideIcon;
+};
 
 const EVENTS: EventMeta[] = [
-  { key: 'orderCreated', label: 'New order', description: 'When a new order is received', Icon: ShoppingCart },
-  { key: 'orderCancelled', label: 'Order cancelled', description: 'When an order is cancelled', Icon: PackageX },
-  { key: 'bookingCreated', label: 'New booking', description: 'When a new service booking is received', Icon: CalendarPlus },
-  { key: 'bookingCancelled', label: 'Booking cancelled', description: 'When a service booking is cancelled', Icon: CalendarX2 },
-  { key: 'paymentReceivedPartial', label: 'Partial payment', description: 'When a partial payment is received', Icon: CircleDollarSign },
-  { key: 'paymentReceivedFull', label: 'Full payment', description: 'When a payment is completed in full', Icon: CheckCircle2 },
-  { key: 'storageAlert', label: 'Storage alert', description: 'When media storage crosses 80% / 90% / 100%', Icon: HardDrive },
-  { key: 'connectionUpdated', label: 'Agency connections', description: 'When an agency request, approval, rejection, or re-approval happens', Icon: Handshake },
-  { key: 'payoutUpdates', label: 'Payout updates', description: 'When your payout request is created, paid, or rejected', Icon: Wallet },
-  { key: 'shipmentRejected', label: 'Shipment rejected', description: 'When a delivery agency declines a shipment and its items need rerouting', Icon: PackageX },
-  { key: 'planUpdates', label: 'Plan updates', description: 'When your subscription plan is nearing expiry or has expired', Icon: CalendarClock },
+  { key: 'orderCreated', labelKey: 'notifications.settings.events.orderCreated', descriptionKey: 'notifications.settings.events.orderCreatedHint', Icon: ShoppingCart },
+  { key: 'orderCancelled', labelKey: 'notifications.settings.events.orderCancelled', descriptionKey: 'notifications.settings.events.orderCancelledHint', Icon: PackageX },
+  { key: 'bookingCreated', labelKey: 'notifications.settings.events.bookingCreated', descriptionKey: 'notifications.settings.events.bookingCreatedHint', Icon: CalendarPlus },
+  { key: 'bookingCancelled', labelKey: 'notifications.settings.events.bookingCancelled', descriptionKey: 'notifications.settings.events.bookingCancelledHint', Icon: CalendarX2 },
+  { key: 'paymentReceivedPartial', labelKey: 'notifications.settings.events.paymentReceivedPartial', descriptionKey: 'notifications.settings.events.paymentReceivedPartialHint', Icon: CircleDollarSign },
+  { key: 'paymentReceivedFull', labelKey: 'notifications.settings.events.paymentReceivedFull', descriptionKey: 'notifications.settings.events.paymentReceivedFullHint', Icon: CheckCircle2 },
+  { key: 'storageAlert', labelKey: 'notifications.settings.events.storageAlert', descriptionKey: 'notifications.settings.events.storageAlertHint', Icon: HardDrive },
+  { key: 'connectionUpdated', labelKey: 'notifications.settings.events.connectionUpdated', descriptionKey: 'notifications.settings.events.connectionUpdatedHint', Icon: Handshake },
+  { key: 'payoutUpdates', labelKey: 'notifications.settings.events.payoutUpdates', descriptionKey: 'notifications.settings.events.payoutUpdatesHint', Icon: Wallet },
+  { key: 'shipmentRejected', labelKey: 'notifications.settings.events.shipmentRejected', descriptionKey: 'notifications.settings.events.shipmentRejectedHint', Icon: PackageX },
+  { key: 'planUpdates', labelKey: 'notifications.settings.events.planUpdates', descriptionKey: 'notifications.settings.events.planUpdatesHint', Icon: CalendarClock },
 ];
 
 const LANGUAGES: { value: PreferredLanguage; label: string }[] = [
@@ -150,6 +157,8 @@ function isVerified(p: NotificationPreferences, channel: SecondaryChannel): bool
 // ─── Component ──────────────────────────────────────────────────────────────
 
 export function NotificationSettings() {
+  const { t } = useTranslation();
+  const m = useMessage();
   const { session, updateVendorProfile } = useOnboarding();
   const roleEntity = session?.role_entity;
 
@@ -241,14 +250,18 @@ export function NotificationSettings() {
         setSavedChannel(derived);
         // If the unlinked channel was the active selection, fall back to in-app.
         setChannel((cur) => (cur === ch ? derived : cur));
-        toast.success(`${ch === 'telegram' ? 'Telegram' : 'WhatsApp'} disconnected`);
+        toast.success(
+          t('notifications.settings.disconnected', {
+            channel: ch === 'telegram' ? 'Telegram' : 'WhatsApp',
+          }),
+        );
       } catch (err) {
-        toast.error(mapProfileError(err));
+        toast.error(m(mapProfileError(err)));
       } finally {
         setUnlinking(null);
       }
     },
-    [],
+    [t, m],
   );
 
   // Roll every editable field back to the last server snapshot.
@@ -285,18 +298,18 @@ export function NotificationSettings() {
         setSavedLanguage(language);
       }
 
-      toast.success('Notification settings saved');
+      toast.success(t('notifications.settings.saved'));
     } catch (err) {
       if (err instanceof ApiError && err.code === 'VENDOR_NOTIFICATION_CHANNEL_NOT_VERIFIED') {
-        toast.error('That channel must be verified before it can be enabled.');
+        toast.error(t('notifications.settings.channelNotVerified'));
         load();
       } else {
-        toast.error(mapProfileError(err));
+        toast.error(m(mapProfileError(err)));
       }
     } finally {
       setSaving(false);
     }
-  }, [prefs, events, channel, channelDirty, eventsDirty, languageDirty, language, updateVendorProfile, load]);
+  }, [prefs, events, channel, channelDirty, eventsDirty, languageDirty, language, updateVendorProfile, load, t, m]);
 
   // ─── Render ──────────────────────────────────────────────────────────────
 
@@ -305,12 +318,12 @@ export function NotificationSettings() {
       <div className="space-y-6">
         <PushPermissionBanner />
         <SettingsSections>
-          <SettingsSection title="Delivery channel" contentClassName="space-y-3">
+          <SettingsSection title={t('notifications.settings.delivery.title')} contentClassName="space-y-3">
             {[0, 1, 2, 3].map((i) => (
               <Skeleton key={i} className="h-[4.75rem] w-full rounded-lg" />
             ))}
           </SettingsSection>
-          <SettingsSection title="Events" contentClassName="space-y-4">
+          <SettingsSection title={t('notifications.settings.events.title')} contentClassName="space-y-4">
             {[0, 1, 2, 3, 4].map((i) => (
               <Skeleton key={i} className="h-9 w-full rounded-lg" />
             ))}
@@ -325,11 +338,11 @@ export function NotificationSettings() {
       <div className="space-y-6">
         <PushPermissionBanner />
         <SettingsSections>
-          <SettingsSection title="Notifications" contentClassName="space-y-4">
+          <SettingsSection title={t('notifications.settings.title')} contentClassName="space-y-4">
             <div role="alert" className="p-3 text-sm bg-destructive/10 text-destructive rounded-lg border border-destructive/20">
-              {loadError ?? 'Could not load notification settings.'}
+              {loadError ? m(loadError) : t('notifications.settings.loadFailed')}
             </div>
-            <Button variant="outline" onClick={load}>Try again</Button>
+            <Button variant="outline" onClick={load}>{t('common.actions.retry')}</Button>
           </SettingsSection>
         </SettingsSections>
       </div>
@@ -342,8 +355,8 @@ export function NotificationSettings() {
       <SettingsSections>
         {/* Delivery channel */}
         <SettingsSection
-          title="Delivery channel"
-          info="Where your notifications land. In-app is always on and can't be turned off. On top of that you may pick one extra channel — connect it first, then make it active. Only one extra channel at a time."
+          title={t('notifications.settings.delivery.title')}
+          info={t('notifications.settings.delivery.info')}
           contentClassName="space-y-3"
         >
           {/* In-app — always on, locked */}
@@ -352,18 +365,20 @@ export function NotificationSettings() {
               <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
                 <Bell className="size-5" />
               </div>
-              <p className="min-w-0 flex-1 font-medium leading-none">In-app</p>
+              <p className="min-w-0 flex-1 font-medium leading-none">
+                {t('notifications.settings.delivery.inApp')}
+              </p>
               <Badge variant="secondary" className="shrink-0">
-                <Lock /> Always on
+                <Lock /> {t('notifications.settings.delivery.alwaysOn')}
               </Badge>
             </div>
             <p className="mt-2.5 text-sm text-muted-foreground sm:pl-12">
-              Every notification lands in the bell menu. This can't be turned off.
+              {t('notifications.settings.delivery.inAppHint')}
             </p>
           </div>
 
           {/* Secondary channels — connect first, then make one active */}
-          <div className="space-y-3" role="radiogroup" aria-label="Extra delivery channel">
+          <div className="space-y-3" role="radiogroup" aria-label={t('notifications.settings.delivery.groupLabel')}>
             {SECONDARY_CHANNELS.map((c) => {
               const verified = prefs[c.verifyKey];
               const selected = channel === c.value;
@@ -387,14 +402,14 @@ export function NotificationSettings() {
                     </div>
 
                     <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
-                      <p className="font-medium leading-none">{c.label}</p>
+                      <p className="font-medium leading-none">{t(c.labelKey)}</p>
                       {verified ? (
                         <Badge className="border-transparent bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                          <ShieldCheck /> Connected
+                          <ShieldCheck /> {t('notifications.settings.delivery.connected')}
                         </Badge>
                       ) : (
                         <Badge variant="outline" className="text-muted-foreground">
-                          <ShieldAlert /> Not connected
+                          <ShieldAlert /> {t('notifications.settings.delivery.notConnected')}
                         </Badge>
                       )}
                     </div>
@@ -407,11 +422,12 @@ export function NotificationSettings() {
                         type="button"
                         role="radio"
                         aria-checked={selected}
-                        aria-label={
+                        aria-label={t(
                           selected
-                            ? `${c.label} is your active extra channel — turn it off`
-                            : `Make ${c.label} your active extra channel`
-                        }
+                            ? 'notifications.settings.delivery.turnOff'
+                            : 'notifications.settings.delivery.makeActive',
+                          { channel: t(c.labelKey) },
+                        )}
                         onClick={() => selectChannel(c.value)}
                         className={cn(
                           'flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold transition-colors',
@@ -430,7 +446,9 @@ export function NotificationSettings() {
                         >
                           {selected && <span className="size-1.5 rounded-full bg-primary" />}
                         </span>
-                        {selected ? 'Active' : 'Use'}
+                        {t(selected
+                          ? 'notifications.settings.delivery.active'
+                          : 'notifications.settings.delivery.use')}
                       </button>
                     )}
                   </div>
@@ -442,15 +460,15 @@ export function NotificationSettings() {
                       {c.value === 'email' && verified && roleEntity?.email
                         ? roleEntity.email
                         : !verified
-                          ? 'Connect this channel to use it.'
+                          ? t('notifications.settings.delivery.connectToUse')
                           : selected
-                            ? 'Notifications also go here.'
-                            : 'Tap “Use” to send notifications here.'}
+                            ? t('notifications.settings.delivery.alsoGoHere')
+                            : t('notifications.settings.delivery.tapUse')}
                     </p>
 
                     {!verified ? (
                       <Button variant="outline" size="sm" className="shrink-0" onClick={() => setSetupChannel(c.value)}>
-                        Connect
+                        {t('notifications.settings.delivery.connect')}
                       </Button>
                     ) : c.unlinkable ? (
                       <Button
@@ -460,7 +478,9 @@ export function NotificationSettings() {
                         disabled={busy}
                         onClick={() => handleUnlink(c.value)}
                       >
-                        {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Disconnect'}
+                        {busy
+                          ? <Loader2 className="w-4 h-4 animate-spin" />
+                          : t('notifications.settings.disconnect')}
                       </Button>
                     ) : null}
                   </div>
@@ -490,8 +510,8 @@ export function NotificationSettings() {
 
         {/* Events */}
         <SettingsSection
-          title="Events"
-          info="Which events reach you. Turning one off silences it on every channel, including in-app."
+          title={t('notifications.settings.events.title')}
+          info={t('notifications.settings.events.info')}
         >
           <div className="divide-y">
             {EVENTS.map((e) => (
@@ -501,15 +521,17 @@ export function NotificationSettings() {
                     <e.Icon className="size-4" />
                   </div>
                   <div className="flex min-w-0 items-center gap-1">
-                    <p className="truncate font-medium">{e.label}</p>
-                    <InfoHint label={`About ${e.label}`}>{e.description}</InfoHint>
+                    <p className="truncate font-medium">{t(e.labelKey)}</p>
+                    <InfoHint label={t('notifications.settings.events.about', { event: t(e.labelKey) })}>
+                      {t(e.descriptionKey)}
+                    </InfoHint>
                   </div>
                 </div>
                 <Switch
                   className="shrink-0"
                   checked={events[e.key]}
                   onCheckedChange={() => toggleEvent(e.key)}
-                  aria-label={e.label}
+                  aria-label={t(e.labelKey)}
                 />
               </div>
             ))}

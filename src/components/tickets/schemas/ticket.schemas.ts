@@ -7,13 +7,13 @@ import {
 
 const subjectField = z
   .string()
-  .min(3, 'Subject must be at least 3 characters')
-  .max(200, 'Subject must be 200 characters or less');
+  .min(3, 'tickets.validation.subjectMin')
+  .max(200, 'tickets.validation.subjectMax');
 
 const descriptionField = z
   .string()
-  .min(10, 'Description must be at least 10 characters')
-  .max(5000, 'Description must be 5000 characters or less');
+  .min(10, 'tickets.validation.descriptionMin')
+  .max(5000, 'tickets.validation.descriptionMax');
 
 // ─── Create ───────────────────────────────────────────────────────────────────
 
@@ -22,12 +22,12 @@ const baseCreateTicketSchema = z.object({
   description: descriptionField,
   // Type is one of the authoritative ticket_types.txt values; validated as a
   // non-empty string and narrowed to TicketType on submit.
-  type: z.string().min(1, 'Please select a ticket type'),
+  type: z.string().min(1, 'tickets.validation.typeRequired'),
   importance: z.enum(TICKET_IMPORTANCES as [string, ...string[]], {
-    message: 'Please select an importance level',
+    message: 'tickets.validation.importanceRequired',
   }),
   entityType: z.enum(ENTITY_TYPES as [string, ...string[]], {
-    message: 'Please select a related entity type',
+    message: 'tickets.validation.entityTypeRequired',
   }),
   // Required for every entity type except `other` (where it defaults server-side to
   // the requester's own id). Enforced in the refine below so the rule can read entityType.
@@ -35,10 +35,10 @@ const baseCreateTicketSchema = z.object({
   // Optional in general; conditionally required by the vendor's support policy.
   trackingNumber: z
     .string()
-    .max(TRACKING_NUMBER_MAX, `Tracking number must be ${TRACKING_NUMBER_MAX} characters or less`),
+    .max(TRACKING_NUMBER_MAX, 'tickets.validation.trackingNumberMax'),
   attachments: z
     .array(z.string())
-    .max(MAX_CREATE_ATTACHMENTS, `You can attach at most ${MAX_CREATE_ATTACHMENTS} files`),
+    .max(MAX_CREATE_ATTACHMENTS, 'tickets.validation.attachmentsMax'),
 });
 
 /**
@@ -60,7 +60,7 @@ export function makeCreateTicketSchema(requiredInfo: string[] = []) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['entityId'],
-        message: 'A related entity is required',
+        message: 'tickets.validation.entityRequired',
       });
     }
 
@@ -68,7 +68,7 @@ export function makeCreateTicketSchema(requiredInfo: string[] = []) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['trackingNumber'],
-        message: 'A tracking number is required by your support policy.',
+        message: 'tickets.validation.trackingNumberRequired',
       });
     }
 
@@ -80,7 +80,7 @@ export function makeCreateTicketSchema(requiredInfo: string[] = []) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['attachments'],
-        message: 'At least one photo or video attachment is required by your support policy.',
+        message: 'tickets.validation.attachmentRequired',
       });
     }
   });
@@ -104,8 +104,8 @@ export type EditTicketFormValues = z.infer<typeof editTicketSchema>;
 export const noteSchema = z.object({
   message: z
     .string()
-    .min(1, 'Note cannot be empty')
-    .max(2000, 'Note must be 2000 characters or less'),
+    .min(1, 'tickets.validation.noteRequired')
+    .max(2000, 'tickets.validation.noteMax'),
   visibility: z.enum(['PUBLIC', 'PRIVATE']).default('PUBLIC'),
 });
 

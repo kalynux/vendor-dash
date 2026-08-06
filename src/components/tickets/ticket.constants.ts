@@ -7,6 +7,7 @@ import {
   ShoppingCart, CreditCard, Wallet, Package, Calendar, Truck, Wrench, Bug,
   ShieldCheck, Scale, HelpCircle, LifeBuoy,
 } from 'lucide-react';
+import { asKey, type TranslationKey } from '@/i18n';
 import type {
   TicketStatus,
   TicketPriority,
@@ -17,6 +18,10 @@ import type {
 } from '@/types/tickets.types';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+//
+// This module has no React context, so every label below is a *translation key*
+// that the rendering component resolves with `t`. That keeps one source of truth
+// for the enum → copy mapping while still following a language switch.
 
 /** Turn an UPPER_SNAKE enum value into a human "Title Case" label. */
 export function humanizeEnum(value: string): string {
@@ -25,6 +30,11 @@ export function humanizeEnum(value: string): string {
     .split('_')
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
     .join(' ');
+}
+
+/** Catalog key for any backend ticket-type value. */
+export function ticketTypeKey(type: string): TranslationKey {
+  return asKey(`tickets.types.${type}`);
 }
 
 // ─── Status ───────────────────────────────────────────────────────────────────
@@ -41,16 +51,16 @@ export const TICKET_STATUSES: TicketStatus[] = [
   'closed',
 ];
 
-export const STATUS_LABELS: Record<TicketStatus, string> = {
-  open: 'Open',
-  in_progress: 'In Progress',
-  waiting_on_admin: 'Waiting on Admin',
-  waiting_on_vendor: 'Waiting on You',
-  waiting_on_customer: 'Waiting on Customer',
-  waiting_on_agency: 'Waiting on Agency',
-  waiting_on_agent: 'Waiting on Agent',
-  resolved: 'Resolved',
-  closed: 'Closed',
+export const STATUS_LABEL_KEYS: Record<TicketStatus, TranslationKey> = {
+  open: 'tickets.status.open',
+  in_progress: 'tickets.status.in_progress',
+  waiting_on_admin: 'tickets.status.waiting_on_admin',
+  waiting_on_vendor: 'tickets.status.waiting_on_vendor',
+  waiting_on_customer: 'tickets.status.waiting_on_customer',
+  waiting_on_agency: 'tickets.status.waiting_on_agency',
+  waiting_on_agent: 'tickets.status.waiting_on_agent',
+  resolved: 'tickets.status.resolved',
+  closed: 'tickets.status.closed',
 };
 
 export const STATUS_BADGE_CLASSES: Record<TicketStatus, string> = {
@@ -92,17 +102,17 @@ export const WAITING_STATUS_ROLE: Partial<Record<TicketStatus, TicketActorRole>>
  * available in the detail status control). `null` = All. From the vendor's seat,
  * "Waiting on you" maps to `waiting_on_vendor`.
  */
-export const STATUS_TABS: { label: string; value: TicketStatus | null }[] = [
-  { label: 'All', value: null },
-  { label: 'Open', value: 'open' },
-  { label: 'In progress', value: 'in_progress' },
-  { label: 'Waiting on you', value: 'waiting_on_vendor' },
-  { label: 'Waiting on admin', value: 'waiting_on_admin' },
-  { label: 'Waiting on customer', value: 'waiting_on_customer' },
-  { label: 'Waiting on agency', value: 'waiting_on_agency' },
-  { label: 'Waiting on agent', value: 'waiting_on_agent' },
-  { label: 'Resolved', value: 'resolved' },
-  { label: 'Closed', value: 'closed' },
+export const STATUS_TABS: { labelKey: TranslationKey; value: TicketStatus | null }[] = [
+  { labelKey: 'tickets.statusTabs.all', value: null },
+  { labelKey: 'tickets.statusTabs.open', value: 'open' },
+  { labelKey: 'tickets.statusTabs.in_progress', value: 'in_progress' },
+  { labelKey: 'tickets.statusTabs.waiting_on_vendor', value: 'waiting_on_vendor' },
+  { labelKey: 'tickets.statusTabs.waiting_on_admin', value: 'waiting_on_admin' },
+  { labelKey: 'tickets.statusTabs.waiting_on_customer', value: 'waiting_on_customer' },
+  { labelKey: 'tickets.statusTabs.waiting_on_agency', value: 'waiting_on_agency' },
+  { labelKey: 'tickets.statusTabs.waiting_on_agent', value: 'waiting_on_agent' },
+  { labelKey: 'tickets.statusTabs.resolved', value: 'resolved' },
+  { labelKey: 'tickets.statusTabs.closed', value: 'closed' },
 ];
 
 // ─── Priority ─────────────────────────────────────────────────────────────────
@@ -110,12 +120,12 @@ export const STATUS_TABS: { label: string; value: TicketStatus | null }[] = [
 /** Priorities a vendor may set (the updatable enum, per tickets.md PATCH /priority). */
 export const TICKET_PRIORITIES: TicketPriority[] = ['low', 'medium', 'high', 'urgent'];
 
-export const PRIORITY_LABELS: Record<TicketPriority, string> = {
-  normal: 'Normal',
-  low: 'Low',
-  medium: 'Medium',
-  high: 'High',
-  urgent: 'Urgent',
+export const PRIORITY_LABEL_KEYS: Record<TicketPriority, TranslationKey> = {
+  normal: 'tickets.priority.normal',
+  low: 'tickets.priority.low',
+  medium: 'tickets.priority.medium',
+  high: 'tickets.priority.high',
+  urgent: 'tickets.priority.urgent',
 };
 
 export const PRIORITY_BADGE_CLASSES: Record<TicketPriority, string> = {
@@ -139,11 +149,11 @@ export const PRIORITY_DOT_CLASSES: Record<TicketPriority, string> = {
 
 export const TICKET_IMPORTANCES: TicketImportance[] = ['low', 'medium', 'high', 'critical'];
 
-export const IMPORTANCE_LABELS: Record<TicketImportance, string> = {
-  low: 'Low',
-  medium: 'Medium',
-  high: 'High',
-  critical: 'Critical',
+export const IMPORTANCE_LABEL_KEYS: Record<TicketImportance, TranslationKey> = {
+  low: 'tickets.importance.low',
+  medium: 'tickets.importance.medium',
+  high: 'tickets.importance.high',
+  critical: 'tickets.importance.critical',
 };
 
 export const IMPORTANCE_BADGE_CLASSES: Record<TicketImportance, string> = {
@@ -157,66 +167,58 @@ export const IMPORTANCE_BADGE_CLASSES: Record<TicketImportance, string> = {
 
 export const ENTITY_TYPES: TicketEntityType[] = ['ORDER', 'PRODUCT', 'BOOKING', 'ACCOUNT', 'OTHER'];
 
-export const ENTITY_TYPE_LABELS: Record<TicketEntityType, string> = {
-  ORDER: 'Order',
-  PRODUCT: 'Product',
-  BOOKING: 'Booking',
-  ACCOUNT: 'Account',
-  OTHER: 'Other',
+export const ENTITY_TYPE_LABEL_KEYS: Record<TicketEntityType, TranslationKey> = {
+  ORDER: 'tickets.entityType.ORDER',
+  PRODUCT: 'tickets.entityType.PRODUCT',
+  BOOKING: 'tickets.entityType.BOOKING',
+  ACCOUNT: 'tickets.entityType.ACCOUNT',
+  OTHER: 'tickets.entityType.OTHER',
 };
 
 // ─── Ticket types (grouped, authoritative) ────────────────────────────────────
 
 export interface TicketTypeGroup {
-  groupLabel: string;
-  values: { value: TicketType; label: string }[];
+  groupLabelKey: TranslationKey;
+  values: { value: TicketType; labelKey: TranslationKey }[];
 }
 
-function group(groupLabel: string, values: TicketType[]): TicketTypeGroup {
-  return { groupLabel, values: values.map((value) => ({ value, label: humanizeEnum(value) })) };
+function group(groupLabelKey: TranslationKey, values: TicketType[]): TicketTypeGroup {
+  return {
+    groupLabelKey,
+    values: values.map((value) => ({ value, labelKey: ticketTypeKey(value) })),
+  };
 }
 
 export const TICKET_TYPE_GROUPS: TicketTypeGroup[] = [
-  group('General & Account', [
+  group('tickets.typeGroups.general', [
     'GENERAL_SUPPORT', 'ACCOUNT_ACCESS', 'ACCOUNT_VERIFICATION', 'PROFILE_UPDATE', 'SECURITY_ISSUE',
   ]),
-  group('Orders', [
+  group('tickets.typeGroups.orders', [
     'ORDER_ISSUE', 'ORDER_CANCELLATION', 'ORDER_REFUND', 'ORDER_DISPUTE', 'ORDER_FULFILLMENT',
   ]),
-  group('Payments', [
+  group('tickets.typeGroups.payments', [
     'PAYMENT_ISSUE', 'PAYMENT_FAILED', 'PAYMENT_CONFIRMATION', 'CHARGEBACK', 'INVOICE_REQUEST',
   ]),
-  group('Payouts', [
+  group('tickets.typeGroups.payouts', [
     'PAYOUT_REQUEST', 'PAYOUT_DELAY', 'PAYOUT_DISPUTE', 'COMMISSION_QUESTION',
   ]),
-  group('Bookings', [
+  group('tickets.typeGroups.bookings', [
     'BOOKING_ISSUE', 'BOOKING_CANCELLATION', 'BOOKING_RESCHEDULE', 'AVAILABILITY_PROBLEM',
   ]),
-  group('Products', [
+  group('tickets.typeGroups.products', [
     'PRODUCT_ISSUE', 'INVENTORY_PROBLEM', 'PRICING_ISSUE', 'VARIANT_ISSUE',
   ]),
-  group('Shipping', [
+  group('tickets.typeGroups.shipping', [
     'SHIPPING_ISSUE', 'DELIVERY_DELAY', 'DELIVERY_CONFIRMATION', 'ADDRESS_CHANGE',
   ]),
-  group('Technical', [
+  group('tickets.typeGroups.technical', [
     'TECHNICAL_ISSUE', 'BUG_REPORT', 'INTEGRATION_ISSUE', 'API_ACCESS',
   ]),
-  group('Policy & Legal', [
+  group('tickets.typeGroups.policy', [
     'POLICY_QUESTION', 'COMPLIANCE', 'LEGAL_REQUEST',
   ]),
-  group('Other', ['OTHER']),
+  group('tickets.typeGroups.other', ['OTHER']),
 ];
-
-/** Flat label lookup for any ticket type value. */
-export const TICKET_TYPE_LABELS: Record<string, string> = TICKET_TYPE_GROUPS.reduce(
-  (acc, g) => {
-    g.values.forEach(({ value, label }) => {
-      acc[value] = label;
-    });
-    return acc;
-  },
-  {} as Record<string, string>,
-);
 
 // ─── Misc ─────────────────────────────────────────────────────────────────────
 
@@ -247,12 +249,6 @@ export function responsiveSheetProps(
 }
 
 /** Format bytes into a short human-readable size. */
-export function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
 // ─── Type icon / colour ───────────────────────────────────────────────────────
 // Each ticket type maps to a lucide icon + tint, grouped by domain. Used for the
 // list-row leading icon and the detail "Type" row.
@@ -284,12 +280,12 @@ export function getTypeVisual(type: string): TypeVisual {
 
 // ─── Actor helpers ────────────────────────────────────────────────────────────
 
-export const ROLE_LABELS: Record<TicketActorRole, string> = {
-  admin: 'Admin',
-  agent: 'Support Agent',
-  vendor: 'Vendor',
-  customer: 'Customer',
-  agency: 'Agency',
+export const ROLE_LABEL_KEYS: Record<TicketActorRole, TranslationKey> = {
+  admin: 'tickets.role.admin',
+  agent: 'tickets.role.agent',
+  vendor: 'tickets.role.vendor',
+  customer: 'tickets.role.customer',
+  agency: 'tickets.role.agency',
 };
 
 /** Avatar fallback tint per role. */
@@ -316,18 +312,25 @@ export function shortTicketRef(id: string): string {
   return `tkt_${id.slice(-6)}`;
 }
 
-/** Compact relative time, e.g. "just now", "5m ago", "3d ago", or a date. */
-export function relativeTime(iso: string): string {
+/**
+ * Compact relative time, e.g. "just now", "5m ago", "3d ago", or a date.
+ * Takes the translator so it can be called from a component without this module
+ * needing React context of its own.
+ */
+export function relativeTime(
+  iso: string,
+  t: (key: TranslationKey, params?: Record<string, string | number>) => string,
+  formatDate: (iso: string) => string,
+): string {
   const then = new Date(iso).getTime();
   if (Number.isNaN(then)) return '';
-  const diff = Date.now() - then;
-  const sec = Math.round(diff / 1000);
-  if (sec < 45) return 'just now';
+  const sec = Math.round((Date.now() - then) / 1000);
+  if (sec < 45) return t('tickets.time.justNow');
   const min = Math.round(sec / 60);
-  if (min < 60) return `${min}m ago`;
+  if (min < 60) return t('tickets.time.minutesAgo', { count: min });
   const hr = Math.round(min / 60);
-  if (hr < 24) return `${hr}h ago`;
+  if (hr < 24) return t('tickets.time.hoursAgo', { count: hr });
   const day = Math.round(hr / 24);
-  if (day < 30) return `${day}d ago`;
-  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  if (day < 30) return t('tickets.time.daysAgo', { count: day });
+  return formatDate(iso);
 }

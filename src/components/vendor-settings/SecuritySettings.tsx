@@ -13,18 +13,22 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
+import { useMessage, useTranslation, type TranslationKey } from '@/i18n';
 
-// Mirror the backend password policy (see api-doc/me/password.md).
-function passwordIssue(pw: string): string | null {
-  if (pw.length < 8) return 'At least 8 characters';
-  if (!/[A-Z]/.test(pw)) return 'At least one uppercase letter';
-  if (!/[a-z]/.test(pw)) return 'At least one lowercase letter';
-  if (!/[0-9]/.test(pw)) return 'At least one number';
-  if (!/[^A-Za-z0-9]/.test(pw)) return 'At least one special character';
+// Mirror the backend password policy (see api-doc/me/password.md). Returns a
+// catalog key so the rule that failed reads in the vendor's language.
+function passwordIssue(pw: string): TranslationKey | null {
+  if (pw.length < 8) return 'account.security.rules.length';
+  if (!/[A-Z]/.test(pw)) return 'account.security.rules.uppercase';
+  if (!/[a-z]/.test(pw)) return 'account.security.rules.lowercase';
+  if (!/[0-9]/.test(pw)) return 'account.security.rules.number';
+  if (!/[^A-Za-z0-9]/.test(pw)) return 'account.security.rules.special';
   return null;
 }
 
 export function SecuritySettings() {
+  const { t } = useTranslation();
+  const m = useMessage();
   const [showCurrent, setShowCurrent] = useState(false);
   const [showNew, setShowNew] = useState(false);
 
@@ -46,7 +50,7 @@ export function SecuritySettings() {
     setError(null);
     try {
       await onboardingService.changePassword({ oldPassword: current, newPassword: next });
-      toast.success('Password updated. Use your new password next time you log in.');
+      toast.success(t('account.security.updated'));
       setCurrent('');
       setNext('');
       setConfirm('');
@@ -55,15 +59,15 @@ export function SecuritySettings() {
     } finally {
       setSaving(false);
     }
-  }, [canSubmit, current, next]);
+  }, [canSubmit, current, next, t]);
 
   return (
     <SettingsSections>
       {/* Password change */}
       <SettingsSection
-        title="Change Password"
+        title={t('account.security.passwordTitle')}
         icon={Lock}
-        info="Use a password you don't use anywhere else. Changing it doesn't sign you out of this device, but you'll need the new one next time you log in."
+        info={t('account.security.passwordInfo')}
         contentClassName="space-y-4 max-w-md"
       >
           {error && (
@@ -71,12 +75,12 @@ export function SecuritySettings() {
               role="alert"
               className="p-3 text-sm bg-destructive/10 text-destructive rounded-lg border border-destructive/20"
             >
-              {error}
+              {m(error)}
             </div>
           )}
 
           <div className="space-y-2">
-            <Label htmlFor="current-password">Current Password</Label>
+            <Label htmlFor="current-password">{t('account.security.currentPassword')}</Label>
             <div className="relative">
               <Input
                 id="current-password"
@@ -88,7 +92,9 @@ export function SecuritySettings() {
               <button
                 type="button"
                 onClick={() => setShowCurrent((s) => !s)}
-                aria-label={showCurrent ? 'Hide password' : 'Show password'}
+                aria-label={t(showCurrent
+                  ? 'account.security.hidePassword'
+                  : 'account.security.showPassword')}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
               >
                 {showCurrent ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -97,7 +103,7 @@ export function SecuritySettings() {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="new-password">New Password</Label>
+            <Label htmlFor="new-password">{t('account.security.newPassword')}</Label>
             <div className="relative">
               <Input
                 id="new-password"
@@ -110,21 +116,21 @@ export function SecuritySettings() {
               <button
                 type="button"
                 onClick={() => setShowNew((s) => !s)}
-                aria-label={showNew ? 'Hide password' : 'Show password'}
+                aria-label={t(showNew
+                  ? 'account.security.hidePassword'
+                  : 'account.security.showPassword')}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
               >
                 {showNew ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
             <p className={newIssue ? 'text-xs text-destructive' : 'text-xs text-muted-foreground'}>
-              {newIssue
-                ? newIssue
-                : '8+ chars with upper & lower case, a number, and a special character.'}
+              {t(newIssue ?? 'account.security.passwordHint')}
             </p>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="confirm-password">Confirm New Password</Label>
+            <Label htmlFor="confirm-password">{t('account.security.confirmPassword')}</Label>
             <Input
               id="confirm-password"
               type={showNew ? 'text' : 'password'}
@@ -134,14 +140,14 @@ export function SecuritySettings() {
               aria-invalid={confirmMismatch}
             />
             {confirmMismatch && (
-              <p className="text-xs text-destructive">Passwords don't match.</p>
+              <p className="text-xs text-destructive">{t('account.security.passwordsDontMatch')}</p>
             )}
           </div>
 
           <div className="pt-2">
             <Button onClick={handleSubmit} disabled={!canSubmit} className="gap-2">
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-              Update Password
+              {t('account.security.updatePassword')}
             </Button>
           </div>
       </SettingsSection>
@@ -152,17 +158,17 @@ export function SecuritySettings() {
         icon={Shield}
         title={
           <span className="flex items-center gap-2">
-            Two-Factor Authentication
-            <Badge variant="outline">Coming soon</Badge>
+            {t('account.security.twoFactorTitle')}
+            <Badge variant="outline">{t('common.states.comingSoon')}</Badge>
           </span>
         }
-        info="A second step at login — a code from your phone on top of your password. Not available yet."
+        info={t('account.security.twoFactorInfo')}
       >
           <div className="flex items-center justify-between gap-3">
             <p className="text-sm text-muted-foreground">
-              Not available yet — this will be enabled in a future update.
+              {t('account.security.notAvailableYet')}
             </p>
-            <Switch disabled aria-label="Enable two-factor authentication" />
+            <Switch disabled aria-label={t('account.security.twoFactorToggle')} />
           </div>
       </SettingsSection>
 
@@ -171,18 +177,18 @@ export function SecuritySettings() {
         icon={Globe}
         title={
           <span className="flex items-center gap-2">
-            Active Sessions
-            <Badge variant="outline">Coming soon</Badge>
+            {t('account.security.sessionsTitle')}
+            <Badge variant="outline">{t('common.states.comingSoon')}</Badge>
           </span>
         }
-        info="Review the devices signed in to your account and sign them out remotely. Not available yet."
+        info={t('account.security.sessionsInfo')}
       >
           <div className="flex items-center justify-between gap-3">
             <p className="text-sm text-muted-foreground">
-              Not available yet — this will be enabled in a future update.
+              {t('account.security.notAvailableYet')}
             </p>
             <Button variant="outline" size="sm" disabled>
-              Revoke
+              {t('account.security.revoke')}
             </Button>
           </div>
       </SettingsSection>

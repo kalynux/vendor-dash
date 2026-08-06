@@ -1,6 +1,7 @@
 import { Loader2, Save } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { useTranslation } from '@/i18n';
 
 interface UnsavedChangesBarProps {
     /** Show the bar (typically `dirty || saving`). */
@@ -33,6 +34,8 @@ export function UnsavedChangesBar({
     formId,
     saveDisabled,
 }: UnsavedChangesBarProps) {
+    const { t } = useTranslation();
+
     if (!visible) return null;
 
     return (
@@ -43,7 +46,7 @@ export function UnsavedChangesBar({
                     <span className="relative inline-flex h-2 w-2 rounded-full bg-amber-500" />
                 </span>
                 <p className="min-w-0 flex-1 truncate text-xs font-medium md:flex-none md:text-sm">
-                    Unsaved changes
+                    {t('account.unsavedBar.label')}
                 </p>
                 <div className="flex shrink-0 items-center gap-1 md:gap-1.5">
                     <Button
@@ -54,7 +57,7 @@ export function UnsavedChangesBar({
                         onClick={onDiscard}
                         disabled={saving}
                     >
-                        Discard
+                        {t('account.unsavedBar.discard')}
                     </Button>
                     <Button
                         type={formId ? 'submit' : 'button'}
@@ -65,8 +68,8 @@ export function UnsavedChangesBar({
                         disabled={saving || saveDisabled}
                     >
                         {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-                        <span className="md:hidden">Save</span>
-                        <span className="hidden md:inline">Save changes</span>
+                        <span className="md:hidden">{t('account.unsavedBar.save')}</span>
+                        <span className="hidden md:inline">{t('account.unsavedBar.saveChanges')}</span>
                     </Button>
                 </div>
             </div>

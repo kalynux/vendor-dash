@@ -1,4 +1,5 @@
 import { X } from 'lucide-react';
+import { useTranslation } from '@/i18n';
 import { cn } from '@/lib/utils';
 
 export interface ActiveFilterChip {
@@ -21,6 +22,7 @@ export function ActiveFilterChips({
   onClearAll?: () => void;
   className?: string;
 }) {
+  const { t } = useTranslation();
   if (chips.length === 0) return null;
 
   return (
@@ -42,7 +44,7 @@ export function ActiveFilterChips({
           onClick={onClearAll}
           className="text-xs font-medium text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline"
         >
-          Clear all
+          {t('common.actions.clearAll')}
         </button>
       )}
     </div>

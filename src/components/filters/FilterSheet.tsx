@@ -10,15 +10,18 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { useTranslation, type TranslationKey } from '@/i18n';
 import { cn } from '@/lib/utils';
 
 /**
- * Bottom-sheet filter shell shared by every list page.
+ * Filter shell shared by every list page: a bottom sheet on mobile, a right-side
+ * panel on desktop — the same responsive shape the ticket sheets use.
  *
- * Layout is fixed on purpose so filters feel identical everywhere: grab handle,
- * pinned title row, scrolling body of `FilterSection`s, and a pinned action bar
- * ("Clear all" + apply). Filters apply live as they're tapped — the apply button
- * only dismisses — so the sheet never holds a draft the user can lose.
+ * Layout is fixed on purpose so filters feel identical everywhere: pinned title
+ * row, scrolling body of `FilterSection`s, and a pinned action bar ("Clear all"
+ * + apply). Filters apply live as they're tapped — the apply button only
+ * dismisses — so the sheet never holds a draft the user can lose.
  */
 export interface FilterSheetProps {
   open: boolean;
@@ -37,36 +40,47 @@ export interface FilterSheetProps {
 export function FilterSheet({
   open,
   onOpenChange,
-  title = 'Filters',
+  title,
   description,
   activeCount = 0,
   onClear,
-  applyLabel = 'Show results',
+  applyLabel,
   children,
   className,
 }: FilterSheetProps) {
+  const { t } = useTranslation();
+  const isMobile = useIsMobile();
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
-        side="bottom"
+        side={isMobile ? 'bottom' : 'right'}
         className={cn(
-          'max-h-[85dvh] gap-0 rounded-t-2xl p-0',
+          'gap-0 p-0',
+          isMobile ? 'max-h-[85dvh] rounded-t-2xl' : 'w-full sm:max-w-md',
           // Grow the sheet's built-in close button into a real touch target.
           '[&>button]:top-4 [&>button]:right-3 [&>button]:flex [&>button]:size-9 [&>button]:items-center [&>button]:justify-center [&>button]:rounded-full [&>button]:hover:bg-muted',
           className,
         )}
       >
-        {/* Grab handle — signals the sheet is dismissable by swipe/tap-away. */}
-        <div className="flex shrink-0 justify-center pt-2.5">
-          <span className="h-1.5 w-10 rounded-full bg-muted-foreground/25" />
-        </div>
+        {/* Grab handle — signals the sheet is dismissable by swipe/tap-away.
+            Meaningless on a side panel, so mobile only. */}
+        {isMobile && (
+          <div className="flex shrink-0 justify-center pt-2.5">
+            <span className="h-1.5 w-10 rounded-full bg-muted-foreground/25" />
+          </div>
+        )}
 
         {/* Borders run full-bleed; the content inside them is capped at `max-w-3xl`
             so the sheet stays readable on a wide desktop viewport. */}
         <div className="shrink-0 border-b">
-          <SheetHeader className="mx-auto w-full max-w-3xl gap-1 px-4 pt-2 pb-3 pr-14">
+          <SheetHeader
+            className={cn(
+              'mx-auto w-full max-w-3xl gap-1 px-4 pb-3 pr-14',
+              isMobile ? 'pt-2' : 'pt-4',
+            )}
+          >
             <SheetTitle className="flex items-center gap-2 text-base">
-              {title}
+              {title ?? t('common.actions.filters')}
               {activeCount > 0 && (
                 <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-semibold text-primary-foreground">
                   {activeCount}
@@ -90,10 +104,10 @@ export function FilterSheet({
               onClick={onClear}
               disabled={!onClear || activeCount === 0}
             >
-              Clear all
+              {t('common.actions.clearAll')}
             </Button>
             <Button type="button" className="h-11 flex-1" onClick={() => onOpenChange(false)}>
-              {applyLabel}
+              {applyLabel ?? t('common.filters.showResults')}
             </Button>
           </SheetFooter>
         </div>
@@ -128,16 +142,24 @@ export function FilterSection({
   );
 }
 
+/**
+ * Either form of label is accepted: `labelKey` for the fixed enum options that
+ * live in a constants module (no React context there to translate with), and
+ * `label` for the ones built at runtime from data — an agency name, a flag the
+ * vendor typed. `labelKey` wins when both are given.
+ */
 export interface FilterOption<T extends string> {
   value: T;
-  label: string;
+  label?: string;
+  labelKey?: TranslationKey;
   /** Optional leading adornment (colour dot, glyph) rendered inside the chip. */
   icon?: ReactNode;
 }
 
 /** Optional grouping for long option lists (e.g. ticket types). */
 export interface FilterOptionGroup<T extends string> {
-  label: string;
+  label?: string;
+  labelKey?: TranslationKey;
   options: FilterOption<T>[];
 }
 
@@ -182,7 +204,7 @@ export function FilterChips<T extends string>({
   groups,
   value,
   onChange,
-  allLabel = 'All',
+  allLabel,
   hideAll = false,
 }: {
   options?: FilterOption<T>[];
@@ -192,8 +214,16 @@ export function FilterChips<T extends string>({
   allLabel?: string;
   hideAll?: boolean;
 }) {
+  const { t } = useTranslation();
+  const labelOf = (o: { label?: string; labelKey?: TranslationKey }) =>
+    o.labelKey ? t(o.labelKey) : o.label ?? '';
+
   const allChip = !hideAll && (
-    <Chip label={allLabel} selected={!value} onClick={() => onChange(undefined)} />
+    <Chip
+      label={allLabel ?? t('common.labels.all')}
+      selected={!value}
+      onClick={() => onChange(undefined)}
+    />
   );
 
   if (groups) {
@@ -201,13 +231,13 @@ export function FilterChips<T extends string>({
       <div className="space-y-3">
         {!hideAll && <div className="flex flex-wrap gap-2">{allChip}</div>}
         {groups.map((group) => (
-          <div key={group.label} className="space-y-2">
-            <p className="text-[11px] font-medium text-muted-foreground/80">{group.label}</p>
+          <div key={group.labelKey ?? group.label} className="space-y-2">
+            <p className="text-[11px] font-medium text-muted-foreground/80">{labelOf(group)}</p>
             <div className="flex flex-wrap gap-2">
               {group.options.map((o) => (
                 <Chip
                   key={o.value}
-                  label={o.label}
+                  label={labelOf(o)}
                   icon={o.icon}
                   selected={value === o.value}
                   onClick={() => onChange(value === o.value ? undefined : o.value)}
@@ -226,7 +256,7 @@ export function FilterChips<T extends string>({
       {(options ?? []).map((o) => (
         <Chip
           key={o.value}
-          label={o.label}
+          label={labelOf(o)}
           icon={o.icon}
           selected={value === o.value}
           onClick={() => onChange(value === o.value ? undefined : o.value)}
@@ -246,12 +276,13 @@ export function FilterMultiChips<T extends string>({
   values: T[];
   onToggle: (value: T) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex flex-wrap gap-2">
       {options.map((o) => (
         <Chip
           key={o.value}
-          label={o.label}
+          label={o.labelKey ? t(o.labelKey) : o.label ?? ''}
           icon={o.icon}
           selected={values.includes(o.value)}
           onClick={() => onToggle(o.value)}

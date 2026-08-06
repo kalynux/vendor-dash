@@ -34,12 +34,12 @@ import { CreateTicketSheet } from '@/components/tickets/CreateTicketSheet';
 import { TicketDetailSheet } from '@/components/tickets/TicketDetailSheet';
 import { FaqSheet } from '@/components/tickets/FaqSheet';
 import {
-  STATUS_LABELS, STATUS_BADGE_CLASSES, STATUS_DOT_CLASSES, STATUS_TABS,
-  PRIORITY_LABELS, PRIORITY_BADGE_CLASSES, PRIORITY_DOT_CLASSES, TICKET_PRIORITIES,
-  TICKET_TYPE_GROUPS, TICKET_TYPE_LABELS, getTypeVisual, shortTicketRef, relativeTime,
+  STATUS_LABEL_KEYS, STATUS_BADGE_CLASSES, STATUS_DOT_CLASSES, STATUS_TABS,
+  PRIORITY_LABEL_KEYS, PRIORITY_BADGE_CLASSES, PRIORITY_DOT_CLASSES, TICKET_PRIORITIES,
+  TICKET_TYPE_GROUPS, ticketTypeKey, getTypeVisual, shortTicketRef, relativeTime,
 } from '@/components/tickets/ticket.constants';
 import { fetchTickets } from '@/services/tickets.service';
-import { ApiError } from '@/types/api';
+import { useApiError, useFormatters, useTranslation, type TranslationKey } from '@/i18n';
 import type {
   ApiTicketListItem, TicketListMeta, TicketsQueryParams,
   TicketStatus, TicketPriority, TicketType, UpdatablePriority,
@@ -50,10 +50,15 @@ const PAGE_LIMIT = 20;
 const ALL = '__all__';
 
 type SortKey = 'updated' | 'created' | 'priority';
-const SORT_OPTIONS: { value: SortKey; label: string; sortBy: TicketsQueryParams['sortBy']; sortOrder: 'asc' | 'desc' }[] = [
-  { value: 'updated', label: 'Recently updated', sortBy: 'updatedAt', sortOrder: 'desc' },
-  { value: 'created', label: 'Recently created', sortBy: 'createdAt', sortOrder: 'desc' },
-  { value: 'priority', label: 'Priority', sortBy: 'priority', sortOrder: 'desc' },
+const SORT_OPTIONS: {
+  value: SortKey;
+  labelKey: TranslationKey;
+  sortBy: TicketsQueryParams['sortBy'];
+  sortOrder: 'asc' | 'desc';
+}[] = [
+  { value: 'updated', labelKey: 'tickets.list.sort.updated', sortBy: 'updatedAt', sortOrder: 'desc' },
+  { value: 'created', labelKey: 'tickets.list.sort.created', sortBy: 'createdAt', sortOrder: 'desc' },
+  { value: 'priority', labelKey: 'tickets.list.sort.priority', sortBy: 'priority', sortOrder: 'desc' },
 ];
 
 // Desktop list-state cache so returning to the Tickets tab restores what was
@@ -72,6 +77,12 @@ interface TicketsDesktopCache {
 }
 
 export function Tickets() {
+  const { t } = useTranslation();
+  const apiError = useApiError();
+  // The row renderers below bind `t` to a *ticket*, so keep a second, unshadowed
+  // reference to the translator for anything called from inside them.
+  const translate = t;
+  const fmt = useFormatters();
   const dCache = getListCache<TicketsDesktopCache>(TICKETS_DESKTOP_KEY);
   const [tickets, setTickets] = useState<ApiTicketListItem[]>(dCache?.tickets ?? []);
   const [meta, setMeta] = useState<TicketListMeta | null>(dCache?.meta ?? null);
@@ -119,14 +130,14 @@ export function Tickets() {
         setTickets(result.data);
         setMeta(result.meta);
       } catch (err) {
-        setError(err instanceof ApiError ? err.message : 'Failed to load tickets');
+        setError(apiError.resolve(err, { fallbackKey: 'tickets.errors.loadFailed' }));
         setTickets([]);
         setMeta(null);
       } finally {
         setLoading(false);
       }
     },
-    [],
+    [apiError],
   );
 
   // Debounce the raw search box; reset to page 1 on change. Skip the first run
@@ -239,28 +250,28 @@ export function Tickets() {
   if (statusFilter) {
     activeChips.push({
       key: 'status',
-      label: `Status: ${STATUS_LABELS[statusFilter] ?? statusFilter}`,
+      label: t('tickets.list.chipStatus', { value: t(STATUS_LABEL_KEYS[statusFilter]) }),
       onRemove: () => { setStatusFilter(null); setPage(1); },
     });
   }
   if (typeFilter) {
     activeChips.push({
       key: 'type',
-      label: `Type: ${TICKET_TYPE_LABELS[typeFilter] ?? typeFilter}`,
+      label: t('tickets.list.chipType', { value: t(ticketTypeKey(typeFilter)) }),
       onRemove: () => { setTypeFilter(''); setPage(1); },
     });
   }
   if (priorityFilter) {
     activeChips.push({
       key: 'priority',
-      label: `Priority: ${PRIORITY_LABELS[priorityFilter]}`,
+      label: t('tickets.list.chipPriority', { value: t(PRIORITY_LABEL_KEYS[priorityFilter]) }),
       onRemove: () => { setPriorityFilter(''); setPage(1); },
     });
   }
   if (sort !== SORT_OPTIONS[0].value) {
     activeChips.push({
       key: 'sort',
-      label: `Sort: ${sortConfig.label}`,
+      label: t('tickets.list.chipSort', { value: t(sortConfig.labelKey) }),
       onRemove: () => { setSort(SORT_OPTIONS[0].value); setPage(1); },
     });
   }
@@ -270,10 +281,10 @@ export function Tickets() {
       <SearchFilterBar
         value={searchQuery}
         onChange={setSearchQuery}
-        placeholder="Search tickets…"
+        placeholder={t('tickets.list.searchPlaceholder')}
         activeFilterCount={activeFilterCount}
         onOpenFilters={() => setFilterSheetOpen(true)}
-        filterLabel="Filter tickets"
+        filterLabel={t('tickets.list.filterTitle')}
       />
       <ActiveFilterChips chips={activeChips} onClearAll={clearFilters} />
     </div>
@@ -283,48 +294,49 @@ export function Tickets() {
     <FilterSheet
       open={filterSheetOpen}
       onOpenChange={setFilterSheetOpen}
-      title="Filter tickets"
+      title={t('tickets.list.filterTitle')}
       activeCount={activeFilterCount}
       onClear={clearFilters}
-      applyLabel="Show tickets"
+      applyLabel={t('tickets.list.applyLabel')}
     >
-      <FilterSection title="Status">
+      <FilterSection title={t('tickets.columns.status')}>
         <FilterChips
-          options={STATUS_TABS.filter((t): t is { label: string; value: TicketStatus } => t.value !== null)
-            .map((t) => ({ value: t.value, label: t.label }))}
+          options={STATUS_TABS.filter(
+            (tab): tab is { labelKey: TranslationKey; value: TicketStatus } => tab.value !== null,
+          ).map((tab) => ({ value: tab.value, labelKey: tab.labelKey }))}
           value={statusFilter ?? undefined}
-          onChange={(v) => { setStatusFilter(v ?? null); setPage(1); }}
-          allLabel="Any status"
+          onChange={(v) => { setStatusFilter((v ?? null) as TicketStatus | null); setPage(1); }}
+          allLabel={t('tickets.list.anyStatus')}
         />
       </FilterSection>
 
-      <FilterSection title="Priority">
+      <FilterSection title={t('tickets.columns.priority')}>
         <FilterChips
-          options={TICKET_PRIORITIES.map((p) => ({ value: p, label: PRIORITY_LABELS[p] }))}
+          options={TICKET_PRIORITIES.map((p) => ({ value: p, labelKey: PRIORITY_LABEL_KEYS[p] }))}
           value={priorityFilter || undefined}
           onChange={(v) => { setPriorityFilter((v ?? '') as UpdatablePriority | ''); setPage(1); }}
-          allLabel="Any"
+          allLabel={t('tickets.list.anyPriority')}
         />
       </FilterSection>
 
       {/* Type has ~40 values across 8 groups — a grouped select stays scannable
           where a chip wall would not. */}
-      <FilterSection title="Type">
+      <FilterSection title={t('tickets.list.type')}>
         <FilterField>
           <Select
             value={typeFilter || ALL}
             onValueChange={(v) => { setTypeFilter(v === ALL ? '' : (v as TicketType)); setPage(1); }}
           >
             <SelectTrigger className="h-11 w-full rounded-xl">
-              <SelectValue placeholder="All types" />
+              <SelectValue placeholder={t('tickets.list.allTypes')} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value={ALL}>All types</SelectItem>
+              <SelectItem value={ALL}>{t('tickets.list.allTypes')}</SelectItem>
               {TICKET_TYPE_GROUPS.map((g) => (
-                <SelectGroup key={g.groupLabel}>
-                  <SelectLabel>{g.groupLabel}</SelectLabel>
+                <SelectGroup key={g.groupLabelKey}>
+                  <SelectLabel>{t(g.groupLabelKey)}</SelectLabel>
                   {g.values.map((v) => (
-                    <SelectItem key={v.value} value={v.value}>{v.label}</SelectItem>
+                    <SelectItem key={v.value} value={v.value}>{t(v.labelKey)}</SelectItem>
                   ))}
                 </SelectGroup>
               ))}
@@ -333,9 +345,9 @@ export function Tickets() {
         </FilterField>
       </FilterSection>
 
-      <FilterSection title="Sort by">
+      <FilterSection title={t('tickets.list.sortBy')}>
         <FilterChips
-          options={SORT_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+          options={SORT_OPTIONS.map((o) => ({ value: o.value, labelKey: o.labelKey }))}
           value={sort}
           onChange={(v) => { setSort(v ?? SORT_OPTIONS[0].value); setPage(1); }}
           hideAll
@@ -348,19 +360,19 @@ export function Tickets() {
     <Empty className="py-16">
       <EmptyHeader>
         <EmptyMedia variant="icon"><TicketIcon className="h-6 w-6" /></EmptyMedia>
-        <EmptyTitle>{hasActiveQuery ? 'No matching tickets' : 'No tickets yet'}</EmptyTitle>
+        <EmptyTitle>{hasActiveQuery ? t('tickets.list.emptyFiltered') : t('tickets.list.empty')}</EmptyTitle>
         <EmptyDescription>
           {hasActiveQuery
-            ? 'Try adjusting your search or filters.'
-            : 'Create your first ticket to get help from the team.'}
+            ? t('tickets.list.emptyFilteredHint')
+            : t('tickets.list.emptyHint')}
         </EmptyDescription>
       </EmptyHeader>
       <EmptyContent>
         {hasActiveQuery ? (
-          <Button variant="outline" onClick={clearFilters}>Clear filters</Button>
+          <Button variant="outline" onClick={clearFilters}>{t('tickets.list.clearFilters')}</Button>
         ) : (
           <Button onClick={() => setCreateOpen(true)} className="gap-2">
-            <Plus className="h-4 w-4" /> New ticket
+            <Plus className="h-4 w-4" /> {t('tickets.list.newTicket')}
           </Button>
         )}
       </EmptyContent>
@@ -377,7 +389,7 @@ export function Tickets() {
       <div className="flex flex-wrap items-center gap-2">
         <StatusPill status={t.status} />
         <PriorityPill priority={t.priority} locked={t.priority_locked} />
-        <span className="ml-auto text-xs text-muted-foreground">{relativeTime(t.updatedAt)}</span>
+        <span className="ml-auto text-xs text-muted-foreground">{relativeTime(t.updatedAt, translate, fmt.date)}</span>
       </div>
     </button>
   );
@@ -389,7 +401,7 @@ export function Tickets() {
         open={createOpen}
         onOpenChange={setCreateOpen}
         onCreated={() => {
-          toast.success('Ticket added to your list');
+          toast.success(t('tickets.list.added'));
           reloadList();
         }}
       />
@@ -408,7 +420,7 @@ export function Tickets() {
     return (
       <div className="-mx-6 -mt-6">
         <MobilePageHeader
-          title="Tickets"
+          title={t('nav.items.tickets')}
           actions={
             <>
               <button
@@ -422,7 +434,7 @@ export function Tickets() {
               <button
                 type="button"
                 onClick={() => setCreateOpen(true)}
-                aria-label="New ticket"
+                aria-label={t('tickets.list.newTicket')}
                 className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-accent transition-colors"
               >
                 <Plus className="h-5 w-5" />
@@ -439,7 +451,7 @@ export function Tickets() {
             <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed py-16 text-center">
               <TicketIcon className="h-10 w-10 text-muted-foreground" />
               <p className="text-sm text-muted-foreground">{infinite.error}</p>
-              <Button variant="outline" size="sm" onClick={infinite.reload}>Try again</Button>
+              <Button variant="outline" size="sm" onClick={infinite.reload}>{t('common.actions.retry')}</Button>
             </div>
           ) : infinite.items.length === 0 ? (
             emptyNode
@@ -456,7 +468,7 @@ export function Tickets() {
           )}
         </div>
 
-        <MobileListFooter shown={infinite.items.length} total={infinite.total} noun="tickets" />
+        <MobileListFooter shown={infinite.items.length} total={infinite.total} nounKey="common.units.tickets" />
         {sheets}
       </div>
     );
@@ -468,15 +480,15 @@ export function Tickets() {
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Tickets</h1>
-          <p className="text-muted-foreground">Track and resolve issues with the Jovi Mall team.</p>
+          <h1 className="text-3xl font-bold tracking-tight">{t('tickets.title')}</h1>
+          <p className="text-muted-foreground">{t('tickets.subtitle')}</p>
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" onClick={() => setFaqOpen(true)} className="gap-2">
             <HelpCircle className="h-4 w-4" /> FAQ
           </Button>
           <Button onClick={() => setCreateOpen(true)} className="gap-2">
-            <Plus className="h-4 w-4" /> New ticket
+            <Plus className="h-4 w-4" /> {t('tickets.list.newTicket')}
           </Button>
         </div>
       </div>
@@ -490,7 +502,7 @@ export function Tickets() {
         <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed py-16 text-center">
           <TicketIcon className="h-10 w-10 text-muted-foreground" />
           <p className="text-sm text-muted-foreground">{error}</p>
-          <Button variant="outline" size="sm" onClick={refresh}>Try again</Button>
+          <Button variant="outline" size="sm" onClick={refresh}>{t('common.actions.retry')}</Button>
         </div>
       ) : tickets.length === 0 ? (
         emptyNode
@@ -501,10 +513,10 @@ export function Tickets() {
             <table className="w-full text-sm">
               <thead className="border-b bg-muted/40 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 <tr>
-                  <th className="px-4 py-3">Ticket</th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3">Priority</th>
-                  <th className="px-4 py-3">Updated</th>
+                  <th className="px-4 py-3">{t('tickets.detail.ticket')}</th>
+                  <th className="px-4 py-3">{t('tickets.columns.status')}</th>
+                  <th className="px-4 py-3">{t('tickets.columns.priority')}</th>
+                  <th className="px-4 py-3">{t('tickets.columns.updated')}</th>
                   <th className="w-8 px-4 py-3" />
                 </tr>
               </thead>
@@ -520,7 +532,7 @@ export function Tickets() {
                     </td>
                     <td className="px-4 py-3"><StatusPill status={t.status} /></td>
                     <td className="px-4 py-3"><PriorityPill priority={t.priority} locked={t.priority_locked} /></td>
-                    <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">{relativeTime(t.updatedAt)}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">{relativeTime(t.updatedAt, translate, fmt.date)}</td>
                     <td className="px-4 py-3 text-right">
                       <ChevronRight className="ml-auto h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
                     </td>
@@ -534,16 +546,21 @@ export function Tickets() {
           {meta && (
             <div className="flex flex-col items-center justify-between gap-3 text-sm text-muted-foreground sm:flex-row">
               <span>
-                Showing {tickets.length} of {meta.total} ticket{meta.total !== 1 ? 's' : ''}
+                {t('common.pagination.showingOf', {
+                  shown: tickets.length,
+                  items: t('common.units.tickets', { count: meta.total }),
+                })}
               </span>
               {meta.totalPages > 1 && (
                 <div className="flex items-center gap-2">
                   <Button variant="outline" size="sm" disabled={meta.page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
-                    Previous
+                    {t('common.pagination.previous')}
                   </Button>
-                  <span>Page {meta.page} of {meta.totalPages}</span>
+                  <span>
+                    {t('common.pagination.pageOf', { page: meta.page, total: meta.totalPages })}
+                  </span>
                   <Button variant="outline" size="sm" disabled={meta.page >= meta.totalPages} onClick={() => setPage((p) => p + 1)}>
-                    Next
+                    {t('common.pagination.next')}
                   </Button>
                 </div>
               )}
@@ -601,19 +618,21 @@ function TicketIdentity({ t }: { t: ApiTicketListItem }) {
 // ─── Pills ────────────────────────────────────────────────────────────────────
 
 function StatusPill({ status }: { status: TicketStatus }) {
+  const { t } = useTranslation();
   return (
     <Badge className={cn('gap-1.5 border-0 font-medium', STATUS_BADGE_CLASSES[status])}>
       <span className={cn('h-1.5 w-1.5 rounded-full', STATUS_DOT_CLASSES[status])} />
-      {STATUS_LABELS[status]}
+      {t(STATUS_LABEL_KEYS[status])}
     </Badge>
   );
 }
 
 function PriorityPill({ priority, locked }: { priority: TicketPriority; locked?: boolean }) {
+  const { t } = useTranslation();
   return (
     <Badge className={cn('gap-1.5 border-0 font-medium', PRIORITY_BADGE_CLASSES[priority])}>
       <span className={cn('h-1.5 w-1.5 rounded-full', PRIORITY_DOT_CLASSES[priority])} />
-      {PRIORITY_LABELS[priority]}
+      {t(PRIORITY_LABEL_KEYS[priority])}
       {locked && <LockGlyph />}
     </Badge>
   );

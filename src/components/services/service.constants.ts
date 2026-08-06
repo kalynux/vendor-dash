@@ -1,5 +1,10 @@
 // ─── Vendor Service / Booking module — display constants & helpers ──────────────
+//
+// This module is imported by mobile and desktop surfaces alike and has no React
+// context of its own, so every user-visible label is exported as a
+// `TranslationKey` and resolved by the call site. See src/i18n/README.md.
 
+import type { TranslationKey } from '@/i18n';
 import type {
   BookingMode,
   BookingStatus,
@@ -9,6 +14,8 @@ import type {
   PeakPriceType,
   ServiceConfig,
 } from '@/types/services.types';
+
+type Translate = (key: TranslationKey, params?: Record<string, string | number>) => string;
 
 // ─── Field limits (kept in sync with service.schemas.ts and API docs) ───────────
 
@@ -23,24 +30,24 @@ export const CANCEL_REASON_MAX = 500;
 
 // ─── Days of week (availability-rules.md: 0 = Sunday … 6 = Saturday) ────────────
 
-export const DAY_LABELS: Record<DayOfWeek, string> = {
-  0: 'Sunday',
-  1: 'Monday',
-  2: 'Tuesday',
-  3: 'Wednesday',
-  4: 'Thursday',
-  5: 'Friday',
-  6: 'Saturday',
+export const DAY_LABEL_KEYS: Record<DayOfWeek, TranslationKey> = {
+  0: 'services.days.sunday',
+  1: 'services.days.monday',
+  2: 'services.days.tuesday',
+  3: 'services.days.wednesday',
+  4: 'services.days.thursday',
+  5: 'services.days.friday',
+  6: 'services.days.saturday',
 };
 
-export const DAY_SHORT: Record<DayOfWeek, string> = {
-  0: 'Sun',
-  1: 'Mon',
-  2: 'Tue',
-  3: 'Wed',
-  4: 'Thu',
-  5: 'Fri',
-  6: 'Sat',
+export const DAY_SHORT_KEYS: Record<DayOfWeek, TranslationKey> = {
+  0: 'services.daysShort.sunday',
+  1: 'services.daysShort.monday',
+  2: 'services.daysShort.tuesday',
+  3: 'services.daysShort.wednesday',
+  4: 'services.daysShort.thursday',
+  5: 'services.daysShort.friday',
+  6: 'services.daysShort.saturday',
 };
 
 // Display order Sunday → Saturday.
@@ -54,28 +61,32 @@ export function getAvailabilityRuleId(rule: { _id?: string; id?: string }): stri
 
 // ─── Booking mode ───────────────────────────────────────────────────────────────
 
-export const BOOKING_MODES: { value: BookingMode; label: string; description: string }[] = [
+export const BOOKING_MODES: {
+  value: BookingMode;
+  labelKey: TranslationKey;
+  descriptionKey: TranslationKey;
+}[] = [
   {
     value: 'calendar',
-    label: 'Calendar',
-    description: 'Customers pick a specific time slot from your availability.',
+    labelKey: 'services.bookingMode.calendar',
+    descriptionKey: 'services.bookingModeHelp.calendar',
   },
   {
     value: 'manual',
-    label: 'Manual',
-    description: 'You arrange the time with the customer after they request it.',
+    labelKey: 'services.bookingMode.manual',
+    descriptionKey: 'services.bookingModeHelp.manual',
   },
   {
     value: 'capacity',
-    label: 'Capacity',
-    description: 'Multiple customers can book the same time slot.',
+    labelKey: 'services.bookingMode.capacity',
+    descriptionKey: 'services.bookingModeHelp.capacity',
   },
 ];
 
-export const BOOKING_MODE_LABELS: Record<BookingMode, string> = {
-  calendar: 'Calendar',
-  manual: 'Manual',
-  capacity: 'Capacity',
+export const BOOKING_MODE_LABEL_KEYS: Record<BookingMode, TranslationKey> = {
+  calendar: 'services.bookingMode.calendar',
+  manual: 'services.bookingMode.manual',
+  capacity: 'services.bookingMode.capacity',
 };
 
 // ─── Shared service-config form shape + builder ─────────────────────────────────
@@ -127,50 +138,67 @@ export function buildServiceConfig(v: ServiceConfigFormShape): ServiceConfig {
 
 // ─── Duration presets (minutes) ─────────────────────────────────────────────────
 
-export const DURATION_PRESETS: { value: number; label: string }[] = [
-  { value: 15, label: '15 min' },
-  { value: 30, label: '30 min' },
-  { value: 45, label: '45 min' },
-  { value: 60, label: '1 hour' },
-  { value: 90, label: '1.5 hours' },
-  { value: 120, label: '2 hours' },
+export const DURATION_PRESETS: { value: number; labelKey: TranslationKey }[] = [
+  { value: 15, labelKey: 'services.duration.presets.min15' },
+  { value: 30, labelKey: 'services.duration.presets.min30' },
+  { value: 45, labelKey: 'services.duration.presets.min45' },
+  { value: 60, labelKey: 'services.duration.presets.hour1' },
+  { value: 90, labelKey: 'services.duration.presets.hour1h30' },
+  { value: 120, labelKey: 'services.duration.presets.hour2' },
 ];
 
-export function formatDuration(minutes: number | null): string {
-  if (!minutes || minutes <= 0) return '—';
-  if (minutes < 60) return `${minutes} min`;
+/**
+ * Compact session length ("45 min", "1h", "1h 30m").
+ * Takes the translator so this module needs no React context of its own —
+ * same convention as `relativeTime` in ticket.constants.
+ */
+export function formatDuration(minutes: number | null, t: Translate): string {
+  if (!minutes || minutes <= 0) return t('common.labels.emptyValue');
+  if (minutes < 60) return t('services.duration.minutes', { minutes });
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
-  return m === 0 ? `${h}h` : `${h}h ${m}m`;
+  return m === 0
+    ? t('services.duration.hours', { hours: h })
+    : t('services.duration.hoursMinutes', { hours: h, minutes: m });
 }
 
 // ─── Status metadata ─────────────────────────────────────────────────────────────
 
 export type BadgeTone = 'neutral' | 'success' | 'warning' | 'danger' | 'info' | 'orange';
 
-export const SERVICE_STATUS_META: Record<ServiceStatus, { label: string; tone: BadgeTone }> = {
-  draft: { label: 'Draft', tone: 'neutral' },
-  active: { label: 'Active', tone: 'success' },
-  archived: { label: 'Archived', tone: 'neutral' },
-  pending_review: { label: 'In review', tone: 'warning' },
-  suspended: { label: 'Suspended', tone: 'danger' },
+export const SERVICE_STATUS_META: Record<ServiceStatus, { labelKey: TranslationKey; tone: BadgeTone }> = {
+  draft: { labelKey: 'services.status.draft', tone: 'neutral' },
+  active: { labelKey: 'services.status.active', tone: 'success' },
+  archived: { labelKey: 'services.status.archived', tone: 'neutral' },
+  pending_review: { labelKey: 'services.status.pending_review', tone: 'warning' },
+  suspended: { labelKey: 'services.status.suspended', tone: 'danger' },
 };
 
-export const BOOKING_STATUS_META: Record<BookingStatus, { label: string; tone: BadgeTone }> = {
-  pending: { label: 'Pending', tone: 'warning' },
-  confirmed: { label: 'Confirmed', tone: 'info' },
-  completed: { label: 'Completed', tone: 'success' },
-  'no-show': { label: 'No-show', tone: 'danger' },
-  cancelled: { label: 'Cancelled', tone: 'neutral' },
+export const BOOKING_STATUS_META: Record<BookingStatus, { labelKey: TranslationKey; tone: BadgeTone }> = {
+  pending: { labelKey: 'services.booking.status.pending', tone: 'warning' },
+  confirmed: { labelKey: 'services.booking.status.confirmed', tone: 'info' },
+  completed: { labelKey: 'services.booking.status.completed', tone: 'success' },
+  'no-show': { labelKey: 'services.booking.status.no-show', tone: 'danger' },
+  cancelled: { labelKey: 'services.booking.status.cancelled', tone: 'neutral' },
 };
 
-export const PAYMENT_STATUS_META: Record<PaymentStatus, { label: string; tone: BadgeTone }> = {
-  unpaid: { label: 'Unpaid', tone: 'warning' },
-  pending: { label: 'Payment pending', tone: 'warning' },
-  paid: { label: 'Paid', tone: 'success' },
-  disputed: { label: 'Disputed', tone: 'orange' },
-  failed: { label: 'Payment failed', tone: 'danger' },
-  refunded: { label: 'Refunded', tone: 'neutral' },
+export const PAYMENT_STATUS_META: Record<PaymentStatus, { labelKey: TranslationKey; tone: BadgeTone }> = {
+  unpaid: { labelKey: 'services.booking.payment.unpaid', tone: 'warning' },
+  pending: { labelKey: 'services.booking.payment.pending', tone: 'warning' },
+  paid: { labelKey: 'services.booking.payment.paid', tone: 'success' },
+  disputed: { labelKey: 'services.booking.payment.disputed', tone: 'orange' },
+  failed: { labelKey: 'services.booking.payment.failed', tone: 'danger' },
+  refunded: { labelKey: 'services.booking.payment.refunded', tone: 'neutral' },
+};
+
+/** Shorter payment wording for filter chips, where "Payment" is already said. */
+export const PAYMENT_STATUS_FILTER_KEYS: Record<PaymentStatus, TranslationKey> = {
+  unpaid: 'services.booking.paymentShort.unpaid',
+  pending: 'services.booking.paymentShort.pending',
+  paid: 'services.booking.paymentShort.paid',
+  disputed: 'services.booking.paymentShort.disputed',
+  failed: 'services.booking.paymentShort.failed',
+  refunded: 'services.booking.paymentShort.refunded',
 };
 
 // Tailwind classes per tone — applied by the badge wrappers.
@@ -188,7 +216,7 @@ export const TONE_CLASSES: Record<BadgeTone, string> = {
 
 export interface BookingTransition {
   target: BookingStatus;
-  label: string;
+  labelKey: TranslationKey;
   tone: 'default' | 'destructive';
   /**
    * UI handling hint. `complete` routes through the Complete-Booking settlement
@@ -200,13 +228,28 @@ export interface BookingTransition {
 
 export const BOOKING_TRANSITIONS: Record<BookingStatus, BookingTransition[]> = {
   pending: [
-    { target: 'confirmed', label: 'Confirm booking', tone: 'default' },
-    { target: 'cancelled', label: 'Cancel booking', tone: 'destructive', kind: 'cancel' },
+    { target: 'confirmed', labelKey: 'services.booking.transitions.confirm', tone: 'default' },
+    {
+      target: 'cancelled',
+      labelKey: 'services.booking.transitions.cancel',
+      tone: 'destructive',
+      kind: 'cancel',
+    },
   ],
   confirmed: [
-    { target: 'completed', label: 'Complete & settle', tone: 'default', kind: 'complete' },
-    { target: 'no-show', label: 'Mark no-show', tone: 'destructive' },
-    { target: 'cancelled', label: 'Cancel booking', tone: 'destructive', kind: 'cancel' },
+    {
+      target: 'completed',
+      labelKey: 'services.booking.transitions.complete',
+      tone: 'default',
+      kind: 'complete',
+    },
+    { target: 'no-show', labelKey: 'services.booking.transitions.noShow', tone: 'destructive' },
+    {
+      target: 'cancelled',
+      labelKey: 'services.booking.transitions.cancel',
+      tone: 'destructive',
+      kind: 'cancel',
+    },
   ],
   completed: [],
   'no-show': [],
@@ -215,88 +258,15 @@ export const BOOKING_TRANSITIONS: Record<BookingStatus, BookingTransition[]> = {
 
 export const TERMINAL_BOOKING_STATES: BookingStatus[] = ['completed', 'no-show', 'cancelled'];
 
-// ─── Money ───────────────────────────────────────────────────────────────────────
-
 /**
- * Format a minor-unit amount (e.g. booking `priceSnapshot` 5000 = 50.00 XAF).
- * Booking amounts from the API are in the smallest currency unit.
+ * Booking amounts come from the API in the smallest currency unit
+ * (`priceSnapshot` 5000 = 50.00 XAF). Divide before handing to `fmt.currency`.
  */
-export function formatMinor(amount: number, currency = 'XAF'): string {
-  const major = amount / 100;
-  try {
-    return new Intl.NumberFormat(undefined, {
-      style: 'currency',
-      currency,
-      maximumFractionDigits: 2,
-    }).format(major);
-  } catch {
-    return `${new Intl.NumberFormat().format(major)} ${currency}`;
-  }
+export function toMajorUnits(amount: number): number {
+  return amount / 100;
 }
 
-/**
- * Format a major-unit amount (e.g. a service price as entered in the variant
- * editor convention — decimals allowed, no implicit /100).
- */
-export function formatPrice(amount: number, currency = 'XAF'): string {
-  try {
-    return new Intl.NumberFormat(undefined, {
-      style: 'currency',
-      currency,
-      maximumFractionDigits: 2,
-    }).format(amount);
-  } catch {
-    return `${new Intl.NumberFormat().format(amount)} ${currency}`;
-  }
-}
-
-// ─── Date / time helpers ─────────────────────────────────────────────────────────
-
-export function formatDateTime(iso: string | null): string {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
-}
-
-export function formatDate(iso: string | null): string {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
-}
-
-export function formatTime(iso: string | null): string {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
-}
-
-export function relativeTime(iso: string | null): string {
-  if (!iso) return '—';
-  const then = new Date(iso).getTime();
-  if (Number.isNaN(then)) return '—';
-  const diff = Date.now() - then;
-  const sec = Math.round(diff / 1000);
-  const future = sec < 0;
-  const abs = Math.abs(sec);
-  const fmt = (n: number, unit: string) => (future ? `in ${n}${unit}` : `${n}${unit} ago`);
-  if (abs < 45) return 'just now';
-  const min = Math.round(abs / 60);
-  if (min < 60) return fmt(min, 'm');
-  const hr = Math.round(min / 60);
-  if (hr < 24) return fmt(hr, 'h');
-  const day = Math.round(hr / 24);
-  if (day < 30) return fmt(day, 'd');
-  return formatDate(iso);
-}
+// ─── Timezones ───────────────────────────────────────────────────────────────────
 
 /** Browser's IANA timezone, used as the default for new availability rules. */
 export function browserTimezone(): string {
@@ -338,41 +308,51 @@ export function responsiveSheetProps(
 
 export interface ServiceStatusTransition {
   target: ServiceStatus;
-  label: string;
+  labelKey: TranslationKey;
   destructive: boolean;
   needsPreflight: boolean;
-  confirmMessage?: string;
+  confirmKey?: TranslationKey;
 }
 
 export const SERVICE_STATUS_TRANSITIONS: Record<ServiceStatus, ServiceStatusTransition[]> = {
   draft: [
-    { target: 'active', label: 'Publish service', destructive: false, needsPreflight: true },
+    {
+      target: 'active',
+      labelKey: 'services.transitions.publish',
+      destructive: false,
+      needsPreflight: true,
+    },
     {
       target: 'archived',
-      label: 'Archive',
+      labelKey: 'services.transitions.archive',
       destructive: true,
       needsPreflight: false,
-      confirmMessage: 'Archive this service? It will no longer be bookable.',
+      confirmKey: 'services.transitions.confirm.archiveDraft',
     },
   ],
   active: [
     {
       target: 'draft',
-      label: 'Unpublish (draft)',
+      labelKey: 'services.transitions.unpublish',
       destructive: false,
       needsPreflight: false,
-      confirmMessage: 'Unpublish this service? It will stop accepting new bookings.',
+      confirmKey: 'services.transitions.confirm.unpublish',
     },
     {
       target: 'archived',
-      label: 'Archive',
+      labelKey: 'services.transitions.archive',
       destructive: true,
       needsPreflight: false,
-      confirmMessage: 'Archive this live service? It will stop accepting new bookings immediately.',
+      confirmKey: 'services.transitions.confirm.archiveActive',
     },
   ],
   archived: [
-    { target: 'draft', label: 'Restore to draft', destructive: false, needsPreflight: false },
+    {
+      target: 'draft',
+      labelKey: 'services.transitions.restore',
+      destructive: false,
+      needsPreflight: false,
+    },
   ],
   // System-locked statuses — no vendor-triggered transitions allowed (backend
   // returns CATALOG_PRODUCT_INVALID_STATE). See api-doc/vendor/products.md.

@@ -50,9 +50,12 @@ import {
 } from '@/components/filters';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Progress } from '@/components/ui/progress';
-import { cn, formatFileSize } from '@/lib/utils';
+import { cn } from '@/lib/utils';
+
+/** Local alias so module-level helpers can take the translator as a parameter. */
+type Translate = (key: TranslationKey, params?: Record<string, string | number>) => string;
 import { useIsMobile } from '@/hooks/use-mobile';
-import { ApiError } from '@/types/api';
+import { useApiError, useFormatters, useTranslation, type TranslationKey } from '@/i18n';
 import { getUploadErrorMessage } from '@/lib/uploadErrors';
 import {
   listFiles,
@@ -95,11 +98,11 @@ const typeColors: Record<FileKind, string> = {
   audio: 'bg-emerald-500/10 text-emerald-600',
 };
 
-const KIND_LABELS: Record<FileKind, string> = {
-  image: 'Images',
-  video: 'Video',
-  document: 'Documents',
-  audio: 'Audio',
+const KIND_LABEL_KEYS: Record<FileKind, TranslationKey> = {
+  image: 'media.filters.kind.image',
+  video: 'media.filters.kind.video',
+  document: 'media.filters.kind.document',
+  audio: 'media.filters.kind.audio',
 };
 
 const PICKER_LIMIT = 24;
@@ -110,13 +113,13 @@ const ALL_KINDS: FileKind[] = ['image', 'video', 'document', 'audio'];
 
 type SortValue = `${FileSortField}:${'asc' | 'desc'}`;
 
-const SORT_OPTIONS: { value: SortValue; label: string }[] = [
-  { value: 'createdAt:desc', label: 'Newest first' },
-  { value: 'createdAt:asc', label: 'Oldest first' },
-  { value: 'originalName:asc', label: 'Name A–Z' },
-  { value: 'originalName:desc', label: 'Name Z–A' },
-  { value: 'size:desc', label: 'Largest first' },
-  { value: 'size:asc', label: 'Smallest first' },
+const SORT_OPTIONS: { value: SortValue; labelKey: TranslationKey }[] = [
+  { value: 'createdAt:desc', labelKey: 'media.filters.sort.newest' },
+  { value: 'createdAt:asc', labelKey: 'media.filters.sort.oldest' },
+  { value: 'originalName:asc', labelKey: 'media.filters.sort.nameAsc' },
+  { value: 'originalName:desc', labelKey: 'media.filters.sort.nameDesc' },
+  { value: 'size:desc', labelKey: 'media.filters.sort.largest' },
+  { value: 'size:asc', labelKey: 'media.filters.sort.smallest' },
 ];
 
 interface FilterState {
@@ -142,9 +145,12 @@ function mbToBytes(mb: string): number | undefined {
   return Number.isFinite(n) && n > 0 ? Math.round(n * 1024 * 1024) : undefined;
 }
 
-/** Human label for the kinds a slot accepts, e.g. "image" or "image / video". */
-function describeAccepted(types: FileKind[]): string {
-  return types.map((t) => KIND_LABELS[t].toLowerCase()).join(' / ');
+/**
+ * Human label for the kinds a slot accepts, e.g. "image" or "image / video".
+ * Takes the translator as a parameter — this runs outside any component body.
+ */
+function describeAccepted(types: FileKind[], t: Translate): string {
+  return types.map((kind) => t(KIND_LABEL_KEYS[kind]).toLowerCase()).join(' / ');
 }
 
 // Module-level so its identity is stable across renders — defining it inside the
@@ -218,6 +224,9 @@ export function MediaPicker({
   maxFiles,
   alreadySelectedIds = [],
 }: MediaPickerProps) {
+  const { t } = useTranslation();
+  const fmt = useFormatters();
+  const apiError = useApiError();
   const isMobile = useIsMobile();
 
   const alreadySelected = useMemo(
@@ -275,11 +284,11 @@ export function MediaPicker({
       setFiles(res.files);
       setPagination(res.pagination);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Could not load files.');
+      apiError.toast(err, { fallbackKey: 'media.errors.loadFailed' });
     } finally {
       setIsLoading(false);
     }
-  }, [query]);
+  }, [query, apiError]);
 
   // Reset everything when the picker opens. The type filter is *seeded* from the
   // accepted kinds (a single accepted kind pre-selects it) but stays changeable so
@@ -329,7 +338,7 @@ export function MediaPicker({
       setUploadPercent(0);
       try {
         await uploadMediaWithProgress(arr, setUploadPercent);
-        toast.success(`Uploaded ${arr.length} file${arr.length > 1 ? 's' : ''}.`);
+        toast.success(t('media.library.uploaded', { count: arr.length }));
         if (page !== 1) setPage(1);
         else await fetchFiles();
       } catch (err) {
@@ -340,7 +349,7 @@ export function MediaPicker({
         if (fileInputRef.current) fileInputRef.current.value = '';
       }
     },
-    [page, fetchFiles],
+    [page, fetchFiles, t],
   );
 
   const onDrop = (e: React.DragEvent) => {
@@ -362,7 +371,10 @@ export function MediaPicker({
     // user can land on, e.g., a PDF while picking a cover image).
     if (!selected[file.id] && !acceptedTypes.includes(kind)) {
       setSelectError(
-        `${KIND_LABELS[kind]} can't be used here — only ${describeAccepted(acceptedTypes)} files are allowed.`,
+        t('media.picker.kindNotAllowed', {
+          kind: t(KIND_LABEL_KEYS[kind]),
+          allowed: describeAccepted(acceptedTypes, t),
+        }),
       );
       return;
     }
@@ -411,10 +423,10 @@ export function MediaPicker({
       <SearchFilterBar
         value={searchInput}
         onChange={setSearchInput}
-        placeholder="Search files…"
+        placeholder={t('media.picker.searchPlaceholder')}
         activeFilterCount={activeFilterCount}
         onOpenFilters={() => setFiltersOpen(true)}
-        filterLabel="Filter files"
+        filterLabel={t('media.picker.filterTitle')}
         trailing={
           <>
             <Button
@@ -424,14 +436,14 @@ export function MediaPicker({
               className="h-11 shrink-0 gap-2 rounded-xl"
             >
               {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-              <span className="hidden sm:inline">Upload</span>
+              <span className="hidden sm:inline">{t('common.actions.upload')}</span>
             </Button>
             <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as 'grid' | 'list')}>
               <TabsList className="h-11 rounded-xl">
-                <TabsTrigger value="grid" className="px-2" aria-label="Grid view">
+                <TabsTrigger value="grid" className="px-2" aria-label={t('media.picker.gridView')}>
                   <Grid3X3 className="h-4 w-4" />
                 </TabsTrigger>
-                <TabsTrigger value="list" className="px-2" aria-label="List view">
+                <TabsTrigger value="list" className="px-2" aria-label={t('media.picker.listView')}>
                   <List className="h-4 w-4" />
                 </TabsTrigger>
               </TabsList>
@@ -467,7 +479,7 @@ export function MediaPicker({
               </div>
               <div className="absolute bottom-2 left-2">
                 {added ? (
-                  <Badge className="bg-primary text-xs text-primary-foreground">Added</Badge>
+                  <Badge className="bg-primary text-xs text-primary-foreground">{t('media.picker.added')}</Badge>
                 ) : (
                   <Badge variant="secondary" className="text-xs capitalize">
                     {kindFromMime(file.mimeType)}
@@ -476,7 +488,7 @@ export function MediaPicker({
               </div>
             </div>
             <div className="p-3">
-              <p className="truncate text-sm font-medium">{file.originalName ?? 'Untitled'}</p>
+              <p className="truncate text-sm font-medium">{file.originalName ?? t('media.details.untitled')}</p>
             </div>
           </div>
         );
@@ -506,13 +518,13 @@ export function MediaPicker({
               <FileThumb file={file} />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="truncate font-medium">{file.originalName ?? 'Untitled'}</p>
+              <p className="truncate font-medium">{file.originalName ?? t('media.details.untitled')}</p>
               <p className="text-xs text-muted-foreground">
-                {formatFileSize(file.size)} · {new Date(file.createdAt).toLocaleDateString()}
+                {fmt.fileSize(file.size)} · {fmt.date(file.createdAt)}
               </p>
             </div>
             {added && (
-              <Badge className="bg-primary text-xs text-primary-foreground">Added</Badge>
+              <Badge className="bg-primary text-xs text-primary-foreground">{t('media.picker.added')}</Badge>
             )}
             <SelectionBox checked={isSelected} />
           </div>
@@ -536,7 +548,7 @@ export function MediaPicker({
       {uploading && (
         <div className="border-b bg-muted/30 px-4 py-3 sm:px-6">
           <div className="mb-1 flex justify-between text-xs">
-            <span className="text-muted-foreground">Uploading…</span>
+            <span className="text-muted-foreground">{t('media.picker.uploading')}</span>
             <span>{uploadPercent}%</span>
           </div>
           <Progress value={uploadPercent} className="h-1.5" />
@@ -554,7 +566,7 @@ export function MediaPicker({
             type="button"
             onClick={() => setSelectError(null)}
             className="shrink-0 rounded-sm p-0.5 hover:bg-destructive/15"
-            aria-label="Dismiss"
+            aria-label={t('common.actions.close')}
           >
             <X className="h-4 w-4" />
           </button>
@@ -580,7 +592,7 @@ export function MediaPicker({
         ) : visibleFiles.length === 0 ? (
           <div className="py-12 text-center">
             <ImageIcon className="mx-auto mb-3 h-12 w-12 text-muted-foreground" />
-            <p className="text-muted-foreground">No files found</p>
+            <p className="text-muted-foreground">{t('media.picker.noFiles')}</p>
             {hasActiveFilters && (
               <Button
                 variant="outline"
@@ -591,7 +603,7 @@ export function MediaPicker({
                 }}
                 className="mt-3"
               >
-                Clear filters
+                {t('media.picker.clearFilters')}
               </Button>
             )}
           </div>
@@ -605,7 +617,9 @@ export function MediaPicker({
         {pagination && pagination.pages > 1 && (
           <div className="mt-4 flex items-center justify-between">
             <p className="text-sm text-muted-foreground">
-              Page {pagination.page} of {pagination.pages} · {pagination.total} total
+              {t('common.pagination.pageOf', { page: pagination.page, total: pagination.pages })}
+              {' · '}
+              {t('media.picker.totalFiles', { count: pagination.total })}
             </p>
             <div className="flex items-center gap-2">
               <Button
@@ -616,7 +630,7 @@ export function MediaPicker({
                 className="gap-1"
               >
                 <ChevronLeft className="h-4 w-4" />
-                Prev
+                {t('common.pagination.previous')}
               </Button>
               <Button
                 variant="outline"
@@ -625,7 +639,7 @@ export function MediaPicker({
                 onClick={() => setPage((p) => p + 1)}
                 className="gap-1"
               >
-                Next
+                {t('common.pagination.next')}
                 <ChevronRight className="h-4 w-4" />
               </Button>
             </div>
@@ -638,9 +652,9 @@ export function MediaPicker({
         <div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center bg-primary/10 backdrop-blur-sm">
           <div className="rounded-2xl border-2 border-dashed border-primary bg-background px-10 py-8 text-center shadow-lg">
             <Upload className="mx-auto mb-3 h-10 w-10 text-primary" />
-            <p className="text-lg font-semibold">Drop to upload</p>
+            <p className="text-lg font-semibold">{t('media.picker.dropToUpload')}</p>
             <p className="text-sm text-muted-foreground">
-              Up to {MAX_FILES_PER_UPLOAD} files (500 MB each) or 3 videos (70 MB each)
+              {t('media.upload.limits', { maxFiles: MAX_FILES_PER_UPLOAD })}
             </p>
           </div>
         </div>
@@ -651,20 +665,24 @@ export function MediaPicker({
   const footer = (
     <div className="flex items-center justify-between border-t px-4 py-4 sm:px-6">
       <Button variant="outline" onClick={onClose}>
-        Cancel
+        {t('common.actions.cancel')}
       </Button>
       <Button onClick={handleConfirm} disabled={selectedCount === 0}>
-        Select {selectedCount > 0 && `(${selectedCount})`}
+        {selectedCount > 0
+          ? t('media.picker.selectCount', { count: selectedCount })
+          : t('common.actions.select')}
       </Button>
     </div>
   );
 
   const titleNode = (
     <div className="flex items-center justify-between">
-      <span>Select media</span>
+      <span>{t('media.picker.selectMedia')}</span>
       {multiple && (
         <span className="text-sm font-normal text-muted-foreground">
-          {selectedCount} selected{maxFiles ? ` / ${maxFiles} max` : ''}
+          {maxFiles
+            ? t('media.picker.selectedOfMax', { count: selectedCount, max: maxFiles })
+            : t('media.picker.selected', { count: selectedCount })}
         </span>
       )}
     </div>
@@ -674,10 +692,10 @@ export function MediaPicker({
     <FilterSheet
       open={filtersOpen}
       onOpenChange={setFiltersOpen}
-      title="Filter files"
+      title={t('media.picker.filterTitle')}
       activeCount={activeFilterCount}
       onClear={() => setFilters(DEFAULT_FILTERS)}
-      applyLabel="Show files"
+      applyLabel={t('media.filters.apply')}
     >
       <MediaPickerFilters filters={filters} onChange={setFilters} />
     </FilterSheet>
@@ -724,23 +742,24 @@ function MediaPickerFilters({
   filters: FilterState;
   onChange: (f: FilterState) => void;
 }) {
+  const { t } = useTranslation();
   const set = <K extends keyof FilterState>(key: K, value: FilterState[K]) =>
     onChange({ ...filters, [key]: value });
 
   return (
     <>
-      <FilterSection title="File type">
+      <FilterSection title={t('media.picker.fileType')}>
         <FilterChips
-          options={ALL_KINDS.map((k) => ({ value: k, label: KIND_LABELS[k] }))}
+          options={ALL_KINDS.map((k) => ({ value: k, labelKey: KIND_LABEL_KEYS[k] }))}
           value={filters.category === 'all' ? undefined : (filters.category as FileKind)}
           onChange={(v) => set('category', (v ?? 'all') as MediaCategory | 'all')}
-          allLabel="All types"
+          allLabel={t('media.filters.allTypes')}
         />
       </FilterSection>
 
-      <FilterSection title="Size (MB)">
+      <FilterSection title={t('media.picker.sizeMb')}>
         <div className="flex items-center gap-2">
-          <FilterField label="Min" htmlFor="picker-min-mb" className="flex-1">
+          <FilterField label={t('media.picker.sizeMin')} htmlFor="picker-min-mb" className="flex-1">
             <Input
               id="picker-min-mb"
               type="number"
@@ -751,12 +770,12 @@ function MediaPickerFilters({
               className="h-11 rounded-xl"
             />
           </FilterField>
-          <FilterField label="Max" htmlFor="picker-max-mb" className="flex-1">
+          <FilterField label={t('media.picker.sizeMax')} htmlFor="picker-max-mb" className="flex-1">
             <Input
               id="picker-max-mb"
               type="number"
               min={0}
-              placeholder="Any"
+              placeholder={t('media.picker.sizeAny')}
               value={filters.maxMB}
               onChange={(e) => set('maxMB', e.target.value)}
               className="h-11 rounded-xl"
@@ -765,9 +784,9 @@ function MediaPickerFilters({
         </div>
       </FilterSection>
 
-      <FilterSection title="Uploaded">
+      <FilterSection title={t('media.picker.uploadedOn')}>
         <div className="grid grid-cols-2 gap-2">
-          <FilterField label="After" htmlFor="picker-after">
+          <FilterField label={t('media.picker.uploadedAfter')} htmlFor="picker-after">
             <Input
               id="picker-after"
               type="date"
@@ -776,7 +795,7 @@ function MediaPickerFilters({
               className="h-11 rounded-xl"
             />
           </FilterField>
-          <FilterField label="Before" htmlFor="picker-before">
+          <FilterField label={t('media.picker.uploadedBefore')} htmlFor="picker-before">
             <Input
               id="picker-before"
               type="date"
@@ -788,7 +807,7 @@ function MediaPickerFilters({
         </div>
       </FilterSection>
 
-      <FilterSection title="Sort by">
+      <FilterSection title={t('media.picker.sortBy')}>
         <FilterChips
           options={SORT_OPTIONS}
           value={filters.sort}

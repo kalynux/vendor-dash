@@ -4,9 +4,10 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
+import { useTranslation, useFormatters } from '@/i18n';
 import { validateServiceActivation } from '@/components/services/schemas/service.schemas';
 import {
-  formatDuration, formatPrice, BOOKING_MODE_LABELS,
+  formatDuration, BOOKING_MODE_LABEL_KEYS, SERVICE_STATUS_META,
 } from '@/components/services/service.constants';
 import type { ServiceProduct, ServiceConfig } from '@/types/services.types';
 
@@ -39,6 +40,8 @@ export function StepServiceReview({
   onSaveDraft,
   onBack,
 }: StepServiceReviewProps) {
+  const { t } = useTranslation();
+  const fmt = useFormatters();
   const [vectorisationEnabled, setVectorisationEnabled] = useState<boolean>(
     service?.vectorisationEnabled ?? false,
   );
@@ -67,16 +70,16 @@ export function StepServiceReview({
         bookingMode: config?.bookingMode ?? null,
         maxBookings: config?.maxBookings ?? null,
       })
-    : ['Service has not been created yet'];
+    : (['services.activation.notCreated'] as const);
 
   const canPublish = activationErrors.length === 0;
 
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-semibold">Review &amp; publish</h2>
+        <h2 className="text-lg font-semibold">{t('services.review.title')}</h2>
         <p className="text-sm text-muted-foreground mt-1">
-          Review your service before publishing. You can always save as draft and publish later.
+          {t('services.review.description')}
         </p>
       </div>
 
@@ -90,37 +93,26 @@ export function StepServiceReview({
       {isLockedForVectorisation && (
         <Alert>
           <AlertCircle className="w-4 h-4" />
-          <AlertDescription>
-            This service is being indexed for AI search. Editing is temporarily disabled.
-          </AlertDescription>
+          <AlertDescription>{t('services.review.indexingNotice')}</AlertDescription>
         </Alert>
       )}
 
       {serviceStatus === 'archived' && (
         <Alert>
           <AlertCircle className="w-4 h-4" />
-          <AlertDescription>
-            This service is archived and read-only. Restore it to draft from the
-            services list to edit or publish it.
-          </AlertDescription>
+          <AlertDescription>{t('services.review.archivedNotice')}</AlertDescription>
         </Alert>
       )}
       {serviceStatus === 'pending_review' && (
         <Alert>
           <AlertCircle className="w-4 h-4" />
-          <AlertDescription>
-            This service is awaiting admin review and is read-only until moderation
-            completes.
-          </AlertDescription>
+          <AlertDescription>{t('services.review.pendingReviewNotice')}</AlertDescription>
         </Alert>
       )}
       {serviceStatus === 'suspended' && (
         <Alert>
           <AlertCircle className="w-4 h-4" />
-          <AlertDescription>
-            This service is suspended. You can still edit it — it is restored
-            automatically once the cause is resolved.
-          </AlertDescription>
+          <AlertDescription>{t('services.review.suspendedNotice')}</AlertDescription>
         </Alert>
       )}
 
@@ -137,9 +129,9 @@ export function StepServiceReview({
                 <span
                   className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusColors[service.status] ?? ''}`}
                 >
-                  {service.status.replace('_', ' ')}
+                  {t(SERVICE_STATUS_META[service.status]?.labelKey ?? 'services.status.draft')}
                 </span>
-                <span className="text-xs text-muted-foreground">service</span>
+                <span className="text-xs text-muted-foreground">{t('services.review.typeLabel')}</span>
                 <span className="text-xs text-muted-foreground">{service.category}</span>
               </div>
             </div>
@@ -147,28 +139,32 @@ export function StepServiceReview({
 
           <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
             <div>
-              <span className="text-muted-foreground text-xs">Duration</span>
-              <p className="font-medium">{formatDuration(config?.durationMinutes ?? null)}</p>
+              <span className="text-muted-foreground text-xs">{t('services.review.duration')}</span>
+              <p className="font-medium">{formatDuration(config?.durationMinutes ?? null, t)}</p>
             </div>
             <div>
-              <span className="text-muted-foreground text-xs">Price</span>
-              <p className="font-medium">{price != null ? formatPrice(price) : '—'}</p>
-            </div>
-            <div>
-              <span className="text-muted-foreground text-xs">Booking mode</span>
+              <span className="text-muted-foreground text-xs">{t('services.review.price')}</span>
               <p className="font-medium">
-                {config?.bookingMode ? BOOKING_MODE_LABELS[config.bookingMode] : '—'}
+                {price != null ? fmt.currency(price) : t('common.labels.emptyValue')}
+              </p>
+            </div>
+            <div>
+              <span className="text-muted-foreground text-xs">{t('services.review.mode')}</span>
+              <p className="font-medium">
+                {config?.bookingMode
+                  ? t(BOOKING_MODE_LABEL_KEYS[config.bookingMode])
+                  : t('common.labels.emptyValue')}
               </p>
             </div>
             {config?.bookingMode === 'capacity' && (
               <div>
-                <span className="text-muted-foreground text-xs">Seats per slot</span>
-                <p className="font-medium">{config?.maxBookings ?? '—'}</p>
+                <span className="text-muted-foreground text-xs">{t('services.review.seats')}</span>
+                <p className="font-medium">{config?.maxBookings ?? t('common.labels.emptyValue')}</p>
               </div>
             )}
             {service.tags.length > 0 && (
               <div className="col-span-2">
-                <span className="text-muted-foreground text-xs">Tags</span>
+                <span className="text-muted-foreground text-xs">{t('services.review.tags')}</span>
                 <div className="flex flex-wrap gap-1 mt-1">
                   {service.tags.map((tag) => (
                     <Badge key={tag} variant="secondary" className="text-xs font-normal">
@@ -189,18 +185,16 @@ export function StepServiceReview({
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="font-medium text-sm">Enable AI vectorisation</p>
+                <p className="font-medium text-sm">{t('services.vectorisation.toggleLabel')}</p>
                 <p className="text-xs text-muted-foreground mt-0.5 max-w-md">
-                  When enabled and the service is complete and active, service data is sent for
-                  vectorisation so customers can find it via AI search. Status and retry options are
-                  available from the service card.
+                  {t('services.vectorisation.toggleHelp')}
                 </p>
               </div>
               <Switch
                 checked={vectorisationEnabled}
                 onCheckedChange={setVectorisationEnabled}
                 disabled={isSaving || isLockedForVectorisation || isReadOnlyStatus}
-                aria-label="Enable AI vectorisation"
+                aria-label={t('services.vectorisation.toggleLabel')}
               />
             </div>
           </div>
@@ -209,18 +203,18 @@ export function StepServiceReview({
 
       {/* Activation checklist */}
       <div className="space-y-2">
-        <p className="text-sm font-medium">Publishing requirements</p>
+        <p className="text-sm font-medium">{t('services.review.requirements')}</p>
         {canPublish ? (
           <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
             <CheckCircle2 className="w-4 h-4" />
-            All requirements met — ready to publish
+            {t('services.review.requirementsMet')}
           </div>
         ) : (
           <ul className="space-y-1.5">
-            {activationErrors.map((err, i) => (
-              <li key={i} className="flex items-start gap-2 text-sm text-destructive">
+            {activationErrors.map((errorKey) => (
+              <li key={errorKey} className="flex items-start gap-2 text-sm text-destructive">
                 <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
-                {err}
+                {t(errorKey)}
               </li>
             ))}
           </ul>
@@ -231,7 +225,7 @@ export function StepServiceReview({
       <div className="flex items-center justify-between pt-2">
         <Button type="button" variant="ghost" size="sm" onClick={onBack} className="gap-1.5">
           <ChevronLeft className="w-4 h-4" />
-          Back
+          {t('common.actions.back')}
         </Button>
         <div className="flex items-center gap-2">
           {service?.status === 'draft' && (
@@ -241,7 +235,7 @@ export function StepServiceReview({
               onClick={() => onSaveDraft({ vectorisationEnabled })}
               disabled={isSaving || isLockedForVectorisation}
             >
-              Keep as draft
+              {t('services.review.keepDraft')}
             </Button>
           )}
           {showPublish && (
@@ -252,11 +246,11 @@ export function StepServiceReview({
               className="gap-1.5"
             >
               {isSaving ? (
-                'Publishing…'
+                t('services.review.publishing')
               ) : (
                 <>
                   <Globe className="w-4 h-4" />
-                  Publish
+                  {t('services.review.publish')}
                 </>
               )}
             </Button>
@@ -268,7 +262,7 @@ export function StepServiceReview({
               disabled={isSaving || isLockedForVectorisation}
               className="gap-1.5"
             >
-              {isSaving ? 'Saving…' : 'Save changes'}
+              {isSaving ? t('common.actions.saving') : t('common.actions.saveChanges')}
             </Button>
           )}
         </div>

@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import { uploadMediaWithProgress } from '@/services/files.service';
+import { useTranslation } from '@/i18n';
 import type { ApiFile } from '@/types/file.types';
 
 export interface BrandingImageUploadProps {
@@ -27,6 +28,7 @@ export function BrandingImageUpload({
     onChange,
     aspect = 'square',
 }: BrandingImageUploadProps) {
+    const { t } = useTranslation();
     const [uploading, setUploading] = useState(false);
     const [localPreview, setLocalPreview] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
@@ -93,13 +95,13 @@ export function BrandingImageUpload({
                         className="h-8 gap-1.5 text-xs"
                     >
                         {uploading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />}
-                        {hasImage ? 'Replace' : 'Upload'}
+                        {hasImage ? t('common.actions.change') : t('common.actions.upload')}
                     </Button>
                     {hasImage && (
                         <button
                             type="button"
                             onClick={handleRemove}
-                            aria-label={`Remove ${label}`}
+                            aria-label={t('settings.branding.removeImage', { label })}
                             className="text-muted-foreground hover:text-destructive transition-colors"
                         >
                             <X className="w-4 h-4" />

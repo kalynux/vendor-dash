@@ -1,21 +1,16 @@
 import { PackageX } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useTranslation, useFormatters, type TranslationKey } from '@/i18n';
 import type { DeliveryRejection } from '@/types';
 
 /** Friendly labels for the agency rejection reasons (see orders.md → `delivery.rejection`). */
-const REJECTION_REASON_LABELS: Record<string, string> = {
-  out_of_coverage_area: 'Out of coverage area',
-  capacity_exceeded: 'Agency capacity exceeded',
-  invalid_address: 'Invalid delivery address',
-  vendor_item_not_ready: 'Item not ready for pickup',
-  other: 'Other reason',
+const REJECTION_REASON_KEYS: Record<string, TranslationKey> = {
+  out_of_coverage_area: 'agency.rejectionReason.out_of_coverage_area',
+  capacity_exceeded: 'agency.rejectionReason.capacity_exceeded',
+  invalid_address: 'agency.rejectionReason.invalid_address',
+  vendor_item_not_ready: 'agency.rejectionReason.vendor_item_not_ready',
+  other: 'agency.rejectionReason.other',
 };
-
-/** Human-readable label for a rejection reason, with a graceful fallback for unknown values. */
-function deliveryRejectionReasonLabel(reason?: string): string {
-  if (!reason) return 'Rejected by agency';
-  return REJECTION_REASON_LABELS[reason] ?? reason.replace(/_/g, ' ');
-}
 
 interface DeliveryRejectionNoticeProps {
   rejection: DeliveryRejection;
@@ -29,10 +24,15 @@ interface DeliveryRejectionNoticeProps {
  * control sits alongside this notice).
  */
 export function DeliveryRejectionNotice({ rejection, size = 'sm' }: DeliveryRejectionNoticeProps) {
-  const formatDate = (dateStr: string) =>
-    new Date(dateStr).toLocaleString('en-US', {
-      month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit',
-    });
+  const { t } = useTranslation();
+  const fmt = useFormatters();
+
+  /** Localized reason, with a graceful fallback for values we don't know. */
+  const reasonLabel = (reason?: string): string => {
+    if (!reason) return t('agency.rejectionReason.unknown');
+    const key = REJECTION_REASON_KEYS[reason];
+    return key ? t(key) : reason.replace(/_/g, ' ');
+  };
 
   return (
     <div
@@ -44,20 +44,23 @@ export function DeliveryRejectionNotice({ rejection, size = 'sm' }: DeliveryReje
     >
       <div className="flex items-center gap-1.5 font-semibold text-red-700">
         <PackageX className={size === 'xs' ? 'w-3 h-3' : 'w-3.5 h-3.5'} />
-        Shipment declined by agency
+        {t('agency.reassign.declinedTitle')}
       </div>
       <p className="mt-1">
-        <span className="font-medium">Reason:</span> {deliveryRejectionReasonLabel(rejection.reason)}
+        <span className="font-medium">{t('agency.reassign.declinedReason')}</span>{' '}
+        {reasonLabel(rejection.reason)}
       </p>
       {rejection.note && (
         <p className="mt-0.5">
-          <span className="font-medium">Note:</span> {rejection.note}
+          <span className="font-medium">{t('agency.reassign.declinedNote')}</span> {rejection.note}
         </p>
       )}
       {rejection.rejectedAt && (
-        <p className="mt-0.5 text-red-600/80">Declined on {formatDate(rejection.rejectedAt)}</p>
+        <p className="mt-0.5 text-red-600/80">
+          {t('agency.reassign.declinedOn', { date: fmt.dateTime(rejection.rejectedAt) })}
+        </p>
       )}
-      <p className="mt-1 text-red-600/80">Reassign this item to another agency to continue.</p>
+      <p className="mt-1 text-red-600/80">{t('agency.reassign.declinedHint')}</p>
     </div>
   );
 }

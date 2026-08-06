@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { basicInfoSchema } from './product.schemas';
 import { PRODUCT_IMAGE_LIMIT } from '@/components/products/media.constants';
+import type { TranslationKey } from '@/i18n';
 import type {
   ApiProductDetail,
   ApiVariant,
@@ -20,23 +21,24 @@ const emptyToUndefined = (v: unknown) =>
       ? Number(v)
       : v;
 
-const requiredNumber = (message: string) =>
+// Messages are translation keys, not sentences — see the note in
+// `product.schemas.ts`. One key per field rather than a composed
+// `${label} must be…`, because that word order is English-only.
+
+const requiredNumber = (message: TranslationKey) =>
   z.preprocess(
     emptyToUndefined,
     z.number({ message }).refine(Number.isFinite, message),
   );
 
-const optionalNumber = (message = 'Must be a number') =>
+const optionalNumber = (message: TranslationKey = 'common.validation.number') =>
   z.preprocess(
     emptyToUndefined,
     z.number({ message }).refine(Number.isFinite, message).optional(),
   );
 
-const optionalNonNegative = (label: string) =>
-  optionalNumber(`${label} must be a number`).refine(
-    (n) => n === undefined || n >= 0,
-    `${label} must be 0 or more`,
-  );
+const optionalNonNegative = (message: TranslationKey) =>
+  optionalNumber(message).refine((n) => n === undefined || n >= 0, message);
 
 // ─── Schema ───────────────────────────────────────────────────────────────────
 // Extends basicInfoSchema rather than copying it: title 3–200, category,
@@ -49,48 +51,45 @@ const optionalNonNegative = (label: string) =>
 export const simpleProductSchema = basicInfoSchema.extend({
   fileIds: z
     .array(z.string())
-    .max(
-      PRODUCT_IMAGE_LIMIT.physical,
-      `A product can have at most ${PRODUCT_IMAGE_LIMIT.physical} images`,
-    )
+    .max(PRODUCT_IMAGE_LIMIT.physical, 'products.validation.imageLimit')
     .default([]),
 
   // Zero is rejected by the backend outright — a zero-priced product can never
   // be activated.
-  price: requiredNumber('Price is required').refine(
+  price: requiredNumber('products.validation.priceRequired').refine(
     (n) => n > 0,
-    'Price must be greater than 0',
+    'products.validation.priceGreaterThanZero',
   ),
-  compareAtPrice: optionalNonNegative('Compare-at price'),
+  compareAtPrice: optionalNonNegative('products.validation.compareAtMin'),
 
   stock: z.preprocess(
     emptyToUndefined,
     z
-      .number({ message: 'Stock must be a number' })
-      .int('Stock must be a whole number')
-      .min(0, 'Stock cannot be negative')
+      .number({ message: 'products.validation.stockNumber' })
+      .int('products.validation.stockInteger')
+      .min(0, 'products.validation.stockMin')
       .default(0),
   ),
   isInfiniteStock: z.boolean().default(false),
 
   sku: z
     .string()
-    .min(1, 'SKU cannot be empty')
-    .max(100, 'SKU must be 100 characters or less')
+    .min(1, 'products.validation.skuEmpty')
+    .max(100, 'products.validation.skuMax')
     .optional()
     .or(z.literal('')),
 
   // Edit-only — not accepted by POST /products/simple, dropped by toCreatePayload.
-  lowStockThreshold: optionalNumber('Low-stock threshold must be a number').refine(
+  lowStockThreshold: optionalNumber('products.validation.lowStockThreshold').refine(
     (n) => n === undefined || (Number.isInteger(n) && n >= 0),
-    'Low-stock threshold must be a whole number, 0 or more',
+    'products.validation.lowStockThreshold',
   ),
   allowOversell: z.boolean().default(false),
 
-  weight: optionalNonNegative('Weight'),
-  length: optionalNonNegative('Length'),
-  width: optionalNonNegative('Width'),
-  height: optionalNonNegative('Height'),
+  weight: optionalNonNegative('products.validation.weightMin'),
+  length: optionalNonNegative('products.validation.lengthMin'),
+  width: optionalNonNegative('products.validation.widthMin'),
+  height: optionalNonNegative('products.validation.heightMin'),
 });
 
 export type SimpleProductFormValues = z.infer<typeof simpleProductSchema>;

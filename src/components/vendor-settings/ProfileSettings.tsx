@@ -4,11 +4,13 @@ import { toast } from 'sonner';
 
 import { useOnboarding } from '@/onboarding/store/onboarding.store';
 import { useStoreStore } from '@/store';
-import { COUNTRIES, TIMEZONES } from '@/components/vendor-settings/forms/basicSetup.helpers';
-import { mapProfileError } from '@/components/vendor-settings/errors';
+import { PhoneInput } from '@/components/phone';
+import { normalizeStoredPhone, phoneErrorKey, toE164 } from '@/lib/phone';
+import { TIMEZONES } from '@/components/vendor-settings/forms/basicSetup.helpers';
 import { UnsavedChangesBar } from '@/components/vendor-settings/UnsavedChangesBar';
 import { MediaPicker } from '@/components/features/MediaPicker';
 import { resolveFileUrl } from '@/services/files.service';
+import { useTranslation, useApiError, useFormatters, LOCALES, SELECTABLE_LOCALES } from '@/i18n';
 import type { BrandingFileRef, VendorProfileUpdatePayload } from '@/types/api';
 import type { ApiFile } from '@/types/file.types';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -28,14 +30,16 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 
-/** Languages the backend renders notifications in (preferred_language). */
-const LANGUAGES = [
-  { value: 'en', label: 'English' },
-  { value: 'fr', label: 'French' },
-  { value: 'pt', label: 'Portuguese' },
-  { value: 'es', label: 'Spanish' },
-  { value: 'ar', label: 'Arabic' },
-];
+/**
+ * The languages on offer come straight from the i18n registry — only locales
+ * with a finished catalog, so a vendor can never select one that would render
+ * as English. This same value is `preferred_language` on the profile, which the
+ * backend uses for notifications, so the dashboard and the emails agree.
+ */
+const LANGUAGES = SELECTABLE_LOCALES.map((code) => ({
+  value: code,
+  label: LOCALES[code].nativeLabel,
+}));
 
 /** Up-to-two-letter initials for the avatar fallback. */
 function initialsFrom(name: string): string {
@@ -61,6 +65,9 @@ function initialsFrom(name: string): string {
  * backend exposes a dedicated field — it persists locally for now.
  */
 export function ProfileSettings() {
+  const { t, tDynamic, hasKey } = useTranslation();
+  const fmt = useFormatters();
+  const apiError = useApiError();
   const { session, updateVendorProfile, isSubmitting } = useOnboarding();
   const { store } = useStoreStore();
   const roleEntity = session?.role_entity;
@@ -70,7 +77,9 @@ export function ProfileSettings() {
   // Backed fields — dirty is derived by comparing against the live role_entity,
   // so a successful save (which merges into the session) auto-clears it.
   const [fullName, setFullName] = useState(roleEntity?.display_name ?? '');
-  const [phone, setPhone] = useState(roleEntity?.phone ?? '');
+  // Seeded canonically (E.164): a record saved before phone numbers were
+  // standardized would otherwise read as edited the moment the field renders.
+  const [phone, setPhone] = useState(() => normalizeStoredPhone(roleEntity?.phone));
   const [timezone, setTimezone] = useState(roleEntity?.timezone ?? '');
   const [language, setLanguage] = useState(roleEntity?.preferred_language ?? 'en');
 
@@ -80,7 +89,7 @@ export function ProfileSettings() {
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
 
   // Pending-backend field (local placeholder data for now).
-  const [whatsapp, setWhatsapp] = useState(roleEntity?.phone ?? '');
+  const [whatsapp, setWhatsapp] = useState(() => normalizeStoredPhone(roleEntity?.phone));
   const savedLocal = useRef({ whatsapp });
 
   if (!roleEntity || !session) return null;
@@ -90,9 +99,11 @@ export function ProfileSettings() {
   // fallback chain is personal display name → store name → email local-part.
   const displayLabel = fullName || store?.name || email.split('@')[0];
   const role = session.role; // e.g. "vendor" — not editable
-  const roleLabel = role.charAt(0).toUpperCase() + role.slice(1);
+  // Localized where we know the role, otherwise the raw value title-cased.
+  const roleKey = `account.profile.roles.${role}`;
+  const roleLabel = hasKey(roleKey) ? tDynamic(roleKey) : role.charAt(0).toUpperCase() + role.slice(1);
   const countryLabel = roleEntity.country
-    ? (COUNTRIES.find((c) => c.code === roleEntity.country)?.name ?? roleEntity.country)
+    ? fmt.country(roleEntity.country)
     : '—';
 
   // Saved avatar comes from the session; the local pending value overrides it
@@ -102,23 +113,28 @@ export function ProfileSettings() {
   const avatarUrl = displayedAvatar?.url;
   const avatarChanged = (displayedAvatar?.id ?? null) !== (savedAvatar?.id ?? null);
 
+  const savedPhone = normalizeStoredPhone(roleEntity.phone);
   const nameChanged = fullName !== (roleEntity.display_name ?? '');
-  const phoneChanged = phone !== (roleEntity.phone ?? '');
+  const phoneChanged = phone !== savedPhone;
   const timezoneChanged = timezone !== (roleEntity.timezone ?? '');
   const languageChanged = language !== (roleEntity.preferred_language ?? 'en');
+  const whatsappChanged = whatsapp !== savedLocal.current.whatsapp;
   const dirty =
     nameChanged ||
     phoneChanged ||
     timezoneChanged ||
     languageChanged ||
     avatarChanged ||
-    whatsapp !== savedLocal.current.whatsapp;
+    whatsappChanged;
 
-  // displayName (2–100 chars) and phone (8–20 chars) are NOT clearable —
-  // sending "" would be rejected (README Conventions), so block empty edits.
+  // displayName (2–100 chars) and phone are NOT clearable — sending "" would be
+  // rejected (README Conventions), so block empty edits. The phone is validated
+  // against its country's numbering plan and stored as E.164. Both checks are
+  // gated on "changed" so an unparseable legacy value doesn't lock the vendor
+  // out of editing everything else on the tab.
   const nameInvalid = nameChanged && fullName.trim().length < 2;
-  const phoneInvalid =
-    phoneChanged && (phone.trim().length < 8 || phone.trim().length > 20);
+  const phoneInvalid = phoneChanged && phoneErrorKey(phone, { required: true }) !== null;
+  const whatsappInvalid = whatsappChanged && phoneErrorKey(whatsapp) !== null;
 
   // The MediaPicker returns a library file (uploading, if needed, happens inside
   // the picker). We keep the populated file ref and persist its id on save.
@@ -141,7 +157,7 @@ export function ProfileSettings() {
 
   const handleDiscard = () => {
     setFullName(roleEntity.display_name ?? '');
-    setPhone(roleEntity.phone ?? '');
+    setPhone(savedPhone);
     setTimezone(roleEntity.timezone ?? '');
     setLanguage(roleEntity.preferred_language ?? 'en');
     setPendingAvatar(undefined);
@@ -150,8 +166,8 @@ export function ProfileSettings() {
   };
 
   const handleSave = async () => {
-    if (nameInvalid || phoneInvalid) {
-      setError('Please fix the highlighted fields before saving.');
+    if (nameInvalid || phoneInvalid || whatsappInvalid) {
+      setError(t('common.validation.fixHighlighted'));
       return;
     }
     setError(null);
@@ -161,7 +177,8 @@ export function ProfileSettings() {
       // whatsapp is not yet accepted by the backend — kept local.
       const payload: Omit<VendorProfileUpdatePayload, 'version'> = {};
       if (nameChanged) payload.displayName = fullName.trim();
-      if (phoneChanged) payload.phone = phone.trim();
+      // E.164 — `phoneInvalid` above guarantees this parses.
+      if (phoneChanged) payload.phone = toE164(phone) ?? phone.trim();
       if (timezoneChanged) payload.timezone = timezone;
       if (languageChanged) payload.preferred_language = language;
       // `null` detaches the avatar; a file id attaches the newly uploaded one.
@@ -177,9 +194,9 @@ export function ProfileSettings() {
         if (avatarChanged) setPendingAvatar(undefined);
       }
       savedLocal.current = { whatsapp };
-      toast.success('Profile updated');
+      toast.success(t('account.profile.updated'));
     } catch (err) {
-      setError(mapProfileError(err));
+      setError(apiError.resolve(err));
     }
   };
 
@@ -196,14 +213,8 @@ export function ProfileSettings() {
 
       <SettingsSections>
       <SettingsSection
-        title="Profile"
-        info={
-          <>
-            Your personal details. The name and photo here are what teammates and
-            support see — your public storefront name lives under the Store tab.
-            Tap your photo to pick a new one from your media library.
-          </>
-        }
+        title={t('account.profile.title')}
+        info={t('account.profile.info')}
         contentClassName="space-y-5"
       >
           {/* Avatar */}
@@ -225,7 +236,7 @@ export function ProfileSettings() {
                   <button
                     type="button"
                     onClick={() => setAvatarPickerOpen(true)}
-                    aria-label="Change photo"
+                    aria-label={t('account.profile.changePhoto')}
                     className="absolute bottom-0 right-0 p-2 rounded-full bg-primary text-primary-foreground shadow-md hover:opacity-90 transition-opacity"
                   >
                     <Camera className="w-4 h-4" />
@@ -236,7 +247,7 @@ export function ProfileSettings() {
                 <button
                   type="button"
                   onClick={() => setAvatarPickerOpen(true)}
-                  aria-label="Add photo"
+                  aria-label={t('account.profile.addPhoto')}
                   className="group relative rounded-full"
                 >
                   <Avatar className="w-24 h-24 ring-2 ring-border">
@@ -259,7 +270,7 @@ export function ProfileSettings() {
                   onClick={handleRemoveAvatar}
                   className="text-xs text-destructive hover:underline"
                 >
-                  Remove photo
+                  {t('account.profile.removePhoto')}
                 </button>
               )}
             </div>
@@ -269,26 +280,26 @@ export function ProfileSettings() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="profile-name">Full Name</Label>
+              <Label htmlFor="profile-name">{t('account.profile.fullName')}</Label>
               <Input
                 id="profile-name"
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
-                placeholder="Your name"
+                placeholder={t('account.profile.fullNamePlaceholder')}
                 aria-invalid={nameInvalid}
               />
               {nameInvalid && (
-                <p className="text-xs text-destructive">Name must be at least 2 characters.</p>
+                <p className="text-xs text-destructive">{t('account.profile.nameTooShort')}</p>
               )}
             </div>
 
             <div className="space-y-2">
               <LabelWithHint
                 htmlFor="profile-email"
-                hintLabel="About your email"
-                hint="This is the address you sign in with, and where receipts and account notices are sent. It can't be edited here — contact support to change it."
+                hintLabel={t('account.profile.emailHintLabel')}
+                hint={t('account.profile.emailHint')}
               >
-                Email
+                {t('account.profile.email')}
               </LabelWithHint>
               <Input id="profile-email" type="email" value={email} disabled />
             </div>
@@ -296,46 +307,42 @@ export function ProfileSettings() {
             <div className="space-y-2">
               <LabelWithHint
                 htmlFor="profile-phone"
-                hintLabel="About your phone number"
-                hint="Your account phone number, used for account and payout follow-ups. Include the country code, e.g. +237699000001. Between 8 and 20 characters."
+                hintLabel={t('account.profile.phoneHintLabel')}
+                hint={t('account.profile.phoneHint')}
               >
-                Phone
+                {t('account.profile.phone')}
               </LabelWithHint>
-              <Input
+              <PhoneInput
                 id="profile-phone"
                 value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="+237 6XX XXX XXX"
-                aria-invalid={phoneInvalid}
+                onChange={setPhone}
+                required
+                invalid={phoneInvalid}
               />
-              {phoneInvalid && (
-                <p className="text-xs text-destructive">Phone must be 8–20 characters.</p>
-              )}
             </div>
 
             <div className="space-y-2">
               <LabelWithHint
                 htmlFor="profile-whatsapp"
-                hintLabel="About your WhatsApp number"
-                hint="The number you take order questions on. Separate from your account phone — the one customers see on your storefront is set under Store → Support & contact."
+                hintLabel={t('account.profile.whatsappHintLabel')}
+                hint={t('account.profile.whatsappHint')}
               >
-                WhatsApp Number
+                {t('account.profile.whatsapp')}
               </LabelWithHint>
-              <Input
+              <PhoneInput
                 id="profile-whatsapp"
                 value={whatsapp}
-                onChange={(e) => setWhatsapp(e.target.value)}
-                placeholder="+237 6XX XXX XXX"
+                onChange={setWhatsapp}
               />
             </div>
 
             <div className="space-y-2 md:col-span-2">
               <LabelWithHint
                 htmlFor="profile-role"
-                hintLabel="About your role"
-                hint="What this account may do on the platform. Set by the platform and not editable."
+                hintLabel={t('account.profile.roleHintLabel')}
+                hint={t('account.profile.roleHint')}
               >
-                Role
+                {t('account.profile.role')}
               </LabelWithHint>
               <div className="relative">
                 <Input id="profile-role" value={roleLabel} disabled />
@@ -347,37 +354,42 @@ export function ProfileSettings() {
 
       {/* Localization — profile-level regional settings (PATCH /vendor/profile) */}
       <SettingsSection
-        title="Localization"
+        title={t('account.localization.title')}
         icon={Globe}
-        info="Where you operate and in which language you're contacted. Your country drives tax, shipping and address rules; your timezone is used for every date and time in the dashboard."
+        info={t('account.localization.info')}
       >
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <LabelWithHint
-                hintLabel="About your country"
-                hint="Set once during onboarding and locked afterwards — it decides your tax, shipping, and address rules, and your business addresses must fall inside it. Contact support if it needs to change."
+                hintLabel={t('account.localization.countryHintLabel')}
+                hint={t('account.localization.countryHint')}
               >
-                <Lock className="mr-1.5 w-3 h-3 text-muted-foreground" /> Country
+                <Lock className="mr-1.5 w-3 h-3 text-muted-foreground" /> {t('account.localization.country')}
               </LabelWithHint>
-              <Input value={countryLabel} disabled readOnly aria-label="Country (read-only)" />
+              <Input
+                value={countryLabel}
+                disabled
+                readOnly
+                aria-label={t('account.localization.countryReadOnly')}
+              />
             </div>
 
             <div className="space-y-2">
               <LabelWithHint
                 htmlFor="profile-timezone"
-                hintLabel="About your timezone"
-                hint="Every order time, report, and schedule in the dashboard is shown in this zone. Changing it re-labels existing timestamps; it doesn't move them."
+                hintLabel={t('account.localization.timezoneHintLabel')}
+                hint={t('account.localization.timezoneHint')}
               >
-                Timezone
+                {t('account.localization.timezone')}
               </LabelWithHint>
               <Select value={timezone} onValueChange={setTimezone}>
                 <SelectTrigger id="profile-timezone">
-                  <SelectValue placeholder="Select your timezone" />
+                  <SelectValue placeholder={t('account.localization.timezonePlaceholder')} />
                 </SelectTrigger>
                 <SelectContent>
                   {TIMEZONES.map((tz) => (
                     <SelectItem key={tz.value} value={tz.value}>
-                      {tz.label}
+                      {`${t(tz.cityKey)} (${tz.offset})`}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -387,14 +399,14 @@ export function ProfileSettings() {
             <div className="space-y-2">
               <LabelWithHint
                 htmlFor="profile-language"
-                hintLabel="About your language"
-                hint="The language your notifications are written in — email, WhatsApp, Telegram and in-app alerts. It does not change the language of this dashboard."
+                hintLabel={t('account.localization.languageHintLabel')}
+                hint={t('account.localization.languageHint')}
               >
-                Language
+                {t('account.localization.language')}
               </LabelWithHint>
               <Select value={language} onValueChange={setLanguage}>
                 <SelectTrigger id="profile-language">
-                  <SelectValue placeholder="Select a language" />
+                  <SelectValue placeholder={t('account.localization.languagePlaceholder')} />
                 </SelectTrigger>
                 <SelectContent>
                   {LANGUAGES.map((l) => (

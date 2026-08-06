@@ -15,7 +15,7 @@ import { fetchDefaultDeliveryAgency } from '@/services/agencies.service';
 import { getActiveConnectedAgencies, getAgencyConnectionErrorMessage } from '@/services/agency-connections.service';
 import { getDeliveryErrorMessage } from '@/services/products.service';
 import { useOnboarding } from '@/onboarding/store/onboarding.store';
-import { ApiError } from '@/types/api';
+import { useApiError, useMessage, useTranslation } from '@/i18n';
 import type { VendorAgencyListItemDto, ApiPickupLocation, PickupLocationSource } from '@/types/product.types';
 
 interface AgencySelectorProps {
@@ -45,6 +45,9 @@ export function AgencySelector({
   onPickupLocationChange,
   onAvailabilityResolved,
 }: AgencySelectorProps) {
+  const { t } = useTranslation();
+  const m = useMessage();
+  const apiError = useApiError();
   const { session } = useOnboarding();
   const businessAddresses = session?.role_entity.business_addresses ?? [];
   const [agencies, setAgencies] = useState<VendorAgencyListItemDto[]>([]);
@@ -69,9 +72,7 @@ export function AgencySelector({
         onAvailabilityResolved?.({ defaultAgency: defaultResult });
       } catch (err: unknown) {
         if (cancelled) return;
-        const msg =
-          err instanceof ApiError ? err.message : 'Could not load delivery agencies.';
-        setLoadError(msg);
+        setLoadError('products.delivery.loadAgenciesFailed');
       } finally {
         if (!cancelled) setIsLoading(false);
       }
@@ -168,8 +169,7 @@ export function AgencySelector({
     try {
       await onFreeDeliveryChange(checked);
     } catch (err: unknown) {
-      const msg = err instanceof ApiError ? err.message : 'Could not update free delivery.';
-      toast.error(msg);
+      apiError.toast(err, { fallbackKey: 'products.errors.freeDeliveryFailed' });
     }
   }
 
@@ -178,10 +178,9 @@ export function AgencySelector({
       <div className="flex items-start gap-3">
         <Truck className="w-5 h-5 text-muted-foreground mt-0.5 shrink-0" />
         <div className="flex-1 min-w-0">
-          <p className="font-medium text-sm">Delivery agency</p>
+          <p className="font-medium text-sm">{t('products.delivery.agencyLabel')}</p>
           <p className="text-xs text-muted-foreground mt-0.5">
-            The agency that will fulfill orders for this product. Only agencies
-            with an active connection can be assigned.
+            {t('products.delivery.agencyDescription')}
           </p>
         </div>
       </div>
@@ -189,20 +188,22 @@ export function AgencySelector({
       {isLoading ? (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="w-4 h-4 animate-spin" />
-          Loading agencies…
+          {t('products.delivery.loadingAgencies')}
         </div>
       ) : loadError ? (
         <div className="flex items-start gap-2 text-sm text-destructive">
           <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
-          <span>{loadError}</span>
+          <span>{m(loadError)}</span>
         </div>
       ) : agencies.length === 0 && !defaultAgency ? (
         <div className="rounded-lg border border-dashed p-4 text-center space-y-2">
           <p className="text-sm text-muted-foreground">
-            You have no active delivery-agency connections yet.
+            {t('products.delivery.noConnections')}
           </p>
           <Button asChild size="sm" variant="outline">
-            <Link to="/dashboard/agency/connections">Go to Agency &rarr; Connection</Link>
+            <Link to="/dashboard/agency/connections">
+              {t('products.delivery.goToConnections')}
+            </Link>
           </Button>
         </div>
       ) : (
@@ -213,12 +214,12 @@ export function AgencySelector({
             disabled={isSaving || !productId}
           >
             <SelectTrigger className="w-full" data-size="default">
-              <SelectValue placeholder="Select an agency" />
+              <SelectValue placeholder={t('products.delivery.agencyPlaceholder')} />
             </SelectTrigger>
             <SelectContent>
               {defaultAgency && (
                 <SelectItem value="default">
-                  Use my default — {defaultAgency.agencyName}
+                  {t('products.delivery.agencyDefaultNamed', { name: defaultAgency.agencyName })}
                 </SelectItem>
               )}
               {agencies.map((agency) => (
@@ -232,20 +233,14 @@ export function AgencySelector({
           {noUsableAgency && (
             <div className="flex items-start gap-2 text-xs text-destructive">
               <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-              <span>
-                You have no default delivery agency. Pick one for this product or
-                set a default in your profile before publishing.
-              </span>
+              <span>{t('products.delivery.noDefaultAgency')}</span>
             </div>
           )}
 
           {defaultConnectionLost && !productAgencyId && (
             <div className="flex items-start gap-2 text-xs text-destructive">
               <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-              <span>
-                Your default agency's connection is no longer active. Pick another
-                agency here or update your default in Settings.
-              </span>
+              <span>{t('products.delivery.defaultConnectionLost')}</span>
             </div>
           )}
 
@@ -253,7 +248,7 @@ export function AgencySelector({
             <div className="flex items-start gap-2 text-xs text-muted-foreground">
               <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
               <span>
-                The system will use your default agency — {effectiveAgency.agencyName}.
+                {t('products.delivery.usingDefaultAgency', { name: effectiveAgency.agencyName })}
               </span>
             </div>
           )}
@@ -266,23 +261,22 @@ export function AgencySelector({
           <div className="flex items-start gap-3">
             <MapPin className="w-5 h-5 text-muted-foreground mt-0.5 shrink-0" />
             <div className="flex-1 min-w-0">
-              <p className="font-medium text-sm">Pickup location</p>
+              <p className="font-medium text-sm">{t('products.delivery.pickupLabel')}</p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Where the delivery agency collects this product from. Required to publish.
+                {t('products.delivery.pickupDescription')}
               </p>
             </div>
           </div>
 
           {!effectiveAgency ? (
             <p className="text-xs text-muted-foreground">
-              Assign a delivery agency above first.
+              {t('products.delivery.pickupNeedsAgency')}
             </p>
           ) : noPickupSourcesAvailable ? (
             <div className="flex items-start gap-2 text-xs text-destructive">
               <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
               <span>
-                {effectiveAgency.agencyName} doesn't support pickup from your address or agency
-                storage. Choose a different agency.
+                {t('products.delivery.pickupNoSources', { name: effectiveAgency.agencyName })}
               </span>
             </div>
           ) : (
@@ -293,14 +287,18 @@ export function AgencySelector({
                 disabled={isSaving || pickupSaving || !productId}
               >
                 <SelectTrigger className="w-full" data-size="default">
-                  <SelectValue placeholder="Select a pickup method" />
+                  <SelectValue placeholder={t('products.delivery.pickupPlaceholder')} />
                 </SelectTrigger>
                 <SelectContent>
                   {canPickupFromAddress && (
-                    <SelectItem value="vendor_address">Collect from my address</SelectItem>
+                    <SelectItem value="vendor_address">
+                      {t('products.delivery.pickupFromAddress')}
+                    </SelectItem>
                   )}
                   {canUseAgencyStorage && (
-                    <SelectItem value="agency_storage">Agency already stores my stock</SelectItem>
+                    <SelectItem value="agency_storage">
+                      {t('products.delivery.pickupFromAgency')}
+                    </SelectItem>
                   )}
                 </SelectContent>
               </Select>
@@ -309,10 +307,12 @@ export function AgencySelector({
                 businessAddresses.length === 0 ? (
                   <div className="rounded-lg border border-dashed p-4 text-center space-y-2">
                     <p className="text-sm text-muted-foreground">
-                      You have no business addresses yet.
+                      {t('products.delivery.noAddresses')}
                     </p>
                     <Button asChild size="sm" variant="outline">
-                      <Link to="/dashboard/account/addresses">Go to Account &rarr; Addresses</Link>
+                      <Link to="/dashboard/account/addresses">
+                        {t('products.delivery.goToAddresses')}
+                      </Link>
                     </Button>
                   </div>
                 ) : (
@@ -322,7 +322,7 @@ export function AgencySelector({
                     disabled={isSaving || pickupSaving || !productId}
                   >
                     <SelectTrigger className="w-full" data-size="default">
-                      <SelectValue placeholder="Select a business address" />
+                      <SelectValue placeholder={t('products.delivery.addressPlaceholder')} />
                     </SelectTrigger>
                     <SelectContent>
                       {businessAddresses.filter((addr) => !!addr._id).map((addr) => (
@@ -339,7 +339,9 @@ export function AgencySelector({
               {localSource === 'agency_storage' && (
                 <div className="flex items-start gap-2 text-xs text-muted-foreground">
                   <Warehouse className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-                  <span>{effectiveAgency.agencyName} already warehouses this product's stock.</span>
+                  <span>
+                    {t('products.delivery.pickupWarehoused', { name: effectiveAgency.agencyName })}
+                  </span>
                 </div>
               )}
             </>
@@ -351,17 +353,16 @@ export function AgencySelector({
         <Gift className="w-5 h-5 text-muted-foreground mt-0.5 shrink-0" />
         <div className="flex-1 min-w-0 flex items-center justify-between gap-3">
           <div>
-            <p className="font-medium text-sm">Free delivery</p>
+            <p className="font-medium text-sm">{t('products.delivery.freeDelivery')}</p>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Advertise this product as free delivery. Does not change agency
-              resolution or fee calculation.
+              {t('products.delivery.freeDeliveryHint')}
             </p>
           </div>
           <Switch
             checked={freeDelivery}
             onCheckedChange={handleFreeDeliveryToggle}
             disabled={isSaving || !productId}
-            aria-label="Free delivery"
+            aria-label={t('products.delivery.freeDelivery')}
           />
         </div>
       </div>

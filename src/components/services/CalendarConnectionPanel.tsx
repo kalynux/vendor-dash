@@ -20,13 +20,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { ApiError } from '@/types/api';
+import { useTranslation, useFormatters, useApiError } from '@/i18n';
 import {
   fetchCalendarStatus,
   disconnectCalendar,
   getCalendarConnectUrl,
 } from '@/services/services.service';
-import { formatDateTime } from '@/components/services/service.constants';
 import type { CalendarStatus } from '@/types/services.types';
 
 interface CalendarConnectionPanelProps {
@@ -37,6 +36,9 @@ interface CalendarConnectionPanelProps {
 }
 
 export function CalendarConnectionPanel({ refreshKey, onStatusChange }: CalendarConnectionPanelProps) {
+  const { t } = useTranslation();
+  const fmt = useFormatters();
+  const apiError = useApiError();
   const [status, setStatus] = useState<CalendarStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -51,11 +53,11 @@ export function CalendarConnectionPanel({ refreshKey, onStatusChange }: Calendar
       setStatus(data);
       onStatusChange?.(data);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Failed to load calendar status');
+      setError(apiError.resolve(err, { fallbackKey: 'services.errors.loadCalendarStatusFailed' }));
     } finally {
       setLoading(false);
     }
-  }, [onStatusChange]);
+  }, [onStatusChange, apiError]);
 
   useEffect(() => {
     load();
@@ -72,11 +74,11 @@ export function CalendarConnectionPanel({ refreshKey, onStatusChange }: Calendar
     setDisconnecting(true);
     try {
       await disconnectCalendar();
-      toast.success('Google Calendar disconnected');
+      toast.success(t('services.calendarPanel.disconnectedToast'));
       setConfirmOpen(false);
       await load();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Failed to disconnect');
+      apiError.toast(err, { fallbackKey: 'services.errors.disconnectFailed' });
     } finally {
       setDisconnecting(false);
     }
@@ -98,7 +100,7 @@ export function CalendarConnectionPanel({ refreshKey, onStatusChange }: Calendar
         <TriangleAlert className="mx-auto h-8 w-8 text-muted-foreground" />
         <p className="text-sm text-muted-foreground">{error}</p>
         <Button variant="outline" size="sm" onClick={load} className="gap-2">
-          <RefreshCw className="h-4 w-4" /> Retry
+          <RefreshCw className="h-4 w-4" /> {t('common.actions.retry')}
         </Button>
       </div>
     );
@@ -115,15 +117,14 @@ export function CalendarConnectionPanel({ refreshKey, onStatusChange }: Calendar
             <CalendarX2 className="h-5 w-5 text-muted-foreground" />
           </div>
           <div className="space-y-1">
-            <h3 className="font-semibold">Connect Google Calendar</h3>
+            <h3 className="font-semibold">{t('services.calendarPanel.connectTitle')}</h3>
             <p className="text-sm text-muted-foreground">
-              Customers can only book once your calendar is connected — bookings are written as
-              events on it, and your existing busy times are blocked from offered slots.
+              {t('services.calendarPanel.connectDescription')}
             </p>
           </div>
         </div>
         <Button onClick={handleConnect} className="gap-2">
-          <CalendarCheck2 className="h-4 w-4" /> Connect Google Calendar
+          <CalendarCheck2 className="h-4 w-4" /> {t('services.calendarPanel.connect')}
         </Button>
       </div>
     );
@@ -136,13 +137,10 @@ export function CalendarConnectionPanel({ refreshKey, onStatusChange }: Calendar
         <div className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300">
           <TriangleAlert className="mt-0.5 h-5 w-5 flex-shrink-0" />
           <div className="space-y-2 text-sm">
-            <p className="font-medium">Reconnection required</p>
-            <p>
-              Access to your Google Calendar was revoked or expired. Reconnect to keep accepting
-              bookings.
-            </p>
+            <p className="font-medium">{t('services.calendarPanel.reauthTitle')}</p>
+            <p>{t('services.calendarPanel.reauthDescription')}</p>
             <Button size="sm" onClick={handleConnect} className="gap-2">
-              <RefreshCw className="h-4 w-4" /> Reconnect
+              <RefreshCw className="h-4 w-4" /> {t('services.calendarPanel.reconnect')}
             </Button>
           </div>
         </div>
@@ -154,14 +152,16 @@ export function CalendarConnectionPanel({ refreshKey, onStatusChange }: Calendar
             <CalendarCheck2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
           </div>
           <div>
-            <h3 className="font-semibold">Connected</h3>
+            <h3 className="font-semibold">{t('services.calendarPanel.connected')}</h3>
             <p className="text-sm text-muted-foreground">{status.email}</p>
             {status.calendarId && (
-              <p className="text-xs text-muted-foreground">Calendar: {status.calendarId}</p>
+              <p className="text-xs text-muted-foreground">
+                {t('services.calendarPanel.calendarId', { id: status.calendarId })}
+              </p>
             )}
             {status.lastSyncAt && (
               <p className="text-xs text-muted-foreground">
-                Last synced {formatDateTime(status.lastSyncAt)}
+                {t('services.calendarPanel.lastSynced', { date: fmt.dateTime(status.lastSyncAt) })}
               </p>
             )}
           </div>
@@ -172,14 +172,14 @@ export function CalendarConnectionPanel({ refreshKey, onStatusChange }: Calendar
           onClick={() => setConfirmOpen(true)}
           className="gap-2 text-destructive hover:text-destructive"
         >
-          <CalendarX2 className="h-4 w-4" /> Disconnect
+          <CalendarX2 className="h-4 w-4" /> {t('services.calendarPanel.disconnect')}
         </Button>
       </div>
 
       {status.permissions.length > 0 && (
         <div className="space-y-2">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            Granted permissions
+            {t('services.calendarPanel.permissions')}
           </p>
           <ul className="space-y-1.5">
             {status.permissions.map((p) => (
@@ -195,13 +195,15 @@ export function CalendarConnectionPanel({ refreshKey, onStatusChange }: Calendar
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Disconnect Google Calendar?</AlertDialogTitle>
+            <AlertDialogTitle>{t('services.calendarPanel.disconnectTitle')}</AlertDialogTitle>
             <AlertDialogDescription>
-              New bookings will be blocked until you reconnect. Existing bookings are not deleted.
+              {t('services.calendarPanel.disconnectDescription')}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={disconnecting}>Keep connected</AlertDialogCancel>
+            <AlertDialogCancel disabled={disconnecting}>
+              {t('services.calendarPanel.keepConnected')}
+            </AlertDialogCancel>
             <AlertDialogAction
               onClick={(e) => {
                 e.preventDefault();
@@ -210,7 +212,9 @@ export function CalendarConnectionPanel({ refreshKey, onStatusChange }: Calendar
               disabled={disconnecting}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              {disconnecting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Disconnect'}
+              {disconnecting
+                ? <Loader2 className="h-4 w-4 animate-spin" />
+                : t('services.calendarPanel.disconnect')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

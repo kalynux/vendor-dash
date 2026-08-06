@@ -22,7 +22,7 @@ import { SalesChart } from '@/components/features/SalesChart';
 import { TopProductsList } from '@/components/features/TopProductsList';
 import { DateRangePicker } from '@/components/features/DateRangePicker';
 import { cn } from '@/lib/utils';
-import { formatMoney } from '@/components/customers/customer.constants';
+import { useTranslation, useFormatters } from '@/i18n';
 
 interface MetricCardProps {
   title: string;
@@ -33,6 +33,7 @@ interface MetricCardProps {
 }
 
 function MetricCard({ title, value, change, changeType, icon: Icon }: MetricCardProps) {
+  const { t } = useTranslation();
   return (
     <div className="animate-fade-in h-full">
       <Card className="hover:shadow-lg transition-shadow h-full">
@@ -62,7 +63,9 @@ function MetricCard({ title, value, change, changeType, icon: Icon }: MetricCard
                 >
                   {change > 0 ? '+' : ''}{change}%
                 </span>
-                <span className="hidden sm:inline text-sm text-muted-foreground">vs last period</span>
+                <span className="hidden sm:inline text-sm text-muted-foreground">
+                  {t('overview.metrics.vsLastPeriod')}
+                </span>
               </div>
             </div>
             <div className="hidden sm:block p-3 bg-primary/10 rounded-lg flex-shrink-0">
@@ -122,11 +125,14 @@ function useTwoUpMetrics(values: string[]) {
   return { gridRef, measureRef, twoUp };
 }
 
-// Analytics totals carry no per-currency field; use the platform default (XAF)
-// via the shared, currency-aware formatter.
-const formatCurrency = (value: number) => formatMoney(value);
-
 export function Analytics() {
+  const { t } = useTranslation();
+  const fmt = useFormatters();
+
+  // Analytics totals carry no per-currency field; use the platform default (XAF)
+  // via the shared, locale-aware formatter.
+  const formatCurrency = (value: number) => fmt.currency(value);
+
   const {
     metrics,
     topProducts,
@@ -146,35 +152,36 @@ export function Analytics() {
   const metricTiles = useMemo(
     () => [
       {
-        title: 'Total Sales',
-        value: formatCurrency(metrics.totalSales.value),
+        title: t('overview.metrics.totalSales'),
+        value: fmt.currency(metrics.totalSales.value),
         change: metrics.totalSales.change,
         changeType: metrics.totalSales.changeType,
         icon: DollarSign,
       },
       {
-        title: 'Total Orders',
-        value: metrics.totalOrders.value.toString(),
+        title: t('overview.metrics.totalOrders'),
+        value: fmt.number(metrics.totalOrders.value),
         change: metrics.totalOrders.change,
         changeType: metrics.totalOrders.changeType,
         icon: ShoppingCart,
       },
       {
-        title: 'Net Revenue',
-        value: formatCurrency(metrics.netRevenue.value),
+        title: t('overview.metrics.netRevenue'),
+        value: fmt.currency(metrics.netRevenue.value),
         change: metrics.netRevenue.change,
         changeType: metrics.netRevenue.changeType,
         icon: Wallet,
       },
       {
-        title: 'Average Order Value',
-        value: formatCurrency(metrics.averageOrderValue.value),
+        title: t('overview.metrics.averageOrderValue'),
+        value: fmt.currency(metrics.averageOrderValue.value),
         change: metrics.averageOrderValue.change,
         changeType: metrics.averageOrderValue.changeType,
         icon: Users,
       },
     ],
-    [metrics],
+    // `t` and `fmt` are memoized per locale, so this recomputes on a language switch.
+    [metrics, t, fmt],
   );
 
   const { gridRef, measureRef, twoUp } = useTwoUpMetrics(metricTiles.map((m) => m.value));
@@ -184,16 +191,14 @@ export function Analytics() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Analytics</h1>
-          <p className="text-muted-foreground">
-            Track your store performance and insights
-          </p>
+          <h1 className="text-2xl font-bold">{t('analytics.title')}</h1>
+          <p className="text-muted-foreground">{t('analytics.headerSubtitle')}</p>
         </div>
         <div className="flex items-center gap-3">
           <DateRangePicker value={dateRange} onChange={setDateRange} />
           <Button variant="outline" className="gap-2">
             <Download className="w-4 h-4" />
-            Export
+            {t('analytics.export')}
           </Button>
         </div>
       </div>
@@ -203,10 +208,7 @@ export function Analytics() {
         <Card className="border-amber-200 bg-amber-50">
           <CardContent className="flex items-center gap-3 p-4 text-amber-800">
             <AlertCircle className="w-5 h-5 flex-shrink-0" />
-            <p className="text-sm">
-              Analytics for this period aren&apos;t ready yet. Data is aggregated daily — please
-              check back shortly.
-            </p>
+            <p className="text-sm">{t('analytics.notReady')}</p>
           </CardContent>
         </Card>
       )}
@@ -240,19 +242,19 @@ export function Analytics() {
         <TabsList className="grid w-full grid-cols-4 lg:w-auto lg:inline-grid">
           <TabsTrigger value="overview" className="gap-2">
             <BarChart3 className="w-4 h-4" />
-            Overview
+            {t('analytics.tabs.overview')}
           </TabsTrigger>
           <TabsTrigger value="sales" className="gap-2">
             <LineChart className="w-4 h-4" />
-            Sales
+            {t('analytics.tabs.sales')}
           </TabsTrigger>
           <TabsTrigger value="products" className="gap-2">
             <PieChart className="w-4 h-4" />
-            Products
+            {t('analytics.tabs.products')}
           </TabsTrigger>
           <TabsTrigger value="customers" className="gap-2">
             <Users className="w-4 h-4" />
-            Customers
+            {t('analytics.tabs.customers')}
           </TabsTrigger>
         </TabsList>
 
@@ -261,17 +263,17 @@ export function Analytics() {
             <Card className="lg:col-span-2">
               <CardHeader className="flex flex-row items-center justify-between">
                 <div>
-                  <CardTitle>Sales Performance</CardTitle>
-                  <CardDescription>Daily sales and order trends</CardDescription>
+                  <CardTitle>{t('analytics.charts.salesTitle')}</CardTitle>
+                  <CardDescription>{t('analytics.charts.salesDescription')}</CardDescription>
                 </div>
                 <div className="flex items-center gap-2">
                   <Badge variant="secondary" className="gap-1">
                     <div className="w-2 h-2 rounded-full bg-primary" />
-                    Sales
+                    {t('analytics.charts.legendSales')}
                   </Badge>
                   <Badge variant="outline" className="gap-1">
                     <div className="w-2 h-2 rounded-full bg-blue-400" />
-                    Orders
+                    {t('analytics.charts.legendOrders')}
                   </Badge>
                 </div>
               </CardHeader>
@@ -282,33 +284,33 @@ export function Analytics() {
 
             <Card>
               <CardHeader>
-                <CardTitle>Store Snapshot</CardTitle>
-                <CardDescription>Customers &amp; bookings this period</CardDescription>
+                <CardTitle>{t('analytics.charts.snapshotTitle')}</CardTitle>
+                <CardDescription>{t('analytics.charts.snapshotDescription')}</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
                   <div className="flex justify-between items-center">
-                    <span className="text-muted-foreground">Customers</span>
+                    <span className="text-muted-foreground">{t('analytics.snapshot.customers')}</span>
                     <span className="text-2xl font-bold">{customerMetrics?.total ?? 0}</span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-muted-foreground">Repeat customers</span>
+                    <span className="text-muted-foreground">{t('analytics.snapshot.repeatCustomers')}</span>
                     <span className="text-lg font-semibold">{customerMetrics?.repeat ?? 0}</span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-muted-foreground">Repeat rate</span>
+                    <span className="text-muted-foreground">{t('analytics.snapshot.repeatRate')}</span>
                     <span className="text-lg font-semibold">
                       {customerMetrics?.repeatRate ?? 0}%
                     </span>
                   </div>
                   <div className="border-t pt-4 flex justify-between items-center">
                     <span className="text-muted-foreground flex items-center gap-1.5">
-                      <CalendarClock className="w-4 h-4" /> Bookings
+                      <CalendarClock className="w-4 h-4" /> {t('analytics.snapshot.bookings')}
                     </span>
                     <span className="text-lg font-semibold">{bookings?.count ?? 0}</span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-muted-foreground">Booking revenue</span>
+                    <span className="text-muted-foreground">{t('analytics.snapshot.bookingRevenue')}</span>
                     <span className="text-lg font-semibold">
                       {formatCurrency(bookings?.revenue ?? 0)}
                     </span>
@@ -320,8 +322,8 @@ export function Analytics() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Top Products</CardTitle>
-              <CardDescription>Best performing products this period</CardDescription>
+              <CardTitle>{t('analytics.charts.topProductsTitle')}</CardTitle>
+              <CardDescription>{t('analytics.charts.topProductsDescription')}</CardDescription>
             </CardHeader>
             <CardContent>
               <TopProductsList products={topProducts} isLoading={isLoading} />
@@ -332,8 +334,8 @@ export function Analytics() {
         <TabsContent value="sales" className="space-y-6 mt-6">
           <Card>
             <CardHeader>
-              <CardTitle>Sales Analytics</CardTitle>
-              <CardDescription>Daily sales breakdown for the selected period</CardDescription>
+              <CardTitle>{t('analytics.charts.salesAnalyticsTitle')}</CardTitle>
+              <CardDescription>{t('analytics.charts.salesAnalyticsDescription')}</CardDescription>
             </CardHeader>
             <CardContent>
               <SalesChart />
@@ -344,8 +346,8 @@ export function Analytics() {
         <TabsContent value="products" className="space-y-6 mt-6">
           <Card>
             <CardHeader>
-              <CardTitle>Top Products</CardTitle>
-              <CardDescription>Ranked by revenue, with units sold</CardDescription>
+              <CardTitle>{t('analytics.products.title')}</CardTitle>
+              <CardDescription>{t('analytics.products.description')}</CardDescription>
             </CardHeader>
             <CardContent>
               <TopProductsList products={topProducts} isLoading={isLoading} />
@@ -357,8 +359,8 @@ export function Analytics() {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
             <Card>
               <CardHeader>
-                <CardTitle className="text-sm">Total Customers</CardTitle>
-                <CardDescription>Unique buyers with paid orders</CardDescription>
+                <CardTitle className="text-sm">{t('analytics.customers.totalTitle')}</CardTitle>
+                <CardDescription>{t('analytics.customers.totalDescription')}</CardDescription>
               </CardHeader>
               <CardContent>
                 <p className="text-3xl font-bold">{customerMetrics?.total ?? 0}</p>
@@ -367,8 +369,8 @@ export function Analytics() {
 
             <Card>
               <CardHeader>
-                <CardTitle className="text-sm">Repeat Customers</CardTitle>
-                <CardDescription>Buyers with 2+ completed orders</CardDescription>
+                <CardTitle className="text-sm">{t('analytics.customers.repeatTitle')}</CardTitle>
+                <CardDescription>{t('analytics.customers.repeatDescription')}</CardDescription>
               </CardHeader>
               <CardContent>
                 <p className="text-3xl font-bold">{customerMetrics?.repeat ?? 0}</p>
@@ -377,8 +379,8 @@ export function Analytics() {
 
             <Card>
               <CardHeader>
-                <CardTitle className="text-sm">Repeat Rate</CardTitle>
-                <CardDescription>Share of repeat customers</CardDescription>
+                <CardTitle className="text-sm">{t('analytics.customers.repeatRateTitle')}</CardTitle>
+                <CardDescription>{t('analytics.customers.repeatRateDescription')}</CardDescription>
               </CardHeader>
               <CardContent>
                 <p className="text-3xl font-bold">{customerMetrics?.repeatRate ?? 0}%</p>

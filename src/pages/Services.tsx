@@ -7,8 +7,10 @@ import { ServicesListPanel } from '@/components/services/ServicesListPanel';
 import { BookingsPanel } from '@/components/services/BookingsPanel';
 import { CalendarConnectionPanel } from '@/components/services/CalendarConnectionPanel';
 import { MobilePageHeader } from '@/components/layout/MobilePageHeader';
+import { SubPageHeader } from '@/components/layout/SubPageHeader';
 import { useIsMobile } from '@/hooks/use-mobile';
 import type { CalendarStatus } from '@/types/services.types';
+import { useTranslation, type TranslationKey } from '@/i18n';
 
 type ServicesTab = 'services' | 'bookings' | 'calendar';
 
@@ -24,23 +26,30 @@ const TAB_TO_PATH: Record<ServicesTab, string> = {
   calendar: '/dashboard/services/calendar',
 };
 
-// Mobile header title per sidebar sub-tab (mirrors the Bookings submenu labels).
-const TAB_TITLES: Record<ServicesTab, string> = {
-  services: 'Services',
-  bookings: 'Appointments',
-  calendar: 'Calendar',
+// Header title per sidebar sub-tab (mirrors the Bookings submenu labels).
+const TAB_TITLE_KEYS: Record<ServicesTab, TranslationKey> = {
+  services: 'services.tabs.services',
+  bookings: 'services.tabs.appointments',
+  calendar: 'services.tabs.calendar',
+};
+
+const TAB_SUBTITLE_KEYS: Record<ServicesTab, TranslationKey> = {
+  services: 'services.tabSubtitles.services',
+  bookings: 'services.tabSubtitles.appointments',
+  calendar: 'services.tabSubtitles.calendar',
 };
 
 // Friendly messages for the OAuth landing `reason` codes (calendar.md).
-const OAUTH_REASON_MESSAGES: Record<string, string> = {
-  missing_code: 'Google did not return an authorization code. Please try again.',
-  missing_state: 'The connection request was missing its security token. Please try again.',
-  state_mismatch: 'The connection could not be verified. Please try connecting again.',
-  invalid_state: 'The connection link expired. Please try connecting again.',
-  connection_failed: 'We could not complete the connection with Google. Please try again.',
+const OAUTH_REASON_KEYS: Record<string, TranslationKey> = {
+  missing_code: 'services.calendarPanel.oauth.missing_code',
+  missing_state: 'services.calendarPanel.oauth.missing_state',
+  state_mismatch: 'services.calendarPanel.oauth.state_mismatch',
+  invalid_state: 'services.calendarPanel.oauth.invalid_state',
+  connection_failed: 'services.calendarPanel.oauth.connection_failed',
 };
 
 export function Services() {
+  const { t } = useTranslation();
   const location = useLocation();
   const reactNavigate = useNavigate();
   const isMobile = useIsMobile();
@@ -63,10 +72,10 @@ export function Services() {
     const calendar = searchParams.get('calendar');
     if (!calendar) return;
     if (calendar === 'connected') {
-      toast.success('Google Calendar connected');
+      toast.success(t('services.calendarPanel.connectedToast'));
     } else if (calendar === 'error') {
       const reason = searchParams.get('reason') ?? '';
-      toast.error(OAUTH_REASON_MESSAGES[reason] ?? 'Could not connect Google Calendar.');
+      toast.error(t(OAUTH_REASON_KEYS[reason] ?? 'services.calendarPanel.connectFailed'));
     }
     setCalendarRefreshKey((k) => k + 1);
     // Strip the params and land on the Calendar tab so a refresh doesn't re-toast.
@@ -123,11 +132,8 @@ export function Services() {
       className="flex w-full items-center gap-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-left text-sm text-amber-800 transition hover:bg-amber-100 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300"
     >
       <TriangleAlert className="h-5 w-5 flex-shrink-0" />
-      <span className="flex-1">
-        Connect your Google Calendar so customers can book. Setup works without it, but bookings
-        need a connected calendar.
-      </span>
-      <span className="font-medium underline">Connect</span>
+      <span className="flex-1">{t('services.calendarPanel.banner')}</span>
+      <span className="font-medium underline">{t('services.calendarPanel.connectShort')}</span>
     </button>
   );
 
@@ -158,7 +164,7 @@ export function Services() {
   if (isMobile) {
     return (
       <div className="-mx-6 -mt-6">
-        <MobilePageHeader title={TAB_TITLES[tab]} />
+        <MobilePageHeader title={t(TAB_TITLE_KEYS[tab])} />
         <div className="space-y-4 px-4 pt-4 pb-24">
           {connectBanner}
           {tabsNode}
@@ -170,17 +176,17 @@ export function Services() {
   // ── Desktop ───────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-5">
-      <div className="flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-          <CalendarClock className="h-5 w-5 text-primary" />
-        </div>
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Bookings</h1>
-          <p className="text-sm text-muted-foreground">
-            Sell bookable services synced to your Google Calendar.
-          </p>
-        </div>
-      </div>
+      {/* Header — "Bookings › <tab>", so the page names the surface you opened. */}
+      <SubPageHeader
+        parent={t('nav.items.bookings')}
+        current={t(TAB_TITLE_KEYS[tab])}
+        description={t(TAB_SUBTITLE_KEYS[tab])}
+        icon={
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+            <CalendarClock className="h-5 w-5 text-primary" />
+          </div>
+        }
+      />
 
       {connectBanner}
 

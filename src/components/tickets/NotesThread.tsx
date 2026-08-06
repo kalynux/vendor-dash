@@ -7,15 +7,18 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { fetchNotes, createNote } from '@/services/tickets.service';
-import { ApiError } from '@/types/api';
 import { ActorAvatar } from '@/components/tickets/ActorAvatar';
 import { FollowerSelect } from '@/components/tickets/FollowerSelect';
-import { ROLE_LABELS, relativeTime, NOTE_MAX_LENGTH } from '@/components/tickets/ticket.constants';
+import { ROLE_LABEL_KEYS, relativeTime, NOTE_MAX_LENGTH } from '@/components/tickets/ticket.constants';
+import { useApiError, useFormatters, useTranslation } from '@/i18n';
 import type { ApiTicketNote, TicketActor, NoteVisibility } from '@/types/tickets.types';
 
 export function NotesThread({
   ticketId, followers, readOnly = false,
 }: { ticketId: string; followers: TicketActor[]; readOnly?: boolean }) {
+  const { t } = useTranslation();
+  const fmt = useFormatters();
+  const apiError = useApiError();
   const [notes, setNotes] = useState<ApiTicketNote[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
@@ -30,7 +33,7 @@ export function NotesThread({
     fetchNotes(ticketId)
       .then((data) => active && setNotes(data))
       .catch((err) => {
-        if (active) toast.error(err instanceof ApiError ? err.message : 'Failed to load notes');
+        if (active) apiError.toast(err, { fallbackKey: 'tickets.detail.notesLoadFailed' });
       })
       .finally(() => active && setLoading(false));
     return () => {
@@ -42,7 +45,7 @@ export function NotesThread({
     const trimmed = message.trim();
     if (!trimmed) return;
     if (trimmed.length > NOTE_MAX_LENGTH) {
-      toast.error(`Note must be ${NOTE_MAX_LENGTH} characters or less`);
+      toast.error(t('tickets.detail.noteTooLong', { max: NOTE_MAX_LENGTH }));
       return;
     }
     setSubmitting(true);
@@ -56,7 +59,7 @@ export function NotesThread({
       setMessage('');
       requestAnimationFrame(() => listEndRef.current?.scrollIntoView({ behavior: 'smooth' }));
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Failed to post note');
+      apiError.toast(err, { fallbackKey: 'tickets.detail.noteFailed' });
     } finally {
       setSubmitting(false);
     }
@@ -65,10 +68,10 @@ export function NotesThread({
   return (
     <section className="space-y-4">
       <div className="flex items-center gap-2">
-        <h3 className="text-sm font-semibold">Conversation</h3>
+        <h3 className="text-sm font-semibold">{t('tickets.detail.conversation')}</h3>
         {!loading && notes.length > 0 && (
           <span className="text-xs text-muted-foreground">
-            {notes.length} note{notes.length !== 1 ? 's' : ''}
+            {t('tickets.detail.noteCount', { count: notes.length })}
           </span>
         )}
       </div>
@@ -80,7 +83,7 @@ export function NotesThread({
         </div>
       ) : notes.length === 0 ? (
         <p className="rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">
-          No messages yet. Start the conversation below.
+          {t('tickets.detail.noMessages')}
         </p>
       ) : (
         <ul className="space-y-4">
@@ -89,7 +92,7 @@ export function NotesThread({
               <Info className="h-3.5 w-3.5" />
               <span>{note.content}</span>
               <span>·</span>
-              <span>{relativeTime(note.created_at)}</span>
+              <span>{relativeTime(note.created_at, t, fmt.date)}</span>
             </li>
           ) : (
             <li key={note._id} className="flex gap-3">
@@ -97,27 +100,29 @@ export function NotesThread({
               <div className="min-w-0 flex-1 space-y-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-sm font-medium">
-                    {note.author?.name ?? ROLE_LABELS[note.author_role]}
+                    {note.author?.name ?? t(ROLE_LABEL_KEYS[note.author_role])}
                   </span>
                   <Badge
                     variant="secondary"
                     className="px-1.5 py-0 text-[10px] font-semibold uppercase tracking-wide"
                   >
-                    {ROLE_LABELS[note.author_role]}
+                    {t(ROLE_LABEL_KEYS[note.author_role])}
                   </Badge>
                   {note.visibility === 'private' && (
                     <Badge
                       variant="outline"
                       className="gap-1 border-amber-300 px-1.5 py-0 text-[10px] text-amber-700 dark:text-amber-400"
                     >
-                      <Lock className="h-2.5 w-2.5" /> private
+                      <Lock className="h-2.5 w-2.5" /> {t('tickets.detail.private')}
                     </Badge>
                   )}
                 </div>
                 <div className="rounded-lg rounded-tl-sm bg-muted/60 px-3 py-2 text-sm">
                   <p className="whitespace-pre-wrap">{note.content}</p>
                 </div>
-                <span className="text-xs text-muted-foreground">{relativeTime(note.created_at)}</span>
+                <span className="text-xs text-muted-foreground">
+                  {relativeTime(note.created_at, t, fmt.date)}
+                </span>
               </div>
             </li>
           )))}
@@ -129,13 +134,13 @@ export function NotesThread({
       {readOnly ? (
         <p className="flex items-center justify-center gap-2 rounded-lg border border-dashed py-3 text-sm text-muted-foreground/70">
           <Lock className="h-3.5 w-3.5" />
-          This ticket is closed. No new messages can be added.
+          {t('tickets.detail.closedNoMessages')}
         </p>
       ) : (
       <div className="space-y-2 rounded-lg border p-3">
         <Textarea
           rows={3}
-          placeholder="Write a note…"
+          placeholder={t('tickets.detail.replyPlaceholder')}
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           maxLength={NOTE_MAX_LENGTH}
@@ -148,13 +153,13 @@ export function NotesThread({
                 active={visibility === 'public'}
                 onClick={() => { setVisibility('public'); setViewerIds([]); }}
                 icon={<Globe className="h-3.5 w-3.5" />}
-                label="public"
+                label={t('tickets.detail.public')}
               />
               <VisibilityToggle
                 active={visibility === 'private'}
                 onClick={() => setVisibility('private')}
                 icon={<Lock className="h-3.5 w-3.5" />}
-                label="private"
+                label={t('tickets.detail.private')}
               />
             </div>
             <div className="flex items-center gap-2">
@@ -163,13 +168,13 @@ export function NotesThread({
               </span>
               <Button size="sm" onClick={handleSend} disabled={submitting || !message.trim()}>
                 {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
-                Send
+                {t('tickets.detail.send')}
               </Button>
             </div>
           </div>
           {visibility === 'private' && (
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs text-muted-foreground">Visible to:</span>
+              <span className="text-xs text-muted-foreground">{t('tickets.detail.visibleTo')}</span>
               <FollowerSelect followers={followers} value={viewerIds} onChange={setViewerIds} />
             </div>
           )}

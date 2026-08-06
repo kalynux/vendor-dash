@@ -1,42 +1,41 @@
 import { type Step1FormValues } from '@/onboarding/schemas/onboarding.schemas';
+import type { TranslationKey } from '@/i18n';
+import { PLATFORM_COUNTRIES } from '@/lib/phone';
 
 // Static option data + empty-entry factories shared by the Basic Setup form
 // (kept in a non-component module so Fast Refresh stays happy).
 
-export const COUNTRIES = [
-    { code: 'CM', name: 'Cameroon' },
-    { code: 'CI', name: "Côte d'Ivoire" },
-    { code: 'SN', name: 'Senegal' },
-    { code: 'NG', name: 'Nigeria' },
-    { code: 'GH', name: 'Ghana' },
-    { code: 'KE', name: 'Kenya' },
-    { code: 'TZ', name: 'Tanzania' },
-    { code: 'UG', name: 'Uganda' },
-    { code: 'RW', name: 'Rwanda' },
-    { code: 'EG', name: 'Egypt' },
-    { code: 'ZA', name: 'South Africa' },
-    { code: 'FR', name: 'France' },
-    { code: 'GB', name: 'United Kingdom' },
-    { code: 'US', name: 'United States' },
+/**
+ * Countries the platform onboards in, as ISO-3166 alpha-2 codes.
+ *
+ * One list, shared with the phone field's country picker (`@/lib/phone`) so the
+ * markets a vendor can register in and the ones offered first when dialling
+ * cannot drift apart.
+ */
+export const COUNTRY_CODES = PLATFORM_COUNTRIES;
+
+/**
+ * Supported timezones. `cityKey` translates the city; `offset` is the technical
+ * suffix (abbreviation + UTC offset), which is not translated.
+ */
+export const TIMEZONES: { value: string; cityKey: TranslationKey; offset: string }[] = [
+    { value: 'Africa/Douala', cityKey: 'settings.cities.douala', offset: 'WAT, UTC+1' },
+    { value: 'Africa/Lagos', cityKey: 'settings.cities.lagos', offset: 'WAT, UTC+1' },
+    { value: 'Africa/Abidjan', cityKey: 'settings.cities.abidjan', offset: 'GMT, UTC+0' },
+    { value: 'Africa/Dakar', cityKey: 'settings.cities.dakar', offset: 'GMT, UTC+0' },
+    { value: 'Africa/Accra', cityKey: 'settings.cities.accra', offset: 'GMT, UTC+0' },
+    { value: 'Africa/Nairobi', cityKey: 'settings.cities.nairobi', offset: 'EAT, UTC+3' },
+    { value: 'Africa/Dar_es_Salaam', cityKey: 'settings.cities.darEsSalaam', offset: 'EAT, UTC+3' },
+    { value: 'Africa/Kampala', cityKey: 'settings.cities.kampala', offset: 'EAT, UTC+3' },
+    { value: 'Africa/Kigali', cityKey: 'settings.cities.kigali', offset: 'CAT, UTC+2' },
+    { value: 'Africa/Cairo', cityKey: 'settings.cities.cairo', offset: 'EET, UTC+2' },
+    { value: 'Africa/Johannesburg', cityKey: 'settings.cities.johannesburg', offset: 'SAST, UTC+2' },
+    { value: 'Europe/Paris', cityKey: 'settings.cities.paris', offset: 'CET, UTC+1' },
+    { value: 'Europe/London', cityKey: 'settings.cities.london', offset: 'GMT, UTC+0' },
+    { value: 'America/New_York', cityKey: 'settings.cities.newYork', offset: 'EST, UTC-5' },
 ];
 
-export const TIMEZONES = [
-    { value: 'Africa/Douala', label: 'Douala (WAT, UTC+1)' },
-    { value: 'Africa/Lagos', label: 'Lagos (WAT, UTC+1)' },
-    { value: 'Africa/Abidjan', label: 'Abidjan (GMT, UTC+0)' },
-    { value: 'Africa/Dakar', label: 'Dakar (GMT, UTC+0)' },
-    { value: 'Africa/Accra', label: 'Accra (GMT, UTC+0)' },
-    { value: 'Africa/Nairobi', label: 'Nairobi (EAT, UTC+3)' },
-    { value: 'Africa/Dar_es_Salaam', label: 'Dar es Salaam (EAT, UTC+3)' },
-    { value: 'Africa/Kampala', label: 'Kampala (EAT, UTC+3)' },
-    { value: 'Africa/Kigali', label: 'Kigali (CAT, UTC+2)' },
-    { value: 'Africa/Cairo', label: 'Cairo (EET, UTC+2)' },
-    { value: 'Africa/Johannesburg', label: 'Johannesburg (SAST, UTC+2)' },
-    { value: 'Europe/Paris', label: 'Paris (CET, UTC+1)' },
-    { value: 'Europe/London', label: 'London (GMT, UTC+0)' },
-    { value: 'America/New_York', label: 'New York (EST, UTC-5)' },
-];
-
+/** Brand names — never translated. `value` is the wire format the backend expects. */
 export const MOBILE_MONEY_PROVIDERS = [
     { value: 'MTN Mobile Money', label: 'MTN Mobile Money' },
     { value: 'Orange Money', label: 'Orange Money' },

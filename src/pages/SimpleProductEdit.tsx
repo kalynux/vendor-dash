@@ -43,6 +43,7 @@ import {
   getDeliveryErrorMessage,
   type SimpleProductResult,
 } from '@/services/products.service';
+import { useMessage, useTranslation, type TranslationKey } from '@/i18n';
 import type {
   ApiProductDetail,
   ApiPickupLocation,
@@ -53,6 +54,8 @@ export function SimpleProductEdit() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
+  const { t } = useTranslation();
+  const m = useMessage();
   const [product, setProduct] = useState<ApiProductDetail | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -138,7 +141,7 @@ export function SimpleProductEdit() {
       const payload = toUpdatePayload(values, initialValuesRef.current, publish);
 
       if (isEmptyUpdate(payload) && publish === undefined) {
-        toast.info('Nothing to save.');
+        toast.info(t('products.simple.nothingToSave'));
         return;
       }
 
@@ -157,9 +160,9 @@ export function SimpleProductEdit() {
           : values;
         const wasDemoted = applyResult(res, wasActive);
         if (wasDemoted) {
-          toast.warning(res.message ?? 'This product was moved back to draft.');
+          toast.warning(res.message ?? t('products.blockers.demoted'));
         } else {
-          toast.success(res.message ?? 'Changes saved.');
+          toast.success(res.message ?? t('products.toast.changesSaved'));
         }
       } catch (err: unknown) {
         const projection = projectSimpleError(err);
@@ -246,7 +249,7 @@ export function SimpleProductEdit() {
               }
             : prev,
         );
-        toast.success(enabled ? 'AI search enabled — indexing started.' : 'AI search disabled.');
+        toast.success(t(enabled ? 'products.ai.enabled' : 'products.ai.disabled'));
       } catch (err: unknown) {
         toast.error(getSimpleProductErrorMessage(err));
       }
@@ -264,7 +267,12 @@ export function SimpleProductEdit() {
         setProduct((prev) => (prev ? { ...prev, status: updated.status } : prev));
         setActivation(null);
         setDemoted(false);
-        toast.success(`"${product.title}" is now ${target.replace('_', ' ')}.`);
+        toast.success(
+          t('products.toast.statusChanged', {
+            name: product.title,
+            status: t(`products.status.${target === 'pending_review' ? 'pendingReview' : target}` as TranslationKey),
+          }),
+        );
       } catch (err: unknown) {
         toast.error(getSimpleProductErrorMessage(err));
       }
@@ -276,7 +284,7 @@ export function SimpleProductEdit() {
     if (!product) return;
     try {
       const copy = await duplicateProduct(product.id);
-      toast.success('Product duplicated.');
+      toast.success(t('products.toast.duplicated'));
       navigate(
         copy.mode === 'simple'
           ? `/dashboard/product-edit/${copy.id}/simple`
@@ -292,10 +300,13 @@ export function SimpleProductEdit() {
   if (loadError) {
     return (
       <div className="max-w-3xl mx-auto space-y-4">
-        <PageBackButton fallbackPath="/dashboard/products" label="Products" />
+        <PageBackButton
+          fallbackPath="/dashboard/products"
+          label={t('products.wizard.backToProducts')}
+        />
         <Alert variant="destructive">
           <AlertCircle className="w-4 h-4" />
-          <AlertDescription>{loadError}</AlertDescription>
+          <AlertDescription>{m(loadError)}</AlertDescription>
         </Alert>
       </div>
     );
@@ -319,11 +330,15 @@ export function SimpleProductEdit() {
     <div className="space-y-4 sm:space-y-6 animate-fade-in max-w-3xl mx-auto -mx-6 sm:mx-auto">
       <div className="px-4 sm:px-0 flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <PageBackButton fallbackPath="/dashboard/products" label="Products" className="mb-1" />
+          <PageBackButton
+            fallbackPath="/dashboard/products"
+            label={t('products.wizard.backToProducts')}
+            className="mb-1"
+          />
           <div className="flex items-center gap-2 flex-wrap">
-            <h1 className="text-xl sm:text-2xl font-bold">Edit product</h1>
+            <h1 className="text-xl sm:text-2xl font-bold">{t('products.wizard.editTitle')}</h1>
             <Badge variant="outline" className="text-[10px]">
-              Quick
+              {t('products.wizard.quickBadge')}
             </Badge>
           </div>
           <p className="text-muted-foreground text-xs sm:text-sm mt-1 truncate">
@@ -340,11 +355,11 @@ export function SimpleProductEdit() {
           <DropdownMenuContent align="end">
             <DropdownMenuItem onClick={() => setConvertOpen(true)}>
               <Wand2 className="w-4 h-4 mr-2" />
-              Convert to advanced editor
+              {t('products.actions.convertToAdvancedEditor')}
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => void handleDuplicate()}>
               <Copy className="w-4 h-4 mr-2" />
-              Duplicate
+              {t('common.actions.duplicate')}
             </DropdownMenuItem>
             {statusTransitions.length > 0 && <DropdownMenuSeparator />}
             {statusTransitions.map((transition) => (
@@ -353,7 +368,7 @@ export function SimpleProductEdit() {
                 variant={transition.destructive ? 'destructive' : undefined}
                 onClick={() => void handleStatusTransition(transition.target)}
               >
-                {transition.label}
+                {t(transition.labelKey)}
               </DropdownMenuItem>
             ))}
           </DropdownMenuContent>
@@ -365,7 +380,7 @@ export function SimpleProductEdit() {
           <Alert>
             <AlertCircle className="w-4 h-4" />
             <AlertDescription>
-              This product is being indexed for AI search. Editing is temporarily disabled.
+              {t('products.review.lockedIndexing')}
             </AlertDescription>
           </Alert>
         </div>
@@ -376,9 +391,9 @@ export function SimpleProductEdit() {
           <Alert>
             <AlertCircle className="w-4 h-4" />
             <AlertDescription>
-              {productStatus === 'archived'
-                ? 'This product is archived and read-only. Restore it to draft from the products list to edit or publish it.'
-                : 'This product is awaiting admin review and is read-only until moderation completes.'}
+              {t(productStatus === 'archived'
+                ? 'products.review.archivedNotice'
+                : 'products.review.pendingReviewNotice')}
             </AlertDescription>
           </Alert>
         </div>
@@ -389,8 +404,7 @@ export function SimpleProductEdit() {
           <Alert>
             <AlertCircle className="w-4 h-4" />
             <AlertDescription>
-              This product is suspended because of a delivery-agency issue. You can still edit
-              it — assigning a working delivery agency below restores it automatically.
+              {t('products.simple.suspendedNotice')}
             </AlertDescription>
           </Alert>
         </div>
@@ -441,17 +455,16 @@ export function SimpleProductEdit() {
                 <Sparkles className="w-5 h-5 text-muted-foreground mt-0.5 shrink-0" />
                 <div className="flex-1 min-w-0 flex items-center justify-between gap-3">
                   <div>
-                    <p className="font-medium text-sm">AI search</p>
+                    <p className="font-medium text-sm">{t('products.simple.aiSearchTitle')}</p>
                     <p className="text-xs text-muted-foreground mt-0.5 max-w-md">
-                      Index this product so customers can find it through AI search. Applies
-                      once the product is active and complete.
+                      {t('products.simple.aiSearchDescription')}
                     </p>
                   </div>
                   <Switch
                     checked={product.vectorisationEnabled ?? false}
                     onCheckedChange={(checked) => void handleVectorisationToggle(checked)}
                     disabled={isSubmitting || isLockedForVectorisation || isReadOnlyStatus}
-                    aria-label="AI search"
+                    aria-label={t('products.simple.aiSearchTitle')}
                   />
                 </div>
               </div>

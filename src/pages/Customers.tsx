@@ -24,11 +24,9 @@ import { CustomerAvatar } from '@/components/customers/CustomerAvatar';
 import { FlagBadge, FlagDot } from '@/components/customers/FlagBadge';
 import { CustomerDetailSheet } from '@/components/customers/CustomerDetailSheet';
 import { FlagsManagerSheet } from '@/components/customers/FlagsManagerSheet';
-import {
-  CUSTOMER_SORT_OPTIONS, formatMoney, relativeTime,
-} from '@/components/customers/customer.constants';
+import { CUSTOMER_SORT_OPTIONS, relativeTime } from '@/components/customers/customer.constants';
 import { fetchCustomers, fetchFlags } from '@/services/customers.service';
-import { ApiError } from '@/types/api';
+import { useTranslation, useFormatters, useApiError } from '@/i18n';
 import type {
   CustomerListItem, CustomerListMeta, CustomerDetail, CustomerFlag, CustomersQueryParams,
 } from '@/types/customers.types';
@@ -47,6 +45,9 @@ interface CustomersDesktopCache {
 }
 
 export function Customers() {
+  const { t } = useTranslation();
+  const fmt = useFormatters();
+  const apiError = useApiError();
   const dCache = getListCache<CustomersDesktopCache>(CUSTOMERS_DESKTOP_KEY);
   const [customers, setCustomers] = useState<CustomerListItem[]>(dCache?.customers ?? []);
   const [meta, setMeta] = useState<CustomerListMeta | null>(dCache?.meta ?? null);
@@ -89,13 +90,13 @@ export function Customers() {
       setCustomers(result.data);
       setMeta(result.meta);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Failed to load customers');
+      setError(apiError.resolve(err, { fallbackKey: 'customers.errors.loadFailed' }));
       setCustomers([]);
       setMeta(null);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [apiError]);
 
   // Debounce the search box; reset to page 1. Skip first run so a restored value
   // doesn't reset paging on return.
@@ -215,24 +216,24 @@ export function Customers() {
       <SearchFilterBar
         value={searchQuery}
         onChange={setSearchQuery}
-        placeholder="Search by name or email…"
+        placeholder={t('customers.list.searchPlaceholder')}
         activeFilterCount={activeFilterCount}
         onOpenFilters={() => setFilterSheetOpen(true)}
-        filterLabel="Filter customers"
+        filterLabel={t('customers.list.filterTitle')}
       />
       <ActiveFilterChips
         chips={[
           ...(activeFlag
             ? [{
               key: 'flag',
-              label: `Flag: ${activeFlag.name}`,
+              label: t('customers.list.flagChip', { value: activeFlag.name }),
               onRemove: () => { setFlagFilter(''); setPage(1); },
             }]
             : []),
           ...(sort !== defaultSort
             ? [{
               key: 'sort',
-              label: `Sort: ${sortConfig.label}`,
+              label: t('customers.list.sortChip', { value: t(sortConfig.labelKey) }),
               onRemove: () => { setSort(defaultSort); setPage(1); },
             }]
             : []),
@@ -246,15 +247,15 @@ export function Customers() {
     <FilterSheet
       open={filterSheetOpen}
       onOpenChange={setFilterSheetOpen}
-      title="Filter customers"
+      title={t('customers.list.filterTitle')}
       activeCount={activeFilterCount}
       onClear={clearFilters}
-      applyLabel="Show customers"
+      applyLabel={t('customers.list.applyFilters')}
     >
-      <FilterSection title="Flag">
+      <FilterSection title={t('customers.list.flagSection')}>
         {flags.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            No flags yet — create one from “Manage flags”.
+            {t('customers.list.noFlagsYet')}
           </p>
         ) : (
           <FilterChips
@@ -265,14 +266,14 @@ export function Customers() {
             }))}
             value={flagFilter || undefined}
             onChange={(v) => { setFlagFilter(v ?? ''); setPage(1); }}
-            allLabel="All flags"
+            allLabel={t('customers.list.allFlags')}
           />
         )}
       </FilterSection>
 
-      <FilterSection title="Sort by">
+      <FilterSection title={t('customers.list.sortSection')}>
         <FilterChips
-          options={CUSTOMER_SORT_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+          options={CUSTOMER_SORT_OPTIONS.map((o) => ({ value: o.value, labelKey: o.labelKey }))}
           value={sort}
           onChange={(v) => { setSort(v ?? defaultSort); setPage(1); }}
           hideAll
@@ -285,16 +286,20 @@ export function Customers() {
     <Empty className="py-16">
       <EmptyHeader>
         <EmptyMedia variant="icon"><Users className="h-6 w-6" /></EmptyMedia>
-        <EmptyTitle>{hasActiveQuery ? 'No matching customers' : 'No customers yet'}</EmptyTitle>
+        <EmptyTitle>
+          {hasActiveQuery
+            ? t('customers.list.emptyFilteredTitle')
+            : t('customers.list.emptyTitle')}
+        </EmptyTitle>
         <EmptyDescription>
           {hasActiveQuery
-            ? 'Try adjusting your search or flag filter.'
-            : 'Customers appear here once they place their first order with you.'}
+            ? t('customers.list.emptyFilteredDescription')
+            : t('customers.list.emptyDescription')}
         </EmptyDescription>
       </EmptyHeader>
       {hasActiveQuery && (
         <EmptyContent>
-          <Button variant="outline" onClick={clearFilters}>Clear filters</Button>
+          <Button variant="outline" onClick={clearFilters}>{t('common.actions.clearAll')}</Button>
         </EmptyContent>
       )}
     </Empty>
@@ -331,7 +336,9 @@ export function Customers() {
         <CustomerAvatar name={item.displayName} avatar={item.avatar} />
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold">{item.displayName}</p>
-          <p className="truncate text-xs text-muted-foreground">{item.email ?? `${item.orderCount} orders`}</p>
+          <p className="truncate text-xs text-muted-foreground">
+            {item.email ?? t('common.units.orders', { count: item.orderCount })}
+          </p>
           {item.flags.length > 0 && (
             <div className="mt-1 flex flex-wrap gap-1">
               {item.flags.slice(0, 2).map((f) => <FlagBadge key={f.id} flag={f} />)}
@@ -342,8 +349,10 @@ export function Customers() {
           )}
         </div>
         <div className="flex flex-col items-end">
-          <span className="text-sm font-medium">{formatMoney(item.totalSpent)}</span>
-          <span className="text-xs text-muted-foreground">{relativeTime(item.lastOrderAt)}</span>
+          <span className="text-sm font-medium">{fmt.currency(item.totalSpent)}</span>
+          <span className="text-xs text-muted-foreground">
+            {relativeTime(item.lastOrderAt, t, fmt.date)}
+          </span>
         </div>
       </button>
     );
@@ -354,12 +363,12 @@ export function Customers() {
     return (
       <div className="-mx-6 -mt-6">
         <MobilePageHeader
-          title="Customers"
+          title={t('customers.title')}
           actions={
             <button
               type="button"
               onClick={() => setFlagsManagerOpen(true)}
-              aria-label="Manage flags"
+              aria-label={t('customers.list.manageFlags')}
               className="flex h-9 w-9 items-center justify-center rounded-full transition-colors hover:bg-accent"
             >
               <Tag className="h-5 w-5" />
@@ -375,7 +384,9 @@ export function Customers() {
             <div className="flex flex-col items-center gap-3 py-16 text-center">
               <Users className="h-10 w-10 text-muted-foreground" />
               <p className="text-sm text-muted-foreground">{infinite.error}</p>
-              <Button variant="outline" size="sm" onClick={infinite.reload}>Try again</Button>
+              <Button variant="outline" size="sm" onClick={infinite.reload}>
+                {t('common.actions.retry')}
+              </Button>
             </div>
           ) : infinite.items.length === 0 ? (
             emptyNode
@@ -392,7 +403,7 @@ export function Customers() {
           )}
         </div>
 
-        <MobileListFooter shown={infinite.items.length} total={infinite.total} noun="customers" />
+        <MobileListFooter shown={infinite.items.length} total={infinite.total} nounKey="common.units.customers" />
         {sheets}
       </div>
     );
@@ -404,13 +415,13 @@ export function Customers() {
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Customers</h1>
+          <h1 className="text-2xl font-bold tracking-tight">{t('customers.title')}</h1>
           <p className="text-muted-foreground">
-            {meta ? `${meta.total} customer${meta.total !== 1 ? 's' : ''} who have ordered from you` : 'Manage your customer relationships'}
+            {meta ? t('common.units.customers', { count: meta.total }) : t('customers.subtitle')}
           </p>
         </div>
         <Button variant="outline" onClick={() => setFlagsManagerOpen(true)} className="gap-2">
-          <Tag className="h-4 w-4" /> Manage flags
+          <Tag className="h-4 w-4" /> {t('customers.list.manageFlags')}
         </Button>
       </div>
 
@@ -423,7 +434,9 @@ export function Customers() {
         <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed py-16 text-center">
           <Users className="h-10 w-10 text-muted-foreground" />
           <p className="text-sm text-muted-foreground">{error}</p>
-          <Button variant="outline" size="sm" onClick={() => load(queryParams)}>Try again</Button>
+          <Button variant="outline" size="sm" onClick={() => load(queryParams)}>
+            {t('common.actions.retry')}
+          </Button>
         </div>
       ) : customers.length === 0 ? (
         emptyNode
@@ -433,11 +446,11 @@ export function Customers() {
             <table className="w-full text-sm">
               <thead className="border-b bg-muted/40 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 <tr>
-                  <th className="px-4 py-3">Customer</th>
-                  <th className="px-4 py-3">Flags</th>
-                  <th className="px-4 py-3 text-right">Orders</th>
-                  <th className="px-4 py-3 text-right">Total spent</th>
-                  <th className="px-4 py-3">Last order</th>
+                  <th className="px-4 py-3">{t('customers.columns.customer')}</th>
+                  <th className="px-4 py-3">{t('customers.columns.flags')}</th>
+                  <th className="px-4 py-3 text-right">{t('customers.columns.orders')}</th>
+                  <th className="px-4 py-3 text-right">{t('customers.columns.spent')}</th>
+                  <th className="px-4 py-3">{t('customers.columns.lastOrder')}</th>
                   <th className="w-8 px-4 py-3" />
                 </tr>
               </thead>
@@ -455,13 +468,15 @@ export function Customers() {
                           <CustomerAvatar name={c.displayName} avatar={c.avatar} className="h-9 w-9" />
                           <div className="min-w-0">
                             <p className="truncate font-medium text-foreground">{c.displayName}</p>
-                            <p className="truncate text-xs text-muted-foreground">{c.email ?? '—'}</p>
+                            <p className="truncate text-xs text-muted-foreground">
+                              {c.email ?? t('common.labels.emptyValue')}
+                            </p>
                           </div>
                         </div>
                       </td>
                       <td className="px-4 py-3">
                         {c.flags.length === 0 ? (
-                          <span className="text-muted-foreground">—</span>
+                          <span className="text-muted-foreground">{t('common.labels.emptyValue')}</span>
                         ) : (
                           <div className="flex flex-wrap gap-1">
                             {c.flags.slice(0, 3).map((f) => <FlagBadge key={f.id} flag={f} />)}
@@ -477,8 +492,10 @@ export function Customers() {
                           {c.orderCount}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-right font-medium">{formatMoney(c.totalSpent)}</td>
-                      <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">{relativeTime(c.lastOrderAt)}</td>
+                      <td className="px-4 py-3 text-right font-medium">{fmt.currency(c.totalSpent)}</td>
+                      <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
+                        {relativeTime(c.lastOrderAt, t, fmt.date)}
+                      </td>
                       <td className="px-4 py-3 text-right">
                         <ChevronRight className="ml-auto h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
                       </td>
@@ -492,15 +509,20 @@ export function Customers() {
           {/* Pagination */}
           {meta && (
             <div className="flex flex-col items-center justify-between gap-3 text-sm text-muted-foreground sm:flex-row">
-              <span>Showing {customers.length} of {meta.total} customer{meta.total !== 1 ? 's' : ''}</span>
+              <span>
+                {t('common.pagination.showingOf', {
+                  shown: customers.length,
+                  items: t('customers.list.count', { count: meta.total }),
+                })}
+              </span>
               {meta.pages > 1 && (
                 <div className="flex items-center gap-2">
                   <Button variant="outline" size="sm" disabled={meta.page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
-                    Previous
+                    {t('common.pagination.previous')}
                   </Button>
-                  <span>Page {meta.page} of {meta.pages}</span>
+                  <span>{t('common.pagination.pageOf', { page: meta.page, total: meta.pages })}</span>
                   <Button variant="outline" size="sm" disabled={meta.page >= meta.pages} onClick={() => setPage((p) => p + 1)}>
-                    Next
+                    {t('common.pagination.next')}
                   </Button>
                 </div>
               )}

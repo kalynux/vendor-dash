@@ -4,19 +4,20 @@ import { Store, LogOut, ChevronLeft } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { useOnboarding } from '@/onboarding/store/onboarding.store';
+import { useTranslation, type TranslationKey } from '@/i18n';
 import type { VendorOnboardingStep } from '@/types/api';
 
 // ─── Step metadata ────────────────────────────────────────────────────────────
 
 const STEPS: {
     step: Exclude<VendorOnboardingStep, 0>;
-    label: string;
-    sublabel: string;
+    labelKey: TranslationKey;
+    sublabelKey: TranslationKey;
 }[] = [
-        { step: 1, label: 'Basic Setup', sublabel: 'Country, timezone & payout' },
-        { step: 2, label: 'Delivery', sublabel: 'Link a delivery agency' },
-        { step: 3, label: 'Branding', sublabel: 'Logo & addresses (optional)' },
-        { step: 4, label: 'Policies', sublabel: 'Return, cancellation & support (optional)' },
+        { step: 1, labelKey: 'onboarding.steps.basicSetup', sublabelKey: 'onboarding.stepSublabels.basicSetup' },
+        { step: 2, labelKey: 'onboarding.steps.deliveryLinking', sublabelKey: 'onboarding.stepSublabels.deliveryLinking' },
+        { step: 3, labelKey: 'onboarding.steps.branding', sublabelKey: 'onboarding.stepSublabels.branding' },
+        { step: 4, labelKey: 'onboarding.steps.policySetup', sublabelKey: 'onboarding.stepSublabels.policySetup' },
     ];
 
 // ─── Progress indicator ───────────────────────────────────────────────────────
@@ -30,6 +31,7 @@ function StepProgress({
     current: Exclude<VendorOnboardingStep, 0>;
     onStepClick: (step: VendorOnboardingStep) => void;
 }) {
+    const { t } = useTranslation();
     const totalSteps = STEPS.length;
     const progressPct = ((viewing - 1) / (totalSteps - 1)) * 100;
 
@@ -38,10 +40,10 @@ function StepProgress({
             {/* Step label row */}
             <div className="flex items-center justify-between mb-3 text-sm">
                 <span className="font-semibold text-foreground">
-                    Step {viewing} of {totalSteps}
+                    {t('onboarding.stepLabel', { current: viewing, total: totalSteps })}
                 </span>
                 <span className="text-muted-foreground">
-                    {STEPS[viewing - 1]?.label}
+                    {STEPS[viewing - 1] ? t(STEPS[viewing - 1].labelKey) : ''}
                 </span>
             </div>
 
@@ -57,7 +59,8 @@ function StepProgress({
 
             {/* Step dots — completed steps are clickable for back-navigation */}
             <div className="flex justify-between mt-3">
-                {STEPS.map(({ step, label }) => {
+                {STEPS.map(({ step, labelKey }) => {
+                    const label = t(labelKey);
                     const isComplete = step < current;
                     const isActive = step === viewing;
                     const isClickable = step !== viewing && step <= current;
@@ -68,7 +71,7 @@ function StepProgress({
                                 type="button"
                                 onClick={() => isClickable && onStepClick(step)}
                                 disabled={!isClickable}
-                                aria-label={isClickable ? `Go back to ${label}` : label}
+                                aria-label={isClickable ? t('onboarding.layout.goBackTo', { step: label }) : label}
                                 className={cn(
                                     'w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-colors duration-300',
                                     isComplete && 'bg-primary text-primary-foreground',
@@ -122,6 +125,7 @@ interface OnboardingLayoutProps {
 }
 
 export function OnboardingLayout({ children, ctaSlot, stepKey }: OnboardingLayoutProps) {
+    const { t } = useTranslation();
     const { session, logout, viewingStep, currentStep, goBack, jumpToStep } = useOnboarding();
     // The business name moved to the Store, which isn't fetched during onboarding
     // (the store shell mounts after it). `business_name` may still ride along on
@@ -142,7 +146,7 @@ export function OnboardingLayout({ children, ctaSlot, stepKey }: OnboardingLayou
                             variant="ghost"
                             size="icon"
                             onClick={goBack}
-                            aria-label="Go back"
+                            aria-label={t('onboarding.layout.goBack')}
                             className="text-muted-foreground -ml-2"
                         >
                             <ChevronLeft className="w-5 h-5" />
@@ -154,7 +158,7 @@ export function OnboardingLayout({ children, ctaSlot, stepKey }: OnboardingLayou
                             <Store className="w-4 h-4 text-primary-foreground" />
                         </div>
                         <div className="flex flex-col leading-tight">
-                            <span className="font-bold text-sm leading-none">Jovi Mall</span>
+                            <span className="font-bold text-sm leading-none">{t('onboarding.layout.brand')}</span>
                             <span className="text-[10px] text-muted-foreground leading-none truncate max-w-[120px]">
                                 {businessName}
                             </span>
@@ -169,13 +173,13 @@ export function OnboardingLayout({ children, ctaSlot, stepKey }: OnboardingLayou
                     className="text-muted-foreground gap-1.5"
                 >
                     <LogOut className="w-4 h-4" />
-                    <span className="hidden sm:inline">Sign out</span>
+                    <span className="hidden sm:inline">{t('onboarding.layout.signOut')}</span>
                 </Button>
             </header>
 
             {/* ── Progress ── */}
             {viewingStep !== null && viewingStep !== 0 && currentStep !== null && currentStep !== 0 && (
-                <nav aria-label="Onboarding progress">
+                <nav aria-label={t('onboarding.layout.progress')}>
                     <StepProgress
                         viewing={viewingStep as Exclude<VendorOnboardingStep, 0>}
                         current={currentStep as Exclude<VendorOnboardingStep, 0>}

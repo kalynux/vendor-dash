@@ -1,5 +1,4 @@
 import {
-    createContext,
     useContext,
     useState,
     useCallback,
@@ -7,6 +6,7 @@ import {
     type ReactNode,
 } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { OnboardingContext } from '@/onboarding/store/onboarding.context';
 import { authService } from '@/services/auth.service';
 import { onboardingService } from '@/services/onboarding.service';
 import { deleteCurrentToken } from '@/lib/fcm';
@@ -137,8 +137,8 @@ export interface OnboardingState {
 }
 
 // ─── Context ──────────────────────────────────────────────────────────────────
-
-const OnboardingContext = createContext<OnboardingState | null>(null);
+// Declared in its own module (`onboarding.context.ts`) so this file only
+// exports components/hooks and Fast Refresh keeps working.
 
 // ─── Step → route mapping ─────────────────────────────────────────────────────
 

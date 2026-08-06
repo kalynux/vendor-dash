@@ -20,9 +20,9 @@ import {
   makeCreateTicketSchema, type CreateTicketFormValues,
 } from '@/components/tickets/schemas/ticket.schemas';
 import {
-  TICKET_TYPE_GROUPS, TICKET_IMPORTANCES, IMPORTANCE_LABELS, ENTITY_TYPES, ENTITY_TYPE_LABELS,
+  TICKET_TYPE_GROUPS, TICKET_IMPORTANCES, IMPORTANCE_LABEL_KEYS, ENTITY_TYPES, ENTITY_TYPE_LABEL_KEYS,
   responsiveSheetProps, DESCRIPTION_MAX_LENGTH, TRACKING_NUMBER_MAX, MAX_CREATE_ATTACHMENTS,
-  formatFileSize, humanizeEnum,
+  humanizeEnum,
 } from '@/components/tickets/ticket.constants';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useOnboarding } from '@/onboarding/store/onboarding.store';
@@ -31,16 +31,25 @@ import { ApiError } from '@/types/api';
 import type {
   ApiTicketDetail, OrderTrackingOption, TicketEntityType, TicketImportance, TicketType,
 } from '@/types/tickets.types';
+import { useApiError, useFormatters, useMessage, useTranslation, type TranslationKey } from '@/i18n';
 import type { ApiFile } from '@/types/file.types';
 
-// Static option groups for the searchable Type / Related-to fields.
-const TYPE_GROUPS: PickerGroup[] = TICKET_TYPE_GROUPS.map((g) => ({
-  label: g.groupLabel,
-  options: g.values.map((v) => ({ value: v.value, label: v.label })),
-}));
-const ENTITY_TYPE_GROUPS: PickerGroup[] = [
-  { options: ENTITY_TYPES.map((et) => ({ value: et, label: ENTITY_TYPE_LABELS[et] })) },
-];
+// Option groups for the searchable Type / Related-to fields. Built per render so
+// the labels follow a language switch — the picker takes resolved strings.
+type Translate = (key: TranslationKey) => string;
+
+function buildTypeGroups(t: Translate): PickerGroup[] {
+  return TICKET_TYPE_GROUPS.map((g) => ({
+    label: t(g.groupLabelKey),
+    options: g.values.map((v) => ({ value: v.value, label: t(v.labelKey) })),
+  }));
+}
+
+function buildEntityTypeGroups(t: Translate): PickerGroup[] {
+  return [
+    { options: ENTITY_TYPES.map((et) => ({ value: et, label: t(ENTITY_TYPE_LABEL_KEYS[et]) })) },
+  ];
+}
 
 interface CreateTicketSheetProps {
   open: boolean;
@@ -60,6 +69,12 @@ const DEFAULT_VALUES: CreateTicketFormValues = {
 };
 
 export function CreateTicketSheet({ open, onOpenChange, onCreated }: CreateTicketSheetProps) {
+  const { t } = useTranslation();
+  const fmt = useFormatters();
+  const m = useMessage();
+  const apiError = useApiError();
+  const TYPE_GROUPS = useMemo(() => buildTypeGroups(t), [t]);
+  const ENTITY_TYPE_GROUPS = useMemo(() => buildEntityTypeGroups(t), [t]);
   const { session } = useOnboarding();
   // The vendor creates tickets against its own entities, so the relevant support
   // policy is the logged-in vendor's. `required_info` drives the extra requirements.
@@ -160,20 +175,17 @@ export function CreateTicketSheet({ open, onOpenChange, onCreated }: CreateTicke
         ...(isOrder && trackingNumber ? { trackingNumber } : {}),
         ...(values.attachments.length ? { attachments: values.attachments } : {}),
       });
-      toast.success('Ticket created successfully');
+      toast.success(t('tickets.create.created'));
       onCreated(ticket);
       onOpenChange(false);
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.code === 'TICKET_ENTITY_NOT_FOUND') {
-          toast.error('The selected order, product, or booking no longer exists.');
+          toast.error(t('tickets.create.entityGone'));
           return;
         }
         if (err.code === 'TICKET_REQUIRED_INFO_MISSING') {
-          toast.error(
-            err.message ||
-              'Your support policy requires more information before this ticket can be created.',
-          );
+          toast.error(t('tickets.create.requiredInfoMissing'));
           return;
         }
         if (err.details?.length) {
@@ -184,9 +196,9 @@ export function CreateTicketSheet({ open, onOpenChange, onCreated }: CreateTicke
             }
           });
         }
-        toast.error(err.message);
+        apiError.toast(err, { fallbackKey: 'tickets.create.failed' });
       } else {
-        toast.error('Failed to create ticket');
+        toast.error(t('tickets.create.failed'));
       }
     }
   }
@@ -195,10 +207,8 @@ export function CreateTicketSheet({ open, onOpenChange, onCreated }: CreateTicke
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side={sheet.side} className={sheet.className}>
         <SheetHeader>
-          <SheetTitle>New support ticket</SheetTitle>
-          <SheetDescription>
-            Describe your issue and link it to the related order, product, or account.
-          </SheetDescription>
+          <SheetTitle>{t('tickets.create.title')}</SheetTitle>
+          <SheetDescription>{t('tickets.create.description')}</SheetDescription>
         </SheetHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="flex min-h-0 flex-1 flex-col">
@@ -206,39 +216,39 @@ export function CreateTicketSheet({ open, onOpenChange, onCreated }: CreateTicke
             {/* Subject */}
             <div className="space-y-1.5">
               <Label htmlFor="subject">
-                Subject <span className="text-destructive">*</span>
+                {t('tickets.create.subject')} <span className="text-destructive">*</span>
               </Label>
               <Input
                 id="subject"
-                placeholder="Brief summary of the issue"
+                placeholder={t('tickets.create.subjectPlaceholder')}
                 {...register('subject')}
                 aria-invalid={!!errors.subject}
               />
-              {errors.subject && <p className="text-xs text-destructive">{errors.subject.message}</p>}
+              {errors.subject && <p className="text-xs text-destructive">{m(errors.subject.message)}</p>}
             </div>
 
             {/* Description */}
             <div className="space-y-1.5">
               <Label htmlFor="description">
-                Description <span className="text-destructive">*</span>
+                {t('tickets.create.descriptionLabel')} <span className="text-destructive">*</span>
               </Label>
               <Textarea
                 id="description"
                 rows={5}
                 maxLength={DESCRIPTION_MAX_LENGTH}
-                placeholder="Provide as much detail as possible…"
+                placeholder={t('tickets.create.descriptionPlaceholder')}
                 {...register('description')}
                 aria-invalid={!!errors.description}
               />
               {errors.description && (
-                <p className="text-xs text-destructive">{errors.description.message}</p>
+                <p className="text-xs text-destructive">{m(errors.description.message)}</p>
               )}
             </div>
 
             {/* Type (grouped, searchable) */}
             <div className="space-y-1.5">
               <Label>
-                Type <span className="text-destructive">*</span>
+                {t('tickets.create.type')} <span className="text-destructive">*</span>
               </Label>
               <Controller
                 control={control}
@@ -248,21 +258,21 @@ export function CreateTicketSheet({ open, onOpenChange, onCreated }: CreateTicke
                     groups={TYPE_GROUPS}
                     value={field.value}
                     onChange={field.onChange}
-                    placeholder="Select a ticket type"
-                    modalTitle="Select a ticket type"
-                    modalDescription="Search by keyword to find the closest match."
-                    searchPlaceholder="Search ticket types…"
+                    placeholder={t('tickets.create.typePlaceholder')}
+                    modalTitle={t('tickets.create.typeModalTitle')}
+                    modalDescription={t('tickets.create.typeModalDescription')}
+                    searchPlaceholder={t('tickets.create.typeSearchPlaceholder')}
                     invalid={!!errors.type}
                   />
                 )}
               />
-              {errors.type && <p className="text-xs text-destructive">{errors.type.message}</p>}
+              {errors.type && <p className="text-xs text-destructive">{m(errors.type.message)}</p>}
             </div>
 
             {/* Importance */}
             <div className="space-y-1.5">
               <Label>
-                Importance <span className="text-destructive">*</span>
+                {t('tickets.create.importance')} <span className="text-destructive">*</span>
               </Label>
               <Controller
                 control={control}
@@ -270,12 +280,12 @@ export function CreateTicketSheet({ open, onOpenChange, onCreated }: CreateTicke
                 render={({ field }) => (
                   <Select value={field.value} onValueChange={field.onChange}>
                     <SelectTrigger aria-invalid={!!errors.importance} className="w-full">
-                      <SelectValue placeholder="Select importance" />
+                      <SelectValue placeholder={t('tickets.create.importancePlaceholder')} />
                     </SelectTrigger>
                     <SelectContent>
                       {TICKET_IMPORTANCES.map((imp) => (
                         <SelectItem key={imp} value={imp}>
-                          {IMPORTANCE_LABELS[imp]}
+                          {t(IMPORTANCE_LABEL_KEYS[imp])}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -283,7 +293,7 @@ export function CreateTicketSheet({ open, onOpenChange, onCreated }: CreateTicke
                 )}
               />
               {errors.importance && (
-                <p className="text-xs text-destructive">{errors.importance.message}</p>
+                <p className="text-xs text-destructive">{m(errors.importance.message)}</p>
               )}
             </div>
 
@@ -291,7 +301,7 @@ export function CreateTicketSheet({ open, onOpenChange, onCreated }: CreateTicke
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label>
-                  Related to <span className="text-destructive">*</span>
+                  {t('tickets.create.relatedTo')} <span className="text-destructive">*</span>
                 </Label>
                 <Controller
                   control={control}
@@ -305,10 +315,10 @@ export function CreateTicketSheet({ open, onOpenChange, onCreated }: CreateTicke
                         // Clear the entity id when the entity type changes.
                         setValue('entityId', '');
                       }}
-                      placeholder="Select"
-                      modalTitle="Related to"
-                      modalDescription="What is this ticket about?"
-                      searchPlaceholder="Search…"
+                      placeholder={t('tickets.create.selectPlaceholder')}
+                      modalTitle={t('tickets.create.relatedTo')}
+                      modalDescription={t('tickets.create.entityTypeModalDescription')}
+                      searchPlaceholder={t('tickets.create.searchPlaceholder')}
                     />
                   )}
                 />
@@ -316,11 +326,13 @@ export function CreateTicketSheet({ open, onOpenChange, onCreated }: CreateTicke
 
               <div className="space-y-1.5">
                 <Label>
-                  Entity{' '}
+                  {t('tickets.create.entity')}{' '}
                   {entityRequired ? (
                     <span className="text-destructive">*</span>
                   ) : (
-                    <span className="text-xs font-normal text-muted-foreground">(optional)</span>
+                    <span className="text-xs font-normal text-muted-foreground">
+                      {t('tickets.create.optional')}
+                    </span>
                   )}
                 </Label>
                 <Controller
@@ -337,7 +349,7 @@ export function CreateTicketSheet({ open, onOpenChange, onCreated }: CreateTicke
                   )}
                 />
                 {errors.entityId && (
-                  <p className="text-xs text-destructive">{errors.entityId.message}</p>
+                  <p className="text-xs text-destructive">{m(errors.entityId.message)}</p>
                 )}
               </div>
             </div>
@@ -346,17 +358,19 @@ export function CreateTicketSheet({ open, onOpenChange, onCreated }: CreateTicke
             {entityType === 'ORDER' && (
               <div className="space-y-1.5">
                 <Label htmlFor="trackingNumber">
-                  Tracking number{' '}
+                  {t('tickets.create.trackingNumber')}{' '}
                   {trackingRequired ? (
                     <span className="text-destructive">*</span>
                   ) : (
-                    <span className="text-xs font-normal text-muted-foreground">(optional)</span>
+                    <span className="text-xs font-normal text-muted-foreground">
+                      {t('tickets.create.optional')}
+                    </span>
                   )}
                 </Label>
 
                 {!entityId ? (
                   <p className="text-xs text-muted-foreground">
-                    Select an order above to choose its tracking number.
+                    {t('tickets.create.trackingNeedsOrder')}
                   </p>
                 ) : !trackingManual && trackingOptions.length > 0 ? (
                   <Select
@@ -371,7 +385,7 @@ export function CreateTicketSheet({ open, onOpenChange, onCreated }: CreateTicke
                     }}
                   >
                     <SelectTrigger aria-invalid={!!errors.trackingNumber} className="w-full">
-                      <SelectValue placeholder="Select a tracking number" />
+                      <SelectValue placeholder={t('tickets.create.trackingPlaceholder')} />
                     </SelectTrigger>
                     <SelectContent>
                       {trackingOptions.map((o) => (
@@ -379,27 +393,29 @@ export function CreateTicketSheet({ open, onOpenChange, onCreated }: CreateTicke
                           <span className="flex flex-col">
                             <span className="font-medium">{o.trackingNumber}</span>
                             <span className="text-xs text-muted-foreground">
-                              {o.agencyName ?? 'Delivery agency'}
+                              {o.agencyName ?? t('tickets.create.deliveryAgencyFallback')}
                               {o.deliveryStatus ? ` · ${humanizeEnum(o.deliveryStatus)}` : ''}
                             </span>
                           </span>
                         </SelectItem>
                       ))}
-                      <SelectItem value="__manual__">Enter manually…</SelectItem>
+                      <SelectItem value="__manual__">
+                        {t('tickets.create.trackingEnterManually')}
+                      </SelectItem>
                     </SelectContent>
                   </Select>
                 ) : (
                   <>
                     <Input
                       id="trackingNumber"
-                      placeholder="e.g. shipment or carrier tracking number"
+                      placeholder={t('tickets.create.trackingManualPlaceholder')}
                       maxLength={TRACKING_NUMBER_MAX}
                       {...register('trackingNumber')}
                       aria-invalid={!!errors.trackingNumber}
                     />
                     {trackingOptions.length === 0 ? (
                       <p className="text-xs text-muted-foreground">
-                        No tracking numbers found for this order yet — it may not be dispatched.
+                        {t('tickets.create.trackingNone')}
                       </p>
                     ) : (
                       <button
@@ -407,14 +423,14 @@ export function CreateTicketSheet({ open, onOpenChange, onCreated }: CreateTicke
                         onClick={() => setTrackingManual(false)}
                         className="text-xs text-muted-foreground hover:text-foreground"
                       >
-                        Choose from the order's tracking numbers instead
+                        {t('tickets.create.trackingUseList')}
                       </button>
                     )}
                   </>
                 )}
 
                 {errors.trackingNumber && (
-                  <p className="text-xs text-destructive">{errors.trackingNumber.message}</p>
+                  <p className="text-xs text-destructive">{m(errors.trackingNumber.message)}</p>
                 )}
               </div>
             )}
@@ -422,11 +438,13 @@ export function CreateTicketSheet({ open, onOpenChange, onCreated }: CreateTicke
             {/* Attachments */}
             <div className="space-y-1.5">
               <Label>
-                Attachments{' '}
+                {t('tickets.create.attachments')}{' '}
                 {attachmentsRequired ? (
                   <span className="text-destructive">*</span>
                 ) : (
-                  <span className="text-xs font-normal text-muted-foreground">(optional)</span>
+                  <span className="text-xs font-normal text-muted-foreground">
+                    {t('tickets.create.optional')}
+                  </span>
                 )}
               </Label>
               {selectedFiles.length > 0 && (
@@ -444,13 +462,15 @@ export function CreateTicketSheet({ open, onOpenChange, onCreated }: CreateTicke
                         </div>
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-sm font-medium">{f.originalName ?? f.key}</p>
-                          <p className="truncate text-xs text-muted-foreground">{formatFileSize(f.size)}</p>
+                          <p className="truncate text-xs text-muted-foreground">{fmt.fileSize(f.size)}</p>
                         </div>
                         <button
                           type="button"
                           onClick={() => removeFile(f.id)}
                           className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
-                          aria-label={`Remove ${f.originalName ?? 'file'}`}
+                          aria-label={t('tickets.create.removeFile', {
+                            name: f.originalName ?? t('tickets.create.fileFallback'),
+                          })}
                         >
                           <X className="h-4 w-4" />
                         </button>
@@ -467,25 +487,28 @@ export function CreateTicketSheet({ open, onOpenChange, onCreated }: CreateTicke
                   onClick={() => setPickerOpen(true)}
                 >
                   <Paperclip className="h-4 w-4" />
-                  Add attachment
+                  {t('tickets.create.addAttachment')}
                 </Button>
               )}
               <p className="text-xs text-muted-foreground">
-                {selectedFiles.length}/{MAX_CREATE_ATTACHMENTS} files. Photos and videos supported.
+                {t('tickets.create.attachmentCount', {
+                  used: selectedFiles.length,
+                  max: MAX_CREATE_ATTACHMENTS,
+                })}
               </p>
               {errors.attachments && (
-                <p className="text-xs text-destructive">{errors.attachments.message as string}</p>
+                <p className="text-xs text-destructive">{m(errors.attachments.message as string)}</p>
               )}
             </div>
           </SheetBody>
 
           <SheetFooter className="flex-row justify-end gap-2 border-t">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
-              Cancel
+              {t('common.actions.cancel')}
             </Button>
             <Button type="submit" disabled={isSubmitting}>
               {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Create ticket
+              {t('tickets.create.submit')}
             </Button>
           </SheetFooter>
         </form>

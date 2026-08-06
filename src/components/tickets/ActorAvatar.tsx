@@ -1,7 +1,8 @@
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
 import { fileRefUrl } from '@/services/files.service';
-import { actorInitials, ROLE_AVATAR_CLASSES, ROLE_LABELS } from '@/components/tickets/ticket.constants';
+import { actorInitials, ROLE_AVATAR_CLASSES, ROLE_LABEL_KEYS } from '@/components/tickets/ticket.constants';
+import { useTranslation } from '@/i18n';
 import type { TicketActor, TicketActorRole } from '@/types/tickets.types';
 
 interface ActorAvatarProps {
@@ -13,8 +14,9 @@ interface ActorAvatarProps {
 
 /** Avatar that shows the actor photo, falling back to role-tinted initials. */
 export function ActorAvatar({ actor, role, className }: ActorAvatarProps) {
+  const { t } = useTranslation();
   const effectiveRole = actor?.role ?? role ?? 'vendor';
-  const name = actor?.name ?? ROLE_LABELS[effectiveRole];
+  const name = actor?.name ?? t(ROLE_LABEL_KEYS[effectiveRole]);
   const avatarUrl = fileRefUrl(actor?.avatar);
   return (
     <Avatar className={cn('h-8 w-8', className)}>

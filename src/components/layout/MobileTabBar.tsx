@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import { MobileMoreDrawer } from './MobileMoreDrawer';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { QUICK_ACTIONS, type QuickAction } from '@/config/quickActions';
+import { useTranslation, type TranslationKey } from '@/i18n';
 
 type LegacyRoute = 'overview' | 'orders' | 'products' | 'product-upload' | 'customers'
   | 'analytics' | 'notifications' | 'settings' | 'media' | 'tickets'
@@ -47,6 +48,7 @@ function TabButton({ label, icon: Icon, active, badge, onClick }: TabButtonProps
 
 export function MobileTabBar() {
   const { route, navigate } = useRouter();
+  const { t } = useTranslation();
   const reactNavigate = useNavigate();
   const { unreadCount } = useNotificationStore();
   const [moreOpen, setMoreOpen] = useState(false);
@@ -60,13 +62,13 @@ export function MobileTabBar() {
     setQuickActionsOpen(false);
   };
 
-  const tabs: { label: string; icon: React.ElementType; route: LegacyRoute; badge?: number }[] = [
-    { label: 'Overview', icon: LayoutDashboard, route: 'overview' },
-    { label: 'Orders', icon: ShoppingCart, route: 'orders', badge: 3 },
+  const tabs: { labelKey: TranslationKey; icon: React.ElementType; route: LegacyRoute; badge?: number }[] = [
+    { labelKey: 'nav.items.overview', icon: LayoutDashboard, route: 'overview' },
+    { labelKey: 'nav.items.orders', icon: ShoppingCart, route: 'orders', badge: 3 },
   ];
 
-  const rightTabs: { label: string; icon: React.ElementType; route: LegacyRoute }[] = [
-    { label: 'Products', icon: Package, route: 'products' },
+  const rightTabs: { labelKey: TranslationKey; icon: React.ElementType; route: LegacyRoute }[] = [
+    { labelKey: 'nav.items.products', icon: Package, route: 'products' },
   ];
 
   return (
@@ -76,7 +78,7 @@ export function MobileTabBar() {
           {tabs.map((tab) => (
             <TabButton
               key={tab.route}
-              label={tab.label}
+              label={t(tab.labelKey)}
               icon={tab.icon}
               active={route === tab.route}
               badge={tab.badge}
@@ -87,7 +89,7 @@ export function MobileTabBar() {
           {/* FAB */}
           <button
             onClick={() => setQuickActionsOpen(true)}
-            aria-label="Quick actions"
+            aria-label={t('nav.mobile.quickActions')}
             className="-mt-6 w-14 h-14 rounded-full bg-gradient-to-br from-primary to-emerald-400 text-primary-foreground shadow-brand ring-4 ring-background flex items-center justify-center flex-shrink-0 transition-transform active:scale-95"
           >
             <Plus className="w-6 h-6" strokeWidth={2.5} />
@@ -96,7 +98,7 @@ export function MobileTabBar() {
           {rightTabs.map((tab) => (
             <TabButton
               key={tab.route}
-              label={tab.label}
+              label={t(tab.labelKey)}
               icon={tab.icon}
               active={route === tab.route}
               onClick={() => navigate(tab.route)}
@@ -104,7 +106,7 @@ export function MobileTabBar() {
           ))}
 
           <TabButton
-            label="More"
+            label={t('nav.items.more')}
             icon={Menu}
             active={moreOpen}
             badge={unreadCount > 0 ? unreadCount : undefined}
@@ -120,7 +122,7 @@ export function MobileTabBar() {
         <SheetContent side="bottom" className="p-0 rounded-t-2xl">
           <div className="px-4 pt-4 pb-2 border-b">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">
-              Quick Actions
+              {t('nav.quickActions.title')}
             </p>
           </div>
           <div className="py-2">
@@ -134,8 +136,8 @@ export function MobileTabBar() {
                   <action.icon className="w-5 h-5" />
                 </div>
                 <div className="flex-1 text-left">
-                  <p className="text-sm font-semibold">{action.label}</p>
-                  <p className="text-xs text-muted-foreground">{action.description}</p>
+                  <p className="text-sm font-semibold">{t(action.labelKey)}</p>
+                  <p className="text-xs text-muted-foreground">{t(action.descriptionKey)}</p>
                 </div>
                 <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />
               </button>

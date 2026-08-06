@@ -351,41 +351,7 @@ export async function unlockSlot(productId: string, slotId: string): Promise<voi
   await api.post<SimpleMessageResponse>(`/products/${productId}/slots/${slotId}/unlock`);
 }
 
-// ─── Error-code → friendly message maps ─────────────────────────────────────────
-
-export const AVAILABILITY_ERROR_MAP: Record<string, string> = {
-  AVAILABILITY_PRODUCT_NOT_FOUND: 'This service could not be found.',
-  AVAILABILITY_INVALID_PRODUCT_TYPE: 'Only service products can have availability rules.',
-  AVAILABILITY_INVALID_TIME_RANGE: 'The start time must be before the end time.',
-  AVAILABILITY_TIME_OVERLAP: 'This time range overlaps an existing rule for that day.',
-  AVAILABILITY_RULE_NOT_FOUND: 'This availability rule no longer exists.',
-  AVAILABILITY_FORBIDDEN: 'You do not have access to this availability rule.',
-};
-
-export const BOOKING_ERROR_MAP: Record<string, string> = {
-  BOOKING_NOT_FOUND: 'This booking could not be found.',
-  BOOKING_INVALID_STATUS_TRANSITION: 'That status change is not allowed from the current state.',
-  BOOKING_NOT_RESCHEDULABLE: 'Only pending or confirmed bookings can be rescheduled.',
-  BOOKING_SLOT_FULL: 'That time slot is full — no seats remain.',
-  BOOKING_PAYMENT_NOT_REQUIRED: 'This booking does not require payment.',
-  BOOKING_INVALID_PAYMENT_METHOD: 'Only cash bookings can be marked paid here.',
-  BOOKING_ALREADY_PAID: 'This booking is already marked as paid.',
-  BOOKING_ALREADY_CANCELLED: 'This booking is already cancelled.',
-  BOOKING_TERMINAL_STATE: 'Completed or no-show bookings cannot be cancelled.',
-  BOOKING_SLOT_LOCKED: 'That time slot is currently held by someone else. Try another.',
-  BOOKING_SLOT_NOT_LOCKED: 'The slot lock expired. Please pick the slot again.',
-  BOOKING_UNAUTHORIZED: 'That slot is locked by a different session.',
-  BOOKING_CALENDAR_SYNC_FAILED: 'The booking was updated but the calendar sync failed.',
-};
-
-export const SERVICE_ACTIVATION_ERROR_MAP: Record<string, string> = {
-  CATALOG_PRODUCT_INVALID_STATE:
-    "This status change isn't allowed from the service's current status.",
-  CATALOG_PRODUCT_NO_DESCRIPTION: 'A service description is required.',
-  CATALOG_PRODUCT_NO_VARIANTS: 'Set a price before publishing.',
-  CATALOG_PRODUCT_VARIANT_ZERO_PRICE: 'The booking price must be greater than 0.',
-  CATALOG_PRODUCT_NO_DEFAULT_VARIANT: 'A booking price must be set before publishing.',
-  CATALOG_PRODUCT_SERVICE_NO_DURATION: 'Set a session duration before publishing.',
-  CATALOG_PRODUCT_SERVICE_NO_CAPACITY: 'Set the seats per slot (capacity) before publishing.',
-  CATALOG_SERVICE_VARIANT_EXISTS: 'This service already has its booking variant.',
-};
+// Error codes are resolved through the shared i18n catalog — `useApiError()` in
+// components, `apiErrorMessage()` outside React. The service-specific wording for
+// the `CATALOG_PRODUCT_*` codes lives in `errors.contexts.service`, so call sites
+// pass `{ context: 'service' }`. See src/i18n/api-errors.ts.

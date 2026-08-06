@@ -16,15 +16,15 @@ import {
 } from '@/components/ui/alert-dialog';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { ApiError } from '@/types/api';
+import { useTranslation, useFormatters, useApiError } from '@/i18n';
 import {
-  fetchBookingById, updateBookingStatus, markBookingPaid, cancelBooking, BOOKING_ERROR_MAP,
+  fetchBookingById, updateBookingStatus, markBookingPaid, cancelBooking,
 } from '@/services/services.service';
 import { BookingStatusBadge, PaymentStatusBadge } from '@/components/services/StatusBadges';
 import { RescheduleSheet } from '@/components/services/RescheduleSheet';
 import { CompleteBookingDialog } from '@/components/services/CompleteBookingDialog';
 import {
-  responsiveSheetProps, formatDateTime, formatTime, formatMinor,
+  responsiveSheetProps, toMajorUnits,
   BOOKING_TRANSITIONS, CANCEL_REASON_MAX, type BookingTransition,
 } from '@/components/services/service.constants';
 import type { Booking } from '@/types/services.types';
@@ -41,17 +41,18 @@ function refId(ref: { _id: string } | string | undefined): string {
   return typeof ref === 'string' ? ref : ref._id;
 }
 
-function productTitle(b: Booking): string {
-  return typeof b.productId === 'object' ? b.productId.title : 'Service';
-}
-
-function customerEmail(b: Booking): string {
-  return typeof b.userId === 'object' ? b.userId.login_email ?? '—' : '—';
-}
-
 export function BookingDetailSheet({ bookingId, open, onOpenChange, onChanged }: BookingDetailSheetProps) {
   const isMobile = useIsMobile();
+  const { t } = useTranslation();
+  const fmt = useFormatters();
+  const apiError = useApiError();
   const sheet = responsiveSheetProps(isMobile, 'sm:max-w-lg');
+
+  const productTitle = (b: Booking): string =>
+    typeof b.productId === 'object' ? b.productId.title : t('services.bookings.untitledService');
+
+  const customerEmail = (b: Booking): string =>
+    (typeof b.userId === 'object' ? b.userId.login_email : null) ?? t('common.labels.emptyValue');
 
   const [booking, setBooking] = useState<Booking | null>(null);
   const [loading, setLoading] = useState(false);
@@ -70,11 +71,11 @@ export function BookingDetailSheet({ bookingId, open, onOpenChange, onChanged }:
     try {
       setBooking(await fetchBookingById(id));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Failed to load booking');
+      setError(apiError.resolve(err, { fallbackKey: 'services.errors.loadBookingFailed' }));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [apiError]);
 
   useEffect(() => {
     if (open && bookingId) load(bookingId);
@@ -87,11 +88,11 @@ export function BookingDetailSheet({ bookingId, open, onOpenChange, onChanged }:
     try {
       const updated = await updateBookingStatus(booking._id, target);
       setBooking(updated);
-      toast.success('Booking updated');
+      toast.success(t('services.toast.bookingUpdated'));
       setPendingStatus(null);
       onChanged();
     } catch (err) {
-      toast.error(err instanceof ApiError ? BOOKING_ERROR_MAP[err.code] ?? err.message : 'Failed to update');
+      apiError.toast(err, { fallbackKey: 'services.errors.bookingUpdateFailed' });
     } finally {
       setBusy(false);
     }
@@ -103,12 +104,12 @@ export function BookingDetailSheet({ bookingId, open, onOpenChange, onChanged }:
     try {
       const updated = await cancelBooking(booking._id, cancelReason.trim() || undefined);
       setBooking(updated);
-      toast.success('Booking cancelled');
+      toast.success(t('services.toast.bookingCancelled'));
       setCancelOpen(false);
       setCancelReason('');
       onChanged();
     } catch (err) {
-      toast.error(err instanceof ApiError ? BOOKING_ERROR_MAP[err.code] ?? err.message : 'Failed to cancel');
+      apiError.toast(err, { fallbackKey: 'services.errors.bookingCancelFailed' });
     } finally {
       setBusy(false);
     }
@@ -120,10 +121,10 @@ export function BookingDetailSheet({ bookingId, open, onOpenChange, onChanged }:
     try {
       await markBookingPaid(booking._id);
       await load(booking._id);
-      toast.success('Marked as paid');
+      toast.success(t('services.toast.markedPaid'));
       onChanged();
     } catch (err) {
-      toast.error(err instanceof ApiError ? BOOKING_ERROR_MAP[err.code] ?? err.message : 'Failed to mark paid');
+      apiError.toast(err, { fallbackKey: 'services.errors.markPaidFailed' });
     } finally {
       setBusy(false);
     }
@@ -151,7 +152,7 @@ export function BookingDetailSheet({ bookingId, open, onOpenChange, onChanged }:
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side={sheet.side} className={cn('p-0 flex flex-col', sheet.className)}>
         <SheetHeader className="border-b pr-12">
-          <SheetTitle>Booking</SheetTitle>
+          <SheetTitle>{t('services.detail.title')}</SheetTitle>
         </SheetHeader>
 
         <SheetBody className="p-4">
@@ -165,7 +166,7 @@ export function BookingDetailSheet({ bookingId, open, onOpenChange, onChanged }:
             <div className="flex flex-col items-center gap-3 py-16 text-center">
               <XCircle className="h-8 w-8 text-destructive" />
               <p className="text-sm text-muted-foreground">{error}</p>
-              <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>Close</Button>
+              <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>{t('common.actions.close')}</Button>
             </div>
           ) : booking ? (
             <div className="space-y-5">
@@ -177,38 +178,40 @@ export function BookingDetailSheet({ bookingId, open, onOpenChange, onChanged }:
                 </div>
                 <p className="flex items-center gap-2 text-sm text-muted-foreground">
                   <CalendarClock className="h-4 w-4" />
-                  {formatDateTime(booking.startAt)} – {formatTime(booking.endAt)}
+                  {fmt.dateTime(booking.startAt)} – {fmt.time(booking.endAt)}
                 </p>
               </div>
 
               {/* Customer */}
-              <InfoCard icon={<User className="h-4 w-4" />} title="Customer">
+              <InfoCard icon={<User className="h-4 w-4" />} title={t('services.detail.customer')}>
                 <p className="text-sm">{customerEmail(booking)}</p>
               </InfoCard>
 
               {/* Payment */}
-              <InfoCard icon={<Banknote className="h-4 w-4" />} title="Payment">
+              <InfoCard icon={<Banknote className="h-4 w-4" />} title={t('services.detail.payment')}>
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium">
-                    {formatMinor(booking.priceSnapshot, booking.currency)}
+                    {fmt.currency(toMajorUnits(booking.priceSnapshot), booking.currency)}
                   </span>
                   <PaymentStatusBadge status={booking.paymentStatus} />
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  {booking.requiresPayment ? 'Payment required' : 'No payment required'}
+                  {booking.requiresPayment
+                    ? t('services.detail.paymentRequired')
+                    : t('services.detail.paymentNotRequired')}
                   {booking.paymentMethod && ` · ${booking.paymentMethod}`}
-                  {booking.paidAt && ` · paid ${formatDateTime(booking.paidAt)}`}
+                  {booking.paidAt &&
+                    ` · ${t('services.detail.paidAt', { date: fmt.dateTime(booking.paidAt) })}`}
                 </p>
                 {booking.paymentStatus === 'disputed' && (
                   <p className="mt-2 rounded-md bg-orange-50 px-2.5 py-2 text-xs text-orange-700">
-                    The customer opened a chargeback on this payment. Stripe is resolving it —
-                    no action is needed. If lost, the booking is refunded and cancelled.
+                    {t('services.detail.disputeNotice')}
                   </p>
                 )}
               </InfoCard>
 
               {booking.cancelledReason && (
-                <InfoCard icon={<Ban className="h-4 w-4" />} title="Cancellation reason">
+                <InfoCard icon={<Ban className="h-4 w-4" />} title={t('services.detail.cancellationReason')}>
                   <p className="text-sm text-muted-foreground">{booking.cancelledReason}</p>
                 </InfoCard>
               )}
@@ -220,23 +223,23 @@ export function BookingDetailSheet({ bookingId, open, onOpenChange, onChanged }:
           <SheetFooter className="flex-col gap-2 border-t">
             {canMarkPaid && (
               <Button variant="outline" className="w-full gap-2" disabled={busy} onClick={handleMarkPaid}>
-                <CheckCircle2 className="h-4 w-4" /> Mark cash payment received
+                <CheckCircle2 className="h-4 w-4" /> {t('services.detail.markCashReceived')}
               </Button>
             )}
             {canReschedule && (
               <Button variant="outline" className="w-full gap-2" disabled={busy} onClick={() => setRescheduleOpen(true)}>
-                <CalendarSync className="h-4 w-4" /> Reschedule
+                <CalendarSync className="h-4 w-4" /> {t('services.detail.reschedule')}
               </Button>
             )}
-            {transitions.map((t) => (
+            {transitions.map((transition) => (
               <Button
-                key={t.target}
-                variant={t.tone === 'destructive' ? 'outline' : 'default'}
-                className={cn('w-full', t.tone === 'destructive' && 'text-destructive hover:text-destructive')}
+                key={transition.target}
+                variant={transition.tone === 'destructive' ? 'outline' : 'default'}
+                className={cn('w-full', transition.tone === 'destructive' && 'text-destructive hover:text-destructive')}
                 disabled={busy}
-                onClick={() => onTransitionClick(t)}
+                onClick={() => onTransitionClick(transition)}
               >
-                {t.label}
+                {t(transition.labelKey)}
               </Button>
             ))}
           </SheetFooter>
@@ -247,18 +250,18 @@ export function BookingDetailSheet({ bookingId, open, onOpenChange, onChanged }:
       <AlertDialog open={!!pendingStatus} onOpenChange={(o) => { if (!o) setPendingStatus(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>{pendingStatus?.label}</AlertDialogTitle>
+            <AlertDialogTitle>{pendingStatus ? t(pendingStatus.labelKey) : ''}</AlertDialogTitle>
             <AlertDialogDescription>
-              Apply this change? Confirmed bookings sync to your Google Calendar.
+              {t('services.detail.statusConfirmDescription')}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={busy}>{t('common.actions.cancel')}</AlertDialogCancel>
             <AlertDialogAction
               onClick={(e) => { e.preventDefault(); if (pendingStatus) applyStatus(pendingStatus.target); }}
               disabled={busy}
             >
-              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Confirm'}
+              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : t('common.actions.confirm')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -268,9 +271,9 @@ export function BookingDetailSheet({ bookingId, open, onOpenChange, onChanged }:
       <AlertDialog open={cancelOpen} onOpenChange={(o) => { if (!o) { setCancelOpen(false); setCancelReason(''); } }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Cancel this booking?</AlertDialogTitle>
+            <AlertDialogTitle>{t('services.detail.cancelTitle')}</AlertDialogTitle>
             <AlertDialogDescription>
-              The calendar event is removed and the customer is notified. This can't be undone.
+              {t('services.detail.cancelDescription')}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <Textarea
@@ -278,16 +281,16 @@ export function BookingDetailSheet({ bookingId, open, onOpenChange, onChanged }:
             onChange={(e) => setCancelReason(e.target.value)}
             maxLength={CANCEL_REASON_MAX}
             rows={3}
-            placeholder="Reason (optional)"
+            placeholder={t('services.detail.cancelReasonPlaceholder')}
           />
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={busy}>Keep booking</AlertDialogCancel>
+            <AlertDialogCancel disabled={busy}>{t('services.detail.keepBooking')}</AlertDialogCancel>
             <AlertDialogAction
               onClick={(e) => { e.preventDefault(); handleCancel(); }}
               disabled={busy}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Cancel booking'}
+              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : t('services.detail.confirmCancel')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

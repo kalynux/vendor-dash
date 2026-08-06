@@ -8,10 +8,12 @@ import { emptyMobileMoneyEntry } from '@/components/vendor-settings/forms/basicS
 import { mapProfileError } from '@/components/vendor-settings/errors';
 import { UnsavedChangesBar } from '@/components/vendor-settings/UnsavedChangesBar';
 import { SettingsSection } from '@/components/vendor-settings/SettingsSection';
+import { useTranslation } from '@/i18n';
 
 const FORM_ID = 'settings-payout-form';
 
 export function PayoutSetupSettings() {
+    const { t } = useTranslation();
     const { session, updateVendorProfile } = useOnboarding();
     const roleEntity = session?.role_entity;
     const [saving, setSaving] = useState(false);
@@ -37,7 +39,7 @@ export function PayoutSetupSettings() {
                 // Country/timezone now live in the Store tab — only payout methods
                 // are managed here.
                 await updateVendorProfile({ payout_details: values.payout_details });
-                toast.success('Payout setup updated');
+                toast.success(t('settings.payout.saved'));
                 // Reset the dirty state by remounting against the freshly-saved session.
                 setDirty(false);
                 setFormKey((k) => k + 1);
@@ -47,7 +49,7 @@ export function PayoutSetupSettings() {
                 setSaving(false);
             }
         },
-        [updateVendorProfile],
+        [updateVendorProfile, t],
     );
 
     if (!roleEntity) return null;
@@ -68,17 +70,11 @@ export function PayoutSetupSettings() {
         // across the top of the floating bar.
         <div>
             <SettingsSection
-                title="Payment Methods"
+                title={t('settings.payout.paymentMethodsTitle')}
                 info={
                     <div className="space-y-2">
-                        <p>
-                            Where your withdrawals are sent. Add up to 3 methods — the first one is the
-                            preferred one and is used by default; the rest are fallbacks.
-                        </p>
-                        <p>
-                            Account names must match the name registered with the provider, otherwise the
-                            transfer is rejected and the payout is sent back to your available balance.
-                        </p>
+                        <p>{t('settings.payout.paymentMethodsInfo1')}</p>
+                        <p>{t('settings.payout.paymentMethodsInfo2')}</p>
                     </div>
                 }
                 contentClassName="space-y-6"

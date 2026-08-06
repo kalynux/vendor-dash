@@ -32,16 +32,15 @@ import {
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useInfiniteList } from '@/hooks/use-infinite-list';
+import { useTranslation, useApiError, type TranslationKey } from '@/i18n';
 import { ServiceStatusBadge } from '@/components/services/StatusBadges';
 import {
-  formatDuration, BOOKING_MODE_LABELS, SERVICE_STATUS_TRANSITIONS,
+  formatDuration, BOOKING_MODE_LABEL_KEYS, SERVICE_STATUS_TRANSITIONS,
   type ServiceStatusTransition,
 } from '@/components/services/service.constants';
 import {
   fetchServices, changeServiceStatus, setVectorisationEnabled, retryVectorisation,
-  SERVICE_ACTIVATION_ERROR_MAP,
 } from '@/services/services.service';
-import { ApiError } from '@/types/api';
 import type { ApiVectorisationStatus } from '@/types/product.types';
 import type {
   ServiceListItem, ServiceListMeta, ServicesQueryParams, ServiceStatus,
@@ -59,45 +58,49 @@ interface ServicesListPanelProps {
   reloadToken: number;
 }
 
-const STATUS_OPTIONS: { value: ServiceStatus | ''; label: string }[] = [
-  { value: '', label: 'All statuses' },
-  { value: 'draft', label: 'Draft' },
-  { value: 'active', label: 'Active' },
-  { value: 'archived', label: 'Archived' },
+const STATUS_OPTIONS: { value: ServiceStatus; labelKey: TranslationKey }[] = [
+  { value: 'draft', labelKey: 'services.status.draft' },
+  { value: 'active', labelKey: 'services.status.active' },
+  { value: 'archived', labelKey: 'services.status.archived' },
 ];
 
 // ─── Vectorisation badge (mirrors the products listing) ─────────────────────────
 
 const VECTORISATION_META: Record<
   ApiVectorisationStatus,
-  { label: string; className: string; Icon: React.ComponentType<{ className?: string }> }
+  { labelKey: TranslationKey; className: string; Icon: React.ComponentType<{ className?: string }> }
 > = {
-  not_started: { label: 'Not indexed', className: 'bg-muted text-muted-foreground', Icon: Sparkles },
+  not_started: {
+    labelKey: 'services.vectorisation.notStarted',
+    className: 'bg-muted text-muted-foreground',
+    Icon: Sparkles,
+  },
   pending: {
-    label: 'Indexing…',
+    labelKey: 'services.vectorisation.pending',
     className: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
     Icon: Loader2,
   },
   completed: {
-    label: 'AI search ready',
+    labelKey: 'services.vectorisation.completed',
     className: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
     Icon: CheckCircle2,
   },
   failed: {
-    label: 'Indexing failed',
+    labelKey: 'services.vectorisation.failed',
     className: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
     Icon: XCircle,
   },
 };
 
 function VectorisationBadge({ enabled, status }: { enabled: boolean; status: ApiVectorisationStatus }) {
+  const { t } = useTranslation();
   if (!enabled) return null;
   const meta = VECTORISATION_META[status];
   const { Icon } = meta;
   return (
     <span className={cn('inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium', meta.className)}>
       <Icon className={cn('h-3 w-3', status === 'pending' && 'animate-spin')} />
-      {meta.label}
+      {t(meta.labelKey)}
     </span>
   );
 }
@@ -118,6 +121,7 @@ interface ServiceActionsMenuProps {
 }
 
 function ServiceActionsMenu({ service, onEdit, onStatusTransition, onVectorisation }: ServiceActionsMenuProps) {
+  const { t } = useTranslation();
   const transitions = SERVICE_STATUS_TRANSITIONS[service.status] ?? [];
   const nonDestructive = transitions.filter((t) => !t.destructive);
   const archive = transitions.find((t) => t.destructive);
@@ -145,19 +149,19 @@ function ServiceActionsMenu({ service, onEdit, onStatusTransition, onVectorisati
       <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
         <DropdownMenuItem onClick={editLocked ? undefined : onEdit} disabled={editLocked}>
           <Edit className="mr-2 h-4 w-4" />
-          {editLocked ? 'Edit (locked — indexing)' : 'Edit'}
+          {editLocked ? t('services.vectorisation.editLocked') : t('common.actions.edit')}
         </DropdownMenuItem>
 
-        {nonDestructive.map((t) => {
-          const Icon = transitionIcon(t);
+        {nonDestructive.map((transition) => {
+          const Icon = transitionIcon(transition);
           return (
             <DropdownMenuItem
-              key={t.target + t.label}
-              onClick={indexing ? undefined : () => onStatusTransition(t)}
+              key={transition.target + transition.labelKey}
+              onClick={indexing ? undefined : () => onStatusTransition(transition)}
               disabled={indexing}
             >
               <Icon className="mr-2 h-4 w-4" />
-              {t.label}
+              {t(transition.labelKey)}
             </DropdownMenuItem>
           );
         })}
@@ -165,19 +169,19 @@ function ServiceActionsMenu({ service, onEdit, onStatusTransition, onVectorisati
         {showEnable && (
           <DropdownMenuItem onClick={() => onVectorisation('enable')}>
             <Sparkles className="mr-2 h-4 w-4" />
-            Enable AI search
+            {t('services.vectorisation.enable')}
           </DropdownMenuItem>
         )}
         {showRetry && (
           <DropdownMenuItem onClick={() => onVectorisation('retry')}>
             <RotateCw className="mr-2 h-4 w-4" />
-            Retry AI search
+            {t('services.vectorisation.retry')}
           </DropdownMenuItem>
         )}
         {showDisable && (
           <DropdownMenuItem onClick={() => onVectorisation('disable')}>
             <XCircle className="mr-2 h-4 w-4" />
-            Disable AI search
+            {t('services.vectorisation.disable')}
           </DropdownMenuItem>
         )}
 
@@ -188,7 +192,7 @@ function ServiceActionsMenu({ service, onEdit, onStatusTransition, onVectorisati
             className="text-destructive focus:text-destructive"
           >
             <Trash2 className="mr-2 h-4 w-4" />
-            {archive.label}
+            {t(archive.labelKey)}
           </DropdownMenuItem>
         )}
       </DropdownMenuContent>
@@ -276,6 +280,8 @@ function ServiceGridCard({ service, onOpen, actions }: ServiceCardProps) {
 
 export function ServicesListPanel({ onOpenDetail, onCreate, reloadToken }: ServicesListPanelProps) {
   const isMobile = useIsMobile();
+  const { t } = useTranslation();
+  const apiError = useApiError();
 
   const [services, setServices] = useState<ServiceListItem[]>([]);
   const [meta, setMeta] = useState<ServiceListMeta | null>(null);
@@ -328,13 +334,13 @@ export function ServicesListPanel({ onOpenDetail, onCreate, reloadToken }: Servi
       setServices(result.data);
       setMeta(result.meta);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Failed to load services');
+      setError(apiError.resolve(err, { fallbackKey: 'services.errors.loadFailed' }));
       setServices([]);
       setMeta(null);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [apiError]);
 
   // Desktop: page-based.
   useEffect(() => {
@@ -377,39 +383,38 @@ export function ServicesListPanel({ onOpenDetail, onCreate, reloadToken }: Servi
     setActionBusy(true);
     try {
       await changeServiceStatus(service.id, target);
-      toast.success('Service updated');
+      toast.success(t('services.toast.statusUpdated'));
       refetch();
     } catch (err) {
-      toast.error(
-        err instanceof ApiError
-          ? SERVICE_ACTIVATION_ERROR_MAP[err.code] ?? err.message
-          : 'Failed to update service.',
-      );
+      apiError.toast(err, {
+        context: 'service',
+        fallbackKey: 'services.errors.statusChangeFailed',
+      });
     } finally {
       setActionBusy(false);
     }
-  }, [refetch]);
+  }, [refetch, t, apiError]);
 
   // Opening the editor is blocked while AI indexing is in flight (mirrors products).
   const openService = useCallback((service: ServiceListItem) => {
     if (service.vectorisationStatus === 'pending') {
-      toast.error('Editing is locked while AI indexing is in progress.');
+      toast.error(t('services.vectorisation.editLockedToast'));
       return;
     }
     onOpenDetail(service.id);
-  }, [onOpenDetail]);
+  }, [onOpenDetail, t]);
 
   const requestTransition = useCallback((service: ServiceListItem, transition: ServiceStatusTransition) => {
     if (service.vectorisationStatus === 'pending') {
-      toast.error('Status changes are locked while AI indexing is in progress.');
+      toast.error(t('services.vectorisation.statusLockedToast'));
       return;
     }
-    if (transition.destructive || transition.confirmMessage) {
+    if (transition.destructive || transition.confirmKey) {
       setPendingTransition({ service, transition });
       return;
     }
     applyTransition(service, transition.target);
-  }, [applyTransition]);
+  }, [applyTransition, t]);
 
   const confirmTransition = useCallback(async () => {
     if (!pendingTransition) return;
@@ -419,22 +424,29 @@ export function ServicesListPanel({ onOpenDetail, onCreate, reloadToken }: Servi
 
   const handleVectorisation = useCallback(async (service: ServiceListItem, action: VectorisationAction) => {
     if (service.vectorisationStatus === 'pending') {
-      toast.error('AI search is being indexed — please wait until it finishes.');
+      toast.error(t('services.vectorisation.busyToast'));
       return;
     }
     try {
       if (action === 'retry') {
         await retryVectorisation(service.id);
-        toast.success('AI search retry queued');
+        toast.success(t('services.vectorisation.retryQueued'));
       } else {
         await setVectorisationEnabled(service.id, action === 'enable');
-        toast.success(action === 'enable' ? 'AI search enabled' : 'AI search disabled');
+        toast.success(
+          action === 'enable'
+            ? t('services.vectorisation.enabled')
+            : t('services.vectorisation.disabled'),
+        );
       }
       refetch();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'AI search could not be updated.');
+      apiError.toast(err, {
+        context: 'service',
+        fallbackKey: 'services.vectorisation.updateFailed',
+      });
     }
-  }, [refetch]);
+  }, [refetch, t, apiError]);
 
   const renderActions = (service: ServiceListItem) => (
     <ServiceActionsMenu
@@ -450,8 +462,8 @@ export function ServicesListPanel({ onOpenDetail, onCreate, reloadToken }: Servi
   const viewToggle = (
     <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as ViewMode)}>
       <TabsList className="h-11 rounded-xl">
-        <TabsTrigger value="grid" aria-label="Grid view"><Grid3X3 className="h-4 w-4" /></TabsTrigger>
-        <TabsTrigger value="list" aria-label="List view"><List className="h-4 w-4" /></TabsTrigger>
+        <TabsTrigger value="grid" aria-label={t('services.list.gridView')}><Grid3X3 className="h-4 w-4" /></TabsTrigger>
+        <TabsTrigger value="list" aria-label={t('services.list.listView')}><List className="h-4 w-4" /></TabsTrigger>
       </TabsList>
     </Tabs>
   );
@@ -463,17 +475,22 @@ export function ServicesListPanel({ onOpenDetail, onCreate, reloadToken }: Servi
       <SearchFilterBar
         value={searchQuery}
         onChange={setSearchQuery}
-        placeholder="Search services…"
+        placeholder={t('services.list.searchPlaceholder')}
         activeFilterCount={activeFilterCount}
         onOpenFilters={() => setFilterSheetOpen(true)}
-        filterLabel="Filter services"
+        filterLabel={t('services.list.filterTitle')}
         trailing={trailing}
       />
       <ActiveFilterChips
         chips={statusFilter
           ? [{
             key: 'status',
-            label: `Status: ${STATUS_OPTIONS.find((o) => o.value === statusFilter)?.label ?? statusFilter}`,
+            label: t('services.list.statusChip', {
+              value: t(
+                STATUS_OPTIONS.find((o) => o.value === statusFilter)?.labelKey
+                  ?? 'services.list.statusSection',
+              ),
+            }),
             onRemove: () => { setStatusFilter(''); setPage(1); },
           }]
           : []}
@@ -485,17 +502,17 @@ export function ServicesListPanel({ onOpenDetail, onCreate, reloadToken }: Servi
     <FilterSheet
       open={filterSheetOpen}
       onOpenChange={setFilterSheetOpen}
-      title="Filter services"
+      title={t('services.list.filterTitle')}
       activeCount={activeFilterCount}
       onClear={clearFilters}
-      applyLabel="Show services"
+      applyLabel={t('services.list.applyFilters')}
     >
-      <FilterSection title="Status">
+      <FilterSection title={t('services.list.statusSection')}>
         <FilterChips
-          options={STATUS_OPTIONS.filter((o): o is { value: ServiceStatus; label: string } => o.value !== '')}
+          options={STATUS_OPTIONS}
           value={statusFilter || undefined}
           onChange={(v) => { setStatusFilter(v ?? ''); setPage(1); }}
-          allLabel="All statuses"
+          allLabel={t('services.list.allStatuses')}
         />
       </FilterSection>
     </FilterSheet>
@@ -505,18 +522,22 @@ export function ServicesListPanel({ onOpenDetail, onCreate, reloadToken }: Servi
     <Empty className="py-16">
       <EmptyHeader>
         <EmptyMedia variant="icon"><CalendarClock className="h-6 w-6" /></EmptyMedia>
-        <EmptyTitle>{hasActiveQuery ? 'No matching services' : 'No services yet'}</EmptyTitle>
+        <EmptyTitle>
+          {hasActiveQuery ? t('services.list.emptyFilteredTitle') : t('services.list.emptyTitle')}
+        </EmptyTitle>
         <EmptyDescription>
           {hasActiveQuery
-            ? 'Try adjusting your search or status filter.'
-            : 'Create a bookable service to start accepting appointments.'}
+            ? t('services.list.emptyFilteredDescription')
+            : t('services.list.emptyDescription')}
         </EmptyDescription>
       </EmptyHeader>
       <EmptyContent>
         {hasActiveQuery ? (
-          <Button variant="outline" onClick={clearFilters}>Clear filters</Button>
+          <Button variant="outline" onClick={clearFilters}>{t('common.actions.clearAll')}</Button>
         ) : (
-          <Button onClick={onCreate} className="gap-2"><Plus className="h-4 w-4" /> New service</Button>
+          <Button onClick={onCreate} className="gap-2">
+            <Plus className="h-4 w-4" /> {t('services.list.newService')}
+          </Button>
         )}
       </EmptyContent>
     </Empty>
@@ -540,16 +561,15 @@ export function ServicesListPanel({ onOpenDetail, onCreate, reloadToken }: Servi
       <table className="w-full text-sm">
         <thead className="border-b bg-muted/40 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
           <tr>
-            <th className="px-4 py-3">Service</th>
-            <th className="px-4 py-3">Duration</th>
-            <th className="px-4 py-3">Mode</th>
-            <th className="px-4 py-3">Status</th>
+            <th className="px-4 py-3">{t('services.list.columns.service')}</th>
+            <th className="px-4 py-3">{t('services.list.columns.duration')}</th>
+            <th className="px-4 py-3">{t('services.list.columns.mode')}</th>
+            <th className="px-4 py-3">{t('services.list.columns.status')}</th>
             <th className="w-8 px-4 py-3" />
           </tr>
         </thead>
         <tbody>
           {items.map((s) => {
-            console.log({ s })
             return (
               <tr
                 key={s.id}
@@ -571,9 +591,9 @@ export function ServicesListPanel({ onOpenDetail, onCreate, reloadToken }: Servi
                     </div>
                   </div>
                 </td>
-                <td className="px-4 py-3 text-muted-foreground">{formatDuration(s.durationMinutes)}</td>
+                <td className="px-4 py-3 text-muted-foreground">{formatDuration(s.durationMinutes, t)}</td>
                 <td className="px-4 py-3 text-muted-foreground">
-                  {s.bookingMode ? BOOKING_MODE_LABELS[s.bookingMode] : '—'}
+                  {s.bookingMode ? t(BOOKING_MODE_LABEL_KEYS[s.bookingMode]) : t('common.labels.emptyValue')}
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex flex-col items-start gap-1">
@@ -608,8 +628,8 @@ export function ServicesListPanel({ onOpenDetail, onCreate, reloadToken }: Servi
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-semibold">{s.title}</p>
             <p className="flex items-center gap-1.5 truncate text-xs text-muted-foreground">
-              <Clock className="h-3 w-3" /> {formatDuration(s.durationMinutes)}
-              {s.bookingMode && ` · ${BOOKING_MODE_LABELS[s.bookingMode]}`}
+              <Clock className="h-3 w-3" /> {formatDuration(s.durationMinutes, t)}
+              {s.bookingMode && ` · ${t(BOOKING_MODE_LABEL_KEYS[s.bookingMode])}`}
             </p>
           </div>
           <ServiceStatusBadge status={s.status} />
@@ -620,7 +640,7 @@ export function ServicesListPanel({ onOpenDetail, onCreate, reloadToken }: Servi
               setActionsSheetService(s);
             }}
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-accent"
-            aria-label="Service actions"
+            aria-label={t('services.list.rowActions')}
           >
             <MoreHorizontal className="h-5 w-5 text-muted-foreground" />
           </button>
@@ -633,19 +653,25 @@ export function ServicesListPanel({ onOpenDetail, onCreate, reloadToken }: Servi
     <AlertDialog open={!!pendingTransition} onOpenChange={(o) => { if (!o) setPendingTransition(null); }}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>{pendingTransition?.transition.label ?? 'Confirm'}</AlertDialogTitle>
+          <AlertDialogTitle>
+            {pendingTransition
+              ? t(pendingTransition.transition.labelKey)
+              : t('services.transitions.confirmTitle')}
+          </AlertDialogTitle>
           <AlertDialogDescription>
-            {pendingTransition?.transition.confirmMessage ?? 'Apply this status change?'}
+            {pendingTransition?.transition.confirmKey
+              ? t(pendingTransition.transition.confirmKey)
+              : t('services.transitions.confirm.generic')}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={actionBusy}>Cancel</AlertDialogCancel>
+          <AlertDialogCancel disabled={actionBusy}>{t('common.actions.cancel')}</AlertDialogCancel>
           <AlertDialogAction
             onClick={(e) => { e.preventDefault(); confirmTransition(); }}
             disabled={actionBusy}
             className={cn(pendingTransition?.transition.destructive && 'bg-destructive text-destructive-foreground hover:bg-destructive/90')}
           >
-            {actionBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Confirm'}
+            {actionBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : t('common.actions.confirm')}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -677,47 +703,47 @@ export function ServicesListPanel({ onOpenDetail, onCreate, reloadToken }: Servi
               <div className="flex flex-col py-2 pb-6">
                 <ServiceSheetActionButton
                   icon={<Edit className="h-5 w-5" />}
-                  label={indexing ? 'Edit (locked — indexing)' : 'Edit'}
+                  label={indexing ? t('services.vectorisation.editLocked') : t('common.actions.edit')}
                   disabled={indexing}
                   onClick={() => { close(); openService(s); }}
                 />
-                {nonDestructive.map((t) => {
-                  const Icon = transitionIcon(t);
+                {nonDestructive.map((transition) => {
+                  const Icon = transitionIcon(transition);
                   return (
                     <ServiceSheetActionButton
-                      key={t.target + t.label}
+                      key={transition.target + transition.labelKey}
                       icon={<Icon className="h-5 w-5" />}
-                      label={t.label}
+                      label={t(transition.labelKey)}
                       disabled={indexing}
-                      onClick={() => { close(); requestTransition(s, t); }}
+                      onClick={() => { close(); requestTransition(s, transition); }}
                     />
                   );
                 })}
                 {showEnable && (
                   <ServiceSheetActionButton
                     icon={<Sparkles className="h-5 w-5" />}
-                    label="Enable AI search"
+                    label={t('services.vectorisation.enable')}
                     onClick={() => { close(); handleVectorisation(s, 'enable'); }}
                   />
                 )}
                 {showRetry && (
                   <ServiceSheetActionButton
                     icon={<RotateCw className="h-5 w-5" />}
-                    label="Retry AI search"
+                    label={t('services.vectorisation.retry')}
                     onClick={() => { close(); handleVectorisation(s, 'retry'); }}
                   />
                 )}
                 {showDisable && (
                   <ServiceSheetActionButton
                     icon={<XCircle className="h-5 w-5" />}
-                    label="Disable AI search"
+                    label={t('services.vectorisation.disable')}
                     onClick={() => { close(); handleVectorisation(s, 'disable'); }}
                   />
                 )}
                 {archive && (
                   <ServiceSheetActionButton
                     icon={<Trash2 className="h-5 w-5" />}
-                    label={archive.label}
+                    label={t(archive.labelKey)}
                     destructive
                     disabled={indexing}
                     onClick={() => { close(); requestTransition(s, archive); }}
@@ -736,7 +762,7 @@ export function ServicesListPanel({ onOpenDetail, onCreate, reloadToken }: Servi
     return (
       <div className="space-y-3">
         {filtersNode(
-          <Button onClick={onCreate} aria-label="New service" className="h-11 w-11 shrink-0 rounded-xl p-0">
+          <Button onClick={onCreate} aria-label={t('services.list.newService')} className="h-11 w-11 shrink-0 rounded-xl p-0">
             <Plus className="h-5 w-5" />
           </Button>,
         )}
@@ -771,7 +797,7 @@ export function ServicesListPanel({ onOpenDetail, onCreate, reloadToken }: Servi
         <>
           {viewToggle}
           <Button onClick={onCreate} className="h-11 shrink-0 gap-2">
-            <Plus className="h-4 w-4" /> New service
+            <Plus className="h-4 w-4" /> {t('services.list.newService')}
           </Button>
         </>,
       )}
@@ -789,15 +815,20 @@ export function ServicesListPanel({ onOpenDetail, onCreate, reloadToken }: Servi
 
           {meta && (
             <div className="flex flex-col items-center justify-between gap-3 text-sm text-muted-foreground sm:flex-row">
-              <span>Showing {services.length} of {meta.total} service{meta.total !== 1 ? 's' : ''}</span>
+              <span>
+                {t('common.pagination.showingOf', {
+                  shown: services.length,
+                  items: t('services.list.count', { count: meta.total }),
+                })}
+              </span>
               {meta.pages > 1 && (
                 <div className="flex items-center gap-2">
                   <Button variant="outline" size="sm" disabled={meta.page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
-                    Previous
+                    {t('common.pagination.previous')}
                   </Button>
-                  <span>Page {meta.page} of {meta.pages}</span>
+                  <span>{t('common.pagination.pageOf', { page: meta.page, total: meta.pages })}</span>
                   <Button variant="outline" size="sm" disabled={meta.page >= meta.pages} onClick={() => setPage((p) => p + 1)}>
-                    Next
+                    {t('common.pagination.next')}
                   </Button>
                 </div>
               )}
@@ -811,11 +842,12 @@ export function ServicesListPanel({ onOpenDetail, onCreate, reloadToken }: Servi
 }
 
 function ErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
+  const { t } = useTranslation();
   return (
     <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed py-16 text-center">
       <CalendarClock className="h-10 w-10 text-muted-foreground" />
       <p className="text-sm text-muted-foreground">{message}</p>
-      <Button variant="outline" size="sm" onClick={onRetry}>Try again</Button>
+      <Button variant="outline" size="sm" onClick={onRetry}>{t('common.actions.retry')}</Button>
     </div>
   );
 }

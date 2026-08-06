@@ -1,5 +1,6 @@
 import * as React from 'react';
 import { getListCache, setListCache, clearListCache } from '@/lib/listCache';
+import { apiErrorMessage } from '@/i18n';
 
 export interface InfinitePage<T> {
   items: T[];
@@ -114,7 +115,7 @@ export function useInfiniteList<T>({
         setPage(target);
       } catch (err) {
         if (id !== requestId.current) return;
-        setError(err instanceof Error ? err.message : 'Failed to load');
+        setError(apiErrorMessage(err, { fallbackKey: 'common.states.errorDescription' }));
       } finally {
         if (id === requestId.current) {
           setLoading(false);

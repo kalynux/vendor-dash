@@ -19,12 +19,14 @@ import {
 import {
   createSimpleProduct,
   updateSimpleProduct,
-  getSimpleProductErrorMessage,
   type SimpleProductResult,
 } from '@/services/products.service';
+import { useApiError, useTranslation } from '@/i18n';
 import type { ApiPickupLocation } from '@/types/product.types';
 
 export function SimpleProductCreate() {
+  const { t } = useTranslation();
+  const apiError = useApiError();
   const navigate = useNavigate();
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -49,12 +51,12 @@ export function SimpleProductCreate() {
       try {
         const res = await createSimpleProduct(toCreatePayload(values, publish));
         if (res.activation.published) {
-          toast.success(res.message ?? 'Product created and published.');
+          toast.success(res.message ?? t('products.quickAdd.createdPublished'));
           goToList();
           return;
         }
         if (!publish) {
-          toast.success(res.message ?? 'Product saved as a draft.');
+          toast.success(res.message ?? t('products.quickAdd.savedAsDraft'));
           goToList();
           return;
         }
@@ -71,7 +73,7 @@ export function SimpleProductCreate() {
         setIsSubmitting(false);
       }
     },
-    [goToList],
+    [goToList, t],
   );
 
   const handleSubmit = useCallback(
@@ -101,18 +103,18 @@ export function SimpleProductCreate() {
       try {
         const res = await updateSimpleProduct(result.product.id, payload);
         if (res.activation.published) {
-          toast.success(res.message ?? 'Product published.');
+          toast.success(res.message ?? t('products.quickAdd.published'));
           goToList();
           return;
         }
         setResult(res);
       } catch (err: unknown) {
-        toast.error(getSimpleProductErrorMessage(err));
+        apiError.toast(err, { context: 'simpleProduct', fallbackKey: 'products.errors.saveFailed' });
       } finally {
         setIsSubmitting(false);
       }
     },
-    [result, goToList],
+    [result, goToList, t, apiError],
   );
 
   const handlePickupLocationChosen = useCallback(
@@ -128,14 +130,17 @@ export function SimpleProductCreate() {
   return (
     <div className="space-y-4 sm:space-y-6 animate-fade-in max-w-3xl mx-auto -mx-6 sm:mx-auto">
       <div className="px-4 sm:px-0">
-        <PageBackButton fallbackPath="/dashboard/products" label="Products" className="mb-1" />
-        <h1 className="text-xl sm:text-2xl font-bold">Quick add product</h1>
+        <PageBackButton
+          fallbackPath="/dashboard/products"
+          label={t('products.wizard.backToProducts')}
+          className="mb-1"
+        />
+        <h1 className="text-xl sm:text-2xl font-bold">{t('products.quickAdd.title')}</h1>
         <p className="text-muted-foreground text-xs sm:text-sm mt-1">
-          One page, one price. Need sizes or colours?{' '}
+          {t('products.quickAdd.subtitleLead')}{' '}
           <Link to="/dashboard/product-upload" className="underline hover:text-foreground">
-            Use the advanced editor
+            {t('products.quickAdd.subtitleLink')}
           </Link>
-          .
         </p>
       </div>
 
@@ -155,17 +160,17 @@ export function SimpleProductCreate() {
               {offerDraftFallback && (
                 <div className="flex flex-col sm:flex-row gap-2">
                   <Button size="sm" variant="outline" onClick={saveAsDraftInstead}>
-                    Save as draft instead
+                    {t('products.simple.saveDraftInstead')}
                   </Button>
                   <Button asChild size="sm" variant="outline">
-                    <Link to="/dashboard/account/billing">View plans</Link>
+                    <Link to="/dashboard/account/billing">{t('products.quickAdd.viewPlans')}</Link>
                   </Button>
                 </div>
               )}
 
               {fieldErrors?.sku && (
                 <Button size="sm" variant="outline" onClick={useGeneratedSku}>
-                  Use an auto-generated SKU instead
+                  {t('products.quickAdd.useGeneratedSku')}
                 </Button>
               )}
 

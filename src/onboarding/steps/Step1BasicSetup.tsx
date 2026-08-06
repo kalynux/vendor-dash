@@ -8,9 +8,11 @@ import { useOnboarding } from '@/onboarding/store/onboarding.store';
 import { BasicSetupFields } from '@/components/vendor-settings/forms/BasicSetupFields';
 import { emptyMobileMoneyEntry } from '@/components/vendor-settings/forms/basicSetup.helpers';
 import { Button } from '@/components/ui/button';
-import { ApiError } from '@/types/api';
+import { useTranslation, useApiError } from '@/i18n';
 
 export function Step1BasicSetup() {
+    const { t } = useTranslation();
+    const errors = useApiError();
     const { submitBasicSetup, isSubmitting, session, drafts, saveDraft } = useOnboarding();
     const [apiError, setApiError] = useState<string | null>(null);
 
@@ -44,24 +46,12 @@ export function Step1BasicSetup() {
                     payout_details: values.payout_details,
                     version: roleEntity?.version,
                 });
-                toast.success('Basic setup saved!');
+                toast.success(t('onboarding.basicSetup.saved'));
             } catch (err) {
-                if (err instanceof ApiError) {
-                    if (err.isConcurrentModification) {
-                        setApiError(
-                            'Your profile was modified in another session. Please refresh and try again.',
-                        );
-                    } else if (err.isValidation && err.details?.length) {
-                        setApiError(err.details[0].message);
-                    } else if (err.isServer) {
-                        setApiError('A server error occurred. Please try again.');
-                    } else {
-                        setApiError(err.message);
-                    }
-                }
+                setApiError(errors.resolve(err, { fallbackKey: 'onboarding.errors.saveFailed' }));
             }
         },
-        [submitBasicSetup, saveDraft, roleEntity?.version],
+        [submitBasicSetup, saveDraft, roleEntity?.version, t, errors],
     );
 
     const ctaSlot = (
@@ -74,11 +64,11 @@ export function Step1BasicSetup() {
             {isSubmitting ? (
                 <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    Saving…
+                    {t('common.actions.saving')}
                 </>
             ) : (
                 <>
-                    Continue
+                    {t('common.actions.continue')}
                     <ChevronRight className="w-4 h-4" />
                 </>
             )}
@@ -88,9 +78,9 @@ export function Step1BasicSetup() {
     return (
         <OnboardingLayout ctaSlot={ctaSlot} stepKey={1}>
             <div className="space-y-2 mb-8">
-                <h1 className="text-2xl font-bold">Basic Setup</h1>
+                <h1 className="text-2xl font-bold">{t('onboarding.basicSetup.heading')}</h1>
                 <p className="text-muted-foreground text-sm">
-                    Tell us where you operate and how you'd like to receive payouts.
+                    {t('onboarding.basicSetup.subheading')}
                 </p>
             </div>
 

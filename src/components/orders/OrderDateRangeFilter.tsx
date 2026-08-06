@@ -5,12 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { toDateFromIso, toDateToIso } from '@/lib/orderFilters';
+import { useFormatters, useTranslation } from '@/i18n';
 import { cn } from '@/lib/utils';
-
-function fmt(iso?: string): string | null {
-  if (!iso) return null;
-  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-}
 
 /**
  * Optional order-date range filter. Unlike the analytics DateRangePicker (which
@@ -29,6 +25,9 @@ export function OrderDateRangeFilter({
   onApply: (from?: string, to?: string) => void;
   className?: string;
 }) {
+  const { t } = useTranslation();
+  const formatters = useFormatters();
+  const fmt = (iso?: string): string | null => (iso ? formatters.date(iso, 'medium') : null);
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<DateRange | undefined>(() => ({
     from: from ? new Date(from) : undefined,
@@ -57,7 +56,11 @@ export function OrderDateRangeFilter({
   };
 
   const label =
-    from ? (to && fmt(to) !== fmt(from) ? `${fmt(from)} – ${fmt(to)}` : fmt(from)) : 'Any time';
+    from
+      ? to && fmt(to) !== fmt(from)
+        ? `${fmt(from)} – ${fmt(to)}`
+        : fmt(from)
+      : t('common.time.allTime');
 
   return (
     <Popover open={open} onOpenChange={handleOpen}>
@@ -78,10 +81,10 @@ export function OrderDateRangeFilter({
         />
         <div className="flex justify-between gap-2 border-t p-2">
           <Button variant="ghost" size="sm" onClick={clear} disabled={!from && !draft?.from}>
-            Clear
+            {t('common.actions.clear')}
           </Button>
           <Button size="sm" onClick={apply} disabled={!draft?.from}>
-            Apply
+            {t('common.actions.apply')}
           </Button>
         </div>
       </PopoverContent>

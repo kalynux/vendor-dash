@@ -20,13 +20,16 @@ import {
   setDefaultPaymentMethod,
   deletePaymentMethod,
 } from '@/services/payment-methods.service';
+import { useTranslation, useApiError } from '@/i18n';
 import { CardSkeleton } from './BillingSkeletons';
-import { billingErrorMessage, methodTypeLabel } from './billing.constants';
+import { methodTypeLabel } from './billing.constants';
 import { AddPaymentMethodDialog } from './AddPaymentMethodDialog';
 
 const MAX_METHODS = 10;
 
 export function SavedPaymentMethodsCard() {
+  const { t } = useTranslation();
+  const apiError = useApiError();
   const [methods, setMethods] = useState<SavedPaymentMethod[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -41,11 +44,13 @@ export function SavedPaymentMethodsCard() {
     try {
       setMethods(await fetchPaymentMethods());
     } catch (err) {
-      setError(billingErrorMessage(err, 'Failed to load payment methods.'));
+      setError(
+        apiError.resolve(err, { context: 'billing', fallbackKey: 'billing.errors.loadMethodsFailed' }),
+      );
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [apiError]);
 
   useEffect(() => {
     load();
@@ -57,7 +62,7 @@ export function SavedPaymentMethodsCard() {
       await setDefaultPaymentMethod(id);
       setMethods((prev) => prev.map((m) => ({ ...m, is_default: m.id === id })));
     } catch (err) {
-      toast.error(billingErrorMessage(err, 'Could not update the default.'));
+      apiError.toast(err, { context: 'billing', fallbackKey: 'billing.errors.defaultFailed' });
     } finally {
       setPendingDefaultId(null);
     }
@@ -71,13 +76,13 @@ export function SavedPaymentMethodsCard() {
       await deletePaymentMethod(deleteTarget.id);
       const remaining = methods.filter((m) => m.id !== deleteTarget.id);
       setMethods(remaining);
-      toast.success('Payment method removed');
+      toast.success(t('billing.toast.methodRemoved'));
       // Deleting the default does not auto-promote another (per the API docs).
       if (wasDefault && remaining.length > 0) {
-        toast.info('Pick a new default payment method.');
+        toast.info(t('billing.toast.pickNewDefault'));
       }
     } catch (err) {
-      toast.error(billingErrorMessage(err, 'Could not remove the method.'));
+      apiError.toast(err, { context: 'billing', fallbackKey: 'billing.errors.removeMethodFailed' });
     } finally {
       setDeleting(false);
       setDeleteTarget(null);
@@ -88,17 +93,17 @@ export function SavedPaymentMethodsCard() {
 
   return (
     <SettingsSection
-      title="Payment methods"
-      info={`Saved methods pre-fill checkout when you buy a plan or credits. Only a token and the last digits are stored — never the full card number or the CVV. Up to ${MAX_METHODS} methods. Deleting your default doesn't promote another one, so pick a new default yourself.`}
+      title={t('billing.methods.title')}
+      info={t('billing.methods.info', { max: MAX_METHODS })}
       action={
         <Button
           size="sm"
           className="gap-1"
           onClick={() => setAddOpen(true)}
           disabled={atLimit}
-          title={atLimit ? `You can save up to ${MAX_METHODS} methods.` : undefined}
+          title={atLimit ? t('billing.methods.atLimit', { max: MAX_METHODS }) : undefined}
         >
-          <Plus className="h-4 w-4" /> Add
+          <Plus className="h-4 w-4" /> {t('common.actions.add')}
         </Button>
       }
     >
@@ -109,12 +114,12 @@ export function SavedPaymentMethodsCard() {
             <AlertCircle className="h-6 w-6 text-destructive" />
             <p className="text-sm text-destructive">{error}</p>
             <Button variant="outline" size="sm" onClick={load}>
-              Retry
+              {t('common.actions.retry')}
             </Button>
           </div>
         ) : methods.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted-foreground">
-            No saved payment methods yet. Add one to speed up checkout.
+            {t('billing.methods.empty')}
           </p>
         ) : (
           <ul className="divide-y">
@@ -130,12 +135,14 @@ export function SavedPaymentMethodsCard() {
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <span className="truncate font-medium">{m.display_label}</span>
-                    {m.is_default && <Badge variant="secondary">Default</Badge>}
+                    {m.is_default && <Badge variant="secondary">{t('billing.methods.default')}</Badge>}
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    {methodTypeLabel(m.method_type)}
+                    {methodTypeLabel(m.method_type, t)}
                     {m.method_type === 'card' && m.exp_month && m.exp_year
-                      ? ` · Expires ${String(m.exp_month).padStart(2, '0')}/${String(m.exp_year).slice(-2)}`
+                      ? ` · ${t('billing.methods.expires', {
+                          date: `${String(m.exp_month).padStart(2, '0')}/${String(m.exp_year).slice(-2)}`,
+                        })}`
                       : ''}
                   </p>
                 </div>
@@ -153,7 +160,7 @@ export function SavedPaymentMethodsCard() {
                       ) : (
                         <Star className="h-4 w-4" />
                       )}
-                      <span className="hidden sm:inline">Set default</span>
+                      <span className="hidden sm:inline">{t('billing.methods.setDefault')}</span>
                     </Button>
                   )}
                   <Button
@@ -161,7 +168,7 @@ export function SavedPaymentMethodsCard() {
                     size="icon"
                     className="text-muted-foreground hover:text-destructive"
                     onClick={() => setDeleteTarget(m)}
-                    aria-label="Remove payment method"
+                    aria-label={t('billing.methods.removeAria')}
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
@@ -186,13 +193,15 @@ export function SavedPaymentMethodsCard() {
       <AlertDialog open={!!deleteTarget} onOpenChange={(v) => !v && setDeleteTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Remove payment method?</AlertDialogTitle>
+            <AlertDialogTitle>{t('billing.methods.removeTitle')}</AlertDialogTitle>
             <AlertDialogDescription>
-              {deleteTarget?.display_label} will be removed. This can't be undone.
+              {t('billing.methods.removeDescription', {
+                label: deleteTarget?.display_label ?? '',
+              })}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={deleting}>{t('common.actions.cancel')}</AlertDialogCancel>
             <AlertDialogAction
               onClick={(e) => {
                 e.preventDefault();
@@ -202,7 +211,7 @@ export function SavedPaymentMethodsCard() {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {deleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Remove
+              {t('common.actions.remove')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

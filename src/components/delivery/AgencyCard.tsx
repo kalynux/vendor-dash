@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils';
 import { formatAgencyLocality } from '@/lib/agencyAddress';
 import { fileRefUrl } from '@/services/files.service';
 import type { VendorAgencyListItemDto } from '@/types/product.types';
+import { useTranslation } from '@/i18n';
 
 export interface AgencyCardProps {
     agency: VendorAgencyListItemDto;
@@ -19,6 +20,7 @@ export interface AgencyCardProps {
 
 /** Presentational agency card — logo, name, KYC badge, HQ, coverage chips. */
 export function AgencyCard({ agency, selected = false, onSelect, onInfo, rightSlot }: AgencyCardProps) {
+    const { t } = useTranslation();
     const hq = agency.headquartersAddress;
     const p = agency.policies;
     const logoUrl = fileRefUrl(agency.logo);
@@ -49,7 +51,7 @@ export function AgencyCard({ agency, selected = false, onSelect, onInfo, rightSl
                 <div className="flex items-center gap-1.5 flex-wrap">
                     <p className="font-semibold text-sm truncate">{agency.agencyName}</p>
                     {agency.kycVerified && (
-                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" aria-label="KYC Verified" />
+                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" aria-label={t('agency.detail.kycVerified')} />
                     )}
                     {onSelect && selected && (
                         <div className="w-4 h-4 bg-primary rounded-full flex items-center justify-center flex-shrink-0 ml-auto">
@@ -70,13 +72,13 @@ export function AgencyCard({ agency, selected = false, onSelect, onInfo, rightSl
                         {p.pricing.storage_based_enabled && (
                             <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
                                 <Warehouse className="w-2.5 h-2.5" />
-                                Storage
+                                {t('agency.detail.storageBased')}
                             </span>
                         )}
                         {p.pricing.pickup_based_enabled && (
                             <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
                                 <Truck className="w-2.5 h-2.5" />
-                                Pickup
+                                {t('agency.detail.pickupBased')}
                             </span>
                         )}
                     </div>
@@ -122,7 +124,7 @@ export function AgencyCard({ agency, selected = false, onSelect, onInfo, rightSl
                             <button
                                 type="button"
                                 onClick={onInfo}
-                                aria-label={`View details for ${agency.agencyName}`}
+                                aria-label={t('agency.browse.viewDetailsFor', { name: agency.agencyName })}
                                 className="flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/20 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring md:h-auto md:w-12 md:rounded-none md:border-l md:border-border/60"
                             >
                                 <Info className="w-4 h-4" />

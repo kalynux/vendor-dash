@@ -51,21 +51,22 @@ import { ReassignAgencyPopover } from './ReassignAgencyPopover';
 import { cn } from '@/lib/utils';
 import { useOrderStore } from '@/store';
 import { addNote, revokeEntitlement, restoreEntitlement, fetchNote, dispatchOrder, getOrderErrorMessage, isOrderFrozen } from '@/services/orders.service';
-import { getNextStatuses, STATUS_LABELS, canDispatchOrder } from '@/lib/orderStatus';
+import { getNextStatuses, STATUS_ACTION_KEYS, ORDER_STATUS_KEYS, canDispatchOrder } from '@/lib/orderStatus';
 import { ApiError } from '@/types/api';
 import { toast } from 'sonner';
-import { formatMoney } from '@/components/customers/customer.constants';
+import { formatPhoneInternational } from '@/lib/phone';
+import { useTranslation, useFormatters, Trans, type TranslationKey } from '@/i18n';
 import type { Order, Entitlement, OrderTimelineEvent, VendorSettableStatus } from '@/types';
 
 const REASSIGNABLE_DELIVERY_STATUSES = ['pending', 'assigned', 'pending_agency_reassignment'];
 
 type TabId = 'details' | 'items' | 'timeline' | 'payment' | 'entitlements';
 
-const BASE_TABS: { id: TabId; label: string }[] = [
-  { id: 'details', label: 'Details' },
-  { id: 'items', label: 'Items' },
-  { id: 'timeline', label: 'Timeline' },
-  { id: 'payment', label: 'Payment' },
+const BASE_TABS: { id: TabId; labelKey: TranslationKey }[] = [
+  { id: 'details', labelKey: 'orders.detail.tabs.details' },
+  { id: 'items', labelKey: 'orders.detail.tabs.items' },
+  { id: 'timeline', labelKey: 'orders.detail.tabs.timeline' },
+  { id: 'payment', labelKey: 'orders.detail.tabs.payment' },
 ];
 
 const timelineIcons: Record<string, React.ElementType> = {
@@ -77,17 +78,6 @@ const timelineIcons: Record<string, React.ElementType> = {
   'entitlement.revoked': Ban,
   'entitlement.restored': RotateCcw,
 };
-
-function formatCurrency(value: number, currency = 'XAF') {
-  return formatMoney(value, currency);
-}
-
-function formatDate(dateStr: string) {
-  return new Date(dateStr).toLocaleString(undefined, {
-    month: 'short', day: 'numeric', year: 'numeric',
-    hour: 'numeric', minute: '2-digit',
-  });
-}
 
 /**
  * One block of sheet content. Runs edge-to-edge and is separated from its
@@ -130,6 +120,8 @@ interface Props {
 }
 
 export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoading, onOpenChange }: Props) {
+  const { t } = useTranslation();
+  const fmt = useFormatters();
   const { updateOrderStatus } = useOrderStore();
 
   const [order, setOrder] = useState<Order | null>(initialOrder);
@@ -165,15 +157,20 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
 
   if (!order) return null;
 
+  const formatCurrency = (value: number, currency = 'XAF') => fmt.currency(value, currency);
+  const formatDate = (dateStr: string) => fmt.dateTime(dateStr);
+
   const isPhysical = order.orderType === 'physical';
   const isDigital = order.orderType === 'digital';
   const hasEntitlements = (order.entitlements?.length ?? 0) > 0;
   const frozen = isOrderFrozen(order);
   const nextStatuses = frozen ? [] : getNextStatuses(order.status);
   const canDispatch = canDispatchOrder(order);
+  // Translated, so the confirm check reads the same key the prompt renders.
+  const cancelWord = t('orders.detail.cancelDialog.confirmWord');
 
   const TABS = hasEntitlements
-    ? [...BASE_TABS, { id: 'entitlements' as TabId, label: 'Access' }]
+    ? [...BASE_TABS, { id: 'entitlements' as TabId, labelKey: 'orders.detail.tabs.access' as TranslationKey }]
     : BASE_TABS;
 
   const currentIndex = TABS.findIndex((t) => t.id === activeTab);
@@ -201,7 +198,7 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
     try {
       await updateOrderStatus(order.id, status);
       setOrder(prev => prev ? { ...prev, status: status as Order['status'] } : prev);
-      toast.success(`Order marked as ${status}`);
+      toast.success(t('orders.toast.markedAs', { status: t(ORDER_STATUS_KEYS[status]) }));
     } catch (err) {
       if (err instanceof ApiError && err.status === 423 && err.code === 'ORDER_DISPUTE_HOLD') {
         setOrder(prev => prev ? {
@@ -223,7 +220,7 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
     try {
       await updateOrderStatus(order.id, 'cancelled');
       setOrder(prev => prev ? { ...prev, status: 'cancelled' as Order['status'] } : prev);
-      toast.success('Order cancelled');
+      toast.success(t('orders.toast.cancelled'));
     } catch (err) {
       toast.error(getOrderErrorMessage(err));
     } finally {
@@ -234,9 +231,9 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
   const handleDispatch = async () => {
     setDispatchLoading(true);
     try {
-      const { order: updated, message } = await dispatchOrder(order.id);
+      const { order: updated } = await dispatchOrder(order.id);
       setOrder(updated);
-      toast.success(message);
+      toast.success(t('orders.toast.dispatched'));
     } catch (err) {
       toast.error(getOrderErrorMessage(err));
     } finally {
@@ -257,13 +254,14 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
       const pseudoEvent = {
         id: `local-${Date.now()}`,
         type: 'note.added' as const,
-        message: 'Note added',
+        messageKey: 'orders.detail.timeline.noteAdded' as const,
+        messageFallback: 'note added',
         description: note.trim(),
         createdAt: new Date().toISOString(),
-        actor: 'You',
+        actor: t('orders.detail.timeline.you'),
       };
       setOrder(prev => prev ? { ...prev, timeline: [pseudoEvent, ...prev.timeline] } : prev);
-      toast.success('Note added');
+      toast.success(t('orders.detail.timeline.noteAdded'));
     } catch (err) {
       toast.error(getOrderErrorMessage(err));
     } finally {
@@ -330,7 +328,9 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
         };
       });
       setActionDialog(null);
-      toast.success(type === 'revoke' ? 'Entitlement revoked' : 'Entitlement restored');
+      toast.success(t(type === 'revoke'
+        ? 'orders.detail.entitlements.revokedToast'
+        : 'orders.detail.entitlements.restoredToast'));
     } catch (err) {
       toast.error(getOrderErrorMessage(err));
     } finally {
@@ -359,20 +359,20 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                   <OrderStatusBadge status={order.status} />
                   {isDigital ? (
                     <Badge variant="outline" className="gap-1 text-xs border-violet-300 text-violet-700 bg-violet-50">
-                      <Download className="w-3 h-3" />Digital
+                      <Download className="w-3 h-3" />{t('orders.orderType.digital')}
                     </Badge>
                   ) : (
                     <Badge variant="outline" className="gap-1 text-xs border-blue-300 text-blue-700 bg-blue-50">
-                      <Package className="w-3 h-3" />Physical
+                      <Package className="w-3 h-3" />{t('orders.orderType.physical')}
                     </Badge>
                   )}
                   {order.paymentMethod === 'cash_on_delivery' && (
                     <Badge variant="outline" className="gap-1 text-xs border-amber-300 text-amber-700 bg-amber-50">
-                      <Banknote className="w-3 h-3" />COD
+                      <Banknote className="w-3 h-3" />{t('orders.paymentMethod.cashOnDeliveryShort')}
                     </Badge>
                   )}
                   <Button variant="outline" size="sm" className="gap-1.5 h-7 px-2.5 text-xs ml-auto">
-                    <Printer className="w-3.5 h-3.5" />Print
+                    <Printer className="w-3.5 h-3.5" />{t('common.actions.print')}
                   </Button>
                 </div>
                 <p className="text-xs text-muted-foreground mt-0.5">{customer.name}</p>
@@ -392,10 +392,10 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                     )}
                   >
                     {tab.id === 'items'
-                      ? `Items (${order.items.length})`
+                      ? t('orders.detail.tabs.itemsWithCount', { count: order.items.length })
                       : tab.id === 'entitlements'
-                        ? `Access (${order.entitlements!.length})`
-                        : tab.label}
+                        ? t('orders.detail.tabs.accessWithCount', { count: order.entitlements!.length })
+                        : t(tab.labelKey)}
                   </button>
                 ))}
               </div>
@@ -410,7 +410,7 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                 {activeTab === 'details' && (
                   <div>
                     <Section
-                      title="Customer"
+                      title={t('orders.detail.customer.title')}
                       icon={User}
                       action={
                         <button
@@ -432,7 +432,9 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                           <p className="font-medium truncate">{customer.name}</p>
                           <p className="text-sm text-muted-foreground truncate">{customer.email}</p>
                           {customer.phone && (
-                            <p className="text-xs text-muted-foreground">{customer.phone}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {formatPhoneInternational(customer.phone)}
+                            </p>
                           )}
                         </div>
                       </div>
@@ -440,19 +442,19 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
 
                     {/* Shipping / Delivery method */}
                     {isDigital ? (
-                      <Section title="Delivery Method" icon={Download}>
+                      <Section title={t('orders.detail.shipping.deliveryMethodTitle')} icon={Download}>
                         <div className="flex items-center gap-3 p-3 rounded-lg bg-violet-50 border border-violet-200">
                           <div className="w-8 h-8 rounded-full bg-violet-100 flex items-center justify-center flex-shrink-0">
                             <Download className="w-3.5 h-3.5 text-violet-700" />
                           </div>
                           <div>
-                            <p className="text-sm font-medium text-violet-900">Digital Delivery</p>
-                            <p className="text-xs text-violet-700">Download links sent to customer's email</p>
+                            <p className="text-sm font-medium text-violet-900">{t('orders.detail.shipping.digitalDelivery')}</p>
+                            <p className="text-xs text-violet-700">{t('orders.detail.shipping.digitalDeliveryNoteShort')}</p>
                           </div>
                         </div>
                       </Section>
                     ) : (
-                      <Section title="Shipping Address" icon={MapPin}>
+                      <Section title={t('orders.detail.shipping.addressTitle')} icon={MapPin}>
                         {customer.defaultAddress ? (
                           <div className="text-sm space-y-0.5">
                             <p className="font-medium">
@@ -463,7 +465,7 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                             <p>{customer.defaultAddress.country}</p>
                           </div>
                         ) : (
-                          <p className="text-sm text-muted-foreground">No address on file</p>
+                          <p className="text-sm text-muted-foreground">{t('orders.detail.shipping.noAddress')}</p>
                         )}
                       </Section>
                     )}
@@ -471,52 +473,56 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                     {/* Shipments (physical, multi-agency) */}
                     {isPhysical && order.deliveries && order.deliveries.length > 0 && (
                       <Section
-                        title={`Shipments${order.deliveries.length > 1 ? ` (${order.deliveries.length} agencies)` : ''}`}
+                        title={order.deliveries.length > 1
+                          ? t('orders.detail.shipping.shipmentsTitleWithCount', { count: order.deliveries.length })
+                          : t('orders.detail.shipping.shipmentsTitle')}
                         icon={Truck}
                       >
                         {order.deliveries.map((shipment, i) => (
                           <div key={shipment.shipmentId ?? i} className={cn(i > 0 && 'pt-2 border-t mt-2')}>
-                            <p className="text-xs text-muted-foreground">Agency</p>
-                            <p className="text-sm font-medium">{shipment.agencyName ?? '—'}</p>
+                            <p className="text-xs text-muted-foreground">{t('orders.detail.shipping.agency')}</p>
+                            <p className="text-sm font-medium">{shipment.agencyName ?? t('common.labels.emptyValue')}</p>
                             {shipment.agencyPhone && (
-                              <p className="text-xs text-muted-foreground mt-0.5">{shipment.agencyPhone}</p>
+                              <p className="text-xs text-muted-foreground mt-0.5">
+                                {formatPhoneInternational(shipment.agencyPhone)}
+                              </p>
                             )}
                             <div className="mt-1.5"><DeliveryStatusBadge status={shipment.deliveryStatus} size="xs" /></div>
                             {shipment.agent && (
-                              <p className="text-xs text-muted-foreground mt-1.5">Agent: <span className="font-medium text-foreground">{shipment.agent.name}</span></p>
+                              <p className="text-xs text-muted-foreground mt-1.5"><Trans i18nKey="orders.detail.shipping.agent" params={{ name: shipment.agent.name }} components={[<span className="font-medium text-foreground" />]} /></p>
                             )}
                             {shipment.trackingNumber && (
-                              <p className="text-xs text-muted-foreground mt-0.5">Tracking: {shipment.trackingNumber}</p>
+                              <p className="text-xs text-muted-foreground mt-0.5">{t('orders.detail.shipping.tracking', { number: shipment.trackingNumber })}</p>
                             )}
                           </div>
                         ))}
                       </Section>
                     )}
 
-                    <Section title="Order Summary">
+                    <Section title={t('orders.detail.summary.title')}>
                       <div className="space-y-2 text-sm">
                         <div className="flex justify-between">
-                          <span className="text-muted-foreground">Subtotal</span>
+                          <span className="text-muted-foreground">{t('orders.detail.summary.subtotal')}</span>
                           <span>{formatCurrency(order.subtotal, order.currency)}</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-muted-foreground">Tax</span>
+                          <span className="text-muted-foreground">{t('orders.detail.summary.tax')}</span>
                           <span>{formatCurrency(order.tax, order.currency)}</span>
                         </div>
                         {isPhysical && (
                           <div className="flex justify-between">
-                            <span className="text-muted-foreground">Shipping</span>
-                            <span>{order.shipping === 0 ? 'Free' : formatCurrency(order.shipping, order.currency)}</span>
+                            <span className="text-muted-foreground">{t('orders.detail.summary.shipping')}</span>
+                            <span>{order.shipping === 0 ? t('orders.detail.summary.free') : formatCurrency(order.shipping, order.currency)}</span>
                           </div>
                         )}
                         {order.discount > 0 && (
                           <div className="flex justify-between">
-                            <span className="text-muted-foreground">Discount</span>
+                            <span className="text-muted-foreground">{t('orders.detail.summary.discount')}</span>
                             <span className="text-green-600">-{formatCurrency(order.discount, order.currency)}</span>
                           </div>
                         )}
                         <div className="pt-2 border-t flex justify-between">
-                          <span className="font-medium">Total</span>
+                          <span className="font-medium">{t('orders.detail.summary.total')}</span>
                           <span className="font-bold text-base">{formatCurrency(order.total, order.currency)}</span>
                         </div>
                       </div>
@@ -541,32 +547,32 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                               <div className="flex items-center gap-1.5 mt-1">
                                 {isDigital && (
                                   <Badge variant="outline" className="text-xs gap-1 border-violet-300 text-violet-700 bg-violet-50">
-                                    <Download className="w-2.5 h-2.5" />Digital
+                                    <Download className="w-2.5 h-2.5" />{t('orders.orderType.digital')}
                                   </Badge>
                                 )}
                                 {item.delivery?.freeDelivery && (
                                   <Badge variant="outline" className="text-xs gap-1 border-green-300 text-green-700 bg-green-50">
-                                    <Truck className="w-2.5 h-2.5" />Free delivery
+                                    <Truck className="w-2.5 h-2.5" />{t('orders.detail.shipping.freeDelivery')}
                                   </Badge>
                                 )}
                               </div>
                             )}
-                            <p className="text-xs text-muted-foreground mt-0.5">Qty: {item.quantity}</p>
+                            <p className="text-xs text-muted-foreground mt-0.5">{t('orders.detail.items.qty', { count: item.quantity })}</p>
                           </div>
                           <div className="text-right flex-shrink-0">
                             <p className="font-semibold text-sm">{formatCurrency(item.total, order.currency)}</p>
-                            <p className="text-xs text-muted-foreground">{formatCurrency(item.price, order.currency)} each</p>
+                            <p className="text-xs text-muted-foreground">{t('orders.detail.items.unitPrice', { price: formatCurrency(item.price, order.currency) })}</p>
                           </div>
                         </div>
                         {isPhysical && item.delivery && (
                           <div className="pt-2 border-t space-y-1.5">
                             <div className="flex items-center gap-1.5 flex-wrap text-xs">
                               <Truck className="w-3 h-3 text-muted-foreground" />
-                              <span className="font-medium">{item.delivery.agencyName ?? 'No agency assigned'}</span>
+                              <span className="font-medium">{item.delivery.agencyName ?? t('orders.detail.shipping.noAgency')}</span>
                               <DeliveryStatusBadge status={item.delivery.deliveryStatus} size="xs" />
                             </div>
                             {item.delivery.trackingNumber && (
-                              <p className="text-xs text-muted-foreground">Tracking: {item.delivery.trackingNumber}</p>
+                              <p className="text-xs text-muted-foreground">{t('orders.detail.shipping.tracking', { number: item.delivery.trackingNumber })}</p>
                             )}
                             {item.delivery.rejection && (
                               <DeliveryRejectionNotice rejection={item.delivery.rejection} size="xs" />
@@ -591,7 +597,7 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                 {activeTab === 'timeline' && (
                   <div className="p-4">
                     {order.timeline.length === 0 ? (
-                      <p className="text-sm text-muted-foreground text-center py-6">No timeline events yet</p>
+                      <p className="text-sm text-muted-foreground text-center py-6">{t('orders.detail.timeline.empty')}</p>
                     ) : (
                       <div className="space-y-4">
                         {order.timeline.map((event, index) => {
@@ -607,9 +613,11 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                                 {!isLast && <div className="w-0.5 flex-1 bg-border mt-2" />}
                               </div>
                               <div className={`flex-1 pb-4 rounded-lg p-2 ${isClickable ? 'cursor-pointer hover:bg-accent' : ''}`}>
-                                <p className="font-medium text-sm">{event.message}</p>
+                                <p className="font-medium text-sm">
+                                  {event.messageKey ? t(event.messageKey, event.messageParams) : event.messageFallback}
+                                </p>
                                 {fetchingNoteId === event.id
-                                  ? <p className="text-xs text-muted-foreground flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" />Loading note…</p>
+                                  ? <p className="text-xs text-muted-foreground flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" />{t('orders.detail.timeline.loadingNote')}</p>
                                   : event.description && <p className="text-xs text-muted-foreground block">• {event.description}</p>
                                 }
                                 <div className="flex items-center gap-1.5 mt-0.5 text-xs text-muted-foreground">
@@ -625,10 +633,10 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                     )}
 
                     <div className="mt-4 pt-4 border-t">
-                      <p className="font-medium text-sm mb-3">Add Internal Note</p>
+                      <p className="font-medium text-sm mb-3">{t('orders.detail.timeline.addNote')}</p>
                       <div className="flex gap-2">
                         <Textarea
-                          placeholder="Add a note visible only to you..."
+                          placeholder={t('orders.detail.timeline.notePlaceholder')}
                           value={note}
                           onChange={(e) => setNote(e.target.value)}
                           className="flex-1 text-sm"
@@ -641,7 +649,7 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                           onClick={handleAddNote}
                         >
                           {noteLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-                          Add
+                          {t('common.actions.add')}
                         </Button>
                       </div>
                     </div>
@@ -650,7 +658,7 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                     {isPhysical && order.deliveryTimeline && order.deliveryTimeline.length > 0 && (
                       <div className="mt-4 pt-4 border-t">
                         <p className="font-medium text-sm mb-3 flex items-center gap-1.5">
-                          <Truck className="w-3.5 h-3.5" /> Delivery Timeline
+                          <Truck className="w-3.5 h-3.5" /> {t('orders.detail.shipping.deliveryTimeline')}
                         </p>
                         <div className="space-y-4">
                           {order.deliveryTimeline.map((entry, index) => {
@@ -687,28 +695,30 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                 {/* ── Payment ── */}
                 {activeTab === 'payment' && (
                   <div>
-                    <Section title="Payment Information" icon={CreditCard}>
+                    <Section title={t('orders.detail.payment.title')} icon={CreditCard}>
                       <div className="grid grid-cols-2 gap-4">
                         <div>
-                          <p className="text-xs text-muted-foreground mb-1">Status</p>
+                          <p className="text-xs text-muted-foreground mb-1">{t('orders.detail.payment.statusShort')}</p>
                           <PaymentStatusBadge status={order.paymentStatus} size="xs" />
                         </div>
                         <div>
-                          <p className="text-xs text-muted-foreground mb-1">Payment Method</p>
+                          <p className="text-xs text-muted-foreground mb-1">{t('orders.detail.payment.method')}</p>
                           <p className="text-sm font-medium">
-                            {order.paymentMethod === 'cash_on_delivery' ? 'Cash on Delivery' : 'Online'}
+                            {t(order.paymentMethod === 'cash_on_delivery'
+                              ? 'orders.paymentMethod.cashOnDelivery'
+                              : 'orders.paymentMethod.online')}
                           </p>
                         </div>
                         <div>
-                          <p className="text-xs text-muted-foreground mb-1">Order Type</p>
-                          <p className="text-sm font-medium capitalize">{order.orderType}</p>
+                          <p className="text-xs text-muted-foreground mb-1">{t('orders.detail.payment.orderType')}</p>
+                          <p className="text-sm font-medium">{t(`orders.orderType.${order.orderType}`)}</p>
                         </div>
                         <div>
-                          <p className="text-xs text-muted-foreground mb-1">Currency</p>
+                          <p className="text-xs text-muted-foreground mb-1">{t('orders.detail.payment.currency')}</p>
                           <p className="text-sm font-medium">{order.currency}</p>
                         </div>
                         <div>
-                          <p className="text-xs text-muted-foreground mb-1">Placed At</p>
+                          <p className="text-xs text-muted-foreground mb-1">{t('orders.detail.payment.placedAt')}</p>
                           <p className="text-sm font-medium">{formatDate(order.createdAt)}</p>
                         </div>
                       </div>
@@ -716,8 +726,8 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                         <div className="mt-3 flex items-start gap-2 rounded-md bg-orange-50 border border-orange-100 p-2.5 text-xs">
                           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-orange-600" />
                           <p className="text-orange-700/90">
-                            <span className="font-medium text-orange-800">Payment disputed.</span> The order is
-                            frozen until Stripe resolves the chargeback — no action needed.
+                            <span className="font-medium text-orange-800">{t('orders.detail.dispute.paymentShortTitle')}</span>{' '}
+                            {t('orders.detail.dispute.paymentShortBody')}
                           </p>
                         </div>
                       )}
@@ -731,7 +741,7 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                   <div>
                     <div className="flex items-start gap-2 border-b bg-violet-50 px-4 py-3 text-xs text-violet-800">
                       <Shield className="w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-violet-600" />
-                      <p>Manage customer access to digital products. Revoke or restore entitlements as needed.</p>
+                      <p>{t('orders.detail.entitlements.introShort')}</p>
                     </div>
 
                     {order.entitlements!.map((entitlement) => {
@@ -757,7 +767,11 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                                   variant={entitlement.isRevoked ? 'destructive' : entitlement.isExpired ? 'secondary' : 'outline'}
                                   className={cn('text-xs mt-0.5', !entitlement.isRevoked && !entitlement.isExpired && 'border-green-300 text-green-700 bg-green-50')}
                                 >
-                                  {entitlement.isRevoked ? 'Revoked' : entitlement.isExpired ? 'Expired' : 'Active'}
+                                  {t(entitlement.isRevoked
+                                    ? 'orders.detail.entitlements.revoked'
+                                    : entitlement.isExpired
+                                      ? 'orders.detail.entitlements.expired'
+                                      : 'orders.detail.entitlements.active')}
                                 </Badge>
                               </div>
                             </div>
@@ -770,7 +784,7 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                                 disabled={entitlement.isExpired}
                                 onClick={() => openRestoreDialog(entitlement)}
                               >
-                                <RotateCcw className="w-3 h-3" />Restore
+                                <RotateCcw className="w-3 h-3" />{t('orders.detail.entitlements.restore')}
                               </Button>
                             ) : (
                               <Button
@@ -779,7 +793,7 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                                 className="gap-1 h-7 text-xs flex-shrink-0 text-red-600 border-red-200 hover:bg-red-50"
                                 onClick={() => openRevokeDialog(entitlement)}
                               >
-                                <Ban className="w-3 h-3" />Revoke
+                                <Ban className="w-3 h-3" />{t('orders.detail.entitlements.revoke')}
                               </Button>
                             )}
                           </div>
@@ -787,7 +801,7 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                           {/* Download progress */}
                           <div>
                             <div className="flex justify-between text-xs mb-1.5">
-                              <span className="text-muted-foreground">Downloads Used</span>
+                              <span className="text-muted-foreground">{t('orders.detail.entitlements.downloadsUsed')}</span>
                               <span className="font-medium">
                                 {entitlement.downloadsUsed} / {maxDl === null ? '∞' : maxDl}
                               </span>
@@ -804,18 +818,18 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
 
                           {/* Expiry */}
                           <div className="flex justify-between text-xs">
-                            <span className="text-muted-foreground">Expires</span>
+                            <span className="text-muted-foreground">{t('orders.detail.entitlements.expires')}</span>
                             <span className="font-medium">{formatDate(entitlement.expiresAt)}</span>
                           </div>
 
                           {/* Revoke info */}
                           {entitlement.isRevoked && entitlement.revokedAt && (
                             <div className="p-2.5 rounded-md bg-red-50 border border-red-100 text-xs">
-                              <p className="font-medium text-red-700 mb-0.5">Revoked At</p>
+                              <p className="font-medium text-red-700 mb-0.5">{t('orders.detail.entitlements.revokedAt')}</p>
                               <p className="text-red-800">{formatDate(entitlement.revokedAt)}</p>
                               {entitlement.revokeReason && (
                                 <>
-                                  <p className="font-medium text-red-700 mt-2 mb-0.5">Reason</p>
+                                  <p className="font-medium text-red-700 mt-2 mb-0.5">{t('orders.detail.entitlements.reason')}</p>
                                   <p className="text-red-800">{entitlement.revokeReason}</p>
                                 </>
                               )}
@@ -834,7 +848,7 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                 {canDispatch && (
                   <Button variant="outline" className="w-full gap-2" disabled={dispatchLoading} onClick={handleDispatch}>
                     {dispatchLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <PackageCheck className="w-4 h-4" />}
-                    Dispatch to Agency
+                    {t('orders.actions.dispatchToAgency')}
                   </Button>
                 )}
                 {nextStatuses.length > 0 ? (
@@ -842,7 +856,7 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                     <DropdownMenuTrigger asChild>
                       <Button className="w-full gap-2" disabled={statusLoading}>
                         {statusLoading && <Loader2 className="w-4 h-4 animate-spin" />}
-                        Update Status
+                        {t('orders.actions.updateStatus')}
                         <ChevronDown className="w-4 h-4" />
                       </Button>
                     </DropdownMenuTrigger>
@@ -853,7 +867,7 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                           onClick={() => handleStatusUpdate(s)}
                           className={s === 'cancelled' ? 'text-destructive' : ''}
                         >
-                          {STATUS_LABELS[s] ?? s}
+                          {t(STATUS_ACTION_KEYS[s])}
                         </DropdownMenuItem>
                       ))}
                     </DropdownMenuContent>
@@ -861,11 +875,11 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                 ) : frozen ? (
                   <div className="flex items-center justify-center gap-2 py-1 text-sm text-orange-700">
                     <AlertTriangle className="h-4 w-4 flex-shrink-0" />
-                    <span>Payment disputed — order frozen</span>
+                    <span>{t('orders.detail.dispute.footerFrozen')}</span>
                   </div>
                 ) : (
-                  <div className="text-center text-sm text-muted-foreground py-1 capitalize">
-                    Order {order.status} — no further actions
+                  <div className="text-center text-sm text-muted-foreground py-1">
+                    {t('orders.detail.noFurtherActions', { status: t(ORDER_STATUS_KEYS[order.status]) })}
                   </div>
                 )}
               </div>
@@ -880,7 +894,7 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
         <SheetContent side="bottom" className="p-0 rounded-t-2xl [&>button]:top-3 [&>button]:right-3">
           <div className="flex flex-col">
             <div className="px-4 pt-4 pb-3 border-b pr-12">
-              <h3 className="text-base font-bold">Customer Info</h3>
+              <h3 className="text-base font-bold">{t('orders.detail.customer.infoTitle')}</h3>
             </div>
             <div className="overflow-y-auto max-h-[70vh]">
               <div className="flex items-center gap-3 border-b px-4 py-4">
@@ -901,15 +915,17 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                   <div className="flex items-center gap-3 px-4 py-3">
                     <Phone className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                     <div>
-                      <p className="text-xs text-muted-foreground">Phone</p>
-                      <p className="text-sm font-medium">{customer.phone}</p>
+                      <p className="text-xs text-muted-foreground">{t('common.labels.phone')}</p>
+                      <p className="text-sm font-medium">
+                        {formatPhoneInternational(customer.phone)}
+                      </p>
                     </div>
                   </div>
                 )}
                 <div className="flex items-center gap-3 px-4 py-3">
                   <Mail className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                   <div className="min-w-0">
-                    <p className="text-xs text-muted-foreground">Email</p>
+                    <p className="text-xs text-muted-foreground">{t('common.labels.email')}</p>
                     <p className="text-sm font-medium truncate">{customer.email}</p>
                   </div>
                 </div>
@@ -917,7 +933,7 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                   <div className="flex items-start gap-3 px-4 py-3">
                     <MapPin className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
                     <div>
-                      <p className="text-xs text-muted-foreground">Address</p>
+                      <p className="text-xs text-muted-foreground">{t('common.labels.address')}</p>
                       <p className="text-sm font-medium">
                         {customer.defaultAddress.address1}, {customer.defaultAddress.city},{' '}
                         {customer.defaultAddress.province}
@@ -930,18 +946,18 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
               <div className="grid grid-cols-2 divide-x border-b">
                 <div className="px-4 py-3 text-center">
                   <p className="text-2xl font-bold">{customer.orderCount}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">Orders (this vendor)</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{t('orders.detail.customer.orderCount')}</p>
                 </div>
                 <div className="px-4 py-3 text-center">
                   <p className="text-2xl font-bold">{formatCurrency(customer.totalSpent, order.currency)}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">Total Spent</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{t('orders.detail.customer.totalSpentLong')}</p>
                 </div>
               </div>
 
               <div className="px-4 py-4">
                 <Button className="w-full gap-2">
                   <UserPlus className="w-4 h-4" />
-                  Add to Customers
+                  {t('orders.detail.customer.addToCustomers')}
                 </Button>
               </div>
             </div>
@@ -954,21 +970,26 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {actionDialog?.type === 'revoke' ? 'Revoke Entitlement' : 'Restore Entitlement'}
+              {t(actionDialog?.type === 'revoke'
+                ? 'orders.detail.entitlements.revokeTitle'
+                : 'orders.detail.entitlements.restoreTitle')}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">
-              {actionDialog?.type === 'revoke'
-                ? `This will immediately stop "${actionDialog.entitlement.productTitle}" from being downloadable.`
-                : `This will restore access to "${actionDialog?.entitlement.productTitle}".`}
+              {t(actionDialog?.type === 'revoke'
+                ? 'orders.detail.entitlements.revokeBodyShort'
+                : 'orders.detail.entitlements.restoreBodyShort',
+              { product: actionDialog?.entitlement.productTitle ?? '' })}
             </p>
             <div>
               <label className="text-sm font-medium mb-1.5 block">
-                Reason <span className="text-destructive">*</span>
+                {t('orders.detail.entitlements.reason')} <span className="text-destructive">*</span>
               </label>
               <Textarea
-                placeholder={actionDialog?.type === 'revoke' ? 'e.g. Customer requested refund' : 'e.g. Issue resolved'}
+                placeholder={t(actionDialog?.type === 'revoke'
+                  ? 'orders.detail.entitlements.revokeReasonPlaceholder'
+                  : 'orders.detail.entitlements.restoreReasonPlaceholder')}
                 value={actionReason}
                 onChange={(e) => setActionReason(e.target.value)}
                 rows={3}
@@ -977,7 +998,7 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setActionDialog(null)} disabled={actionLoading}>
-              Cancel
+              {t('common.actions.cancel')}
             </Button>
             <Button
               variant={actionDialog?.type === 'revoke' ? 'destructive' : 'default'}
@@ -985,7 +1006,9 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
               disabled={!actionReason.trim() || actionLoading}
             >
               {actionLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              {actionDialog?.type === 'revoke' ? 'Revoke Access' : 'Restore Access'}
+              {t(actionDialog?.type === 'revoke'
+                ? 'orders.detail.entitlements.revokeConfirm'
+                : 'orders.detail.entitlements.restoreConfirm')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1003,20 +1026,28 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
               <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center text-red-600 flex-shrink-0">
                 <AlertTriangle className="w-5 h-5" />
               </div>
-              <DialogTitle>Cancel Order?</DialogTitle>
+              <DialogTitle>{t('orders.detail.cancelDialog.title')}</DialogTitle>
             </div>
             <DialogDescription className="pt-3 space-y-3" asChild>
               <div>
                 <p className="text-foreground text-sm">
-                  Are you sure you want to cancel order <span className="font-semibold text-foreground">{order.orderNumber}</span>? This action cannot be undone.
+                  <Trans
+                    i18nKey="orders.detail.cancelDialog.bodyShort"
+                    params={{ number: order.orderNumber }}
+                    components={[<span className="font-semibold text-foreground" />]}
+                  />
                 </p>
                 <div className="space-y-2 pt-2">
                   <label htmlFor="mobile-cancel-confirm-input" className="text-xs font-semibold text-muted-foreground block">
-                    Please type <span className="font-bold text-destructive">cancel</span> to confirm:
+                    <Trans
+                      i18nKey="orders.detail.cancelDialog.prompt"
+                      params={{ word: cancelWord }}
+                      components={[<span className="font-bold text-destructive" />]}
+                    />
                   </label>
                   <Input
                     id="mobile-cancel-confirm-input"
-                    placeholder='Type "cancel"'
+                    placeholder={t('orders.detail.cancelDialog.placeholder', { word: cancelWord })}
                     value={cancelConfirmationText}
                     onChange={(e) => setCancelConfirmationText(e.target.value)}
                     className="h-9 border-red-200 focus-visible:ring-red-500"
@@ -1028,14 +1059,14 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
           </DialogHeader>
           <DialogFooter className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end pt-2">
             <DialogClose asChild>
-              <Button variant="outline">Keep Order</Button>
+              <Button variant="outline">{t('orders.detail.cancelDialog.keep')}</Button>
             </DialogClose>
             <Button
               className="bg-red-600 hover:bg-red-700 text-white font-medium focus:ring-red-500"
-              disabled={cancelConfirmationText.trim().toLowerCase() !== 'cancel'}
+              disabled={cancelConfirmationText.trim().toLowerCase() !== cancelWord.toLowerCase()}
               onClick={confirmCancelOrder}
             >
-              Yes, Cancel Order
+              {t('orders.detail.cancelDialog.confirm')}
             </Button>
           </DialogFooter>
         </DialogContent>

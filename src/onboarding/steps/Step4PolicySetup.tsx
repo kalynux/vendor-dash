@@ -11,9 +11,11 @@ import {
     type PolicyEnabled,
 } from '@/components/vendor-settings/forms/policies.helpers';
 import { Button } from '@/components/ui/button';
-import { ApiError } from '@/types/api';
+import { useTranslation, useApiError } from '@/i18n';
 
 export function Step4PolicySetup() {
+    const { t } = useTranslation();
+    const errors = useApiError();
     const { submitPolicySetup, isSubmitting, session, drafts, saveDraft } = useOnboarding();
     const [apiError, setApiError] = useState<string | null>(null);
     const [isSkipping, setIsSkipping] = useState(false);
@@ -42,22 +44,12 @@ export function Step4PolicySetup() {
                     documents: values.documents ?? [],
                     version: roleEntity?.version,
                 });
-                toast.success('Setup complete! Welcome to your dashboard.');
+                toast.success(t('onboarding.policySetup.setupComplete'));
             } catch (err) {
-                if (err instanceof ApiError) {
-                    if (err.isConcurrentModification) {
-                        setApiError('Your profile was modified in another session. Please refresh and try again.');
-                    } else if (err.isValidation && err.details?.length) {
-                        setApiError(err.details[0].message);
-                    } else if (err.isServer) {
-                        setApiError('A server error occurred. Please try again.');
-                    } else {
-                        setApiError(err.message);
-                    }
-                }
+                setApiError(errors.resolve(err, { fallbackKey: 'onboarding.errors.saveFailed' }));
             }
         },
-        [submitPolicySetup, saveDraft, roleEntity?.version],
+        [submitPolicySetup, saveDraft, roleEntity?.version, t, errors],
     );
 
     const handleSkip = useCallback(async () => {
@@ -65,15 +57,13 @@ export function Step4PolicySetup() {
         setIsSkipping(true);
         try {
             await submitPolicySetup({ skip: true });
-            toast.success('Setup complete! Welcome to your dashboard.');
+            toast.success(t('onboarding.policySetup.setupComplete'));
         } catch (err) {
-            setApiError(
-                err instanceof ApiError ? err.message : 'Could not skip. Please try again.',
-            );
+            setApiError(errors.resolve(err, { fallbackKey: 'onboarding.errors.skipFailed' }));
         } finally {
             setIsSkipping(false);
         }
-    }, [submitPolicySetup]);
+    }, [submitPolicySetup, t, errors]);
 
     const ctaSlot = (
         <div className="space-y-2">
@@ -84,9 +74,9 @@ export function Step4PolicySetup() {
                 className="w-full h-12 text-base font-semibold gap-2"
             >
                 {isSubmitting && !isSkipping ? (
-                    <><Loader2 className="w-4 h-4 animate-spin" />Saving…</>
+                    <><Loader2 className="w-4 h-4 animate-spin" />{t('common.actions.saving')}</>
                 ) : (
-                    <>Save & Finish<ChevronRight className="w-4 h-4" /></>
+                    <>{t('onboarding.saveAndFinish')}<ChevronRight className="w-4 h-4" /></>
                 )}
             </Button>
             <Button
@@ -97,7 +87,7 @@ export function Step4PolicySetup() {
                 className="w-full h-11 text-muted-foreground gap-2"
             >
                 {isSkipping ? <Loader2 className="w-4 h-4 animate-spin" /> : <SkipForward className="w-4 h-4" />}
-                Skip for now
+                {t('onboarding.deliveryLinking.skip')}
             </Button>
         </div>
     );
@@ -105,16 +95,15 @@ export function Step4PolicySetup() {
     return (
         <OnboardingLayout ctaSlot={ctaSlot} stepKey={4}>
             <div className="space-y-2 mb-2">
-                <h1 className="text-2xl font-bold">Policy Setup</h1>
+                <h1 className="text-2xl font-bold">{t('onboarding.policySetup.heading')}</h1>
                 <p className="text-muted-foreground text-sm">
-                    Define your store's return, cancellation, and support policies.
-                    All sections are optional and can be updated later from your dashboard.
+                    {t('onboarding.policySetup.subheading')}
                 </p>
             </div>
 
             <div className="inline-flex items-center gap-1.5 bg-muted text-muted-foreground text-xs px-2.5 py-1 rounded-full mb-6">
                 <SkipForward className="w-3 h-3" />
-                This step is optional
+                {t('onboarding.optional')}
             </div>
 
             {apiError && (

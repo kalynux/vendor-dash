@@ -9,9 +9,11 @@ import { useStoreStore } from '@/store';
 import { fetchStore as fetchStoreProfile } from '@/services/store.service';
 import { BrandingFields } from '@/components/vendor-settings/forms/BrandingFields';
 import { Button } from '@/components/ui/button';
-import { ApiError } from '@/types/api';
+import { useTranslation, useApiError } from '@/i18n';
 
 export function Step3Branding() {
+    const { t } = useTranslation();
+    const errors = useApiError();
     const { submitBranding, isSubmitting, session, drafts, saveDraft } = useOnboarding();
     const { store, applyStore } = useStoreStore();
     const [apiError, setApiError] = useState<string | null>(null);
@@ -87,24 +89,12 @@ export function Step3Branding() {
                 // The logo/banner landed on the store — refresh it so the header,
                 // sidebar and a revisit of this step all read the new images.
                 await loadStore();
-                toast.success('Profile complete! Welcome aboard 🎉');
+                toast.success(t('onboarding.branding.profileComplete'));
             } catch (err) {
-                if (err instanceof ApiError) {
-                    if (err.isConcurrentModification) {
-                        setApiError(
-                            'Your profile was modified in another session. Please refresh and try again.',
-                        );
-                    } else if (err.isValidation && err.details?.length) {
-                        setApiError(err.details[0].message);
-                    } else if (err.isServer) {
-                        setApiError('A server error occurred. Please try again.');
-                    } else {
-                        setApiError(err.message);
-                    }
-                }
+                setApiError(errors.resolve(err, { fallbackKey: 'onboarding.errors.saveFailed' }));
             }
         },
-        [submitBranding, saveDraft, loadStore, roleEntity?.version],
+        [submitBranding, saveDraft, loadStore, roleEntity?.version, t, errors],
     );
 
     const handleSkip = useCallback(async () => {
@@ -112,15 +102,13 @@ export function Step3Branding() {
         setIsSkipping(true);
         try {
             await submitBranding({ skip: true });
-            toast.success('Setup complete! Welcome to the dashboard 🎉');
+            toast.success(t('onboarding.branding.setupComplete'));
         } catch (err) {
-            setApiError(
-                err instanceof ApiError ? err.message : 'Could not skip. Please try again.',
-            );
+            setApiError(errors.resolve(err, { fallbackKey: 'onboarding.errors.skipFailed' }));
         } finally {
             setIsSkipping(false);
         }
-    }, [submitBranding]);
+    }, [submitBranding, t, errors]);
 
     const ctaSlot = (
         <div className="space-y-2">
@@ -133,11 +121,11 @@ export function Step3Branding() {
                 {isSubmitting && !isSkipping ? (
                     <>
                         <Loader2 className="w-4 h-4 animate-spin" />
-                        Saving…
+                        {t('common.actions.saving')}
                     </>
                 ) : (
                     <>
-                        Save & Finish
+                        {t('onboarding.saveAndFinish')}
                         <ChevronRight className="w-4 h-4" />
                     </>
                 )}
@@ -154,7 +142,7 @@ export function Step3Branding() {
                 ) : (
                     <SkipForward className="w-4 h-4" />
                 )}
-                Skip for now
+                {t('onboarding.deliveryLinking.skip')}
             </Button>
         </div>
     );
@@ -162,16 +150,15 @@ export function Step3Branding() {
     return (
         <OnboardingLayout ctaSlot={ctaSlot} stepKey={3}>
             <div className="space-y-2 mb-2">
-                <h1 className="text-2xl font-bold">Branding & Addresses</h1>
+                <h1 className="text-2xl font-bold">{t('onboarding.branding.heading')}</h1>
                 <p className="text-muted-foreground text-sm">
-                    Optional — add your logo and store address to give customers a
-                    better experience. You can always do this later.
+                    {t('onboarding.branding.subheading')}
                 </p>
             </div>
 
             <div className="inline-flex items-center gap-1.5 bg-muted text-muted-foreground text-xs px-2.5 py-1 rounded-full mb-6">
                 <SkipForward className="w-3 h-3" />
-                This step is optional
+                {t('onboarding.optional')}
             </div>
 
             {apiError && (

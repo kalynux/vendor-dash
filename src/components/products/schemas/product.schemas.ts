@@ -1,31 +1,36 @@
 import { z } from 'zod';
+import type { TranslationKey } from '@/i18n';
 import type { ApiProductType, ApiVariant } from '@/types/product.types';
 
 // ─── Step 2: Basic Info ───────────────────────────────────────────────────────
 // Validation rules derived exactly from API spec (products.md field constraints)
+//
+// Every message is a *translation key*, not a sentence: a zod schema is built at
+// module load, long before a locale exists. The components that render these
+// pipe `errors.<field>.message` through `useMessage()`, which resolves the key.
 
 export const basicInfoSchema = z.object({
   title: z
     .string()
-    .min(3, 'Title must be at least 3 characters')
-    .max(200, 'Title must be 200 characters or less'),
-  category: z.string().min(1, 'Category is required'),
-  description: z.string().min(1, 'Description is required'),
+    .min(3, 'products.validation.titleMin')
+    .max(200, 'products.validation.titleMax'),
+  category: z.string().min(1, 'products.validation.categoryRequired'),
+  description: z.string().min(1, 'products.validation.descriptionRequired'),
   tags: z
-    .array(z.string().min(1, 'Tag cannot be empty'))
+    .array(z.string().min(1, 'products.validation.tagEmpty'))
     .refine(
       (arr) => new Set(arr).size === arr.length,
-      { message: 'Tags must be unique' },
+      { message: 'products.validation.tagsUnique' },
     )
     .default([]),
   seoTitle: z
     .string()
-    .max(60, 'SEO title must be 60 characters or less')
+    .max(60, 'products.validation.seoTitleMax')
     .optional()
     .or(z.literal('')),
   seoDescription: z
     .string()
-    .max(160, 'SEO description must be 160 characters or less')
+    .max(160, 'products.validation.seoDescriptionMax')
     .optional()
     .or(z.literal('')),
 });
@@ -38,14 +43,14 @@ export const optionDraftSchema = z.object({
   tempId: z.string(),
   name: z
     .string()
-    .min(1, 'Option name is required')
-    .max(50, 'Option name must be 50 characters or less'),
+    .min(1, 'products.validation.optionNameRequired')
+    .max(50, 'products.validation.optionNameMax'),
   values: z
-    .array(z.string().min(1, 'Value cannot be empty'))
-    .min(1, 'At least one value is required')
+    .array(z.string().min(1, 'products.validation.optionValueEmpty'))
+    .min(1, 'products.validation.optionValueMin')
     .refine(
       (arr) => new Set(arr.map((v) => v.toLowerCase())).size === arr.length,
-      { message: 'Option values must be unique' },
+      { message: 'products.validation.optionValuesUnique' },
     ),
 });
 
@@ -58,23 +63,25 @@ export const variantRowSchema = z.object({
   tempId: z.string(),
   sku: z
     .string()
-    .min(1, 'SKU is required')
-    .max(100, 'SKU must be 100 characters or less'),
-  price: z.number({ message: 'Price is required' }).min(0, 'Price must be 0 or more'),
+    .min(1, 'products.validation.skuRequired')
+    .max(100, 'products.validation.skuMax'),
+  price: z
+    .number({ message: 'products.validation.priceRequired' })
+    .min(0, 'products.validation.priceMin'),
   compareAtPrice: z
     .number()
-    .min(0, 'Compare-at price must be 0 or more')
+    .min(0, 'products.validation.compareAtMin')
     .optional(),
   stock: z
-    .number({ message: 'Stock must be a number' })
-    .int('Stock must be a whole number')
-    .min(0, 'Stock cannot be negative')
+    .number({ message: 'products.validation.stockNumber' })
+    .int('products.validation.stockInteger')
+    .min(0, 'products.validation.stockMin')
     .default(0),
   isInfiniteStock: z.boolean().default(false),
-  weight: z.number().min(0, 'Weight must be 0 or more').optional(),  // grams
-  length: z.number().min(0, 'Length must be 0 or more').optional(),  // cm
-  width: z.number().min(0, 'Width must be 0 or more').optional(),    // cm
-  height: z.number().min(0, 'Height must be 0 or more').optional(),  // cm
+  weight: z.number().min(0, 'products.validation.weightMin').optional(),  // grams
+  length: z.number().min(0, 'products.validation.lengthMin').optional(),  // cm
+  width: z.number().min(0, 'products.validation.widthMin').optional(),    // cm
+  height: z.number().min(0, 'products.validation.heightMin').optional(),  // cm
   // optionValueIds and combination are managed separately, not in the schema
 });
 
@@ -82,17 +89,19 @@ export type VariantRowFormValues = z.infer<typeof variantRowSchema>;
 
 // ─── Client-side activation pre-flight ───────────────────────────────────────
 // Mirrors backend rules from products.md "Activation Requirements" section.
+// Returns translation keys rather than sentences — this module runs outside
+// React, so the call site resolves them and they follow a language switch.
 
 export function validateActivation(params: {
   productType: ApiProductType;
   description: string;
   variants: Pick<ApiVariant, 'price' | 'status'>[];
   defaultVariantId: string | null;
-}): string[] {
-  const errors: string[] = [];
+}): TranslationKey[] {
+  const errors: TranslationKey[] = [];
 
   if (!params.description.trim()) {
-    errors.push('A product description is required');
+    errors.push('products.activation.noDescription');
   }
 
   const activeVariants = params.variants.filter((v) => v.status === 'active');
@@ -101,21 +110,19 @@ export function validateActivation(params: {
     // For digital products an active variant is one with an uploaded asset, so
     // "no active variant" means "no format has a file yet".
     errors.push(
-      params.productType === 'digital'
-        ? (params.variants.length > 0
-          ? 'At least one active variant is required'
-          : 'Upload a file for at least one format before publishing')
-        : 'At least one active variant is required'
+      params.productType === 'digital' && params.variants.length === 0
+        ? 'products.activation.noDigitalAsset'
+        : 'products.activation.noActiveVariant',
     );
   }
 
   const zeroPriced = activeVariants.filter((v) => v.price <= 0);
   if (zeroPriced.length > 0) {
-    errors.push('All active variants must have a price greater than 0');
+    errors.push('products.activation.zeroPrice');
   }
 
   if (!params.defaultVariantId) {
-    errors.push('A default variant must be set');
+    errors.push('products.activation.noDefaultVariant');
   }
 
   return errors;

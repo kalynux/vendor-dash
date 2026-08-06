@@ -37,7 +37,8 @@ import {
   renameOptionValue,
   reorderOptions,
 } from '@/services/products.service';
-import { ACTIVATION_ERROR_MAP, getDeliveryErrorMessage } from '@/services/products.service';
+import { ACTIVATION_ERROR_KEYS, getDeliveryErrorMessage } from '@/services/products.service';
+import { useApiError, useTranslation, type TranslationKey } from '@/i18n';
 import { getAgencyConnectionErrorMessage } from '@/services/agency-connections.service';
 import { getUploadErrorMessage } from '@/lib/uploadErrors';
 import { ApiError } from '@/types/api';
@@ -55,20 +56,20 @@ import type { VariantPhase1Payload, VariantPhase2Payload } from '@/components/pr
 
 // ─── Step definitions ─────────────────────────────────────────────────────────
 
-const PHYSICAL_STEPS: { id: WizardStep; label: string; icon: React.ElementType }[] = [
-  { id: 'type', label: 'Type', icon: Box },
-  { id: 'basic-info', label: 'Basic Info', icon: Package },
-  { id: 'media', label: 'Media', icon: ImageIcon },
-  { id: 'options-variants', label: 'Variants', icon: Tag },
-  { id: 'review', label: 'Review', icon: CheckSquare },
+const PHYSICAL_STEPS: { id: WizardStep; labelKey: TranslationKey; icon: React.ElementType }[] = [
+  { id: 'type', labelKey: 'products.wizard.stepType', icon: Box },
+  { id: 'basic-info', labelKey: 'products.wizard.stepBasicInfo', icon: Package },
+  { id: 'media', labelKey: 'products.wizard.stepMedia', icon: ImageIcon },
+  { id: 'options-variants', labelKey: 'products.wizard.stepVariants', icon: Tag },
+  { id: 'review', labelKey: 'products.wizard.stepReview', icon: CheckSquare },
 ];
 
-const DIGITAL_STEPS: { id: WizardStep; label: string; icon: React.ElementType }[] = [
-  { id: 'type', label: 'Type', icon: Box },
-  { id: 'basic-info', label: 'Basic Info', icon: Package },
-  { id: 'media', label: 'Media', icon: ImageIcon },
-  { id: 'formats', label: 'Formats', icon: FileDigit },
-  { id: 'review', label: 'Review', icon: CheckSquare },
+const DIGITAL_STEPS: { id: WizardStep; labelKey: TranslationKey; icon: React.ElementType }[] = [
+  { id: 'type', labelKey: 'products.wizard.stepType', icon: Box },
+  { id: 'basic-info', labelKey: 'products.wizard.stepBasicInfo', icon: Package },
+  { id: 'media', labelKey: 'products.wizard.stepMedia', icon: ImageIcon },
+  { id: 'formats', labelKey: 'products.wizard.stepFormats', icon: FileDigit },
+  { id: 'review', labelKey: 'products.wizard.stepReview', icon: CheckSquare },
 ];
 
 // ─── Reducer ──────────────────────────────────────────────────────────────────
@@ -146,6 +147,8 @@ function prevStep(current: WizardStep, productType: ApiProductType | null): Wiza
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function ProductUpload() {
+  const { t } = useTranslation();
+  const apiError = useApiError();
   const [state, dispatch] = useReducer(wizardReducer, INITIAL_STATE);
   // Session-local variant image overrides (persisted immediately server-side;
   // kept here so the matrix shows current images after a step remount).
@@ -216,7 +219,7 @@ export function ProductUpload() {
         });
         advance({ serverProduct: product, productId: product.id });
       } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : 'Failed to save. Please try again.';
+        const msg = apiError.resolve(err, { fallbackKey: 'products.errors.saveFailed' });
         dispatch({ type: 'SET_STEP_ERROR', error: msg });
       }
     },
@@ -339,7 +342,7 @@ export function ProductUpload() {
             },
           });
         } catch (err: unknown) {
-          const msg = err instanceof Error ? err.message : 'Failed to apply option changes.';
+          const msg = apiError.resolve(err, { fallbackKey: 'products.errors.optionsFailed' });
           dispatch({ type: 'SET_STEP_ERROR', error: msg });
         }
         return;
@@ -400,7 +403,7 @@ export function ProductUpload() {
               ? { ...state.serverProduct, defaultVariantId: freshVariants[0].id }
               : null;
 
-          toast.success('Variants saved.');
+          toast.success(t('products.toast.variantsSaved'));
           dispatch({
             type: 'SAVE_COMPLETE',
             updates: {
@@ -409,7 +412,7 @@ export function ProductUpload() {
             },
           });
         } catch (err: unknown) {
-          const msg = err instanceof Error ? err.message : 'Failed to save variants.';
+          const msg = apiError.resolve(err, { fallbackKey: 'products.errors.variantsFailed' });
           dispatch({ type: 'SET_STEP_ERROR', error: msg });
         }
         return;
@@ -521,7 +524,7 @@ export function ProductUpload() {
           }
         }
 
-        toast.success('Formats saved.');
+        toast.success(t('products.toast.formatsSaved'));
         advance({ serverVariants: freshVariants, serverProduct });
       } catch (err: unknown) {
         dispatch({ type: 'SET_STEP_ERROR', error: getUploadErrorMessage(err) });
@@ -560,10 +563,13 @@ export function ProductUpload() {
         const updated = await fetchProductById(productId);
         dispatch({ type: 'SAVE_COMPLETE', updates: { serverProduct: updated } });
         toast.success(
-          message ?? (agencyId ? 'Delivery agency updated.' : 'Using your default delivery agency.'),
+          message ??
+            t(agencyId ? 'products.toast.agencyUpdated' : 'products.toast.agencyDefault'),
         );
       } catch (err: unknown) {
-        const msg = err instanceof ApiError ? getAgencyConnectionErrorMessage(err) : 'Could not update delivery agency.';
+        const msg = err instanceof ApiError
+          ? getAgencyConnectionErrorMessage(err)
+          : t('products.errors.agencyFailed');
         dispatch({ type: 'SET_STEP_ERROR', error: msg });
         toast.error(msg);
       }
@@ -580,9 +586,13 @@ export function ProductUpload() {
         await updateProduct(productId, { delivery: { freeDelivery } });
         const updated = await fetchProductById(productId);
         dispatch({ type: 'SAVE_COMPLETE', updates: { serverProduct: updated } });
-        toast.success(freeDelivery ? 'Free delivery enabled.' : 'Free delivery disabled.');
+        toast.success(
+          t(freeDelivery
+            ? 'products.toast.freeDeliveryEnabled'
+            : 'products.toast.freeDeliveryDisabled'),
+        );
       } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : 'Could not update free delivery.';
+        const msg = apiError.resolve(err, { fallbackKey: 'products.errors.freeDeliveryFailed' });
         dispatch({ type: 'SET_STEP_ERROR', error: msg });
         toast.error(msg);
       }
@@ -599,7 +609,7 @@ export function ProductUpload() {
         await updateProduct(productId, { delivery: { pickupLocation } });
         const updated = await fetchProductById(productId);
         dispatch({ type: 'SAVE_COMPLETE', updates: { serverProduct: updated } });
-        toast.success('Pickup location updated.');
+        toast.success(t('products.toast.pickupUpdated'));
       } catch (err: unknown) {
         const msg = getDeliveryErrorMessage(err);
         dispatch({ type: 'SET_STEP_ERROR', error: msg });
@@ -620,16 +630,23 @@ export function ProductUpload() {
         // never empty and the backend persists the toggle on publish.
         await updateProductStatus(productId, 'active');
         await updateProduct(productId, { vectorisationEnabled });
-        toast.success('Product published successfully!');
+        toast.success(t('products.toast.published'));
         navigate('/dashboard/products');
       } catch (err: unknown) {
         if (err && typeof err === 'object' && 'code' in err) {
           const code = (err as { code: string }).code;
-          const human = ACTIVATION_ERROR_MAP[code];
-          dispatch({ type: 'SET_STEP_ERROR', error: human ?? 'Could not publish product.' });
+          const activationKey = ACTIVATION_ERROR_KEYS[code];
+          dispatch({
+            type: 'SET_STEP_ERROR',
+            error: activationKey
+              ? t(activationKey)
+              : apiError.resolve(err, { fallbackKey: 'products.errors.publishFailed' }),
+          });
         } else {
-          const msg = err instanceof Error ? err.message : 'Failed to publish product.';
-          dispatch({ type: 'SET_STEP_ERROR', error: msg });
+          dispatch({
+            type: 'SET_STEP_ERROR',
+            error: apiError.resolve(err, { fallbackKey: 'products.errors.publishFailed' }),
+          });
         }
       }
     },
@@ -645,10 +662,9 @@ export function ProductUpload() {
       }
       try {
         await updateProduct(productId, { vectorisationEnabled });
-        toast.success('Product saved as draft.');
+        toast.success(t('products.toast.savedAsDraft'));
       } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : 'Could not save draft.';
-        toast.error(msg);
+        toast.error(apiError.resolve(err, { fallbackKey: 'products.errors.draftFailed' }));
       } finally {
         navigate('/dashboard/products');
       }
@@ -718,10 +734,14 @@ export function ProductUpload() {
   return (
     <div className="space-y-4 sm:space-y-6 animate-fade-in max-w-3xl mx-auto -mx-6 sm:mx-auto">
       <div className="px-4 sm:px-0">
-        <PageBackButton fallbackPath="/dashboard/products" label="Products" className="mb-1" />
-        <h1 className="text-xl sm:text-2xl font-bold">Create Product</h1>
+        <PageBackButton
+          fallbackPath="/dashboard/products"
+          label={t('products.wizard.backToProducts')}
+          className="mb-1"
+        />
+        <h1 className="text-xl sm:text-2xl font-bold">{t('products.wizard.createTitle')}</h1>
         <p className="text-muted-foreground text-xs sm:text-sm mt-1">
-          Add a new product to your store
+          {t('products.wizard.createSubtitle')}
         </p>
       </div>
 
@@ -747,8 +767,7 @@ export function ProductUpload() {
           <Alert>
             <AlertCircle className="w-4 h-4" />
             <AlertDescription>
-              Product is being indexed for AI search. Editing is temporarily disabled —
-              head to the Review step to refresh status.
+              {t('products.wizard.lockedIndexing')}
             </AlertDescription>
           </Alert>
         </div>

@@ -1,6 +1,7 @@
 import type { ElementType } from 'react';
 import { PackageSearch, XCircle } from 'lucide-react';
 import { isOrderFrozen } from '@/services/orders.service';
+import type { TranslationKey } from '@/i18n';
 import type { Order, OrderStatus, PaymentMethod, PaymentStatus, VendorSettableStatus } from '@/types';
 
 /**
@@ -18,10 +19,28 @@ export function getNextStatuses(status: OrderStatus): VendorSettableStatus[] {
   }
 }
 
-export const STATUS_LABELS: Record<VendorSettableStatus, string> = {
-  pending: 'Mark as Pending',
-  processing: 'Mark as Processing',
-  cancelled: 'Cancel Order',
+/**
+ * Labels live as translation keys rather than strings: this module has no React
+ * context to read a locale from, so each call site resolves the key with its own
+ * `t()`. Same for the filter-option lists further down.
+ */
+export const STATUS_ACTION_KEYS: Record<VendorSettableStatus, TranslationKey> = {
+  pending: 'orders.statusActions.pending',
+  processing: 'orders.statusActions.processing',
+  cancelled: 'orders.statusActions.cancelled',
+};
+
+/** Every fulfilment status, for read-only display (badges, "no further actions"). */
+export const ORDER_STATUS_KEYS: Record<OrderStatus, TranslationKey> = {
+  pending: 'orders.status.pending',
+  processing: 'orders.status.processing',
+  partially_shipped: 'orders.status.partiallyShipped',
+  shipped: 'orders.status.shipped',
+  partially_delivered: 'orders.status.partiallyDelivered',
+  delivered: 'orders.status.delivered',
+  fulfilled: 'orders.status.fulfilled',
+  cancelled: 'orders.status.cancelled',
+  returned: 'orders.status.returned',
 };
 
 export const STATUS_ICONS: Record<VendorSettableStatus, ElementType> = {
@@ -72,37 +91,37 @@ export function canBulkDispatch(orders: Order[]): boolean {
 }
 
 /** Full status list for the Orders filter sheet. */
-export const ORDER_STATUS_FILTER_OPTIONS: { value: OrderStatus; label: string }[] = [
-  { value: 'pending', label: 'Pending' },
-  { value: 'processing', label: 'Processing' },
-  { value: 'partially_shipped', label: 'Partially Shipped' },
-  { value: 'shipped', label: 'Shipped' },
-  { value: 'partially_delivered', label: 'Partially Delivered' },
-  { value: 'delivered', label: 'Delivered' },
-  { value: 'fulfilled', label: 'Fulfilled' },
-  { value: 'cancelled', label: 'Cancelled' },
-  { value: 'returned', label: 'Returned' },
+export const ORDER_STATUS_FILTER_OPTIONS: { value: OrderStatus; labelKey: TranslationKey }[] = [
+  { value: 'pending', labelKey: 'orders.status.pending' },
+  { value: 'processing', labelKey: 'orders.status.processing' },
+  { value: 'partially_shipped', labelKey: 'orders.status.partiallyShipped' },
+  { value: 'shipped', labelKey: 'orders.status.shipped' },
+  { value: 'partially_delivered', labelKey: 'orders.status.partiallyDelivered' },
+  { value: 'delivered', labelKey: 'orders.status.delivered' },
+  { value: 'fulfilled', labelKey: 'orders.status.fulfilled' },
+  { value: 'cancelled', labelKey: 'orders.status.cancelled' },
+  { value: 'returned', labelKey: 'orders.status.returned' },
 ];
 
 /** Payment-method list for the Orders filter sheet. */
-export const PAYMENT_METHOD_FILTER_OPTIONS: { value: PaymentMethod; label: string }[] = [
-  { value: 'online', label: 'Online' },
-  { value: 'cash_on_delivery', label: 'Cash on Delivery' },
+export const PAYMENT_METHOD_FILTER_OPTIONS: { value: PaymentMethod; labelKey: TranslationKey }[] = [
+  { value: 'online', labelKey: 'orders.paymentMethod.online' },
+  { value: 'cash_on_delivery', labelKey: 'orders.paymentMethod.cashOnDelivery' },
 ];
 
 /** Payment-status list for the Orders filter sheet (mirrors the backend `paymentStatus` enum). */
-export const PAYMENT_STATUS_FILTER_OPTIONS: { value: PaymentStatus; label: string }[] = [
-  { value: 'pending', label: 'Pending' },
-  { value: 'AWAITING_PAYMENT', label: 'Awaiting Payment' },
-  { value: 'partially_paid', label: 'Partially Paid' },
-  { value: 'paid', label: 'Paid' },
-  { value: 'disputed', label: 'Disputed' },
-  { value: 'failed', label: 'Failed' },
-  { value: 'refunded', label: 'Refunded' },
+export const PAYMENT_STATUS_FILTER_OPTIONS: { value: PaymentStatus; labelKey: TranslationKey }[] = [
+  { value: 'pending', labelKey: 'orders.paymentStatus.pending' },
+  { value: 'AWAITING_PAYMENT', labelKey: 'orders.paymentStatus.awaitingPayment' },
+  { value: 'partially_paid', labelKey: 'orders.paymentStatus.partiallyPaid' },
+  { value: 'paid', labelKey: 'orders.paymentStatus.paid' },
+  { value: 'disputed', labelKey: 'orders.paymentStatus.disputed' },
+  { value: 'failed', labelKey: 'orders.paymentStatus.failed' },
+  { value: 'refunded', labelKey: 'orders.paymentStatus.refunded' },
 ];
 
 /** Order-type list for the Orders filter sheet. */
-export const ORDER_TYPE_FILTER_OPTIONS: { value: 'physical' | 'digital'; label: string }[] = [
-  { value: 'physical', label: 'Physical' },
-  { value: 'digital', label: 'Digital' },
+export const ORDER_TYPE_FILTER_OPTIONS: { value: 'physical' | 'digital'; labelKey: TranslationKey }[] = [
+  { value: 'physical', labelKey: 'orders.orderType.physical' },
+  { value: 'digital', labelKey: 'orders.orderType.digital' },
 ];

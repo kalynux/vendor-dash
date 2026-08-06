@@ -9,6 +9,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useOnboarding } from '@/onboarding/store/onboarding.store';
+import { useTranslation } from '@/i18n';
 import type { ApiPickupLocation } from '@/types/product.types';
 
 interface PickupAddressPickerProps {
@@ -22,6 +23,7 @@ interface PickupAddressPickerProps {
  * could send a courier to the wrong city.
  */
 export function PickupAddressPicker({ disabled = false, onChoose }: PickupAddressPickerProps) {
+  const { t } = useTranslation();
   const { session } = useOnboarding();
   const addresses = (session?.role_entity.business_addresses ?? []).filter((a) => !!a._id);
   const [selected, setSelected] = useState('');
@@ -29,9 +31,9 @@ export function PickupAddressPicker({ disabled = false, onChoose }: PickupAddres
   if (addresses.length === 0) {
     return (
       <div className="rounded-lg border border-dashed p-4 text-center space-y-2">
-        <p className="text-sm text-muted-foreground">You have no business addresses yet.</p>
+        <p className="text-sm text-muted-foreground">{t('products.delivery.noAddresses')}</p>
         <Button asChild size="sm" variant="outline">
-          <Link to="/dashboard/account/addresses">Go to Account &rarr; Addresses</Link>
+          <Link to="/dashboard/account/addresses">{t('products.delivery.goToAddresses')}</Link>
         </Button>
       </div>
     );
@@ -47,7 +49,7 @@ export function PickupAddressPicker({ disabled = false, onChoose }: PickupAddres
       }}
     >
       <SelectTrigger className="w-full" data-size="default">
-        <SelectValue placeholder="Select a business address" />
+        <SelectValue placeholder={t('products.delivery.addressPlaceholder')} />
       </SelectTrigger>
       <SelectContent>
         {addresses.map((addr) => (

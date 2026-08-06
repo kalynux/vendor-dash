@@ -1,18 +1,26 @@
 import { z } from 'zod';
 
+import { isValidE164 } from '@/lib/phone';
+
 // ─── Payout details (one entry in the array) ──────────────────────────────────
 
 const mobileMoneySchema = z.object({
-    provider: z.string().min(1, 'Provider is required').trim(),
-    phone_number: z.string().min(6, 'Phone number too short').max(20, 'Phone number too long').trim(),
-    account_name: z.string().min(1, 'Account name is required').trim(),
+    provider: z.string().min(1, 'onboarding.validation.providerRequired').trim(),
+    // Stored as E.164 by `<PhoneInput>` and validated against the numbering plan
+    // of the country it names — money moves to this number.
+    phone_number: z
+        .string()
+        .trim()
+        .min(1, 'common.validation.phoneRequired')
+        .refine(isValidE164, 'common.validation.phone'),
+    account_name: z.string().min(1, 'onboarding.validation.accountNameRequired').trim(),
 });
 
 const bankSchema = z.object({
-    bank_name: z.string().min(1, 'Bank name is required').trim(),
-    account_number: z.string().min(1, 'Account number is required').trim(),
-    account_name: z.string().min(1, 'Account name is required').trim(),
-    country: z.string().length(2, 'Must be a valid ISO-2 country code').toUpperCase(),
+    bank_name: z.string().min(1, 'onboarding.validation.bankNameRequired').trim(),
+    account_number: z.string().min(1, 'onboarding.validation.accountNumberRequired').trim(),
+    account_name: z.string().min(1, 'onboarding.validation.accountNameRequired').trim(),
+    country: z.string().length(2, 'onboarding.validation.countryIso2').toUpperCase(),
 });
 
 export const payoutDetailsSchema = z.discriminatedUnion('method', [
@@ -38,13 +46,13 @@ export type PayoutMethod = 'mobile_money' | 'bank';
 export const step1Schema = z.object({
     country: z
         .string()
-        .length(2, 'Must be a 2-letter ISO country code')
+        .length(2, 'onboarding.validation.countryIso2Letters')
         .toUpperCase(),
-    timezone: z.string().min(1, 'Timezone is required'),
+    timezone: z.string().min(1, 'onboarding.validation.timezoneRequired'),
     payout_details: z
         .array(payoutDetailsSchema)
-        .min(1, 'At least one payout method is required')
-        .max(3, 'Maximum 3 payout methods allowed'),
+        .min(1, 'onboarding.validation.payoutMethodMin')
+        .max(3, 'onboarding.validation.payoutMethodMax'),
 });
 
 export type Step1FormValues = z.infer<typeof step1Schema>;
@@ -98,11 +106,11 @@ export const businessAddressSchema = z.object({
      */
     _id: z.string().optional(),
     /** Required by the backend — identifies the location (e.g. "Main Office", "Warehouse"). */
-    label: z.string().min(1, 'Label is required').max(50, 'Label must be 50 characters or fewer'),
-    address_line1: z.string().min(1, 'Address is required').max(200, 'Address too long'),
-    address_line2: z.string().max(200, 'Address too long').optional().or(z.literal('')),
-    city: z.string().min(1, 'City is required').max(100, 'City name too long'),
-    state: z.string().max(100, 'State/region too long').optional().or(z.literal('')),
+    label: z.string().min(1, 'onboarding.validation.labelRequired').max(50, 'onboarding.validation.labelMax'),
+    address_line1: z.string().min(1, 'onboarding.validation.addressRequired').max(200, 'onboarding.validation.addressMax'),
+    address_line2: z.string().max(200, 'onboarding.validation.addressMax').optional().or(z.literal('')),
+    city: z.string().min(1, 'onboarding.validation.cityRequired').max(100, 'onboarding.validation.cityMax'),
+    state: z.string().max(100, 'onboarding.validation.stateMax').optional().or(z.literal('')),
     /** Canonical geospatial address from the search box. Preserved on resubmit. */
     geo: geoAddressFormSchema.nullish(),
 });
@@ -119,17 +127,17 @@ export type Step3FormValues = z.infer<typeof step3Schema>;
 
 const returnPolicySchema = z.object({
     return_eligible: z.boolean(),
-    return_window_days: z.coerce.number().int().min(0, 'Min 0').max(180, 'Max 180 days'),
+    return_window_days: z.coerce.number().int().min(0, 'onboarding.validation.min0').max(180, 'onboarding.validation.max180Days'),
     refund_type: z.enum(['full', 'partial', 'none']),
     refund_percentage: z.coerce.number().min(0).max(100).nullable().optional(),
     return_shipping_payer: z.enum(['vendor', 'customer', 'customer_reimbursed_if_defect']),
-    refund_processing_days: z.coerce.number().int().min(1, 'Min 1').max(30, 'Max 30 days'),
-    return_condition_notes: z.string().max(500, 'Max 500 characters').nullable().optional(),
+    refund_processing_days: z.coerce.number().int().min(1, 'onboarding.validation.min1').max(30, 'onboarding.validation.max30Days'),
+    return_condition_notes: z.string().max(500, 'onboarding.validation.max500Chars').nullable().optional(),
 }).superRefine((val, ctx) => {
     if (val.refund_type === 'partial' && (val.refund_percentage == null)) {
         ctx.addIssue({
             code: z.ZodIssueCode.custom,
-            message: 'Refund percentage is required for partial refunds',
+            message: 'onboarding.validation.refundPercentageRequired',
             path: ['refund_percentage'],
         });
     }
@@ -138,11 +146,11 @@ const returnPolicySchema = z.object({
 const cancellationPolicySchema = z.object({
     cancellable: z.boolean(),
     cancellation_deadline: z.string().nullable().optional(),
-    cancellation_deadline_days: z.coerce.number().int().min(0, 'Min 0').nullable().optional(),
+    cancellation_deadline_days: z.coerce.number().int().min(0, 'onboarding.validation.min0').nullable().optional(),
     cancellation_fee_type: z.enum(['none', 'fixed', 'percentage', 'full_non_refundable']).nullable().optional(),
-    cancellation_fee_value: z.coerce.number().min(0, 'Min 0').nullable().optional(),
+    cancellation_fee_value: z.coerce.number().min(0, 'onboarding.validation.min0').nullable().optional(),
     late_cancellation_refund_type: z.enum(['fixed', 'percentage', 'full_non_refundable']).nullable().optional(),
-    late_cancellation_refund_value: z.coerce.number().min(0, 'Min 0').nullable().optional(),
+    late_cancellation_refund_value: z.coerce.number().min(0, 'onboarding.validation.min0').nullable().optional(),
 }).superRefine((val, ctx) => {
     if (
         val.cancellation_deadline === 'anytime_until_days_before_delivery' &&
@@ -150,7 +158,7 @@ const cancellationPolicySchema = z.object({
     ) {
         ctx.addIssue({
             code: z.ZodIssueCode.custom,
-            message: 'Number of days is required',
+            message: 'onboarding.validation.daysRequired',
             path: ['cancellation_deadline_days'],
         });
     }
@@ -160,7 +168,7 @@ const cancellationPolicySchema = z.object({
     ) {
         ctx.addIssue({
             code: z.ZodIssueCode.custom,
-            message: 'Fee value is required',
+            message: 'onboarding.validation.feeValueRequired',
             path: ['cancellation_fee_value'],
         });
     }
@@ -170,31 +178,44 @@ const cancellationPolicySchema = z.object({
     ) {
         ctx.addIssue({
             code: z.ZodIssueCode.custom,
-            message: 'Refund value is required',
+            message: 'onboarding.validation.refundValueRequired',
             path: ['late_cancellation_refund_value'],
         });
     }
 });
 
-const supportChannelSchema = z.object({
-    type: z.enum(['email', 'phone', 'whatsapp', 'telegram']),
-    contact: z.string().min(1, 'Contact is required').max(200, 'Max 200 characters'),
-});
+const supportChannelSchema = z
+    .object({
+        type: z.enum(['email', 'phone', 'whatsapp', 'telegram']),
+        contact: z.string().min(1, 'onboarding.validation.contactRequired').max(200, 'onboarding.validation.max200Chars'),
+    })
+    // A phone/WhatsApp channel is a dialable number in E.164 — the same bar every
+    // other phone field in the dashboard is held to. Email and Telegram are free text.
+    .superRefine((val, ctx) => {
+        const isPhoneChannel = val.type === 'phone' || val.type === 'whatsapp';
+        if (isPhoneChannel && val.contact && !isValidE164(val.contact)) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: 'common.validation.phone',
+                path: ['contact'],
+            });
+        }
+    });
 
 const supportPolicySchema = z.object({
-    channels: z.array(supportChannelSchema).max(4, 'Maximum 4 channels'),
-    eligibility_notes: z.string().max(500, 'Max 500 characters').nullable().optional(),
+    channels: z.array(supportChannelSchema).max(4, 'onboarding.validation.maxChannels'),
+    eligibility_notes: z.string().max(500, 'onboarding.validation.max500Chars').nullable().optional(),
     required_info: z.array(z.enum(['order_number', 'product_photo_video', 'tracking_number'])).optional(),
     availability: z.enum(['24_7', 'business_hours', 'limited']).nullable().optional(),
-    availability_description: z.string().max(200, 'Max 200 characters').nullable().optional(),
-    languages: z.array(z.string().max(50, 'Max 50 characters')).max(20, 'Maximum 20 languages').optional(),
+    availability_description: z.string().max(200, 'onboarding.validation.max200Chars').nullable().optional(),
+    languages: z.array(z.string().max(50, 'onboarding.validation.max50Chars')).max(20, 'onboarding.validation.maxLanguages').optional(),
 });
 
 export const step4Schema = z.object({
     return_policy: returnPolicySchema.optional(),
     cancellation_policy: cancellationPolicySchema.optional(),
     support_policy: supportPolicySchema.optional(),
-    documents: z.array(z.string()).max(2, 'Maximum 2 documents').optional(),
+    documents: z.array(z.string()).max(2, 'onboarding.validation.maxDocuments').optional(),
 });
 
 export type Step4FormValues = z.infer<typeof step4Schema>;

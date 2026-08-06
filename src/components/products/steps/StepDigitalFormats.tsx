@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { DigitalFormatCard } from '@/components/products/DigitalFormatCard';
+import { useMessage, useTranslation } from '@/i18n';
 import type { WizardState, DigitalFormatRow } from '@/types/product.types';
 
 const MAX_FORMATS = 5;
@@ -67,6 +68,8 @@ export function StepDigitalFormats({
   onVariantStatusChanged,
   onBack,
 }: StepDigitalFormatsProps) {
+  const { t } = useTranslation();
+  const m = useMessage();
   const [formats, setFormats] = useState<DigitalFormatRow[]>(() => buildInitialFormats(serverData));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isActive, setIsActive] = useState<boolean>(
@@ -123,9 +126,9 @@ export function StepDigitalFormats({
   function validate(): boolean {
     const next: Record<string, string> = {};
     for (const f of formats) {
-      if (!f.sku.trim()) next[`${f.tempId}.sku`] = 'SKU is required';
-      if (!f.name.trim()) next[`${f.tempId}.name`] = 'Format name is required';
-      if (!f.price || f.price <= 0) next[`${f.tempId}.price`] = 'Price must be greater than 0';
+      if (!f.sku.trim()) next[`${f.tempId}.sku`] = 'products.formats.skuRequired';
+      if (!f.name.trim()) next[`${f.tempId}.name`] = 'products.formats.nameRequired';
+      if (!f.price || f.price <= 0) next[`${f.tempId}.price`] = 'products.formats.priceRequired';
     }
     setErrors(next);
     return Object.keys(next).length === 0;
@@ -149,17 +152,16 @@ export function StepDigitalFormats({
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-semibold">Formats</h2>
+        <h2 className="text-lg font-semibold">{t('products.formats.title')}</h2>
         <p className="text-sm text-muted-foreground mt-1">
-          Offer your digital product in up to {MAX_FORMATS} formats (e.g. PDF, ZIP, EPUB). Each
-          format has its own file, price, and download rules.
+          {t('products.formats.description', { max: MAX_FORMATS })}
         </p>
       </div>
 
       {stepError && (
         <Alert variant="destructive">
           <AlertCircle className="w-4 h-4" />
-          <AlertDescription>{stepError}</AlertDescription>
+          <AlertDescription>{m(stepError)}</AlertDescription>
         </Alert>
       )}
 
@@ -167,9 +169,9 @@ export function StepDigitalFormats({
       <div className="rounded-xl border border-border p-4">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <Label className="text-sm font-medium">Downloads enabled</Label>
+            <Label className="text-sm font-medium">{t('products.formats.downloadsEnabled')}</Label>
             <p className="text-xs text-muted-foreground mt-0.5">
-              When off, all formats are paused — purchases won&apos;t deliver files.
+              {t('products.formats.downloadsEnabledHint')}
             </p>
           </div>
           <Switch
@@ -179,7 +181,7 @@ export function StepDigitalFormats({
               setDirty(true);
             }}
             disabled={isSaving}
-            aria-label="Downloads enabled"
+            aria-label={t('products.formats.downloadsEnabled')}
           />
         </div>
       </div>
@@ -214,12 +216,12 @@ export function StepDigitalFormats({
           className="gap-2 w-full sm:w-auto"
         >
           <Plus className="w-3.5 h-3.5" />
-          Add format
+          {t('products.formats.addFormat')}
         </Button>
         <p className="text-xs text-muted-foreground">
           {atLimit
-            ? `Maximum ${MAX_FORMATS} formats reached.`
-            : `${formats.length} of ${MAX_FORMATS} formats.`}
+            ? t('products.formats.atLimit', { max: MAX_FORMATS })
+            : t('products.formats.count', { used: formats.length, max: MAX_FORMATS })}
         </p>
       </div>
 
@@ -227,22 +229,22 @@ export function StepDigitalFormats({
       <div className="flex items-center justify-between pt-2">
         <Button type="button" variant="ghost" size="sm" onClick={onBack} className="gap-1.5">
           <ChevronLeft className="w-4 h-4" />
-          Back
+          {t('common.actions.back')}
         </Button>
         {hasUnsaved ? (
           <Button type="button" onClick={handleSave} disabled={isSaving} className="gap-1.5">
             {isSaving ? (
-              'Saving…'
+              t('common.actions.saving')
             ) : (
               <>
                 <Save className="w-4 h-4" />
-                Save &amp; continue
+                {t('products.formats.saveAndContinue')}
               </>
             )}
           </Button>
         ) : (
           <Button type="button" onClick={handleContinue} disabled={isSaving} className="gap-1.5">
-            Continue
+            {t('common.actions.continue')}
             <ChevronRight className="w-4 h-4" />
           </Button>
         )}

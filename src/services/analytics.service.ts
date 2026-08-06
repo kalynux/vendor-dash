@@ -1,5 +1,6 @@
 import { api } from './api';
 import { ApiError } from '@/types/api';
+import { apiErrorMessage, type TranslationKey } from '@/i18n';
 import type {
   SalesDataPoint,
   TopProduct,
@@ -31,13 +32,9 @@ export function isAggregationNotReady(err: unknown): boolean {
   return err instanceof ApiError && (err.code === 'ANALYTICS_AGGREGATION_NOT_READY' || err.status === 503);
 }
 
-/** Resolve a user-facing message for any error thrown by an analytics API call. */
+/** Resolve a localized, user-safe message for any analytics API failure. */
 export function getAnalyticsErrorMessage(err: unknown): string {
-  if (err instanceof ApiError) {
-    if (isAggregationNotReady(err)) return ANALYTICS_ERROR_LABELS.ANALYTICS_AGGREGATION_NOT_READY;
-    return ANALYTICS_ERROR_LABELS[err.code] ?? err.message;
-  }
-  return 'Something went wrong loading analytics. Please try again.';
+  return apiErrorMessage(err, { fallbackKey: 'analytics.errors.loadFailed' });
 }
 
 // ─── API Response Types (mirror api-doc/vendor/analytics.md exactly) ───────────
@@ -132,7 +129,13 @@ export function toISODate(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
-/** The preset labels offered by the date-range dropdown, in display order. */
+/**
+ * The preset ranges offered by the date-range dropdown, in display order.
+ *
+ * The English strings are **identifiers**, not display copy — `presetRange`
+ * switches on them and `DateRange.label` round-trips them through the store.
+ * Render them through `DATE_RANGE_PRESET_KEYS` instead of printing them.
+ */
 export const DATE_RANGE_PRESETS = [
   'Today',
   'Yesterday',
@@ -140,6 +143,16 @@ export const DATE_RANGE_PRESETS = [
   'Last week',
   'Last month',
 ] as const;
+
+/** Display key per preset id, plus the user-picked "Custom" range. */
+export const DATE_RANGE_PRESET_KEYS: Record<string, TranslationKey> = {
+  Today: 'common.time.today',
+  Yesterday: 'common.time.yesterday',
+  'Last 7 days': 'common.time.last7Days',
+  'Last week': 'common.time.lastWeek',
+  'Last month': 'common.time.lastMonth',
+  Custom: 'common.time.custom',
+};
 
 /**
  * Resolve a named date-range preset to a concrete {from, to} range.

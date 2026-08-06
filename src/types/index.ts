@@ -1,3 +1,5 @@
+import type { TranslationKey } from '@/i18n';
+
 // Product Types - Legacy (for backward compatibility)
 export interface Product {
   id: string;
@@ -286,7 +288,14 @@ export type TimelineEventType =
 export interface OrderTimelineEvent {
   id: string;
   type: TimelineEventType;
-  message: string;
+  /**
+   * Translation key for the event line, resolved at the render site so the
+   * timeline follows a language switch without a refetch. `messageFallback`
+   * carries the raw event type for the codes we have no wording for yet.
+   */
+  messageKey: TranslationKey | null;
+  messageParams?: Record<string, string>;
+  messageFallback: string;
   description: string | null;
   createdAt: string;
   actor: string;

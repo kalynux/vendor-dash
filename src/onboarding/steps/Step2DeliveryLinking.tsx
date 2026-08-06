@@ -6,8 +6,8 @@ import { OnboardingLayout } from '@/onboarding/OnboardingLayout';
 import { useOnboarding } from '@/onboarding/store/onboarding.store';
 import { AgencyConnectionBrowser } from '@/components/delivery/AgencyConnectionBrowser';
 import { Button } from '@/components/ui/button';
-import { ApiError } from '@/types/api';
 import { cn } from '@/lib/utils';
+import { useTranslation, useApiError } from '@/i18n';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -22,6 +22,7 @@ function ProductTypeQuestion({
     onPhysical: () => void;
     onService: () => void;
 }) {
+    const { t } = useTranslation();
     return (
         <div className="space-y-4 mt-2">
             <button
@@ -38,9 +39,11 @@ function ProductTypeQuestion({
                         <Package className="w-5 h-5 text-muted-foreground" />
                     </div>
                     <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-sm">Yes, I sell physical products</p>
+                        <p className="font-semibold text-sm">
+                            {t('onboarding.deliveryLinking.physicalOption')}
+                        </p>
                         <p className="text-xs text-muted-foreground mt-0.5">
-                            I need a delivery agency to ship orders to customers.
+                            {t('onboarding.deliveryLinking.physicalOptionHint')}
                         </p>
                     </div>
                     <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />
@@ -61,9 +64,11 @@ function ProductTypeQuestion({
                         <Wrench className="w-5 h-5 text-muted-foreground" />
                     </div>
                     <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-sm">No, I only offer services</p>
+                        <p className="font-semibold text-sm">
+                            {t('onboarding.deliveryLinking.serviceOption')}
+                        </p>
                         <p className="text-xs text-muted-foreground mt-0.5">
-                            My business is service-based — no physical shipping needed.
+                            {t('onboarding.deliveryLinking.serviceOptionHint')}
                         </p>
                     </div>
                     <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />
@@ -76,6 +81,7 @@ function ProductTypeQuestion({
 // ─── Service-Only Confirmation ────────────────────────────────────────────────
 
 function ServiceOnlyConfirmation() {
+    const { t } = useTranslation();
     return (
         <div className="mt-4 rounded-xl border border-border bg-muted/40 p-5">
             <div className="flex items-start gap-3">
@@ -83,10 +89,11 @@ function ServiceOnlyConfirmation() {
                     <Wrench className="w-4 h-4 text-muted-foreground" />
                 </div>
                 <div>
-                    <p className="text-sm font-semibold">Service-only vendor</p>
+                    <p className="text-sm font-semibold">
+                        {t('onboarding.deliveryLinking.serviceOnlyTitle')}
+                    </p>
                     <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                        No delivery agency needed. This step will be skipped and you can proceed
-                        to the next one. You can always link a delivery agency later from Settings.
+                        {t('onboarding.deliveryLinking.serviceOnlyDescription')}
                     </p>
                 </div>
             </div>
@@ -97,14 +104,15 @@ function ServiceOnlyConfirmation() {
 // ─── Physical: optional connection browser ────────────────────────────────────
 
 function PhysicalDeliveryPanel() {
+    const { t } = useTranslation();
     return (
         <div className="mt-4 space-y-3">
             <div className="rounded-xl border border-border bg-muted/40 p-4">
-                <p className="text-sm font-semibold">Get a head start (optional)</p>
+                <p className="text-sm font-semibold">
+                    {t('onboarding.deliveryLinking.headStartTitle')}
+                </p>
                 <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                    Delivery agencies now require an agreement — request a connection now so
-                    approval time overlaps with the rest of setup, or skip this and do it later
-                    from Settings → Delivery. Either way, you don't need one to continue.
+                    {t('onboarding.deliveryLinking.headStartDescription')}
                 </p>
             </div>
             <AgencyConnectionBrowser listHeightClass="h-[38vh] min-h-[160px]" />
@@ -115,6 +123,8 @@ function PhysicalDeliveryPanel() {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function Step2DeliveryLinking() {
+    const { t } = useTranslation();
+    const apiError = useApiError();
     const { submitDeliveryLinking, isSubmitting, session, drafts, saveDraft } = useOnboarding();
 
     const roleEntity = session?.role_entity;
@@ -148,17 +158,11 @@ export function Step2DeliveryLinking() {
         saveDraft(2, { productType });
         try {
             await submitDeliveryLinking({});
-            toast.success('Step complete!');
+            toast.success(t('onboarding.deliveryLinking.stepComplete'));
         } catch (err) {
-            setSubmitError(
-                err instanceof ApiError
-                    ? err.isServer
-                        ? 'A server error occurred. Please try again.'
-                        : err.message
-                    : 'Could not continue. Please try again.',
-            );
+            setSubmitError(apiError.resolve(err, { fallbackKey: 'onboarding.errors.continueFailed' }));
         }
-    }, [productType, submitDeliveryLinking, saveDraft]);
+    }, [productType, submitDeliveryLinking, saveDraft, t, apiError]);
 
     // ── CTA slot ──────────────────────────────────────────────────────────────
 
@@ -176,11 +180,11 @@ export function Step2DeliveryLinking() {
                     {isSubmitting ? (
                         <>
                             <Loader2 className="w-4 h-4 animate-spin" />
-                            Continuing…
+                            {t('onboarding.continuing')}
                         </>
                     ) : (
                         <>
-                            Continue
+                            {t('common.actions.continue')}
                             <ChevronRight className="w-4 h-4" />
                         </>
                     )}
@@ -191,7 +195,7 @@ export function Step2DeliveryLinking() {
                     disabled={isSubmitting}
                     className="w-full text-sm text-muted-foreground hover:text-foreground transition-colors py-2 disabled:opacity-50"
                 >
-                    I only sell services — skip this step
+                    {t('onboarding.deliveryLinking.switchToService')}
                 </button>
             </div>
         );
@@ -207,11 +211,11 @@ export function Step2DeliveryLinking() {
                     {isSubmitting ? (
                         <>
                             <Loader2 className="w-4 h-4 animate-spin" />
-                            Continuing…
+                            {t('onboarding.continuing')}
                         </>
                     ) : (
                         <>
-                            Continue
+                            {t('common.actions.continue')}
                             <ChevronRight className="w-4 h-4" />
                         </>
                     )}
@@ -222,7 +226,7 @@ export function Step2DeliveryLinking() {
                     disabled={isSubmitting}
                     className="w-full text-sm text-muted-foreground hover:text-foreground transition-colors py-2 disabled:opacity-50"
                 >
-                    Actually, I do sell physical products
+                    {t('onboarding.deliveryLinking.switchToPhysical')}
                 </button>
             </div>
         );
@@ -233,13 +237,13 @@ export function Step2DeliveryLinking() {
     return (
         <OnboardingLayout ctaSlot={ctaSlot} stepKey={2}>
             <div className="space-y-2 mb-6">
-                <h1 className="text-2xl font-bold">Delivery Linking</h1>
+                <h1 className="text-2xl font-bold">{t('onboarding.deliveryLinking.heading')}</h1>
                 <p className="text-muted-foreground text-sm">
                     {productType === null
-                        ? 'Do you sell physical products that need to be shipped?'
+                        ? t('onboarding.deliveryLinking.askProductType')
                         : productType === 'physical'
-                          ? 'Delivery agencies are connected independently of setup — this is optional.'
-                          : 'No delivery needed for your business.'}
+                          ? t('onboarding.deliveryLinking.physicalSubheading')
+                          : t('onboarding.deliveryLinking.serviceSubheading')}
                 </p>
             </div>
 

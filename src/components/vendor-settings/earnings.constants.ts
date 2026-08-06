@@ -1,12 +1,16 @@
 // ─── Vendor Earnings — display constants & helpers ───────────────────────────
+//
+// Labels are translation *keys*, not sentences: this module is imported by both
+// the desktop and mobile payout surfaces and has no React context of its own, so
+// each call site resolves them with `t` and they follow a language switch.
 
-import { ApiError } from '@/types/api';
+import { apiErrorMessage, type TranslationKey } from '@/i18n';
 import type { PayoutOrigin, PayoutRequestStatus } from '@/types/earnings.types';
 
-export const PAYOUT_STATUS_LABELS: Record<PayoutRequestStatus, string> = {
-  pending: 'Pending review',
-  paid: 'Paid',
-  rejected: 'Rejected',
+export const PAYOUT_STATUS_KEYS: Record<PayoutRequestStatus, TranslationKey> = {
+  pending: 'account.earnings.status.pending',
+  paid: 'account.earnings.status.paid',
+  rejected: 'account.earnings.status.rejected',
 };
 
 // ─── Server-side payout thresholds ────────────────────────────────────────────
@@ -20,9 +24,9 @@ export const MIN_PAYOUT_AMOUNT = 10_000;
 export const AUTO_PAYOUT_THRESHOLD = 2_000_000;
 
 /** How a payout request came to exist — shown next to the request's status. */
-export const PAYOUT_ORIGIN_LABELS: Record<PayoutOrigin, string> = {
-  manual: 'Requested by you',
-  auto_threshold: 'Automatic',
+export const PAYOUT_ORIGIN_KEYS: Record<PayoutOrigin, TranslationKey> = {
+  manual: 'account.earnings.origin.manual',
+  auto_threshold: 'account.earnings.origin.auto_threshold',
 };
 
 export const PAYOUT_STATUS_BADGE_CLASSES: Record<PayoutRequestStatus, string> = {
@@ -31,16 +35,10 @@ export const PAYOUT_STATUS_BADGE_CLASSES: Record<PayoutRequestStatus, string> = 
   rejected: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
 };
 
-const EARNINGS_ERROR_MESSAGES: Record<string, string> = {
-  EARNINGS_PAYOUT_ALREADY_PENDING: 'You already have a payout request in progress — track it below.',
-  EARNINGS_PAYOUT_METHOD_MISSING: 'Add a payout method below before requesting a withdrawal.',
-  EARNINGS_PAYOUT_NO_AVAILABLE_BALANCE: 'There is no available balance to withdraw yet.',
-  EARNINGS_PAYOUT_BELOW_MINIMUM: `Your available balance is below the ${new Intl.NumberFormat().format(MIN_PAYOUT_AMOUNT)} XAF minimum for a withdrawal.`,
-};
-
-export function earningsErrorMessage(err: unknown, fallback = 'Something went wrong. Please try again.'): string {
-  if (err instanceof ApiError) {
-    return EARNINGS_ERROR_MESSAGES[err.code] ?? err.message ?? fallback;
-  }
-  return fallback;
+/**
+ * Localized message for an earnings failure. Goes through the shared resolver,
+ * so codes without an `errors.contexts.earnings` entry still get a sentence.
+ */
+export function earningsErrorMessage(err: unknown, fallbackKey?: TranslationKey): string {
+  return apiErrorMessage(err, { context: 'earnings', fallbackKey });
 }

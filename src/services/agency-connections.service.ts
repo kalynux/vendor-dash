@@ -1,5 +1,5 @@
 import { api } from './api';
-import { ApiError } from '@/types/api';
+import { apiErrorMessage } from '@/i18n';
 import type {
   AgencyBrowseItemDto,
   AgencyBrowseQueryParams,
@@ -31,9 +31,12 @@ export const AGENCY_CONNECTION_ERROR_LABELS: Record<string, string> = {
   DELIVERY_AGENCY_NOT_FOUND: 'This delivery agency could no longer be found.',
 };
 
+/** Resolve a localized, user-safe message for a connection API failure. */
 export function getAgencyConnectionErrorMessage(err: unknown): string {
-  if (err instanceof ApiError) return AGENCY_CONNECTION_ERROR_LABELS[err.code] ?? err.message;
-  return 'Something went wrong. Please try again.';
+  return apiErrorMessage(err, {
+    context: 'agencyConnection',
+    fallbackKey: 'agency.errors.updateFailed',
+  });
 }
 
 // ─── Query helpers ──────────────────────────────────────────────────────────────

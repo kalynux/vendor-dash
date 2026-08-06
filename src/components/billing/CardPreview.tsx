@@ -1,5 +1,6 @@
 import { Wifi } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useTranslation } from '@/i18n';
 
 export interface CardPreviewProps {
   /** Card network, e.g. `visa`, `mastercard`. Rendered in the corner. */
@@ -17,10 +18,11 @@ function maskedNumber(last4?: string | null): string {
   return groups.join(' ');
 }
 
-function formatExpiry(month?: number | null, year?: number | null): string {
-  if (!month && !year) return 'MM/YY';
-  const mm = month ? String(month).padStart(2, '0') : 'MM';
-  const yy = year ? String(year).slice(-2) : 'YY';
+function formatExpiry(month: number | null | undefined, year: number | null | undefined, placeholder: string): string {
+  if (!month && !year) return placeholder;
+  const [mmPlaceholder, yyPlaceholder] = placeholder.split('/');
+  const mm = month ? String(month).padStart(2, '0') : mmPlaceholder;
+  const yy = year ? String(year).slice(-2) : yyPlaceholder;
   return `${mm}/${yy}`;
 }
 
@@ -36,6 +38,7 @@ export function CardPreview({
   expYear,
   className,
 }: CardPreviewProps) {
+  const { t } = useTranslation();
   return (
     <div
       className={cn(
@@ -48,9 +51,11 @@ export function CardPreview({
       <div className="pointer-events-none absolute -bottom-12 -left-6 h-40 w-40 rounded-full bg-white/5" />
 
       <div className="flex items-start justify-between">
-        <span className="text-xs font-medium uppercase tracking-wide text-white/70">Card type</span>
+        <span className="text-xs font-medium uppercase tracking-wide text-white/70">
+          {t('billing.cardPreview.cardType')}
+        </span>
         <span className="text-lg font-bold uppercase italic tracking-tight">
-          {brand ?? 'CARD'}
+          {brand ?? t('billing.cardPreview.fallbackBrand')}
         </span>
       </div>
 
@@ -63,12 +68,16 @@ export function CardPreview({
       <div className="mt-4 flex items-end justify-between">
         <div className="min-w-0">
           <span className="block truncate text-sm font-medium">
-            {holderName?.trim() || 'Card holder'}
+            {holderName?.trim() || t('billing.cardPreview.holder')}
           </span>
         </div>
         <div className="text-right">
-          <span className="block text-[10px] uppercase tracking-wide text-white/60">Valid</span>
-          <span className="text-sm font-medium">{formatExpiry(expMonth, expYear)}</span>
+          <span className="block text-[10px] uppercase tracking-wide text-white/60">
+            {t('billing.cardPreview.valid')}
+          </span>
+          <span className="text-sm font-medium">
+            {formatExpiry(expMonth, expYear, t('billing.cardPreview.expiryPlaceholder'))}
+          </span>
         </div>
       </div>
     </div>

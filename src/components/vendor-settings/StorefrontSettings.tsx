@@ -10,8 +10,6 @@ import {
   Copy,
   Check,
   Mail,
-  Phone,
-  MessageCircle,
   Globe,
   CalendarDays,
   LifeBuoy,
@@ -20,12 +18,15 @@ import {
 import { toast } from 'sonner';
 
 import { cn } from '@/lib/utils';
+import { normalizeStoredPhone, phoneErrorKey, toE164 } from '@/lib/phone';
+import { PhoneInput } from '@/components/phone';
 import { useStoreStore } from '@/store';
 import { updateStore, updateStoreStatus } from '@/services/store.service';
 import { resolveFileUrl } from '@/services/files.service';
 import { MediaPicker } from '@/components/features/MediaPicker';
 import { mapProfileError } from '@/components/vendor-settings/errors';
 import { UnsavedChangesBar } from '@/components/vendor-settings/UnsavedChangesBar';
+import { useTranslation, useFormatters, type TranslationKey } from '@/i18n';
 import { ApiError } from '@/types/api';
 import type { ApiFile, FileRef } from '@/types/file.types';
 import type { StoreUpdatePayload, VendorStore } from '@/types/store.types';
@@ -67,7 +68,8 @@ interface FormState {
   supportWhatsapp: string;
 }
 
-type FieldErrors = Partial<Record<EditableKey, string>>;
+/** Validation results are keys, not sentences — the component translates them. */
+type FieldErrors = Partial<Record<EditableKey, TranslationKey>>;
 
 function toForm(s: VendorStore): FormState {
   return {
@@ -76,8 +78,10 @@ function toForm(s: VendorStore): FormState {
     logo: s.logo,
     banner: s.banner,
     supportEmail: s.supportEmail ?? '',
-    supportPhone: s.supportPhone ?? '',
-    supportWhatsapp: s.supportWhatsapp ?? '',
+    // Legacy records hold spaced or country-code-less numbers; seed the canonical
+    // form so an untouched field doesn't read as edited.
+    supportPhone: normalizeStoredPhone(s.supportPhone),
+    supportWhatsapp: normalizeStoredPhone(s.supportWhatsapp),
   };
 }
 
@@ -85,6 +89,11 @@ function toForm(s: VendorStore): FormState {
 function norm(v: string): string | null {
   const t = v.trim();
   return t === '' ? null : t;
+}
+
+/** Support numbers go to the backend in E.164, or `null` when cleared. */
+function normPhone(v: string): string | null {
+  return toE164(v) ?? norm(v);
 }
 
 /**
@@ -97,15 +106,16 @@ function buildPayload(form: FormState, store: VendorStore): StoreUpdatePayload {
 
   if (form.name.trim() !== (store.name ?? '')) payload.name = form.name.trim();
 
-  const stringFields: Exclude<EditableKey, 'name'>[] = [
-    'description',
-    'supportEmail',
-    'supportPhone',
-    'supportWhatsapp',
-  ];
+  const stringFields: Exclude<EditableKey, 'name'>[] = ['description', 'supportEmail'];
   for (const key of stringFields) {
     const next = norm(form[key]);
     if (next !== (store[key] ?? null)) payload[key] = next;
+  }
+
+  // Compared canonically, so re-spacing a legacy number is not a change.
+  for (const key of ['supportPhone', 'supportWhatsapp'] as const) {
+    const next = normPhone(form[key]);
+    if (next !== normPhone(store[key] ?? '')) payload[key] = next;
   }
 
   // Send the file id (or `null` to detach) only when the selected file changed.
@@ -120,30 +130,33 @@ function validateForm(form: FormState): FieldErrors {
   const errors: FieldErrors = {};
 
   const name = form.name.trim();
-  if (name.length < 2) errors.name = 'Store name must be at least 2 characters.';
-  else if (name.length > 100) errors.name = 'Store name must be at most 100 characters.';
+  if (name.length < 2) errors.name = 'settings.storefront.validation.nameTooShort';
+  else if (name.length > 100) errors.name = 'settings.storefront.validation.nameTooLong';
 
   const email = form.supportEmail.trim();
   if (email && !/^\S+@\S+\.\S+$/.test(email)) {
-    errors.supportEmail = 'Enter a valid email address.';
+    errors.supportEmail = 'common.validation.email';
   }
 
+  // Both support numbers are optional, but a number that is filled in has to be
+  // dialable — customers reach the vendor on these.
   for (const key of ['supportPhone', 'supportWhatsapp'] as const) {
-    const value = form[key].trim();
-    if (value && (value.length < 8 || value.length > 20)) {
-      errors[key] = 'Must be between 8 and 20 characters.';
-    }
+    const messageKey = phoneErrorKey(form[key]);
+    if (messageKey) errors[key] = messageKey;
   }
 
   return errors;
 }
 
 export function StorefrontSettings() {
+  const { t } = useTranslation();
+  const fmt = useFormatters();
   const { store, isLoading, fetchStore, applyStore } = useStoreStore();
 
   const [form, setForm] = useState<FormState | null>(null);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [saving, setSaving] = useState(false);
+  const [errorKey, setErrorKey] = useState<TranslationKey | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [picker, setPicker] = useState<'logo' | 'banner' | null>(null);
   const [togglingVacation, setTogglingVacation] = useState(false);
@@ -181,6 +194,7 @@ export function StorefrontSettings() {
     if (store) {
       setForm(toForm(store));
       setFieldErrors({});
+      setErrorKey(null);
       setError(null);
     }
   }, [store]);
@@ -191,20 +205,22 @@ export function StorefrontSettings() {
     const errors = validateForm(form);
     if (Object.values(errors).some(Boolean)) {
       setFieldErrors(errors);
-      setError('Please fix the highlighted fields before saving.');
+      setErrorKey('common.validation.fixHighlighted');
+      setError(null);
       return;
     }
 
     setSaving(true);
+    setErrorKey(null);
     setError(null);
     try {
       const updated = await updateStore(buildPayload(form, store));
       applyStore(updated);
-      toast.success('Storefront updated');
+      toast.success(t('settings.storefront.saved'));
     } catch (err) {
       if (err instanceof ApiError && err.isConflict) {
         // Optimistic-locking clash — refresh so the vendor edits the latest.
-        toast.error('Storefront was updated elsewhere. Refreshed — please re-apply your changes.');
+        toast.error(t('settings.storefront.conflictReload'));
         await fetchStore();
       } else {
         setError(mapProfileError(err));
@@ -212,7 +228,7 @@ export function StorefrontSettings() {
     } finally {
       setSaving(false);
     }
-  }, [store, form, applyStore, fetchStore]);
+  }, [store, form, applyStore, fetchStore, t]);
 
   const handleVacationToggle = useCallback(
     async (nextOpen: boolean) => {
@@ -221,10 +237,10 @@ export function StorefrontSettings() {
       try {
         const updated = await updateStoreStatus({ isOpen: nextOpen, version: store.version });
         applyStore(updated);
-        toast.success(nextOpen ? 'Store reopened' : 'Vacation mode enabled — store is now closed');
+        toast.success(t(nextOpen ? 'settings.storefront.status.reopened' : 'settings.storefront.status.closedToast'));
       } catch (err) {
         if (err instanceof ApiError && err.isConflict) {
-          toast.error('Storefront was updated elsewhere. Please try again.');
+          toast.error(t('settings.storefront.conflictRetry'));
           await fetchStore();
         } else {
           toast.error(mapProfileError(err));
@@ -233,7 +249,7 @@ export function StorefrontSettings() {
         setTogglingVacation(false);
       }
     },
-    [store, applyStore, fetchStore],
+    [store, applyStore, fetchStore, t],
   );
 
   const onPickImage = useCallback(
@@ -262,22 +278,22 @@ export function StorefrontSettings() {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      toast.error('Could not copy the URL');
+      toast.error(t('settings.storefront.copyUrlFailed'));
     }
-  }, [store]);
+  }, [store, t]);
 
   if (isLoading && !store) return <StorefrontSkeleton />;
 
   if (!store || !form) {
     return (
       <SettingsSection
-        title="Storefront"
-        info="Your public store identity and support contacts."
+        title={t('settings.storefront.title')}
+        info={t('settings.storefront.info')}
       >
         <div role="alert" className="p-3 text-sm bg-destructive/10 text-destructive rounded-lg border border-destructive/20">
-          Could not load your storefront.
+          {t('settings.storefront.loadFailed')}
         </div>
-        <Button variant="outline" className="mt-3" onClick={fetchStore}>Try again</Button>
+        <Button variant="outline" className="mt-3" onClick={fetchStore}>{t('common.actions.retry')}</Button>
       </SettingsSection>
     );
   }
@@ -296,7 +312,7 @@ export function StorefrontSettings() {
             <>
               <img
                 src={form.banner.url}
-                alt="Store banner"
+                alt={t('settings.storefront.bannerAlt')}
                 crossOrigin="use-credentials"
                 className="h-full w-full object-cover"
               />
@@ -310,14 +326,14 @@ export function StorefrontSettings() {
                   onClick={() => setPicker('banner')}
                 >
                   <Camera className="w-3.5 h-3.5" />
-                  Change banner
+                  {t('settings.storefront.changeBanner')}
                 </Button>
                 <Button
                   type="button"
                   size="sm"
                   variant="secondary"
                   className="bg-background/80 px-2 shadow-sm backdrop-blur-sm hover:bg-background/95 hover:text-destructive"
-                  aria-label="Remove banner"
+                  aria-label={t('settings.storefront.removeBanner')}
                   onClick={() => set('banner', null)}
                 >
                   <X className="w-3.5 h-3.5" />
@@ -329,11 +345,11 @@ export function StorefrontSettings() {
             <button
               type="button"
               onClick={() => setPicker('banner')}
-              aria-label="Add banner"
+              aria-label={t('settings.storefront.addBanner')}
               className="group flex h-full w-full flex-col items-center justify-center gap-1.5 bg-gradient-to-br from-primary/5 via-muted to-muted transition-colors hover:from-primary/10"
             >
               <ImageIcon className="w-6 h-6 text-muted-foreground/60 transition-colors group-hover:text-muted-foreground" />
-              <p className="text-xs text-muted-foreground">Click to add a banner — it makes your storefront stand out</p>
+              <p className="text-xs text-muted-foreground">{t('settings.storefront.addBannerPrompt')}</p>
             </button>
           )}
         </div>
@@ -348,14 +364,14 @@ export function StorefrontSettings() {
                   <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-xl border-4 border-card bg-muted shadow-md sm:h-24 sm:w-24">
                     <img
                       src={form.logo.url}
-                      alt="Store logo"
+                      alt={t('settings.storefront.logoAlt')}
                       crossOrigin="use-credentials"
                       className="h-full w-full object-cover"
                     />
                   </div>
                   <button
                     type="button"
-                    aria-label="Change logo"
+                    aria-label={t('settings.storefront.changeLogo')}
                     onClick={() => setPicker('logo')}
                     className="absolute -bottom-1.5 -right-1.5 rounded-full border border-border bg-background p-1.5 text-foreground shadow-sm transition-colors hover:bg-accent"
                   >
@@ -363,7 +379,7 @@ export function StorefrontSettings() {
                   </button>
                   <button
                     type="button"
-                    aria-label="Remove logo"
+                    aria-label={t('settings.storefront.removeLogo')}
                     onClick={() => set('logo', null)}
                     className="absolute -right-1.5 -top-1.5 rounded-full border border-border bg-background p-1 text-muted-foreground shadow-sm transition-colors hover:text-destructive"
                   >
@@ -374,7 +390,7 @@ export function StorefrontSettings() {
                 // No logo yet — the whole box is a click target to add one.
                 <button
                   type="button"
-                  aria-label="Add logo"
+                  aria-label={t('settings.storefront.addLogo')}
                   onClick={() => setPicker('logo')}
                   className="group flex h-20 w-20 items-center justify-center overflow-hidden rounded-xl border-4 border-card bg-muted shadow-md transition-colors hover:bg-accent sm:h-24 sm:w-24"
                 >
@@ -386,7 +402,7 @@ export function StorefrontSettings() {
             <div className="min-w-0 flex-1 space-y-1">
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className="truncate text-xl font-bold leading-tight">{previewName}</h2>
-                <StatusBadge isOpen={store.isOpen} />
+                <StatusBadge isOpen={store.isOpen} label={t(store.isOpen ? 'settings.storefront.status.open' : 'settings.storefront.status.closed')} />
               </div>
               <a
                 href={store.publicUrl}
@@ -402,21 +418,21 @@ export function StorefrontSettings() {
             <div className="flex shrink-0 items-center gap-2">
               <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={handleCopyUrl}>
                 {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                {copied ? 'Copied' : 'Copy link'}
+                {t(copied ? 'common.actions.copied' : 'common.actions.copyLink')}
               </Button>
               <Button asChild size="sm" className="gap-1.5">
                 <a href={store.publicUrl} target="_blank" rel="noopener noreferrer">
                   <ExternalLink className="w-3.5 h-3.5" />
-                  View store
+                  {t('settings.storefront.viewStore')}
                 </a>
               </Button>
             </div>
           </div>
         </div>
 
-      {error && (
+      {(errorKey || error) && (
         <div role="alert" className="rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">
-          {error}
+          {errorKey ? t(errorKey) : error}
         </div>
       )}
 
@@ -426,15 +442,15 @@ export function StorefrontSettings() {
         <SettingsSections className="lg:col-span-2">
           {/* Identity */}
           <SettingsSection
-            title="Store identity"
+            title={t('settings.storefront.identity.title')}
             icon={StoreIcon}
-            info="The name and description customers see on your storefront page and in search results. Changing the name here does not change your store URL."
+            info={t('settings.storefront.identity.info')}
             contentClassName="space-y-5"
           >
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="store-name">Store name</Label>
-                  <span className="text-xs tabular-nums text-muted-foreground">{form.name.length}/100</span>
+                  <Label htmlFor="store-name">{t('settings.storefront.identity.name')}</Label>
+                  <span className="text-xs tabular-nums text-muted-foreground">{t('settings.storefront.identity.counter', { current: form.name.length, max: 100 })}</span>
                 </div>
                 <Input
                   id="store-name"
@@ -442,21 +458,21 @@ export function StorefrontSettings() {
                   maxLength={100}
                   aria-invalid={!!fieldErrors.name}
                   onChange={(e) => set('name', e.target.value)}
-                  placeholder="Your store's display name"
+                  placeholder={t('settings.storefront.identity.namePlaceholder')}
                 />
-                <FieldError message={fieldErrors.name} />
+                <FieldError messageKey={fieldErrors.name} />
               </div>
 
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="store-description">Description</Label>
+                  <Label htmlFor="store-description">{t('settings.storefront.identity.description')}</Label>
                   <span
                     className={cn(
                       'text-xs tabular-nums text-muted-foreground',
                       form.description.length > 900 && 'text-amber-600 dark:text-amber-500',
                     )}
                   >
-                    {form.description.length}/1000
+                    {t('settings.storefront.identity.counter', { current: form.description.length, max: 1000 })}
                   </span>
                 </div>
                 <Textarea
@@ -465,7 +481,7 @@ export function StorefrontSettings() {
                   maxLength={1000}
                   rows={5}
                   onChange={(e) => set('description', e.target.value)}
-                  placeholder="Tell customers what your store is about — what you sell, what makes you different"
+                  placeholder={t('settings.storefront.identity.descriptionPlaceholder')}
                   className="resize-y"
                 />
               </div>
@@ -473,13 +489,13 @@ export function StorefrontSettings() {
 
           {/* Support contacts */}
           <SettingsSection
-            title="Support & contact"
+            title={t('settings.storefront.support.title')}
             icon={LifeBuoy}
-            info="How customers reach you with questions about their orders. These are published on your storefront — leave a field empty to hide that channel."
+            info={t('settings.storefront.support.info')}
           >
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-2 sm:col-span-2">
-                  <Label htmlFor="store-email">Support email</Label>
+                  <Label htmlFor="store-email">{t('settings.storefront.support.email')}</Label>
                   <IconInput
                     icon={Mail}
                     id="store-email"
@@ -487,35 +503,27 @@ export function StorefrontSettings() {
                     value={form.supportEmail}
                     aria-invalid={!!fieldErrors.supportEmail}
                     onChange={(e) => set('supportEmail', e.target.value)}
-                    placeholder="support@yourstore.com"
+                    placeholder={t('settings.storefront.support.emailPlaceholder')}
                   />
-                  <FieldError message={fieldErrors.supportEmail} />
+                  <FieldError messageKey={fieldErrors.supportEmail} />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="store-phone">Support phone</Label>
-                  <IconInput
-                    icon={Phone}
+                  <Label htmlFor="store-phone">{t('settings.storefront.support.phone')}</Label>
+                  <PhoneInput
                     id="store-phone"
                     value={form.supportPhone}
-                    maxLength={20}
-                    aria-invalid={!!fieldErrors.supportPhone}
-                    onChange={(e) => set('supportPhone', e.target.value)}
-                    placeholder="+2376…"
+                    onChange={(v) => set('supportPhone', v)}
+                    error={fieldErrors.supportPhone ? t(fieldErrors.supportPhone) : undefined}
                   />
-                  <FieldError message={fieldErrors.supportPhone} />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="store-wa">WhatsApp</Label>
-                  <IconInput
-                    icon={MessageCircle}
+                  <Label htmlFor="store-wa">{t('settings.storefront.support.whatsapp')}</Label>
+                  <PhoneInput
                     id="store-wa"
                     value={form.supportWhatsapp}
-                    maxLength={20}
-                    aria-invalid={!!fieldErrors.supportWhatsapp}
-                    onChange={(e) => set('supportWhatsapp', e.target.value)}
-                    placeholder="+2376…"
+                    onChange={(v) => set('supportWhatsapp', v)}
+                    error={fieldErrors.supportWhatsapp ? t(fieldErrors.supportWhatsapp) : undefined}
                   />
-                  <FieldError message={fieldErrors.supportWhatsapp} />
                 </div>
               </div>
           </SettingsSection>
@@ -526,8 +534,8 @@ export function StorefrontSettings() {
         <SettingsSections>
           {/* Vacation mode */}
           <SettingsSection
-            title="Store status"
-            info="Close your storefront temporarily without deleting anything. While closed, customers see a vacation notice, your products stay listed but can't be ordered, and existing orders are unaffected."
+            title={t('settings.storefront.status.title')}
+            info={t('settings.storefront.status.info')}
           >
               <div className="flex items-center justify-between gap-3 rounded-lg border p-3 sm:p-4">
                 <div className="flex min-w-0 items-center gap-3">
@@ -542,11 +550,9 @@ export function StorefrontSettings() {
                     <StoreIcon className="w-5 h-5" />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-sm font-medium">{store.isOpen ? 'Open for business' : 'On vacation'}</p>
+                    <p className="text-sm font-medium">{t(store.isOpen ? 'settings.storefront.status.openTitle' : 'settings.storefront.status.closed')}</p>
                     <p className="text-xs text-muted-foreground">
-                      {store.isOpen
-                        ? 'Visible and accepting orders.'
-                        : 'Customers see a vacation notice; new orders are paused.'}
+                      {t(store.isOpen ? 'settings.storefront.status.openBody' : 'settings.storefront.status.closedBody')}
                     </p>
                   </div>
                 </div>
@@ -556,7 +562,7 @@ export function StorefrontSettings() {
                     checked={store.isOpen}
                     disabled={togglingVacation}
                     onCheckedChange={handleVacationToggle}
-                    aria-label="Store open for business"
+                    aria-label={t('settings.storefront.status.toggleLabel')}
                   />
                 </div>
               </div>
@@ -564,11 +570,11 @@ export function StorefrontSettings() {
 
           {/* Store details (read-only) */}
           <SettingsSection
-            title="Store details"
-            info="Fixed properties of your storefront. None of these can be edited here — contact support if one is wrong."
+            title={t('settings.storefront.details.title')}
+            info={t('settings.storefront.details.info')}
             contentClassName="space-y-4"
           >
-              <DetailRow icon={Globe} label="Public URL">
+              <DetailRow icon={Globe} label={t('settings.storefront.details.publicUrl')}>
                 <a
                   href={store.publicUrl}
                   target="_blank"
@@ -581,22 +587,22 @@ export function StorefrontSettings() {
               <Separator />
               <DetailRow
                 icon={Lock}
-                label="Slug"
-                hint="The last part of your store URL. It's locked because existing links, QR codes, and shared posts would break — contact support if you need a new one."
+                label={t('settings.storefront.details.slug')}
+                hint={t('settings.storefront.details.slugHint')}
               >
                 <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">{store.slug}</code>
               </DetailRow>
               <Separator />
               <DetailRow
                 icon={Lock}
-                label="Country"
-                hint="Set once during onboarding and taken from your vendor profile. It drives tax, shipping, and which addresses you're allowed to register."
+                label={t('settings.storefront.details.country')}
+                hint={t('settings.storefront.details.countryHint')}
               >
-                <span className="text-sm">{store.country ?? '—'}</span>
+                <span className="text-sm">{store.country ?? t('common.labels.emptyValue')}</span>
               </DetailRow>
               <Separator />
-              <DetailRow icon={CalendarDays} label="Last updated">
-                <span className="text-sm">{formatDate(store.updatedAt)}</span>
+              <DetailRow icon={CalendarDays} label={t('settings.storefront.details.lastUpdated')}>
+                <span className="text-sm">{fmt.date(store.updatedAt)}</span>
               </DetailRow>
           </SettingsSection>
         </SettingsSections>
@@ -622,7 +628,7 @@ export function StorefrontSettings() {
 
 // ─── Presentational helpers ───────────────────────────────────────────────────
 
-function StatusBadge({ isOpen }: { isOpen: boolean }) {
+function StatusBadge({ isOpen, label }: { isOpen: boolean; label: string }) {
   return (
     <Badge
       variant="secondary"
@@ -634,7 +640,7 @@ function StatusBadge({ isOpen }: { isOpen: boolean }) {
       )}
     >
       <span className={cn('h-1.5 w-1.5 rounded-full', isOpen ? 'bg-emerald-500' : 'bg-amber-500')} />
-      {isOpen ? 'Open' : 'On vacation'}
+      {label}
     </Badge>
   );
 }
@@ -649,9 +655,10 @@ function IconInput({ icon: Icon, className, ...props }: ComponentProps<typeof In
   );
 }
 
-function FieldError({ message }: { message?: string }) {
-  if (!message) return null;
-  return <p className="text-xs text-destructive">{message}</p>;
+function FieldError({ messageKey }: { messageKey?: TranslationKey }) {
+  const { t } = useTranslation();
+  if (!messageKey) return null;
+  return <p className="text-xs text-destructive">{t(messageKey)}</p>;
 }
 
 /** Labeled read-only row in the "Store details" section. */
@@ -667,12 +674,13 @@ function DetailRow({
   hint?: ReactNode;
   children: ReactNode;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-1">
       <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
         <Icon className="w-3 h-3" /> {label}
         {hint && (
-          <InfoHint label={`About ${label}`} align="start" className="-my-1">
+          <InfoHint label={t('settings.storefront.details.hintLabel', { label })} align="start" className="-my-1">
             {hint}
           </InfoHint>
         )}
@@ -680,12 +688,6 @@ function DetailRow({
       {children}
     </div>
   );
-}
-
-function formatDate(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 /** Loading state mirroring the hero + two-column layout. */

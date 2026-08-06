@@ -2,9 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { ApiError } from '@/types/api';
+import { useTranslation, useFormatters, useApiError } from '@/i18n';
 import { fetchBookingCalendar } from '@/services/services.service';
-import { BOOKING_STATUS_META, TONE_CLASSES, formatTime } from '@/components/services/service.constants';
+import {
+  BOOKING_STATUS_META, TONE_CLASSES, DAY_ORDER, DAY_SHORT_KEYS,
+} from '@/components/services/service.constants';
 import type { BookingCalendarDay } from '@/types/services.types';
 
 interface BookingCalendarProps {
@@ -12,13 +14,15 @@ interface BookingCalendarProps {
   reloadToken: number;
 }
 
-const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
 function ymd(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 export function BookingCalendar({ onOpenBooking, reloadToken }: BookingCalendarProps) {
+  const { t } = useTranslation();
+  const fmt = useFormatters();
+  const apiError = useApiError();
+
   // Anchor on the first day of the displayed month.
   const [anchor, setAnchor] = useState(() => {
     const now = new Date();
@@ -28,7 +32,7 @@ export function BookingCalendar({ onOpenBooking, reloadToken }: BookingCalendarP
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const monthLabel = anchor.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+  const monthLabel = fmt.date(anchor, 'monthYear');
 
   const load = useCallback(async (monthStart: Date) => {
     setLoading(true);
@@ -41,11 +45,11 @@ export function BookingCalendar({ onOpenBooking, reloadToken }: BookingCalendarP
       for (const d of data) map[d.date] = d.bookings;
       setDays(map);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Failed to load calendar');
+      setError(apiError.resolve(err, { fallbackKey: 'services.errors.loadCalendarFailed' }));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [apiError]);
 
   useEffect(() => {
     load(anchor);
@@ -76,7 +80,7 @@ export function BookingCalendar({ onOpenBooking, reloadToken }: BookingCalendarP
             size="icon"
             className="h-8 w-8"
             onClick={() => setAnchor(new Date(anchor.getFullYear(), anchor.getMonth() - 1, 1))}
-            aria-label="Previous month"
+            aria-label={t('services.calendarView.previousMonth')}
           >
             <ChevronLeft className="h-4 w-4" />
           </Button>
@@ -85,14 +89,14 @@ export function BookingCalendar({ onOpenBooking, reloadToken }: BookingCalendarP
             size="sm"
             onClick={() => { const n = new Date(); setAnchor(new Date(n.getFullYear(), n.getMonth(), 1)); }}
           >
-            Today
+            {t('services.calendarView.today')}
           </Button>
           <Button
             variant="outline"
             size="icon"
             className="h-8 w-8"
             onClick={() => setAnchor(new Date(anchor.getFullYear(), anchor.getMonth() + 1, 1))}
-            aria-label="Next month"
+            aria-label={t('services.calendarView.nextMonth')}
           >
             <ChevronRight className="h-4 w-4" />
           </Button>
@@ -102,7 +106,7 @@ export function BookingCalendar({ onOpenBooking, reloadToken }: BookingCalendarP
       {error ? (
         <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed py-12 text-center">
           <p className="text-sm text-muted-foreground">{error}</p>
-          <Button variant="outline" size="sm" onClick={() => load(anchor)}>Try again</Button>
+          <Button variant="outline" size="sm" onClick={() => load(anchor)}>{t('common.actions.retry')}</Button>
         </div>
       ) : (
         <div className="relative overflow-hidden rounded-lg border">
@@ -113,8 +117,8 @@ export function BookingCalendar({ onOpenBooking, reloadToken }: BookingCalendarP
           )}
           {/* Weekday header */}
           <div className="grid grid-cols-7 border-b bg-muted/40 text-center text-xs font-medium text-muted-foreground">
-            {WEEKDAYS.map((w) => (
-              <div key={w} className="py-2">{w}</div>
+            {DAY_ORDER.map((day) => (
+              <div key={day} className="py-2">{t(DAY_SHORT_KEYS[day])}</div>
             ))}
           </div>
           {/* Day cells */}
@@ -145,18 +149,20 @@ export function BookingCalendar({ onOpenBooking, reloadToken }: BookingCalendarP
                         key={b.bookingId}
                         type="button"
                         onClick={() => onOpenBooking(b.bookingId)}
-                        title={`${formatTime(b.startAt)} · ${b.productTitle} · ${b.customerEmail}`}
+                        title={`${fmt.time(b.startAt)} · ${b.productTitle} · ${b.customerEmail}`}
                         className={cn(
                           'flex w-full items-center gap-1 truncate rounded px-1 py-0.5 text-left text-[10px] leading-tight transition hover:opacity-80',
                           TONE_CLASSES[BOOKING_STATUS_META[b.status]?.tone ?? 'neutral'],
                         )}
                       >
-                        <span className="font-medium">{formatTime(b.startAt)}</span>
+                        <span className="font-medium">{fmt.time(b.startAt)}</span>
                         <span className="truncate">{b.productTitle}</span>
                       </button>
                     ))}
                     {entries.length > 3 && (
-                      <p className="px-1 text-[10px] text-muted-foreground">+{entries.length - 3} more</p>
+                      <p className="px-1 text-[10px] text-muted-foreground">
+                        {t('services.calendarView.more', { count: entries.length - 3 })}
+                      </p>
                     )}
                   </div>
                 </div>

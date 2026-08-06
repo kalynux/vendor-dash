@@ -9,12 +9,11 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { ApiError } from '@/types/api';
+import { useTranslation, useFormatters, useApiError } from '@/i18n';
 import {
-  fetchAvailability, lockSlot, unlockSlot, rescheduleBooking, BOOKING_ERROR_MAP,
+  fetchAvailability, lockSlot, unlockSlot, rescheduleBooking,
 } from '@/services/services.service';
-import {
-  responsiveSheetProps, formatDate, formatTime,
-} from '@/components/services/service.constants';
+import { responsiveSheetProps } from '@/components/services/service.constants';
 import type { AvailabilitySlot } from '@/types/services.types';
 
 interface RescheduleSheetProps {
@@ -31,6 +30,9 @@ export function RescheduleSheet({
   bookingId, productId, open, onOpenChange, onRescheduled,
 }: RescheduleSheetProps) {
   const isMobile = useIsMobile();
+  const { t } = useTranslation();
+  const fmt = useFormatters();
+  const apiError = useApiError();
   const sheet = responsiveSheetProps(isMobile, 'sm:max-w-lg');
 
   const [slots, setSlots] = useState<AvailabilitySlot[]>([]);
@@ -75,11 +77,11 @@ export function RescheduleSheet({
       );
       setSlots(data.filter((s) => s.available !== false));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Failed to load available times');
+      setError(apiError.resolve(err, { fallbackKey: 'services.errors.loadSlotsFailed' }));
     } finally {
       setLoading(false);
     }
-  }, [productId]);
+  }, [productId, apiError]);
 
   useEffect(() => {
     if (open) {
@@ -110,12 +112,13 @@ export function RescheduleSheet({
         heldLock.current = null;
         setSelected(null);
         setLockExpiresAt(null);
-        toast.warning('The hold on that time expired. Pick a slot again.');
+        toast.warning(t('services.reschedule.lockExpired'));
       }
     };
     tick();
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lockExpiresAt]);
 
   async function handleSelect(slot: AvailabilitySlot) {
@@ -130,8 +133,7 @@ export function RescheduleSheet({
       setLockExpiresAt(lock.expiresAt);
     } catch (err) {
       setSelected(null);
-      const msg = err instanceof ApiError ? BOOKING_ERROR_MAP[err.code] ?? err.message : 'Could not hold that slot';
-      toast.error(msg);
+      apiError.toast(err, { fallbackKey: 'services.reschedule.lockFailed' });
     } finally {
       setLocking(false);
     }
@@ -143,12 +145,11 @@ export function RescheduleSheet({
     try {
       await rescheduleBooking(bookingId, selected.id);
       heldLock.current = null; // consumed by the reschedule
-      toast.success('Booking rescheduled');
+      toast.success(t('services.toast.bookingRescheduled'));
       onRescheduled();
       onOpenChange(false);
     } catch (err) {
-      const msg = err instanceof ApiError ? BOOKING_ERROR_MAP[err.code] ?? err.message : 'Failed to reschedule';
-      toast.error(msg);
+      apiError.toast(err, { fallbackKey: 'services.errors.rescheduleFailed' });
       // If the lock expired, prompt re-selection.
       if (err instanceof ApiError && err.code === 'BOOKING_SLOT_NOT_LOCKED') {
         setSelected(null);
@@ -173,7 +174,7 @@ export function RescheduleSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side={sheet.side} className={cn('p-0 flex flex-col', sheet.className)}>
         <SheetHeader className="border-b pr-12">
-          <SheetTitle>Reschedule booking</SheetTitle>
+          <SheetTitle>{t('services.reschedule.title')}</SheetTitle>
         </SheetHeader>
 
         <SheetBody className="p-4">
@@ -185,13 +186,13 @@ export function RescheduleSheet({
             <div className="flex flex-col items-center gap-3 py-12 text-center">
               <TriangleAlert className="h-8 w-8 text-muted-foreground" />
               <p className="text-sm text-muted-foreground">{error}</p>
-              <Button variant="outline" size="sm" onClick={loadSlots}>Try again</Button>
+              <Button variant="outline" size="sm" onClick={loadSlots}>{t('common.actions.retry')}</Button>
             </div>
           ) : slots.length === 0 ? (
             <div className="flex flex-col items-center gap-3 py-12 text-center">
               <CalendarClock className="h-8 w-8 text-muted-foreground" />
               <p className="text-sm text-muted-foreground">
-                No open time slots in the next {LOOKAHEAD_DAYS} days. Check the service's availability rules.
+                {t('services.reschedule.empty', { days: LOOKAHEAD_DAYS })}
               </p>
             </div>
           ) : (
@@ -199,7 +200,7 @@ export function RescheduleSheet({
               {byDay.map((group) => (
                 <div key={group.date} className="space-y-2">
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    {formatDate(group.date)}
+                    {fmt.date(group.date)}
                   </p>
                   <div className="flex flex-wrap gap-2">
                     {group.slots.map((slot) => {
@@ -220,7 +221,7 @@ export function RescheduleSheet({
                           {isSel && locking ? (
                             <Loader2 className="h-4 w-4 animate-spin" />
                           ) : (
-                            formatTime(slot.startAt)
+                            fmt.time(slot.startAt)
                           )}
                         </button>
                       );
@@ -236,12 +237,12 @@ export function RescheduleSheet({
           {selected && lockExpiresAt && (
             <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <Timer className="h-3.5 w-3.5" />
-              Held for {countdownLabel}
+              {t('services.reschedule.heldFor', { time: countdownLabel ?? '' })}
             </span>
           )}
           <div className="flex w-full gap-2 sm:w-auto">
             <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting} className="flex-1 sm:flex-none">
-              Cancel
+              {t('common.actions.cancel')}
             </Button>
             <Button
               onClick={handleConfirm}
@@ -249,7 +250,7 @@ export function RescheduleSheet({
               className="flex-1 sm:flex-none"
             >
               {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Confirm new time
+              {t('services.reschedule.confirm')}
             </Button>
           </div>
         </SheetFooter>

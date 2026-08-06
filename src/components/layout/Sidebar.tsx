@@ -9,9 +9,11 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { PlatformStatus } from '@/components/layout/PlatformStatus';
 import { PRIMARY_NAV, FOOTER_NAV, type NavItem, type NavChild, type NavBadge } from '@/config/navigation';
+import { useTranslation } from '@/i18n';
 import { cn } from '@/lib/utils';
 
 /** Left accent bar marking the active row (solid) or a parent-of-active (faded). */
@@ -39,6 +41,18 @@ function isPathActive(itemPath: string, pathname: string): boolean {
   return pathname === itemPath || pathname.startsWith(`${itemPath}/`);
 }
 
+// For a leaf child whose path equals the parent's (the index sub-tab), only mark
+// it active on an exact match so siblings don't all light up.
+function isLeafActive(child: NavChild, parent: NavItem, pathname: string): boolean {
+  return child.path === parent.path
+    ? pathname === child.path
+    : isPathActive(child.path, pathname);
+}
+
+function hasActiveChild(item: NavItem, pathname: string): boolean {
+  return item.children?.some((c) => isLeafActive(c, item, pathname)) ?? false;
+}
+
 const rowBase =
   'relative w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground';
 
@@ -47,15 +61,189 @@ const rowBase =
 const FOOTER_PAD_Y = 24; // py-3 top + bottom
 const ROW_GAP = 4; // space-y-1
 
+// Grace period before a hovered flyout closes, so the pointer can cross the gap
+// between the rail and the panel.
+const FLYOUT_CLOSE_DELAY = 140;
+
+/**
+ * A row of the collapsed icon rail (the pinned layout on tablets).
+ *
+ * The rail hides labels and cannot expand a sub-menu inline, so both live in a
+ * right-side flyout: a label chip for leaf rows, a labelled sub-menu panel for
+ * parents. Hover opens it on pointer devices and tap opens it on touch — the
+ * rail is the tablet default, where hover does not exist.
+ */
+function RailItem({
+  item,
+  badgeCount,
+  pathname,
+  onNavigate,
+}: {
+  item: NavItem;
+  badgeCount: number;
+  pathname: string;
+  onNavigate: (path: string) => void;
+}) {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  const closeTimer = useRef<number | null>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const wasOpenRef = useRef(false);
+
+  const cancelClose = () => {
+    if (closeTimer.current != null) {
+      window.clearTimeout(closeTimer.current);
+      closeTimer.current = null;
+    }
+  };
+  const openNow = () => {
+    cancelClose();
+    setOpen(true);
+  };
+  const closeSoon = () => {
+    cancelClose();
+    closeTimer.current = window.setTimeout(() => setOpen(false), FLYOUT_CLOSE_DELAY);
+  };
+  useEffect(() => cancelClose, []);
+
+  const Icon = item.icon;
+  const label = t(item.labelKey);
+  const children = item.children ?? [];
+  const hasChildren = children.length > 0;
+  const parentActive = isPathActive(item.path, pathname);
+  const childActive = hasActiveChild(item, pathname);
+  const solid = parentActive && !childActive;
+
+  const onClick = () => {
+    if (item.disabled) return;
+    // Parents open their sub-menu instead of navigating — same as the expanded
+    // sidebar, and the only way to reach the children from the rail.
+    if (hasChildren) {
+      cancelClose();
+      // Toggle against the state *before* this press: an already-open panel is
+      // dismissed by Radix on pointer-down (the trigger sits outside it), so
+      // reading `open` here would always see false and re-open it.
+      setOpen(!wasOpenRef.current);
+      return;
+    }
+    cancelClose();
+    setOpen(false);
+    onNavigate(item.path);
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverAnchor asChild>
+        <button
+          onClick={onClick}
+          onPointerDown={() => {
+            wasOpenRef.current = open;
+          }}
+          onPointerEnter={(e) => e.pointerType !== 'touch' && openNow()}
+          onPointerLeave={(e) => e.pointerType !== 'touch' && closeSoon()}
+          onFocus={openNow}
+          onBlur={(e) => {
+            // Keep it open while focus moves into the panel itself.
+            if (!contentRef.current?.contains(e.relatedTarget as Node | null)) closeSoon();
+          }}
+          onKeyDown={(e) => {
+            // Keyboard route into the sub-menu. Handling the key ourselves
+            // suppresses the synthetic click, so this does not also toggle.
+            if (!hasChildren || item.disabled) return;
+            if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'ArrowRight') return;
+            e.preventDefault();
+            cancelClose();
+            setOpen(true);
+            requestAnimationFrame(() => contentRef.current?.focus());
+          }}
+          disabled={item.disabled}
+          aria-label={label}
+          aria-haspopup={hasChildren ? 'menu' : undefined}
+          aria-expanded={hasChildren ? open : undefined}
+          className={cn(
+            rowBase,
+            'justify-center',
+            solid && 'bg-primary/10 text-primary font-semibold',
+            childActive && !solid && 'bg-accent/60 text-accent-foreground',
+            item.disabled && 'opacity-50 cursor-not-allowed hover:bg-transparent hover:text-foreground',
+          )}
+        >
+          <ActiveBar show={parentActive || childActive} faded={childActive && !solid} />
+          <div className="relative">
+            <Icon className="w-5 h-5 flex-shrink-0" />
+            {badgeCount > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-destructive text-destructive-foreground text-[10px] font-bold rounded-full flex items-center justify-center">
+                {badgeCount > 9 ? '9+' : badgeCount}
+              </span>
+            )}
+          </div>
+        </button>
+      </PopoverAnchor>
+
+      <PopoverContent
+        ref={contentRef}
+        side="right"
+        align="start"
+        sideOffset={8}
+        collisionPadding={8}
+        onOpenAutoFocus={(e) => e.preventDefault()}
+        onPointerEnter={cancelClose}
+        onPointerLeave={closeSoon}
+        className={cn('p-0 shadow-lg', hasChildren ? 'w-56' : 'w-auto')}
+      >
+        {hasChildren ? (
+          <>
+            <p className="px-3 pt-2.5 pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              {label}
+            </p>
+            <div className="space-y-1 p-1.5">
+              {children.map((child) => {
+                const ChildIcon = child.icon;
+                const cActive = isLeafActive(child, item, pathname);
+                return (
+                  <button
+                    key={child.id}
+                    onClick={() => {
+                      if (child.disabled) return;
+                      cancelClose();
+                      setOpen(false);
+                      onNavigate(child.path);
+                    }}
+                    disabled={child.disabled}
+                    className={cn(
+                      rowBase,
+                      'py-2',
+                      cActive && 'bg-primary/10 text-primary font-semibold',
+                      child.disabled &&
+                      'opacity-50 cursor-not-allowed hover:bg-transparent hover:text-foreground',
+                    )}
+                  >
+                    <ActiveBar show={cActive} />
+                    <ChildIcon className="w-4 h-4 flex-shrink-0" />
+                    <span className="whitespace-nowrap overflow-hidden">{t(child.labelKey)}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        ) : (
+          <span className="block px-3 py-1.5 text-sm font-medium whitespace-nowrap">{label}</span>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 export function Sidebar() {
   const { sidebarCollapsed, toggleSidebar, collapsible } = useUI();
+  const { t } = useTranslation();
   const { unreadCount } = useNotificationStore();
   const navigate = useNavigate();
   const location = useLocation();
   const pathname = normalizePath(location.pathname);
   const { store } = useStoreStore();
 
-  const storeName = store?.name || 'My Store';
+  const storeName = store?.name || t('nav.sidebar.defaultStoreName');
   const storeDescription = store?.description || null;
   const storeLogo = store?.logo?.url || null;
 
@@ -125,18 +313,13 @@ export function Sidebar() {
     return 0;
   };
 
-  const isChildActive = (child: NavChild) => isPathActive(child.path, pathname);
-  // For a leaf child whose path equals the parent's (the index sub-tab), only
-  // mark it active on an exact match so siblings don't all light up.
-  const isLeafActive = (child: NavChild, parent: NavItem) =>
-    child.path === parent.path ? pathname === child.path : isChildActive(child);
-
-  const hasActiveChild = (item: NavItem) =>
-    item.children?.some((c) => isLeafActive(c, item)) ?? false;
   const isExpanded = (item: NavItem) =>
-    manualExpanded[item.name] ?? hasActiveChild(item);
+    manualExpanded[item.id] ?? hasActiveChild(item, pathname);
   const toggleExpanded = (item: NavItem) =>
-    setManualExpanded((m) => ({ ...m, [item.name]: !(m[item.name] ?? hasActiveChild(item)) }));
+    setManualExpanded((m) => ({
+      ...m,
+      [item.id]: !(m[item.id] ?? hasActiveChild(item, pathname)),
+    }));
 
   const selectChild = (child: NavChild) => {
     if (child.disabled) return;
@@ -144,16 +327,30 @@ export function Sidebar() {
   };
 
   const renderItem = (item: NavItem) => {
-    const Icon = item.icon;
     const badgeCount = getBadgeCount(item.badge);
+
+    // Collapsed rail — labels and sub-menus move into a right-side flyout.
+    if (sidebarCollapsed) {
+      return (
+        <RailItem
+          key={item.id}
+          item={item}
+          badgeCount={badgeCount}
+          pathname={pathname}
+          onNavigate={navigate}
+        />
+      );
+    }
+
+    const Icon = item.icon;
     const hasChildren = !!item.children?.length;
     const parentActive = isPathActive(item.path, pathname);
-    const childActive = hasChildren && hasActiveChild(item);
-    const open = hasChildren && isExpanded(item) && !sidebarCollapsed;
+    const childActive = hasChildren && hasActiveChild(item, pathname);
+    const open = hasChildren && isExpanded(item);
 
     const onClick = () => {
       if (item.disabled) return;
-      if (hasChildren && !sidebarCollapsed) toggleExpanded(item);
+      if (hasChildren) toggleExpanded(item);
       else navigate(item.path);
     };
 
@@ -163,7 +360,7 @@ export function Sidebar() {
     const showBar = parentActive || childActive;
 
     return (
-      <div key={item.name} className="space-y-1">
+      <div key={item.id} className="space-y-1">
         <button
           onClick={onClick}
           disabled={item.disabled}
@@ -171,7 +368,6 @@ export function Sidebar() {
             rowBase,
             solid && 'bg-primary/10 text-primary font-semibold',
             childActive && !solid && 'bg-accent/60 text-accent-foreground',
-            sidebarCollapsed && 'justify-center',
             item.disabled && 'opacity-50 cursor-not-allowed hover:bg-transparent hover:text-foreground',
           )}
         >
@@ -184,12 +380,10 @@ export function Sidebar() {
               </span>
             )}
           </div>
-          {!sidebarCollapsed && (
-            <span className="flex-1 text-left whitespace-nowrap overflow-hidden">
-              {item.name}
-            </span>
-          )}
-          {!sidebarCollapsed && hasChildren && (
+          <span className="flex-1 text-left whitespace-nowrap overflow-hidden">
+            {t(item.labelKey)}
+          </span>
+          {hasChildren && (
             <ChevronDown
               className={cn('w-4 h-4 transition-transform', open && 'rotate-180')}
             />
@@ -200,10 +394,10 @@ export function Sidebar() {
           <div className="ml-5 border-l pl-2 space-y-1 animate-in slide-in-from-top-2 duration-200">
             {item.children!.map((child) => {
               const ChildIcon = child.icon;
-              const cActive = isLeafActive(child, item);
+              const cActive = isLeafActive(child, item, pathname);
               return (
                 <button
-                  key={child.name}
+                  key={child.id}
                   onClick={() => selectChild(child)}
                   disabled={child.disabled}
                   className={cn(
@@ -216,7 +410,7 @@ export function Sidebar() {
                 >
                   <ActiveBar show={cActive} />
                   <ChildIcon className="w-4 h-4 flex-shrink-0" />
-                  <span className="whitespace-nowrap overflow-hidden">{child.name}</span>
+                  <span className="whitespace-nowrap overflow-hidden">{t(child.labelKey)}</span>
                 </button>
               );
             })}
@@ -273,7 +467,7 @@ export function Sidebar() {
             role="separator"
             aria-orientation="horizontal"
             onPointerDown={startFooterResize}
-            title="Drag to resize"
+            title={t('nav.sidebar.dragToResize')}
             className="group absolute -top-1.5 left-0 right-0 z-10 flex h-3 cursor-row-resize items-center justify-center"
           >
             <span className="h-2 w-12 rounded-full bg-border transition-colors group-hover:bg-primary/50" />
@@ -323,7 +517,7 @@ export function Sidebar() {
             ) : (
               <>
                 <ChevronLeft className="h-4 w-4" />
-                Collapse
+                {t('nav.sidebar.collapse')}
               </>
             )}
           </Button>

@@ -1,5 +1,6 @@
 import { X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useTranslation } from '@/i18n';
 import { contrastColor } from '@/components/customers/customer.constants';
 import type { CustomerFlag } from '@/types/customers.types';
 
@@ -12,6 +13,7 @@ interface FlagBadgeProps {
 
 /** Colour-coded customer flag pill, tinted with the flag's own hex colour. */
 export function FlagBadge({ flag, onRemove, className }: FlagBadgeProps) {
+  const { t } = useTranslation();
   const fg = contrastColor(flag.color);
   return (
     <span
@@ -31,7 +33,7 @@ export function FlagBadge({ flag, onRemove, className }: FlagBadgeProps) {
           }}
           className="-mr-0.5 inline-flex h-3.5 w-3.5 items-center justify-center rounded-full opacity-80 transition hover:opacity-100"
           style={{ color: fg }}
-          aria-label={`Remove ${flag.name} flag`}
+          aria-label={t('customers.flags.removeFlag', { name: flag.name })}
         >
           <X className="h-3 w-3" />
         </button>

@@ -40,13 +40,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { QUICK_ACTIONS, type QuickAction } from '@/config/quickActions';
 import { notificationRoute, notificationVisual, notificationTimeAgo } from '@/lib/notifications.utils';
-
-const recentSearches = [
-  'Order #1001',
-  'Wireless Headphones',
-  'Alice Johnson',
-  'Tech Gadgets Pro',
-];
+import { useFormatters, useTranslation } from '@/i18n';
 
 function initialsOf(name: string): string {
   return name
@@ -62,6 +56,8 @@ export function Header() {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [logoutOpen, setLogoutOpen] = useState(false);
+  const { t } = useTranslation();
+  const fmt = useFormatters();
   const { logout } = useAuth();
   const { navigate } = useRouter();
   const reactNavigate = useNavigate();
@@ -73,7 +69,7 @@ export function Header() {
   // personal identity — `avatar` + `display_name`, both still on the profile. The
   // business logo/name moved to the Store, which the Sidebar renders; they're the
   // fallback here so the menu never goes blank on an account with no avatar set.
-  const storeName = roleEntity?.display_name || store?.name || 'My Store';
+  const storeName = roleEntity?.display_name || store?.name || t('nav.sidebar.defaultStoreName');
   const storeLogo = roleEntity?.avatar?.url || store?.logo?.url || null;
   const storeEmail = roleEntity?.email ?? '';
 
@@ -93,6 +89,14 @@ export function Header() {
 
   const unreadNotifications = notifications.filter((n) => !n.isRead).slice(0, 5);
 
+  // Sample suggestions shown before the vendor types anything.
+  const recentSearches = [
+    t('nav.header.recentSamples.order'),
+    t('nav.header.recentSamples.product'),
+    t('nav.header.recentSamples.customer'),
+    t('nav.header.recentSamples.store'),
+  ];
+
   const openNotification = (n: typeof notifications[number]) => {
     markAsRead(n.id);
     reactNavigate(notificationRoute(n));
@@ -110,7 +114,7 @@ export function Header() {
               onClick={toggleSearch}
             >
               <Search className="w-4 h-4" />
-              <span className="hidden sm:inline">Search...</span>
+              <span className="hidden sm:inline">{t('nav.header.search')}</span>
               <kbd className="hidden sm:inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium">
                 <Command className="w-3 h-3" />
                 <span>K</span>
@@ -128,7 +132,7 @@ export function Header() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-60">
-                <DropdownMenuLabel>Quick Actions</DropdownMenuLabel>
+                <DropdownMenuLabel>{t('nav.quickActions.title')}</DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 {QUICK_ACTIONS.map((action) => (
                   <DropdownMenuItem
@@ -138,8 +142,8 @@ export function Header() {
                   >
                     <action.icon className="w-4 h-4" />
                     <div className="flex flex-col">
-                      <span>{action.label}</span>
-                      <span className="text-xs text-muted-foreground">{action.description}</span>
+                      <span>{t(action.labelKey)}</span>
+                      <span className="text-xs text-muted-foreground">{t(action.descriptionKey)}</span>
                     </div>
                   </DropdownMenuItem>
                 ))}
@@ -160,7 +164,7 @@ export function Header() {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-80">
                 <div className="flex items-center justify-between px-3 py-2">
-                  <DropdownMenuLabel className="m-0">Notifications</DropdownMenuLabel>
+                  <DropdownMenuLabel className="m-0">{t('nav.header.notifications')}</DropdownMenuLabel>
                   {unreadCount > 0 && (
                     <Button
                       variant="ghost"
@@ -168,7 +172,7 @@ export function Header() {
                       onClick={() => markAllAsRead()}
                       className="h-auto py-1 px-2 text-xs"
                     >
-                      Mark all read
+                      {t('nav.header.markAllRead')}
                     </Button>
                   )}
                 </div>
@@ -176,7 +180,7 @@ export function Header() {
                 {unreadNotifications.length === 0 ? (
                   <div className="py-8 text-center text-muted-foreground">
                     <Bell className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                    <p className="text-sm">No new notifications</p>
+                    <p className="text-sm">{t('nav.header.noNewNotifications')}</p>
                   </div>
                 ) : (
                   unreadNotifications.map((notification) => (
@@ -189,7 +193,7 @@ export function Header() {
                         <span className={`w-2 h-2 rounded-full ${notificationVisual(notification).dot}`} />
                         <span className="font-medium text-sm flex-1">{notification.title}</span>
                         <span className="text-xs text-muted-foreground">
-                          {notificationTimeAgo(notification.createdAt)}
+                          {notificationTimeAgo(notification.createdAt, t, (iso) => fmt.date(iso))}
                         </span>
                       </div>
                       <p className="text-sm text-muted-foreground line-clamp-2 pl-4">
@@ -203,7 +207,7 @@ export function Header() {
                   onClick={() => navigate('notifications')}
                   className="justify-center text-sm text-primary"
                 >
-                  View all notifications
+                  {t('nav.header.viewAllNotifications')}
                   <ArrowRight className="w-4 h-4 ml-1" />
                 </DropdownMenuItem>
               </DropdownMenuContent>
@@ -235,7 +239,7 @@ export function Header() {
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={goToProfile} className="gap-2">
                   <User className="w-4 h-4" />
-                  Profile
+                  {t('nav.header.profile')}
                 </DropdownMenuItem>
                 {store?.publicUrl && (
                   <DropdownMenuItem asChild className="gap-2">
@@ -245,7 +249,7 @@ export function Header() {
                       rel="noopener noreferrer"
                     >
                       <ExternalLink className="w-4 h-4" />
-                      My Store
+                      {t('nav.header.myStore')}
                     </a>
                   </DropdownMenuItem>
                 )}
@@ -258,7 +262,7 @@ export function Header() {
                   className="gap-2 text-destructive focus:text-destructive"
                 >
                   <LogOut className="w-4 h-4" />
-                  Logout
+                  {t('nav.header.logout')}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -270,18 +274,18 @@ export function Header() {
       <AlertDialog open={logoutOpen} onOpenChange={setLogoutOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Log out?</AlertDialogTitle>
+            <AlertDialogTitle>{t('nav.header.logoutTitle')}</AlertDialogTitle>
             <AlertDialogDescription>
-              You&apos;ll need to sign in again to access your dashboard.
+              {t('nav.header.logoutDescription')}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t('common.actions.cancel')}</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => logout()}
               className="bg-destructive text-white hover:bg-destructive/90"
             >
-              Log out
+              {t('nav.header.logout')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -303,7 +307,7 @@ export function Header() {
                 <Search className="w-5 h-5 text-muted-foreground" />
                 <Input
                   id="global-search"
-                  placeholder="Search orders, products, customers..."
+                  placeholder={t('nav.header.searchPlaceholder')}
                   className="flex-1 border-0 bg-transparent text-lg focus-visible:ring-0 placeholder:text-muted-foreground"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
@@ -326,24 +330,24 @@ export function Header() {
                 {searchQuery ? (
                   <div className="p-4">
                     <p className="text-sm text-muted-foreground mb-3">
-                      Search results for &quot;{searchQuery}&quot;
+                      {t('nav.header.searchResultsFor', { query: searchQuery })}
                     </p>
                     <div className="space-y-2">
                       <div className="flex items-center gap-3 p-3 rounded-lg hover:bg-accent cursor-pointer">
                         <ShoppingCart className="w-5 h-5 text-muted-foreground" />
                         <div className="flex-1">
-                          <p className="font-medium">Order #1001</p>
-                          <p className="text-sm text-muted-foreground">Alice Johnson - $284.97</p>
+                          <p className="font-medium">{t('nav.header.recentSamples.order')}</p>
+                          <p className="text-sm text-muted-foreground">{t('nav.header.recentSamples.orderMeta')}</p>
                         </div>
-                        <Badge variant="secondary">Order</Badge>
+                        <Badge variant="secondary">{t('common.labels.order')}</Badge>
                       </div>
                       <div className="flex items-center gap-3 p-3 rounded-lg hover:bg-accent cursor-pointer">
                         <Package className="w-5 h-5 text-muted-foreground" />
                         <div className="flex-1">
-                          <p className="font-medium">Wireless Bluetooth Headphones</p>
-                          <p className="text-sm text-muted-foreground">SKU: WBH-001 - $149.99</p>
+                          <p className="font-medium">{t('nav.header.recentSamples.product')}</p>
+                          <p className="text-sm text-muted-foreground">{t('nav.header.recentSamples.productMeta')}</p>
                         </div>
-                        <Badge variant="secondary">Product</Badge>
+                        <Badge variant="secondary">{t('common.labels.product')}</Badge>
                       </div>
                     </div>
                   </div>
@@ -352,7 +356,7 @@ export function Header() {
                     {/* Quick Actions */}
                     <div className="mb-6">
                       <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">
-                        Quick Actions
+                        {t('nav.quickActions.title')}
                       </p>
                       <div className="grid grid-cols-2 gap-2">
                         {QUICK_ACTIONS.map((action) => (
@@ -362,7 +366,7 @@ export function Header() {
                             className="flex items-center gap-3 p-3 rounded-lg hover:bg-accent text-left transition-colors"
                           >
                             <action.icon className="w-4 h-4 text-muted-foreground" />
-                            <span className="text-sm">{action.label}</span>
+                            <span className="text-sm">{t(action.labelKey)}</span>
                           </button>
                         ))}
                       </div>
@@ -371,7 +375,7 @@ export function Header() {
                     {/* Recent Searches */}
                     <div>
                       <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">
-                        Recent Searches
+                        {t('nav.header.recentSearches')}
                       </p>
                       <div className="space-y-1">
                         {recentSearches.map((search, index) => (
@@ -395,16 +399,16 @@ export function Header() {
                 <div className="flex items-center gap-4">
                   <span className="flex items-center gap-1">
                     <kbd className="bg-muted px-1.5 py-0.5 rounded border">↑↓</kbd>
-                    to navigate
+                    {t('nav.header.toNavigate')}
                   </span>
                   <span className="flex items-center gap-1">
                     <kbd className="bg-muted px-1.5 py-0.5 rounded border">↵</kbd>
-                    to select
+                    {t('nav.header.toSelect')}
                   </span>
                 </div>
                 <span className="flex items-center gap-1">
                   <kbd className="bg-muted px-1.5 py-0.5 rounded border">esc</kbd>
-                  to close
+                  {t('nav.header.toClose')}
                 </span>
               </div>
             </div>

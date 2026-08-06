@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { FileDigit, Upload, Trash2, RefreshCw, FileText, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { useFormatters, useTranslation } from '@/i18n';
 
 interface CurrentAsset {
   assetId: string;
@@ -42,12 +43,6 @@ const ALLOWED_MIME_TYPES = new Set([
 
 const MAX_SIZE_BYTES = 500 * 1024 * 1024; // 500MB
 
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
 export function DigitalAssetUpload({
   currentAsset,
   onFileSelect,
@@ -55,16 +50,18 @@ export function DigitalAssetUpload({
   isUploading = false,
   disabled = false,
 }: DigitalAssetUploadProps) {
+  const { t } = useTranslation();
+  const fmt = useFormatters();
   const inputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
 
   function validate(file: File): string | null {
     if (!ALLOWED_MIME_TYPES.has(file.type)) {
-      return `File type "${file.type}" is not allowed. Supported: PDF, ZIP, MP4, MP3, images, Word, Excel.`;
+      return t('products.asset.typeNotAllowed', { type: file.type });
     }
     if (file.size > MAX_SIZE_BYTES) {
-      return `File too large (${formatBytes(file.size)}). Maximum is 500MB.`;
+      return t('products.asset.tooLarge', { size: fmt.fileSize(file.size) });
     }
     return null;
   }
@@ -97,7 +94,7 @@ export function DigitalAssetUpload({
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium truncate">{currentAsset.filename}</p>
             <p className="text-xs text-muted-foreground mt-0.5">
-              {formatBytes(currentAsset.size)} · {currentAsset.mimeType}
+              {fmt.fileSize(currentAsset.size)} · {currentAsset.mimeType}
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
@@ -110,7 +107,7 @@ export function DigitalAssetUpload({
               className="gap-1.5"
             >
               <RefreshCw className="w-3.5 h-3.5" />
-              Replace
+              {t('products.asset.replace')}
             </Button>
             <Button
               type="button"
@@ -151,7 +148,7 @@ export function DigitalAssetUpload({
         {isUploading ? (
           <>
             <div className="w-12 h-12 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-            <p className="text-sm font-medium text-muted-foreground">Uploading asset…</p>
+            <p className="text-sm font-medium text-muted-foreground">{t('products.asset.uploading')}</p>
           </>
         ) : (
           <>
@@ -160,15 +157,15 @@ export function DigitalAssetUpload({
             </div>
             <div className="text-center space-y-1">
               <p className="text-sm font-medium">
-                {isDragging ? 'Drop your file here' : 'Drag & drop or click to upload'}
+                {t(isDragging ? 'products.asset.dropHere' : 'products.asset.dragOrClick')}
               </p>
               <p className="text-xs text-muted-foreground">
-                PDF, ZIP, MP4, MP3, images, Word, Excel · max 500MB
+                {t('products.asset.supported')}
               </p>
             </div>
             <Button type="button" variant="outline" size="sm" className="gap-2 pointer-events-none">
               <Upload className="w-3.5 h-3.5" />
-              Select File
+              {t('products.asset.selectFile')}
             </Button>
           </>
         )}
