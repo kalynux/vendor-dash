@@ -31,14 +31,25 @@ import {
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { isValidPhone, toE164 } from '@/lib/phone';
+import { isValidEmail, normalizeEmail } from '@/lib/email';
 import { PhoneInput } from '@/components/phone';
+import {
+  MobileMoneyBrandPicker,
+  PaymentBrandLogo,
+  PaymentOptionCard,
+  PaymentOptionGroup,
+  PaymentOptionIcon,
+  brandForSavedMethod,
+  matchMobileMoneyBrand,
+  mobileMoneyBrandById,
+  type MobileMoneyBrandId,
+} from '@/components/payment-methods';
 import { useTranslation, useFormatters, useApiError, type TranslationKey } from '@/i18n';
 import type {
   PaymentChannel,
   PaymentGateway,
   PaymentInitResult,
   PaymentStatus,
-  PhoneOperator,
 } from '@/types/billing.types';
 import type { SavedPaymentMethod } from '@/types/payment-method.types';
 import { isStripeConfigured } from '@/lib/stripe';
@@ -46,8 +57,10 @@ import { fetchPaymentMethods } from '@/services/payment-methods.service';
 import { StripePaymentElement, type StripePaymentElementHandle } from './StripePaymentElement';
 import { CardPreview } from './CardPreview';
 import {
-  PHONE_OPERATORS,
+  CARD_GATEWAY,
   GATEWAYS,
+  MOBILE_MONEY_GATEWAY,
+  MOBILE_MONEY_GATEWAYS,
   PAYMENT_POLL_INTERVAL_MS,
   PAYMENT_POLL_TIMEOUT_MS,
   formatCharged,
@@ -86,34 +99,22 @@ export interface PaymentDialogProps {
   successLabelKey?: TranslationKey;
 }
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-/** Gateways selectable in the checkout (Stripe hidden when not configured). */
-function availableGateways() {
-  return GATEWAYS.filter((g) => g.methodType !== 'card' || isStripeConfigured);
+/** The two top-level choices. Card only appears when Stripe is configured. */
+type MethodCategory = 'card' | 'mobile_money';
+
+/** Wallet pre-selected when the dialog opens — the largest operator in our markets. */
+const DEFAULT_BRAND: MobileMoneyBrandId = 'mtn';
+
+/** Map a saved mobile-money method's provider to the gateway that can charge it. */
+function providerToMobileMoneyGateway(provider: string): PaymentGateway | null {
+  const match = MOBILE_MONEY_GATEWAYS.find((g) => g.value.toLowerCase() === provider.toLowerCase());
+  return match?.value ?? null;
 }
 
-/** Map a saved method's provider to the gateway used to charge it. */
-function providerToGateway(provider: string): PaymentGateway | null {
-  switch (provider.toLowerCase()) {
-    case 'stripe':
-      return 'STRIPE';
-    case 'notchpay':
-      return 'NOTCHPAY';
-    case 'mycoolpay':
-      return 'MYCOOLPAY';
-    default:
-      return null;
-  }
-}
-
-/** Map a saved mobile-money brand to a known operator, if it matches. */
-function brandToOperator(brand: string | null): PhoneOperator | null {
-  const b = (brand ?? '').toUpperCase();
-  if (b.includes('MTN')) return 'MTN';
-  if (b.includes('ORANGE')) return 'ORANGE';
-  if (b.includes('MOOV')) return 'MOOV';
-  return null;
+/** The currency a gateway actually settles in — XAF for wallets, USD for cards. */
+function chargeCurrencyOf(gateway: PaymentGateway): string | undefined {
+  return GATEWAYS.find((g) => g.value === gateway)?.chargeCurrency;
 }
 
 export function PaymentDialog({
@@ -133,11 +134,13 @@ export function PaymentDialog({
   const fmt = useFormatters();
   const apiError = useApiError();
   const successLabel = t(successLabelKey);
-  const gateways = availableGateways();
 
-  const [gateway, setGateway] = useState<PaymentGateway>(gateways[0]?.value ?? 'NOTCHPAY');
+  const [category, setCategory] = useState<MethodCategory>(
+    isStripeConfigured ? 'card' : 'mobile_money',
+  );
+  const [brandId, setBrandId] = useState<MobileMoneyBrandId>(DEFAULT_BRAND);
+  const [mobileGateway, setMobileGateway] = useState<PaymentGateway>(MOBILE_MONEY_GATEWAY);
   const [phone, setPhone] = useState('');
-  const [operator, setOperator] = useState<PhoneOperator>('MTN');
   const [holderName, setHolderName] = useState('');
   const [email, setEmail] = useState('');
   const [phase, setPhase] = useState<Phase>('form');
@@ -157,15 +160,18 @@ export function PaymentDialog({
   const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollDeadline = useRef<number>(0);
 
-  const methodType = gateways.find((g) => g.value === gateway)?.methodType ?? 'mobile_money';
-  const isStripe = methodType === 'card';
+  const isStripe = category === 'card';
+  const brand = mobileMoneyBrandById(brandId);
+  /** The gateway the initiate call will actually use. */
+  const gateway = isStripe ? CARD_GATEWAY : mobileGateway;
 
   // Reset everything when the dialog is (re)opened or closed.
   useEffect(() => {
     if (open) {
-      setGateway(gateways[0]?.value ?? 'NOTCHPAY');
+      setCategory(isStripeConfigured ? 'card' : 'mobile_money');
+      setBrandId(DEFAULT_BRAND);
+      setMobileGateway(MOBILE_MONEY_GATEWAY);
       setPhone('');
-      setOperator('MTN');
       setHolderName('');
       setEmail('');
       setPhase('form');
@@ -179,7 +185,6 @@ export function PaymentDialog({
       setSelectedSavedId(null);
     }
     return stopPolling;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   // Load saved methods for the quick-select row (best-effort — autofill only).
@@ -233,17 +238,24 @@ export function PaymentDialog({
     }, PAYMENT_POLL_INTERVAL_MS);
   }
 
-  /** Quick-select a saved method: switch gateway + prefill what we can. */
+  /** Quick-select a saved method: switch category + prefill what we can. */
   function selectSaved(method: SavedPaymentMethod) {
     setSelectedSavedId(method.id);
     setFormError(null);
-    const gw = providerToGateway(method.provider);
-    if (gw && gateways.some((g) => g.value === gw)) setGateway(gw);
     if (method.holder_name) setHolderName(method.holder_name);
-    if (method.method_type === 'mobile_money') {
-      const op = brandToOperator(method.brand);
-      if (op) setOperator(op);
+
+    if (method.method_type === 'card') {
+      if (isStripeConfigured) setCategory('card');
+      return;
     }
+    setCategory('mobile_money');
+    const gw = providerToMobileMoneyGateway(method.provider);
+    if (gw) setMobileGateway(gw);
+    // Only wallets a gateway can debit are offered, so a saved Airtel/Wave
+    // method (payout-only) leaves the current pick alone rather than selecting
+    // a brand the picker would then refuse.
+    const saved = matchMobileMoneyBrand(method.brand);
+    if (saved?.chargeOperator) setBrandId(saved.id);
   }
 
   function clearSaved() {
@@ -256,22 +268,28 @@ export function PaymentDialog({
   function buildChannel(): PaymentChannel | null {
     if (isStripe) {
       // Stripe collects the card client-side — send only identification fields.
-      if (email.trim() && !EMAIL_RE.test(email.trim())) {
+      if (email.trim() && !isValidEmail(email)) {
         setFormError(t('billing.validation.email'));
         return null;
       }
       const channel: PaymentChannel = {};
-      if (email.trim()) channel.customerEmail = email.trim();
+      if (email.trim()) channel.customerEmail = normalizeEmail(email);
       if (holderName.trim()) channel.customerName = holderName.trim();
       return channel;
     }
     // Mobile money — phone + operator are required. The gateway is given E.164.
+    // The picker only offers debitable wallets, so this guard is belt-and-braces
+    // against a future brand landing in state before its gateway support does.
+    if (!brand?.chargeOperator) {
+      setFormError(t('payments.providers.soonHint', { brand: brand?.name ?? '' }));
+      return null;
+    }
     const phoneNumber = toE164(phone);
     if (!phoneNumber) {
       setFormError(t('common.validation.phone'));
       return null;
     }
-    return { phoneNumber, phoneOperator: operator };
+    return { phoneNumber, phoneOperator: brand.chargeOperator };
   }
 
   /** Step 1: initiate the payment server-side. */
@@ -385,7 +403,7 @@ export function PaymentDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md">
+      <DialogContent className="max-h-[92dvh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>
@@ -394,12 +412,14 @@ export function PaymentDialog({
         </DialogHeader>
 
         {phase === 'form' && (
-          <div className="space-y-4">
+          <div className="space-y-5">
             {/* Saved-method quick-select row */}
             {savedMethods.length > 0 && (
               <div className="space-y-1.5">
                 <Label>{t('billing.checkout.savedMethods')}</Label>
-                <div className="flex flex-wrap gap-2">
+                {/* Horizontally scrollable rather than wrapped: ten saved methods
+                    would otherwise push the actual form off a phone screen. */}
+                <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
                   {savedMethods.map((m) => (
                     <SavedChip
                       key={m.id}
@@ -411,8 +431,10 @@ export function PaymentDialog({
                   <button
                     type="button"
                     onClick={clearSaved}
+                    aria-pressed={!selectedSavedId}
                     className={cn(
-                      'flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition',
+                      'flex shrink-0 items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition',
+                      'outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
                       !selectedSavedId
                         ? 'border-primary bg-primary/5 text-primary'
                         : 'border-border text-muted-foreground hover:bg-muted',
@@ -424,41 +446,56 @@ export function PaymentDialog({
               </div>
             )}
 
-            {/* Gateway-first selection */}
-            <div className="space-y-1.5">
-              <Label>{t('billing.checkout.payWith')}</Label>
-              <div className="grid grid-cols-3 gap-2">
-                {gateways.map((g) => (
-                  <button
-                    key={g.value}
-                    type="button"
-                    onClick={() => {
-                      setGateway(g.value);
-                      setFormError(null);
-                    }}
-                    className={cn(
-                      'flex flex-col items-center justify-center gap-1 rounded-md border px-2 py-2.5 text-xs font-medium transition',
-                      gateway === g.value
-                        ? 'border-primary bg-primary/5 text-primary'
-                        : 'border-border text-muted-foreground hover:bg-muted',
-                    )}
-                  >
-                    {g.methodType === 'card' ? (
-                      <CreditCard className="h-4 w-4" />
-                    ) : (
-                      <Smartphone className="h-4 w-4" />
-                    )}
-                    {t(g.labelKey)}
-                    <span className="text-[10px] font-normal text-muted-foreground">
-                      {g.chargeCurrency}
-                    </span>
-                  </button>
-                ))}
-              </div>
+            {/* Category first: the vendor picks a way to pay, not a gateway name. */}
+            <div className="space-y-2">
+              <Label id="pay-category-label" className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                {t('billing.checkout.payWith')}
+              </Label>
+              <PaymentOptionGroup
+                aria-labelledby="pay-category-label"
+                value={category}
+                onValueChange={(v) => {
+                  setCategory(v as MethodCategory);
+                  setFormError(null);
+                }}
+                disabled={submitting}
+                // Two abreast so the whole choice is one glance; a lone card (no
+                // Stripe key) keeps the full width rather than sitting half-empty.
+                className={isStripeConfigured ? 'grid-cols-2' : undefined}
+              >
+                {isStripeConfigured && (
+                  <PaymentOptionCard
+                    value="card"
+                    orientation="stacked"
+                    visual={<PaymentOptionIcon icon={CreditCard} />}
+                    title={t('payments.category.card.title')}
+                    description={t('payments.category.card.provider')}
+                    badge={<CurrencyPill code={chargeCurrencyOf(CARD_GATEWAY)} />}
+                  />
+                )}
+                <PaymentOptionCard
+                  value="mobile_money"
+                  orientation="stacked"
+                  visual={<PaymentOptionIcon icon={Smartphone} />}
+                  title={t('payments.category.mobileMoney.title')}
+                  description={t('payments.category.mobileMoney.payFrom')}
+                  badge={<CurrencyPill code={chargeCurrencyOf(mobileGateway)} />}
+                />
+              </PaymentOptionGroup>
             </div>
 
-            {methodType === 'mobile_money' ? (
-              <div className="space-y-3">
+            {!isStripe ? (
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label id="pay-provider-label">{t('payments.providers.label')}</Label>
+                  <MobileMoneyBrandPicker
+                    aria-labelledby="pay-provider-label"
+                    value={brandId}
+                    onChange={setBrandId}
+                    chargeableOnly
+                    disabled={submitting}
+                  />
+                </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="pay-phone">{t('billing.checkout.phone')}</Label>
                   <PhoneInput
@@ -469,15 +506,19 @@ export function PaymentDialog({
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="pay-operator">{t('billing.checkout.operator')}</Label>
-                  <Select value={operator} onValueChange={(v) => setOperator(v as PhoneOperator)}>
-                    <SelectTrigger id="pay-operator">
+                  <Label htmlFor="pay-gateway">{t('billing.methods.processedBy')}</Label>
+                  <Select
+                    value={mobileGateway}
+                    onValueChange={(v) => setMobileGateway(v as PaymentGateway)}
+                    disabled={submitting}
+                  >
+                    <SelectTrigger id="pay-gateway">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {PHONE_OPERATORS.map((op) => (
-                        <SelectItem key={op.value} value={op.value}>
-                          {t(op.labelKey)}
+                      {MOBILE_MONEY_GATEWAYS.map((g) => (
+                        <SelectItem key={g.value} value={g.value}>
+                          {t(g.labelKey)}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -485,47 +526,63 @@ export function PaymentDialog({
                 </div>
               </div>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-4">
                 {/* Card payments are charged in USD — make that explicit up front. */}
                 <div className="flex gap-2 rounded-lg border border-blue-500/30 bg-blue-500/5 p-3 text-xs text-muted-foreground">
                   <Info className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
                   <span>{t('billing.checkout.usdNotice')}</span>
                 </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="pay-name">{t('billing.checkout.nameOnCard')}</Label>
-                  <Input
-                    id="pay-name"
-                    placeholder={t('billing.checkout.nameOnCardPlaceholder')}
-                    value={holderName}
-                    onChange={(e) => setHolderName(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="pay-email">{t('billing.checkout.receiptEmail')}</Label>
-                  <Input
-                    id="pay-email"
-                    type="email"
-                    inputMode="email"
-                    placeholder={t('billing.checkout.receiptEmailPlaceholder')}
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    aria-invalid={!!formError}
-                  />
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="pay-name">{t('billing.checkout.nameOnCard')}</Label>
+                    <Input
+                      id="pay-name"
+                      placeholder={t('billing.checkout.nameOnCardPlaceholder')}
+                      value={holderName}
+                      onChange={(e) => setHolderName(e.target.value)}
+                      disabled={submitting}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="pay-email">{t('billing.checkout.receiptEmail')}</Label>
+                    <Input
+                      id="pay-email"
+                      type="email"
+                      inputMode="email"
+                      placeholder={t('billing.checkout.receiptEmailPlaceholder')}
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      aria-invalid={!!formError}
+                      disabled={submitting}
+                    />
+                  </div>
                 </div>
               </div>
             )}
 
-            {formError && <p className="text-sm text-destructive">{formError}</p>}
+            {formError && (
+              <p className="text-sm text-destructive" role="alert">
+                {formError}
+              </p>
+            )}
 
             <DialogFooter>
-              <Button variant="outline" onClick={() => handleClose(false)} disabled={submitting}>
+              <Button
+                variant="outline"
+                onClick={() => handleClose(false)}
+                disabled={submitting}
+                className="max-sm:w-full"
+              >
                 {t('common.actions.cancel')}
               </Button>
               <Button
                 onClick={handleInitiate}
                 // An incomplete mobile-money number can't be charged — don't let
                 // it reach the gateway.
-                disabled={submitting || (!isStripe && !isValidPhone(phone))}
+                disabled={
+                  submitting || (!isStripe && (!isValidPhone(phone) || !brand?.chargeOperator))
+                }
+                className="max-sm:w-full"
               >
                 {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 {isStripe
@@ -652,6 +709,16 @@ export function PaymentDialog({
   );
 }
 
+/** The currency a choice is actually settled in — codes are never translated. */
+function CurrencyPill({ code }: { code?: string }) {
+  if (!code) return null;
+  return (
+    <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+      {code}
+    </span>
+  );
+}
+
 function SavedChip({
   method,
   active,
@@ -665,19 +732,18 @@ function SavedChip({
     <button
       type="button"
       onClick={onClick}
+      aria-pressed={active}
       className={cn(
-        'flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition',
+        'flex shrink-0 items-center gap-2 rounded-lg border py-1.5 pl-1.5 pr-3 text-sm font-medium transition',
+        'outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
         active
           ? 'border-primary bg-primary/5 text-primary'
           : 'border-border text-muted-foreground hover:bg-muted',
       )}
       title={method.display_label}
     >
-      {method.method_type === 'card' ? (
-        <CreditCard className="h-4 w-4" />
-      ) : (
-        <Smartphone className="h-4 w-4" />
-      )}
+      {/* The label right next to it already names the brand. */}
+      <PaymentBrandLogo brand={brandForSavedMethod(method)} size="sm" decorative />
       <span className="max-w-[8rem] truncate">{method.display_label}</span>
     </button>
   );

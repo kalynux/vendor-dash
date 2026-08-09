@@ -52,6 +52,25 @@ export interface SimpleProductFormProps {
   onSubmit: (values: SimpleProductFormValues, intent: SimpleSubmitIntent) => void | Promise<void>;
   onCancel: () => void;
   /**
+   * Rendered directly under the stock input — where the discrepancy is. The edit
+   * page uses it for the "120 → 90 · awaiting approval" notice on an
+   * agency-warehoused product.
+   */
+  stockNotice?: React.ReactNode;
+  /**
+   * True when this product's pickup is `agency_storage`. A warehouse holds a
+   * countable quantity, so the backend refuses the pair with
+   * `422 CATALOG_PRODUCT_AGENCY_STORAGE_INFINITE_STOCK`.
+   */
+  disableUnlimitedStock?: boolean;
+  /**
+   * Fires on every switch change (and once on mount) so the page can OR the LIVE
+   * value into what it tells the pickup picker. The switch is a deferred form
+   * field while the picker writes immediately — without this they can disagree
+   * inside one screen.
+   */
+  onStockModeChange?: (isInfiniteStock: boolean) => void;
+  /**
    * Rendered between the fields and the action bar. The edit page injects the
    * delivery card, AI-search toggle and status control here — all separate
    * endpoints, and therefore not this form's business.
@@ -92,6 +111,9 @@ export function SimpleProductForm({
   onSubmit,
   onCancel,
   children,
+  stockNotice,
+  disableUnlimitedStock = false,
+  onStockModeChange,
 }: SimpleProductFormProps) {
   const { t } = useTranslation();
   const m = useMessage();
@@ -119,6 +141,13 @@ export function SimpleProductForm({
   const compareAtPrice = watch('compareAtPrice');
   const seoTitle = watch('seoTitle') ?? '';
   const seoDesc = watch('seoDescription') ?? '';
+
+  // Report the live switch value up, including the value it mounted with, so the
+  // pickup picker judges "agency storage" against what the vendor sees rather
+  // than against what was last persisted.
+  useEffect(() => {
+    onStockModeChange?.(isInfiniteStock === true);
+  }, [isInfiniteStock, onStockModeChange]);
 
   // Project server-side field errors (a taken SKU, a rejected image) onto the
   // inputs, revealing the collapsed section when the culprit lives inside it.
@@ -321,13 +350,18 @@ export function SimpleProductForm({
             aria-invalid={!!errors.stock}
           />
           {errors.stock && <p className="text-xs text-destructive">{m(errors.stock.message)}</p>}
+          {/* Where the discrepancy is: the field above holds the server's
+              figure, and this says what is still waiting on the agency. */}
+          {stockNotice}
         </div>
 
         <div className="flex items-center justify-between gap-3 rounded-lg border border-border px-4 py-3 self-end">
           <div className="min-w-0">
             <p className="text-sm font-medium">{t('products.fields.unlimitedStock')}</p>
             <p className="text-xs text-muted-foreground mt-0.5">
-              {t('products.fields.unlimitedStockHint')}
+              {disableUnlimitedStock
+                ? t('products.fields.unlimitedStockLockedHint')
+                : t('products.fields.unlimitedStockHint')}
             </p>
           </div>
           <Switch
@@ -335,7 +369,7 @@ export function SimpleProductForm({
             onCheckedChange={(checked) =>
               setValue('isInfiniteStock', checked, { shouldDirty: true })
             }
-            disabled={isBusy}
+            disabled={isBusy || disableUnlimitedStock}
             aria-label={t('products.fields.unlimitedStock')}
           />
         </div>

@@ -24,6 +24,7 @@ import media from './media';
 import tickets from './tickets';
 import notifications from './notifications';
 import transactions from './transactions';
+import payments from './payments';
 import billing from './billing';
 import settings from './settings';
 import account from './account';
@@ -45,6 +46,7 @@ export const en = {
     tickets,
     notifications,
     transactions,
+    payments,
     billing,
     settings,
     account,

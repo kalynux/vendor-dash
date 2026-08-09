@@ -37,6 +37,8 @@ import {
   reorderOptions,
 } from '@/services/products.service';
 import { ACTIVATION_ERROR_KEYS, getDeliveryErrorMessage } from '@/services/products.service';
+import { fetchStockRequests } from '@/services/stockRequests.service';
+import type { PendingStockInfo } from '@/components/inventory/PendingStockBadge';
 import { useApiError, useTranslation, type TranslationKey } from '@/i18n';
 import { getAgencyConnectionErrorMessage } from '@/services/agency-connections.service';
 import { getUploadErrorMessage } from '@/lib/uploadErrors';
@@ -176,6 +178,15 @@ export function ProductEdit() {
   // Session-local variant image overrides (persisted immediately server-side;
   // kept here so the matrix shows current images after a step remount).
   const [variantImageEdits, setVariantImageEdits] = useState<Record<string, ApiFileDetail[]>>({});
+  /**
+   * Open stock requests per saved variant id — what explains a stock input that
+   * snapped back after a save on an agency-warehoused product.
+   *
+   * Page level, NOT the variant reducer: SAVE_COMPLETE/HYDRATE rebuild rows from
+   * `serverVariants` and would wipe it. Seeded on load so the badge survives a
+   * refresh and also covers requests the AGENCY raised, not just ours.
+   */
+  const [pendingStock, setPendingStock] = useState<Record<string, PendingStockInfo>>({});
 
   const handleVariantImagesChange = useCallback(
     (variantId: string, files: ApiFileDetail[]) => {
@@ -183,6 +194,18 @@ export function ProductEdit() {
     },
     [],
   );
+
+  const seedPendingStock = useCallback(async (pid: string) => {
+    const res = await fetchStockRequests({ productId: pid, status: 'pending', limit: 100 }).catch(
+      () => null,
+    );
+    if (!res) return;
+    setPendingStock(
+      Object.fromEntries(
+        res.data.map((r) => [r.variantId, { requestId: r.id, requestedQuantity: r.requestedQuantity }]),
+      ),
+    );
+  }, []);
 
   useEffect(() => {
     if (!id) return;
@@ -203,6 +226,11 @@ export function ProductEdit() {
             return;
           }
           dispatch({ type: 'LOAD_COMPLETE', product, variants, options });
+          // Only agency-warehoused products can have any, so skip the call
+          // entirely for everything else.
+          if (product.delivery?.pickupLocation?.source === 'agency_storage') {
+            void seedPendingStock(product.id);
+          }
         }
       } catch (err: unknown) {
         if (!cancelled) {
@@ -414,9 +442,10 @@ export function ProductEdit() {
             ),
           );
 
-          await Promise.all(
-            toUpdate.map((row) =>
-              updateVariant(productId, row.serverId, {
+          const updateResults = await Promise.all(
+            toUpdate.map(async (row) => ({
+              row,
+              res: await updateVariant(productId, row.serverId, {
                 sku: row.sku,
                 price: row.price,
                 compareAtPrice: row.compareAtPrice,
@@ -427,9 +456,29 @@ export function ProductEdit() {
                 width: row.width,
                 height: row.height,
               }),
-            ),
+            })),
           );
 
+          // Rows on an agency-warehoused product applied everything EXCEPT the
+          // quantity, which is now a request awaiting the agency's approval.
+          const queued = updateResults.filter((r) => r.res.stockAdjustment);
+          if (queued.length) {
+            setPendingStock((prev) => ({
+              ...prev,
+              ...Object.fromEntries(
+                queued.map((q) => [
+                  q.row.serverId,
+                  {
+                    requestId: q.res.stockAdjustment!.request.id,
+                    requestedQuantity: q.res.stockAdjustment!.request.requestedQuantity,
+                  },
+                ]),
+              ),
+            }));
+          }
+
+          // Authoritative — for a queued row this deliberately returns the OLD
+          // quantity. The pending badge is what explains the difference.
           const freshVariants = await fetchVariants(productId);
 
           // The backend auto-sets the first variant as default when none is set
@@ -447,7 +496,13 @@ export function ProductEdit() {
               ? { ...state.serverProduct, defaultVariantId: freshVariants[0].id }
               : null;
 
-          toast.success(t('products.toast.variantsSaved'));
+          if (queued.length) {
+            toast.warning(
+              t('products.toast.variantsSavedStockQueued', { count: queued.length }),
+            );
+          } else {
+            toast.success(t('products.toast.variantsSaved'));
+          }
           dispatch({
             type: 'SAVE_COMPLETE',
             updates: {
@@ -682,7 +737,6 @@ export function ProductEdit() {
         toast.success(t('products.toast.publishedBang'));
         navigate('/dashboard/products');
       } catch (err: unknown) {
-        console.log('err', err)
         if (err && typeof err === 'object' && 'code' in err) {
           const code = (err as { code: string }).code;
           const activationKey = ACTIVATION_ERROR_KEYS[code];
@@ -767,6 +821,7 @@ export function ProductEdit() {
             onSaveComplete={handleVariantsSave}
             imageEditsByVariantId={variantImageEdits}
             onVariantImagesChange={handleVariantImagesChange}
+            pendingStockByVariantId={pendingStock}
           />
         ) : null;
       case 'formats':

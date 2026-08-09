@@ -278,6 +278,9 @@ export const common = {
         resolveFailed: 'Could not resolve your location to an address.',
         permissionDenied: 'Location permission denied.',
         searchUnavailable: 'Address search is unavailable right now.',
+        /** Under the picked place, so the vendor can sanity-check the coordinates. */
+        pinnedAt: 'Pinned at {{lat}}, {{lng}}',
+        clearPinned: 'Remove the pinned location',
     },
 
     a11y: {

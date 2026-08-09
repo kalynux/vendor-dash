@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { AlertCircle, MoreHorizontal, Sparkles, Wand2, Copy } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
@@ -43,12 +43,15 @@ import {
   getDeliveryErrorMessage,
   type SimpleProductResult,
 } from '@/services/products.service';
-import { useMessage, useTranslation, type TranslationKey } from '@/i18n';
+import { fetchStockRequests, withdrawStockRequest } from '@/services/stockRequests.service';
+import { useApiError, useMessage, useTranslation, type TranslationKey } from '@/i18n';
 import type {
   ApiProductDetail,
   ApiPickupLocation,
+  ApiVariant,
   SimpleActivationMeta,
 } from '@/types/product.types';
+import type { StockRequestDto } from '@/types/stock-requests.types';
 
 export function SimpleProductEdit() {
   const { id } = useParams<{ id: string }>();
@@ -56,6 +59,7 @@ export function SimpleProductEdit() {
 
   const { t } = useTranslation();
   const m = useMessage();
+  const apiError = useApiError();
   const [product, setProduct] = useState<ApiProductDetail | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -66,6 +70,19 @@ export function SimpleProductEdit() {
   const [activationMessage, setActivationMessage] = useState<string | undefined>();
   const [demoted, setDemoted] = useState(false);
   const [convertOpen, setConvertOpen] = useState(false);
+  /** The single variant, kept so the pickup picker can see its stock mode. */
+  const [variant, setVariant] = useState<ApiVariant | null>(null);
+  /** The live (possibly unsaved) value of the unlimited-stock switch. */
+  const [liveInfiniteStock, setLiveInfiniteStock] = useState(false);
+  /** An open stock request on this SKU, if the agency has yet to answer. */
+  const [pendingStockRequest, setPendingStockRequest] = useState<StockRequestDto | null>(null);
+  const [withdrawing, setWithdrawing] = useState(false);
+  /**
+   * Bumped to remount the form on the server's values. react-hook-form captures
+   * `defaultValues` on first render, so rebasing the ref alone would leave the
+   * vendor looking at a quantity the server refused to write.
+   */
+  const [formEpoch, setFormEpoch] = useState(0);
 
   // The baseline the save diff is computed against; refreshed after every write
   // so a second save doesn't re-send what the first already persisted.
@@ -91,7 +108,20 @@ export function SimpleProductEdit() {
           return;
         }
         setProduct(loaded);
+        setVariant(loadedVariant);
+        setLiveInfiniteStock(loadedVariant?.isInfiniteStock ?? false);
         initialValuesRef.current = toFormValues(loaded, loadedVariant);
+
+        // Only an agency-warehoused product can have a pending stock request,
+        // so skip the call for everything else.
+        if (loaded.delivery?.pickupLocation?.source === 'agency_storage') {
+          const requests = await fetchStockRequests({
+            productId: loaded.id,
+            status: 'pending',
+            limit: 1,
+          }).catch(() => null);
+          if (!cancelled && requests) setPendingStockRequest(requests.data[0] ?? null);
+        }
       } catch (err: unknown) {
         if (!cancelled) setLoadError(getSimpleProductErrorMessage(err));
       }
@@ -115,6 +145,40 @@ export function SimpleProductEdit() {
     [productStatus],
   );
 
+  const isWarehoused = product?.delivery?.pickupLocation?.source === 'agency_storage';
+
+  /**
+   * What blocks a move TO agency storage. The switch is a deferred form field
+   * while the pickup picker writes immediately, so the LIVE switch value is OR'd
+   * in — otherwise a vendor could flip unlimited on (unsaved), pick agency
+   * storage (the server still sees `false`, so it succeeds), then eat a 422 on
+   * the next save.
+   */
+  const unlimitedStockVariants = useMemo(
+    () =>
+      variant && (liveInfiniteStock || variant.isInfiniteStock) && variant.status === 'active'
+        ? [{ id: variant.id, sku: variant.sku }]
+        : [],
+    [variant, liveInfiniteStock],
+  );
+
+  const handleWithdrawStockRequest = useCallback(async () => {
+    if (!pendingStockRequest) return;
+    setWithdrawing(true);
+    try {
+      await withdrawStockRequest(pendingStockRequest.id);
+      setPendingStockRequest(null);
+      toast.success(t('products.simple.stockRequestWithdrawn'));
+    } catch (err: unknown) {
+      apiError.toast(err, {
+        context: 'stockRequest',
+        fallbackKey: 'inventory.requests.errors.actionFailed',
+      });
+    } finally {
+      setWithdrawing(false);
+    }
+  }, [pendingStockRequest, t, apiError]);
+
   // ─── Applying a write result ────────────────────────────────────────────────
 
   /** Returns true when this write silently demoted an active product to draft. */
@@ -122,6 +186,17 @@ export function SimpleProductEdit() {
     setProduct(res.product);
     setActivation(res.activation);
     setActivationMessage(res.message);
+    // `defaultVariant` is the server's truth for the variant half of the write —
+    // including a stock figure it declined to change.
+    const saved = res.product.defaultVariant;
+    if (saved) {
+      setVariant((prev) => (prev ? { ...prev, ...saved } : prev));
+      if (saved.isInfiniteStock !== undefined) setLiveInfiniteStock(saved.isInfiniteStock);
+    }
+    // The quantity was NOT written: it queued for the storage agency.
+    if (res.stockAdjustment) {
+      setPendingStockRequest(res.stockAdjustment.request as StockRequestDto);
+    }
     // Omitting `publish` means an edit that broke the active-state invariant
     // silently demotes to draft — the blockers list is the vendor's only notice.
     const nowDemoted = wasActive && res.product.status === 'draft';
@@ -154,12 +229,39 @@ export function SimpleProductEdit() {
         // Rebase the diff on what the server actually stored — the nested
         // defaultVariant is authoritative for the variant fields (e.g. a SKU it
         // generated or normalised), so the next save can't re-send a stale one.
+        //
+        // `isInfiniteStock` matters as much as `stock` here: on an
+        // agency-warehoused product the backend DROPS both from the write, so
+        // recording what was typed would mark them clean and they would never
+        // be re-sent — the form and the server would disagree forever.
         const saved = res.product.defaultVariant;
         initialValuesRef.current = saved
-          ? { ...values, sku: saved.sku, price: saved.price, stock: saved.stock }
+          ? {
+              ...values,
+              sku: saved.sku,
+              price: saved.price,
+              stock: saved.stock,
+              // `SimpleDefaultVariant` types these as optional, so fall back to
+              // what was typed when the server omits them.
+              isInfiniteStock: saved.isInfiniteStock ?? values.isInfiniteStock,
+              compareAtPrice: saved.compareAtPrice ?? values.compareAtPrice,
+              lowStockThreshold: saved.lowStockThreshold ?? values.lowStockThreshold,
+              allowOversell: saved.allowOversell ?? values.allowOversell,
+            }
           : values;
         const wasDemoted = applyResult(res, wasActive);
-        if (wasDemoted) {
+        if (res.stockAdjustment) {
+          // Remount the form so the vendor sees the quantity the server holds,
+          // not the one they typed — "render `data` as returned, not as
+          // submitted". Everything else in the body did apply.
+          setFormEpoch((n) => n + 1);
+          toast.warning(
+            t('products.simple.stockQueued', {
+              from: saved?.stock ?? '—',
+              to: res.stockAdjustment.request.requestedQuantity,
+            }),
+          );
+        } else if (wasDemoted) {
           toast.warning(res.message ?? t('products.blockers.demoted'));
         } else {
           toast.success(res.message ?? t('products.toast.changesSaved'));
@@ -428,7 +530,9 @@ export function SimpleProductEdit() {
         <CardContent className="p-4 sm:p-6">
           <div className={isLocked ? 'pointer-events-none opacity-60' : ''}>
             <SimpleProductForm
-              key={product.id}
+              // `formEpoch` remounts the form on the server's values after a
+              // stock change the backend declined to write.
+              key={`${product.id}:${formEpoch}`}
               mode="edit"
               initialValues={initialValuesRef.current}
               existingFiles={product.files}
@@ -439,6 +543,17 @@ export function SimpleProductEdit() {
               canPublish={productStatus === 'draft'}
               onSubmit={handleSubmit}
               onCancel={goToList}
+              disableUnlimitedStock={isWarehoused}
+              onStockModeChange={setLiveInfiniteStock}
+              stockNotice={
+                pendingStockRequest ? (
+                  <PendingStockRequestNotice
+                    request={pendingStockRequest}
+                    withdrawing={withdrawing}
+                    onWithdraw={handleWithdrawStockRequest}
+                  />
+                ) : null
+              }
             >
               <AgencySelector
                 productId={product.id}
@@ -449,6 +564,8 @@ export function SimpleProductEdit() {
                 onFreeDeliveryChange={handleFreeDeliveryChange}
                 pickupLocation={product.delivery?.pickupLocation ?? null}
                 onPickupLocationChange={handlePickupLocationChange}
+                pickup={product.pickup ?? null}
+                unlimitedStockVariants={unlimitedStockVariants}
               />
 
               <div className="rounded-xl border border-border p-5 flex items-start gap-3">
@@ -482,6 +599,56 @@ export function SimpleProductEdit() {
           navigate(`/dashboard/product-edit/${converted.id}`, { replace: true })
         }
       />
+    </div>
+  );
+}
+
+/**
+ * Sits directly under the stock input, where the discrepancy is.
+ *
+ * The field above shows what the agency has on record; this says what is queued
+ * and offers the only way back out — withdrawing the proposal, which is also
+ * what unblocks proposing a different quantity (one open request per SKU).
+ */
+function PendingStockRequestNotice({
+  request,
+  withdrawing,
+  onWithdraw,
+}: {
+  request: StockRequestDto;
+  withdrawing: boolean;
+  onWithdraw: () => void;
+}) {
+  const { t } = useTranslation();
+  const canWithdraw = request.availableActions.includes('withdraw');
+
+  return (
+    <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-2.5 text-xs text-amber-700 dark:text-amber-400">
+      <p className="font-medium tabular-nums">
+        {t('products.simple.stockQueuedNotice', {
+          from: request.currentQuantity ?? request.quantityBefore,
+          to: request.requestedQuantity,
+        })}
+      </p>
+      <p className="mt-0.5 opacity-90">{t('products.simple.stockQueuedHint')}</p>
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <Button asChild size="sm" variant="outline" className="h-7 text-xs">
+          <Link to={`/dashboard/inventory/requests?view=${encodeURIComponent(request.id)}`}>
+            {t('products.simple.viewStockRequest')}
+          </Link>
+        </Button>
+        {canWithdraw && (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 text-xs"
+            disabled={withdrawing}
+            onClick={onWithdraw}
+          >
+            {t('products.simple.withdrawStockRequest')}
+          </Button>
+        )}
+      </div>
     </div>
   );
 }

@@ -19,6 +19,7 @@ import { toast } from 'sonner';
 
 import { cn } from '@/lib/utils';
 import { normalizeStoredPhone, phoneErrorKey, toE164 } from '@/lib/phone';
+import { emailErrorKey, normalizeEmail } from '@/lib/email';
 import { PhoneInput } from '@/components/phone';
 import { useStoreStore } from '@/store';
 import { updateStore, updateStoreStatus } from '@/services/store.service';
@@ -96,6 +97,12 @@ function normPhone(v: string): string | null {
   return toE164(v) ?? norm(v);
 }
 
+/** Support email goes to the backend trimmed and lowercased, or `null` when cleared. */
+function normEmail(v: string): string | null {
+  const trimmed = norm(v);
+  return trimmed === null ? null : normalizeEmail(trimmed);
+}
+
 /**
  * Build the PATCH payload from the diff between the edited form and the stored
  * store, always including `version`. Only changed fields are sent (partial
@@ -106,11 +113,13 @@ function buildPayload(form: FormState, store: VendorStore): StoreUpdatePayload {
 
   if (form.name.trim() !== (store.name ?? '')) payload.name = form.name.trim();
 
-  const stringFields: Exclude<EditableKey, 'name'>[] = ['description', 'supportEmail'];
-  for (const key of stringFields) {
-    const next = norm(form[key]);
-    if (next !== (store[key] ?? null)) payload[key] = next;
-  }
+  const description = norm(form.description);
+  if (description !== (store.description ?? null)) payload.description = description;
+
+  // Compared canonically for the same reason as the phones below: the backend
+  // lowercases on store, so re-casing an address is not a change.
+  const email = normEmail(form.supportEmail);
+  if (email !== normEmail(store.supportEmail ?? '')) payload.supportEmail = email;
 
   // Compared canonically, so re-spacing a legacy number is not a change.
   for (const key of ['supportPhone', 'supportWhatsapp'] as const) {
@@ -133,10 +142,8 @@ function validateForm(form: FormState): FieldErrors {
   if (name.length < 2) errors.name = 'settings.storefront.validation.nameTooShort';
   else if (name.length > 100) errors.name = 'settings.storefront.validation.nameTooLong';
 
-  const email = form.supportEmail.trim();
-  if (email && !/^\S+@\S+\.\S+$/.test(email)) {
-    errors.supportEmail = 'common.validation.email';
-  }
+  const emailError = emailErrorKey(form.supportEmail);
+  if (emailError) errors.supportEmail = emailError;
 
   // Both support numbers are optional, but a number that is filled in has to be
   // dialable — customers reach the vendor on these.

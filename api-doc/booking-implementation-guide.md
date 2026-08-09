@@ -31,7 +31,7 @@ Build these in order; each depends on the previous.
 ### Step 3 — Create the service variant (price + `serviceConfig`)  → [vendor/variants.md](./vendor/variants.md)
 
 - `POST /api/vendor/products/:id/variants` with `price` + `serviceConfig`. A service product has **exactly one** variant carrying its config + price.
-- `serviceConfig` requires `durationMinutes` and `bookingMode`; optionally `bufferBeforeMinutes`, `bufferAfterMinutes`, and a `peakHours` surcharge. For `bookingMode: "capacity"` (multi-seat slots, e.g. a class), also send `maxBookings` (≥ 1) — see [serviceConfig.bookingMode](./variants.md#service-bookingmode).
+- `serviceConfig` requires `durationMinutes` and `bookingMode`; optionally `bufferBeforeMinutes`, `bufferAfterMinutes`, and a `peakHours` surcharge. For `bookingMode: "capacity"` (multi-seat slots, e.g. a class), also send `maxBookings` (≥ 1) — see [serviceConfig.bookingMode](./vendor/variants.md#service-bookingmode).
 - `price` is the **base price per `durationMinutes`** (e.g. `5000` for a 60-min unit). The booking price is prorated by the actual elapsed duration; peak surcharge applies only to the minutes overlapping the peak window.
 - Update the scheduling/peak config later via `PATCH /api/vendor/products/:productId/variants/:variantId/service/config`.
 
@@ -54,7 +54,7 @@ Build the checkout as a short-lived, ordered flow.
 ### Step 6 — Lock, then book
 
 - On slot select: `POST /api/products/:productId/slots/:slotId/lock` → start a 15-min countdown from `expiresAt`.
-- On confirm: `POST /api/products/:productId/book` with `{ slotId, metadata }` → returns the `booking` and `price`. The booking's `status` is `confirmed` (`calendar`/`capacity`) or `pending` (`manual`, awaiting vendor acceptance) — see [serviceConfig.bookingMode](./variants.md#service-bookingmode); `paymentStatus` is `unpaid`.
+- On confirm: `POST /api/products/:productId/book` with `{ slotId, metadata }` → returns the `booking` and `price`. The booking's `status` is `confirmed` (`calendar`/`capacity`) or `pending` (`manual`, awaiting vendor acceptance) — see [serviceConfig.bookingMode](./vendor/variants.md#service-bookingmode); `paymentStatus` is `unpaid`.
 - **Capacity mode**: a slot accepts multiple seats. Availability slots carry `maxBookings`/`spotsRemaining` (render "N spots left"); a full slot returns `available:false`, and booking a full slot returns `409 BOOKING_SLOT_FULL`.
 - On abandon: `POST /api/products/:productId/slots/:slotId/unlock` (or let the lock expire).
 - Handle `409 BOOKING_SLOT_LOCKED` (someone else holds it) and `409 BOOKING_SLOT_NOT_LOCKED` (lock expired → re-lock).

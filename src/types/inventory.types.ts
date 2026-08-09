@@ -86,10 +86,42 @@ export interface BulkStockUpdateVariantResult {
   newStock: number;
 }
 
+/**
+ * An agency-warehoused row. **Nothing was written for it** — it became a pending
+ * stock request awaiting the agency's countersignature. Presenting one of these
+ * as updated is the one way to make the bulk response lie.
+ */
+export interface BulkStockRequestedResult {
+  variantId: string;
+  sku: string;
+  requestId: string;
+  requestedQuantity: number;
+}
+
+/**
+ * A row that could neither apply nor be queued — almost always
+ * `STOCK_REQUEST_ALREADY_PENDING` (a request is already open on that SKU and
+ * somebody has to resolve it first). Reported rather than thrown because the
+ * `variants` rows have already committed.
+ */
+export interface BulkStockNotRequestedResult {
+  variantId: string;
+  sku: string;
+  /** Machine code — resolve via `errors.codes.<CODE>`. Never print `message`. */
+  error: string;
+  message?: string;
+}
+
 export interface BulkStockUpdateResult {
   batchId: string;
+  /** Number of variants **written**. Counts `variants` only, never `requested`. */
   updated: number;
+  /** Rows that applied. */
   variants: BulkStockUpdateVariantResult[];
+  /** Rows queued for the agency's approval. Report these separately. */
+  requested: BulkStockRequestedResult[];
+  /** Rows that neither applied nor queued. */
+  notRequested: BulkStockNotRequestedResult[];
 }
 
 /**

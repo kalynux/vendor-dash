@@ -1,9 +1,8 @@
-import { type Step1FormValues } from '@/onboarding/schemas/onboarding.schemas';
 import type { TranslationKey } from '@/i18n';
 import { PLATFORM_COUNTRIES } from '@/lib/phone';
 
-// Static option data + empty-entry factories shared by the Basic Setup form
-// (kept in a non-component module so Fast Refresh stays happy).
+// Static option data for the Basic Setup form (kept in a non-component module so
+// Fast Refresh stays happy).
 
 /**
  * Countries the platform onboards in, as ISO-3166 alpha-2 codes.
@@ -35,27 +34,11 @@ export const TIMEZONES: { value: string; cityKey: TranslationKey; offset: string
     { value: 'America/New_York', cityKey: 'settings.cities.newYork', offset: 'EST, UTC-5' },
 ];
 
-/** Brand names — never translated. `value` is the wire format the backend expects. */
-export const MOBILE_MONEY_PROVIDERS = [
-    { value: 'MTN Mobile Money', label: 'MTN Mobile Money' },
-    { value: 'Orange Money', label: 'Orange Money' },
-    { value: 'Wave', label: 'Wave' },
-    { value: 'Moov Money', label: 'Moov Money' },
-    { value: 'Airtel Money', label: 'Airtel Money' },
-];
+// The mobile-money provider list moved to `@/components/payment-methods` —
+// `MOBILE_MONEY_BRANDS[].payoutValue` holds the exact wire strings this form
+// used to declare, next to the logo and the gateway operator for the same
+// brand, so the three cannot drift apart.
 
-export function emptyMobileMoneyEntry(): Step1FormValues['payout_details'][number] {
-    return {
-        method: 'mobile_money',
-        mobile_money: { provider: '', phone_number: '', account_name: '' },
-        bank: null,
-    };
-}
-
-export function emptyBankEntry(): Step1FormValues['payout_details'][number] {
-    return {
-        method: 'bank',
-        bank: { bank_name: '', account_number: '', account_name: '', country: '' },
-        mobile_money: null,
-    };
-}
+// Entries are no longer created blank: `PayoutMethodsEditor`'s dialog builds a
+// complete, schema-validated entry, so there is nothing to seed a half-empty one
+// with — an empty list is the "nothing yet" state.

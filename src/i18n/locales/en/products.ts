@@ -111,6 +111,9 @@ export const products = {
         compareAtTooLowHint: 'Customers only see a discount when this is higher than the price.',
         unlimitedStock: 'Unlimited stock',
         unlimitedStockHint: 'Never runs out.',
+        /** Shown instead of the hint when the product is warehoused by an agency. */
+        unlimitedStockLockedHint:
+            'An agency warehouses this product, and a warehouse holds a countable quantity. Move pickup back to your own address to use unlimited stock.',
         moreOptions: 'More options',
         skuPlaceholderEdit: 'Product SKU',
         skuPlaceholderCreate: 'Leave blank to generate one automatically',
@@ -310,6 +313,10 @@ export const products = {
         noDefaultVariant: 'A default variant must be set',
         noAgency: 'A delivery agency must be assigned before publishing',
         noPickupLocation: 'A pickup location must be set before publishing',
+        // Not a `stock > 0` rule — a warehoused product may legitimately be at
+        // zero. It is unlimited stock specifically that a warehouse cannot hold.
+        agencyStorageInfiniteStock:
+            'Turn off unlimited stock on every active variant — a product stored in an agency warehouse needs a countable quantity',
         cannotPublishTitle: 'Cannot publish yet',
         cannotPublishDescription: 'Fix the following before publishing <0>{{name}}</0>:',
     },
@@ -379,6 +386,19 @@ export const products = {
             'Index this product so customers can find it through AI search. Applies once the product is active and complete.',
         suspendedNotice:
             'This product is suspended because of a delivery-agency issue. You can still edit it — assigning a working delivery agency below restores it automatically.',
+
+        // ── Agency-warehoused stock ───────────────────────────────────────────
+        // The quantity was NOT written: an agency holds these goods, so the
+        // number needs its countersignature. The form is rebased on what the
+        // server actually stored, and this explains the difference.
+        stockQueued:
+            'Saved. The stock change ({{from}} → {{to}}) is awaiting the storage agency’s approval.',
+        stockQueuedNotice: '{{from}} → {{to}} · awaiting the agency’s approval',
+        stockQueuedHint:
+            'An agency warehouses this product, so the quantity above is what it has on record until your change is approved.',
+        viewStockRequest: 'View request',
+        withdrawStockRequest: 'Withdraw',
+        stockRequestWithdrawn: 'Request withdrawn — you can propose a new quantity.',
     },
 
     /** Digital products — one card per downloadable format. */
@@ -472,9 +492,28 @@ export const products = {
         pickupNoSources:
             '{{name}} doesn’t support pickup from your address or agency storage. Choose a different agency.',
         pickupWarehoused: '{{name}} already warehouses this product’s stock.',
+        pickupAddressMissing:
+            'The address this product was collected from no longer exists. Pick another one before publishing.',
         addressPlaceholder: 'Select a business address',
         noAddresses: 'You have no business addresses yet.',
         goToAddresses: 'Go to Account → Addresses',
+        depotPlaceholder: 'Which warehouse holds this stock?',
+        depotDefaultSuffix: 'default',
+        depotPrimaryName: 'Primary headquarters',
+        depotBranchName: 'Branch {{number}}',
+        loadingDepots: 'Loading warehouses…',
+        depotsUnavailable:
+            'We could not load this agency’s warehouses right now. Your current choice is unchanged — try again in a moment.',
+        noDepots: '{{name}} has no warehouse on file yet.',
+        depotRemoved:
+            'The warehouse you chose is no longer operated by this agency. Collection has fallen back to their main one — pick another if that is wrong.',
+        /** Agency storage is unavailable because a variant has unlimited stock. */
+        storageNeedsCountableStock:
+            'A warehouse holds a countable quantity, so agency storage is unavailable while {{skus}} has unlimited stock. Turn unlimited stock off and enter a quantity.',
+        /** Already warehoused AND unlimited — a live product that predates the rule. */
+        storageInfiniteLive:
+            'This product is stored at an agency but {{skus}} has unlimited stock. It will not publish again until you turn that off.',
+        storageSkusMore: '{{skus}} and {{count}} more',
         guidance: {
             multipleAddressesTitle: 'Which address should the courier collect from?',
             multipleAddressesBody:
@@ -656,6 +695,11 @@ export const products = {
         mediaSaved: 'Media saved.',
         optionsSaved: 'Options saved.',
         variantsSaved: 'Variants saved.',
+        /** Everything else applied; the quantity is a proposal until the agency signs off. */
+        variantsSavedStockQueued: plural({
+            one: 'Variants saved. {{count}} stock change is awaiting the storage agency’s approval.',
+            other: 'Variants saved. {{count}} stock changes are awaiting the storage agency’s approval.',
+        }),
         formatsSaved: 'Formats saved.',
         agencyUpdated: 'Delivery agency updated.',
         agencyDefault: 'Using your default delivery agency.',

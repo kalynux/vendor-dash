@@ -27,3 +27,20 @@ export function formatAgencyAddressDetail(hq: HQAddressLike): string | null {
   const locality = formatAgencyLocality(hq);
   return locality === hq.address_description ? null : hq.address_description;
 }
+
+/**
+ * Same job as `formatAgencyLocality`, for the depot-listing endpoint — which
+ * returns the identical three fields under camelCase names
+ * (`GET /vendor/delivery-agencies/:agencyId/locations`).
+ */
+export function formatAgencyLocationLocality(location: {
+  region?: string | null;
+  city?: string | null;
+  addressDescription: string;
+}): string {
+  return formatAgencyLocality({
+    region: location.region,
+    city: location.city,
+    address_description: location.addressDescription,
+  });
+}

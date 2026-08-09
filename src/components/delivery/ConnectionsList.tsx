@@ -2,8 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Building2, Loader2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Textarea } from '@/components/ui/textarea';
+import { ReasonPopover } from '@/components/common/ReasonPopover';
 import {
     ActiveFilterChips,
     FilterChips,
@@ -53,50 +52,6 @@ const STATUS_LABEL_KEYS: Record<ConnectionStatus, TranslationKey> = {
     withdrawn: 'agency.status.withdrawn',
     terminated: 'agency.status.terminated',
 };
-
-function ReasonPopover({
-    triggerLabel,
-    confirmLabel,
-    placeholder,
-    variant,
-    disabled,
-    onConfirm,
-}: {
-    triggerLabel: string;
-    confirmLabel: string;
-    placeholder: string;
-    variant?: 'outline' | 'destructive';
-    disabled: boolean;
-    onConfirm: (reason: string) => void;
-}) {
-    const [open, setOpen] = useState(false);
-    const [reason, setReason] = useState('');
-
-    return (
-        <Popover open={open} onOpenChange={setOpen}>
-            <PopoverTrigger asChild>
-                <Button size="sm" variant={variant ?? 'outline'}>{triggerLabel}</Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-64 space-y-2" align="end">
-                <Textarea
-                    placeholder={placeholder}
-                    value={reason}
-                    onChange={(e) => setReason(e.target.value)}
-                    className="text-xs min-h-16"
-                />
-                <Button
-                    size="sm"
-                    variant={variant ?? 'default'}
-                    className="w-full"
-                    disabled={disabled}
-                    onClick={() => { onConfirm(reason); setOpen(false); setReason(''); }}
-                >
-                    {disabled ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : confirmLabel}
-                </Button>
-            </PopoverContent>
-        </Popover>
-    );
-}
 
 function ConnectionRowActions({
     connection,

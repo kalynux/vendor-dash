@@ -95,9 +95,35 @@ export interface BankDetails {
   country: string;
 }
 
+/**
+ * A card payout destination — Visa, Mastercard and friends.
+ *
+ * The API never accepts (and never stores) a card number or a CVV: sending one
+ * is a `400`, not a silent drop. A destination is brand + last 4 + holder +
+ * expiry, plus an optional gateway token for a future automated push-to-card.
+ * See api-doc/vendor/payout-methods.md#card.
+ */
+export interface CardPayoutDetails {
+  /** Lower-case network name — `visa`, `mastercard`, `amex`, … */
+  brand: string;
+  last4: string;
+  card_holder_name: string;
+  expiry_month: number;
+  expiry_year: number;
+  country: string;
+  issuing_bank?: string | null;
+  /** Write-only; the gateway that issued `gateway_token`. Never returned. */
+  gateway_provider?: string | null;
+  /** Write-only; the gateway's handle for this card. Never returned. */
+  gateway_token?: string | null;
+  /** Read-only, server-rendered (`•••• •••• •••• 4242`). Never sent back. */
+  number_masked?: string;
+}
+
 export type PayoutDetails =
-  | { method: 'mobile_money'; mobile_money: MobileMoneyDetails; bank?: null }
-  | { method: 'bank'; bank: BankDetails; mobile_money?: null };
+  | { method: 'mobile_money'; mobile_money: MobileMoneyDetails; bank?: null; card?: null }
+  | { method: 'bank'; bank: BankDetails; mobile_money?: null; card?: null }
+  | { method: 'card'; card: CardPayoutDetails; mobile_money?: null; bank?: null };
 
 export interface VendorRoleEntity {
   _id: string;

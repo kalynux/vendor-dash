@@ -119,6 +119,8 @@ export const products = {
             'Les clients ne voient une remise que si ce montant est supérieur au prix.',
         unlimitedStock: 'Stock illimité',
         unlimitedStockHint: 'Ne s’épuise jamais.',
+        unlimitedStockLockedHint:
+            'Une agence entrepose ce produit, et un entrepôt détient une quantité chiffrée. Remettez le retrait à votre propre adresse pour utiliser le stock illimité.',
         moreOptions: 'Plus d’options',
         skuPlaceholderEdit: 'SKU du produit',
         skuPlaceholderCreate: 'Laissez vide pour en générer un automatiquement',
@@ -324,6 +326,8 @@ export const products = {
         noDefaultVariant: 'Une variante par défaut doit être définie',
         noAgency: 'Une agence de livraison doit être attribuée avant la publication',
         noPickupLocation: 'Un point de retrait doit être défini avant la publication',
+        agencyStorageInfiniteStock:
+            'Désactivez le stock illimité sur chaque variante active — un produit entreposé chez une agence a besoin d’une quantité chiffrée',
         cannotPublishTitle: 'Publication impossible pour l’instant',
         cannotPublishDescription: 'Corrigez les points suivants avant de publier <0>{{name}}</0> :',
     },
@@ -395,6 +399,15 @@ export const products = {
             'Indexez ce produit pour que les clients le trouvent via la recherche IA. S’applique une fois le produit actif et complet.',
         suspendedNotice:
             'Ce produit est suspendu à cause d’un problème d’agence de livraison. Vous pouvez toujours le modifier — lui attribuer une agence opérationnelle ci-dessous le rétablit automatiquement.',
+
+        stockQueued:
+            'Enregistré. La modification de stock ({{from}} → {{to}}) est en attente de validation de l’agence de stockage.',
+        stockQueuedNotice: '{{from}} → {{to}} · en attente de validation de l’agence',
+        stockQueuedHint:
+            'Une agence entrepose ce produit : la quantité ci-dessus est donc celle qu’elle a enregistrée tant que votre modification n’est pas validée.',
+        viewStockRequest: 'Voir la demande',
+        withdrawStockRequest: 'Retirer',
+        stockRequestWithdrawn: 'Demande retirée — vous pouvez proposer une nouvelle quantité.',
     },
 
     digital: {
@@ -485,9 +498,26 @@ export const products = {
         pickupNoSources:
             '{{name}} ne prend en charge ni la collecte à votre adresse ni le stockage en agence. Choisissez une autre agence.',
         pickupWarehoused: '{{name}} entrepose déjà le stock de ce produit.',
+        pickupAddressMissing:
+            'L’adresse de collecte de ce produit n’existe plus. Choisissez-en une autre avant de publier.',
         addressPlaceholder: 'Sélectionnez une adresse professionnelle',
         noAddresses: 'Vous n’avez encore aucune adresse professionnelle.',
         goToAddresses: 'Aller à Compte → Adresses',
+        depotPlaceholder: 'Quel entrepôt détient ce stock ?',
+        depotDefaultSuffix: 'par défaut',
+        depotPrimaryName: 'Siège principal',
+        depotBranchName: 'Agence {{number}}',
+        loadingDepots: 'Chargement des entrepôts…',
+        depotsUnavailable:
+            'Impossible de charger les entrepôts de cette agence pour le moment. Votre choix actuel reste inchangé — réessayez dans un instant.',
+        noDepots: '{{name}} n’a encore aucun entrepôt enregistré.',
+        depotRemoved:
+            'L’entrepôt que vous aviez choisi n’est plus exploité par cette agence. La collecte se fait désormais depuis son entrepôt principal — choisissez-en un autre si cela ne convient pas.',
+        storageNeedsCountableStock:
+            'Un entrepôt détient une quantité chiffrée : le stockage en agence est donc indisponible tant que {{skus}} est en stock illimité. Désactivez le stock illimité et saisissez une quantité.',
+        storageInfiniteLive:
+            'Ce produit est stocké chez une agence mais {{skus}} est en stock illimité. Il ne pourra plus être publié tant que vous ne l’aurez pas désactivé.',
+        storageSkusMore: '{{skus}} et {{count}} de plus',
         guidance: {
             multipleAddressesTitle: 'À quelle adresse le coursier doit-il venir ?',
             multipleAddressesBody:
@@ -669,6 +699,10 @@ export const products = {
         mediaSaved: 'Médias enregistrés.',
         optionsSaved: 'Options enregistrées.',
         variantsSaved: 'Variantes enregistrées.',
+        variantsSavedStockQueued: plural({
+            one: 'Variantes enregistrées. {{count}} modification de stock est en attente de validation de l’agence de stockage.',
+            other: 'Variantes enregistrées. {{count}} modifications de stock sont en attente de validation de l’agence de stockage.',
+        }),
         formatsSaved: 'Formats enregistrés.',
         agencyUpdated: 'Agence de livraison mise à jour.',
         agencyDefault: 'Utilisation de votre agence de livraison par défaut.',

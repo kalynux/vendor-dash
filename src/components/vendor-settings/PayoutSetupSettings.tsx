@@ -4,7 +4,6 @@ import { toast } from 'sonner';
 import { useOnboarding } from '@/onboarding/store/onboarding.store';
 import { type Step1FormValues } from '@/onboarding/schemas/onboarding.schemas';
 import { BasicSetupFields } from '@/components/vendor-settings/forms/BasicSetupFields';
-import { emptyMobileMoneyEntry } from '@/components/vendor-settings/forms/basicSetup.helpers';
 import { mapProfileError } from '@/components/vendor-settings/errors';
 import { UnsavedChangesBar } from '@/components/vendor-settings/UnsavedChangesBar';
 import { SettingsSection } from '@/components/vendor-settings/SettingsSection';
@@ -59,9 +58,10 @@ export function PayoutSetupSettings() {
     const defaultValues: Step1FormValues = {
         country: roleEntity.country ?? '',
         timezone: roleEntity.timezone ?? '',
-        payout_details: roleEntity.payout_details?.length
-            ? (roleEntity.payout_details as Step1FormValues['payout_details'])
-            : [emptyMobileMoneyEntry()],
+        // Empty list rather than a blank entry — the methods editor shows its own
+        // empty state, and a half-built row would only read as broken.
+        payout_details: (roleEntity.payout_details ??
+            []) as Step1FormValues['payout_details'],
     };
 
     return (

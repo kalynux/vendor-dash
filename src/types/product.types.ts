@@ -4,6 +4,7 @@ import type { ApiFile, FileRef } from '@/types/file.types';
 // Service variants carry serviceConfig. Type-only import (erased at compile) —
 // no runtime circular dependency with services.types.
 import type { ServiceConfig } from '@/types/services.types';
+import type { StockAdjustmentMeta } from '@/types/stock-requests.types';
 
 export type ApiProductType = 'physical' | 'digital';
 
@@ -32,12 +33,61 @@ export interface ApiPickupLocation {
   source: PickupLocationSource;
   /** Required (must match a business_addresses._id) when source is 'vendor_address'; null/omitted for 'agency_storage'. */
   vendorAddressId: string | null;
+  /**
+   * Which of the agency's depots warehouses this product, when source is
+   * 'agency_storage' (omit for 'vendor_address'). Options come from
+   * `GET /vendor/delivery-agencies/:agencyId/locations`.
+   *
+   * **`null` is meaningful, not "unset": it means the agency's *primary*
+   * depot**, and keeps tracking it if the agency reorders its locations.
+   * Storing the primary's id instead pins that specific depot. Never pre-fill
+   * this with the primary's id on the vendor's behalf — those are two different
+   * intents. See api-doc/vendor/products.md#update-product.
+   */
+  agencyAddressId?: string | null;
 }
 
 export interface ApiProductDelivery {
   agencyId: string | null;
   freeDelivery: boolean;
   pickupLocation?: ApiPickupLocation | null;
+}
+
+/** Resolved address on `ApiProductPickup` — the standard address shape. */
+export interface ApiPickupAddress {
+  label: string | null;
+  formattedAddress: string | null;
+  addressLine1: string | null;
+  addressLine2: string | null;
+  city: string | null;
+  state: string | null;
+  country: string | null;
+  coordinates: { lat: number; lng: number } | null;
+}
+
+/**
+ * Read-only mirror of `delivery.pickupLocation` on product **detail** responses,
+ * with the referenced address resolved so the current choice can be labelled
+ * without a second request. `null` when the product has no pickup location
+ * (digital, service, or an unconfigured physical product).
+ *
+ * `delivery.pickupLocation` keeps the raw ids — round-trip *that* object on a
+ * PATCH, not this one.
+ */
+export interface ApiProductPickup {
+  source: PickupLocationSource;
+  vendorAddressId: string | null;
+  /** `null` = the agency's primary depot. */
+  agencyAddressId: string | null;
+  /** `null` when the referenced address no longer exists (e.g. a deleted business address). */
+  address: ApiPickupAddress | null;
+  /**
+   * `true` when `address` is the agency's **primary** depot standing in — either
+   * because no depot was chosen or because the chosen one has since been
+   * deleted. Worth surfacing: the address shown is a default, not a pick.
+   * Always `false` for `vendor_address`.
+   */
+  isPrimaryFallback: boolean;
 }
 
 // ─── API Response Shapes ──────────────────────────────────────────────────────
@@ -110,6 +160,8 @@ export interface ApiProduct {
   vectorisedDataId?: string | null;
   // Physical products only — nested delivery config (agency assignment)
   delivery?: ApiProductDelivery;
+  // Detail responses only — `delivery.pickupLocation` with its address resolved.
+  pickup?: ApiProductPickup | null;
 }
 
 export interface VectorisationStatusDto {
@@ -406,7 +458,15 @@ export type SimpleProductData = ApiProductDetail & {
 export interface SimpleProductResponse {
   success: true;
   data: SimpleProductData;
-  meta?: { activation: SimpleActivationMeta };
+  meta?: {
+    activation: SimpleActivationMeta;
+    /**
+     * Present only when the product is agency-warehoused and the body carried a
+     * quantity: `data.defaultVariant.stock` is then the OLD number and the change
+     * is queued for the agency's approval. See api-doc/vendor/simple-products.md.
+     */
+    stockAdjustment?: StockAdjustmentMeta;
+  };
   message?: string;
 }
 
@@ -494,6 +554,14 @@ export interface VariantListResponse {
 export interface VariantDetailResponse {
   success: boolean;
   data: ApiVariant;
+  /**
+   * Present only when the product is agency-warehoused: `stock`/`isInfiniteStock`
+   * were stripped from the write and queued as a stock request, so `data.stock`
+   * is the OLD quantity. Every other field in the same PATCH applied normally.
+   * Still a 200, not a 202 — you have to read the body either way.
+   * See api-doc/vendor/variants.md.
+   */
+  meta?: { stockAdjustment?: StockAdjustmentMeta };
   message?: string;
 }
 
@@ -685,6 +753,13 @@ export interface VendorAgencyListItemDto {
   logo: FileRef | null;
   kycVerified: boolean;
   headquartersAddress: VendorAgencyHQAddressDto | null;
+  /**
+   * ISO-2 country the agency operates in (e.g. `"CM"`), set once at their
+   * onboarding. What scopes `coverageAreas` to a region catalogue.
+   * `null` on legacy agencies.
+   */
+  country: string | null;
+  /** Region keys from `locations.json`, always within `country`. */
   coverageAreas: string[];
   rating: number | null;
   policies: VendorAgencyPolicySummaryDto | null;
@@ -714,4 +789,34 @@ export interface DeliveryAgenciesQueryParams {
   search?: string;
   region?: string;
   hq_city?: string;
+}
+
+/**
+ * One physical location (depot / warehouse) an agency operates, from
+ * `GET /vendor/delivery-agencies/:agencyId/locations`. Its `id` is what goes
+ * into `delivery.pickupLocation.agencyAddressId`.
+ *
+ * Unlike the agency listing — which only ever exposes the primary HQ — this
+ * endpoint is gated on an **active connection** with the agency, matching the
+ * gate on setting a product-level agency override. Per-location support
+ * contacts are never returned.
+ */
+export interface AgencyLocationDto {
+  id: string;
+  /** The agency's own name for the location. `null` on entries saved before labels existed. */
+  label: string | null;
+  /** Derived from the entry's geocode; `null` when it resolves none (rural / landmark). */
+  region: string | null;
+  /** Derived from the entry's geocode; `null` when it resolves none. */
+  city: string | null;
+  /** Always present — use it when `region`/`city` are null. */
+  addressDescription: string;
+  /** `true` for the agency's primary depot (the first entry). */
+  isPrimary: boolean;
+}
+
+/** Unpaginated on purpose — an agency has a handful of locations. */
+export interface GetAgencyLocationsResponse {
+  success: true;
+  data: AgencyLocationDto[];
 }

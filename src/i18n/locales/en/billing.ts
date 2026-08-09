@@ -119,9 +119,10 @@ export const billing = {
         removeDescription: "{{label}} will be removed. This can't be undone.",
         addTitle: 'Add payment method',
         addDescription: 'Save a method to speed up checkout. We never store full card numbers or CVV.',
-        type: 'Type',
+        type: 'Payment method',
         phone: 'Mobile money number',
-        operator: 'Operator',
+        /** Which gateway will hold the token — a processor detail, not the brand. */
+        processedBy: 'Processed by',
         holderNameOptional: 'Account holder name (optional)',
         holderNamePlaceholder: 'Account holder',
         cardHolderName: 'Card holder name',
@@ -149,19 +150,12 @@ export const billing = {
         card: 'Visa, Mastercard & more — charged in USD',
     },
 
-    operator: {
-        MTN: 'MTN Mobile Money',
-        ORANGE: 'Orange Money',
-        MOOV: 'Moov Money',
-    },
-
     /** The plan / credit checkout dialog. */
     checkout: {
         savedMethods: 'Payment method',
         newMethod: 'New',
         payWith: 'Pay with',
         phone: 'Mobile money number',
-        operator: 'Operator',
         usdNotice:
             'Card payments are processed in USD; your bank may apply its own conversion. ' +
             "We'll show the exact dollar amount on the next step.",

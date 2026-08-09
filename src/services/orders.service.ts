@@ -59,6 +59,7 @@ interface ApiOrderDelivery {
   agencyPhone?: string;
   deliveryStatus?: string;
   shipmentId?: string;
+  /** Platform-generated `ACR-YYMMDD-HHMMSS-XXXXX`; `null` only on legacy shipments. */
   trackingNumber?: string | null;
   /** Snapshot of the product's `delivery.freeDelivery` flag at checkout time. */
   freeDelivery?: boolean;

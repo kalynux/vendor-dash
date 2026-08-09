@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { CreditCard, Smartphone, Plus, Trash2, Star, Loader2, AlertCircle } from 'lucide-react';
+import { Plus, Trash2, Star, Loader2, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { SettingsSection } from '@/components/vendor-settings/SettingsSection';
 import { Button } from '@/components/ui/button';
@@ -20,6 +20,7 @@ import {
   setDefaultPaymentMethod,
   deletePaymentMethod,
 } from '@/services/payment-methods.service';
+import { PaymentBrandLogo, brandForSavedMethod } from '@/components/payment-methods';
 import { useTranslation, useApiError } from '@/i18n';
 import { CardSkeleton } from './BillingSkeletons';
 import { methodTypeLabel } from './billing.constants';
@@ -125,13 +126,8 @@ export function SavedPaymentMethodsCard() {
           <ul className="divide-y">
             {methods.map((m) => (
               <li key={m.id} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border bg-muted/40">
-                  {m.method_type === 'card' ? (
-                    <CreditCard className="h-5 w-5 text-muted-foreground" />
-                  ) : (
-                    <Smartphone className="h-5 w-5 text-muted-foreground" />
-                  )}
-                </div>
+                {/* The brand is spelled out in `display_label` next to it. */}
+                <PaymentBrandLogo brand={brandForSavedMethod(m)} size="md" decorative />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <span className="truncate font-medium">{m.display_label}</span>

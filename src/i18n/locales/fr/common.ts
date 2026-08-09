@@ -264,6 +264,8 @@ export const common = {
         resolveFailed: 'Impossible de convertir votre position en adresse.',
         permissionDenied: 'Autorisation de localisation refusée.',
         searchUnavailable: 'La recherche d’adresse est indisponible pour le moment.',
+        pinnedAt: 'Position fixée à {{lat}}, {{lng}}',
+        clearPinned: 'Supprimer l’emplacement fixé',
     },
 
     a11y: {

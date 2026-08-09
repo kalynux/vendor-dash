@@ -6,7 +6,6 @@ import { OnboardingLayout } from '@/onboarding/OnboardingLayout';
 import { type Step1FormValues } from '@/onboarding/schemas/onboarding.schemas';
 import { useOnboarding } from '@/onboarding/store/onboarding.store';
 import { BasicSetupFields } from '@/components/vendor-settings/forms/BasicSetupFields';
-import { emptyMobileMoneyEntry } from '@/components/vendor-settings/forms/basicSetup.helpers';
 import { Button } from '@/components/ui/button';
 import { useTranslation, useApiError } from '@/i18n';
 
@@ -19,13 +18,15 @@ export function Step1BasicSetup() {
     const roleEntity = session?.role_entity;
     const draft = drafts.basicSetup;
 
-    // Pre-population priority: draft → session role_entity → empty defaults
+    // Pre-population priority: draft → session role_entity → nothing.
+    // Nothing means an empty list, not a blank entry: the methods editor has an
+    // empty state of its own, and a half-built row would only read as broken.
     const defaultPayoutDetails = (): Step1FormValues['payout_details'] => {
         if (draft?.payout_details?.length) return draft.payout_details;
         if (roleEntity?.payout_details?.length) {
             return roleEntity.payout_details as Step1FormValues['payout_details'];
         }
-        return [emptyMobileMoneyEntry()];
+        return [];
     };
 
     const defaultValues: Step1FormValues = {

@@ -4,7 +4,7 @@ import { toast } from 'sonner';
 
 import { searchAddresses, reverseGeocode } from '@/services/geo.service';
 import { useTranslation, useApiError } from '@/i18n';
-import type { GeoAddressCandidate } from '@/types/geo.types';
+import type { GeoAddress, GeoAddressCandidate } from '@/types/geo.types';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -15,9 +15,19 @@ const MIN_QUERY = 3;
 interface AddressSearchProps {
   /** Called with the picked candidate and the raw query the user typed. */
   onSelect: (candidate: GeoAddressCandidate, rawInput: string) => void;
+  /**
+   * The address already pinned on this row. Rendered as a confirmation panel
+   * under the box so the vendor can see which place the coordinates belong to —
+   * the search field itself always clears after a pick.
+   */
+  value?: GeoAddress | GeoAddressCandidate | null;
+  /** Clears the pinned address. Omit to render the panel without a clear button. */
+  onClear?: () => void;
   /** ISO-2 country code(s) to bias results (e.g. the vendor's country). */
   countryBias?: string | null;
   placeholder?: string;
+  /** Marks the box when the surrounding form is blocked on a missing pin. */
+  hasError?: boolean;
   className?: string;
 }
 
@@ -28,7 +38,15 @@ interface AddressSearchProps {
  * degrade gracefully (a hint, never a block — the vendor can still type manually).
  * Also offers "use my location" via reverse geocoding.
  */
-export function AddressSearch({ onSelect, countryBias, placeholder, className }: AddressSearchProps) {
+export function AddressSearch({
+  onSelect,
+  value = null,
+  onClear,
+  countryBias,
+  placeholder,
+  hasError,
+  className,
+}: AddressSearchProps) {
   const { t } = useTranslation();
   const apiError = useApiError();
   const [query, setQuery] = useState('');
@@ -125,7 +143,7 @@ export function AddressSearch({ onSelect, countryBias, placeholder, className }:
   }, [onSelect]);
 
   return (
-    <div ref={containerRef} className={cn('relative', className)}>
+    <div ref={containerRef} className={cn('relative space-y-2', className)}>
       <div className="flex items-center gap-2">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -146,7 +164,8 @@ export function AddressSearch({ onSelect, countryBias, placeholder, className }:
             onChange={(e) => setQuery(e.target.value)}
             onFocus={() => results.length && setOpen(true)}
             placeholder={placeholder ?? 'Search an address…'}
-            className="h-10 pl-10 pr-9"
+            className={cn('h-10 pl-10 pr-9', hasError && 'border-destructive')}
+            aria-invalid={hasError}
           />
         </div>
         <Button
@@ -163,7 +182,7 @@ export function AddressSearch({ onSelect, countryBias, placeholder, className }:
         </Button>
       </div>
 
-      {hint && <p className="mt-1 text-xs text-muted-foreground">{hint}</p>}
+      {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
 
       {open && results.length > 0 && (
         <ul className="absolute z-50 mt-1 max-h-64 w-full overflow-auto rounded-lg border bg-popover p-1 shadow-md">
@@ -175,7 +194,14 @@ export function AddressSearch({ onSelect, countryBias, placeholder, className }:
                 className="flex w-full items-start gap-2 rounded-md px-2 py-2 text-left text-sm hover:bg-accent"
               >
                 <MapPin className="mt-0.5 h-4 w-4 flex-shrink-0 text-muted-foreground" />
-                <span className="min-w-0">{r.formatted_address}</span>
+                <span className="min-w-0">
+                  <span className="block">{r.formatted_address}</span>
+                  {(r.components?.city || r.components?.region) && (
+                    <span className="block text-xs text-muted-foreground">
+                      {[r.components?.city, r.components?.region].filter(Boolean).join(', ')}
+                    </span>
+                  )}
+                </span>
               </button>
             </li>
           ))}
@@ -183,7 +209,34 @@ export function AddressSearch({ onSelect, countryBias, placeholder, className }:
       )}
 
       {open && !loading && query.trim().length >= MIN_QUERY && results.length === 0 && !hint && (
-        <p className="mt-1 text-xs text-muted-foreground">{t('common.address.noMatches')}</p>
+        <p className="text-xs text-muted-foreground">{t('common.address.noMatches')}</p>
+      )}
+
+      {/* The pin that is actually stored — the coordinate delivery agencies route
+          to, so it stays on screen rather than living in a one-line "pinned" note. */}
+      {value && (
+        <div className="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 dark:border-emerald-900 dark:bg-emerald-950/40">
+          <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm">{value.formatted_address}</p>
+            <p className="text-[11px] text-muted-foreground">
+              {t('common.address.pinnedAt', {
+                lat: value.coordinates.coordinates[1].toFixed(4),
+                lng: value.coordinates.coordinates[0].toFixed(4),
+              })}
+            </p>
+          </div>
+          {onClear && (
+            <button
+              type="button"
+              aria-label={t('common.address.clearPinned')}
+              onClick={onClear}
+              className="shrink-0 text-muted-foreground transition-colors hover:text-destructive"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
       )}
     </div>
   );

@@ -16,6 +16,10 @@ interface ResponsiveModalProps {
   footer?: React.ReactNode;
   /** Desktop popup max-width utility (e.g. `sm:max-w-2xl`). */
   desktopClassName?: string;
+  /** Mobile sheet panel override — e.g. `h-auto max-h-[92dvh]` for a short form. */
+  mobileClassName?: string;
+  /** Footer row override, e.g. `flex-col-reverse` to float the primary action. */
+  footerClassName?: string;
   /** When true the modal can't be dismissed by overlay/escape (e.g. while saving). */
   disableClose?: boolean;
 }
@@ -26,7 +30,8 @@ interface ResponsiveModalProps {
  * while the body scrolls, so tabbed forms keep their actions in view.
  */
 export function ResponsiveModal({
-  open, onOpenChange, title, description, children, footer, desktopClassName = 'sm:max-w-lg', disableClose,
+  open, onOpenChange, title, description, children, footer,
+  desktopClassName = 'sm:max-w-lg', mobileClassName, footerClassName, disableClose,
 }: ResponsiveModalProps) {
   const isMobile = useIsMobile();
 
@@ -40,7 +45,7 @@ export function ResponsiveModal({
       <Sheet open={open} onOpenChange={handleOpenChange}>
         <SheetContent
           side="bottom"
-          className="flex h-[92vh] flex-col gap-0 rounded-t-2xl p-0"
+          className={cn('flex h-[92vh] flex-col gap-0 rounded-t-2xl p-0', mobileClassName)}
           onInteractOutside={(e) => disableClose && e.preventDefault()}
           onEscapeKeyDown={(e) => disableClose && e.preventDefault()}
         >
@@ -49,7 +54,11 @@ export function ResponsiveModal({
             {description && <SheetDescription>{description}</SheetDescription>}
           </SheetHeader>
           <SheetBody className="p-4">{children}</SheetBody>
-          {footer && <SheetFooter className="border-t">{footer}</SheetFooter>}
+          {footer && (
+            <SheetFooter className={cn('border-t pb-[calc(1rem+env(safe-area-inset-bottom))]', footerClassName)}>
+              {footer}
+            </SheetFooter>
+          )}
         </SheetContent>
       </Sheet>
     );
@@ -68,7 +77,12 @@ export function ResponsiveModal({
         </DialogHeader>
         <div className="min-h-0 flex-1 overflow-y-auto p-4">{children}</div>
         {footer && (
-          <div className="flex flex-col-reverse gap-2 border-t p-4 sm:flex-row sm:justify-end">
+          <div
+            className={cn(
+              'flex flex-col-reverse gap-2 border-t p-4 sm:flex-row sm:justify-end',
+              footerClassName,
+            )}
+          >
             {footer}
           </div>
         )}

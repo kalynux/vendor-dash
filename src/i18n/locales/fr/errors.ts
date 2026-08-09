@@ -87,17 +87,30 @@ export const errors = {
                 "Ce point de retrait n'est pas valide pour l'agence de livraison qui gère ce produit.",
             CATALOG_PRODUCT_NO_DEFAULT_VARIANT:
                 "Ce produit a perdu sa variante. Ouvrez-le dans l'éditeur avancé pour la rétablir.",
+            CATALOG_PRODUCT_AGENCY_STORAGE_INFINITE_STOCK:
+                "Ce produit est stocké chez une agence : il lui faut donc une quantité chiffrée. Désactivez le stock illimité, ou remettez le retrait à votre propre adresse.",
         },
 
         delivery: {
             CATALOG_PRODUCT_INVALID_PICKUP_LOCATION:
                 "Ce point de retrait n'est pas valide pour l'agence de livraison assignée, ou son adresse professionnelle n'existe plus.",
+            CATALOG_PRODUCT_AGENCY_STORAGE_INFINITE_STOCK:
+                "Impossible de stocker ce produit chez l'agence tant qu'une variante est en stock illimité. Désactivez le stock illimité et saisissez une quantité.",
             CATALOG_PRODUCT_VECTORISATION_PENDING:
                 'Ce produit fait actuellement l’objet de traitements en arrière-plan. Réessayez dans quelques secondes.',
             CATALOG_PRODUCT_VECTORISATION_NOT_ELIGIBLE:
                 "Ce produit n'est pas éligible à l'indexation pour la recherche IA. Il doit être actif, avoir l'indexation activée, et disposer d'un titre, d'une description et d'une catégorie.",
             CONNECTION_NOT_ACTIVE:
                 "Vous avez besoin d'une connexion active et approuvée avec cette agence avant de pouvoir l'assigner. Envoyez ou vérifiez d'abord votre demande de connexion.",
+        },
+
+        stockRequest: {
+            STOCK_REQUEST_NOT_PENDING:
+                "Quelqu'un a répondu à cette demande avant vous. Nous l'avons rechargée — vérifiez le résultat avant d'en proposer une autre.",
+            STOCK_REQUEST_NOT_YOURS:
+                "Ce bouton n'était plus à jour. Nous avons actualisé les actions disponibles ici.",
+            STOCK_REQUEST_ALREADY_PENDING:
+                "Une demande de stock est déjà ouverte sur ce SKU. Retirez la vôtre, ou répondez à la leur, avant d'en proposer une autre.",
         },
 
         earnings: {
@@ -462,6 +475,19 @@ export const errors = {
         CATALOG_VARIANT_RESERVATION_CONFLICT: 'Ce stock a changé pendant votre modification. Actualisez puis réessayez.',
         CATALOG_VARIANT_RESERVATION_NOT_FOUND: 'Cette réservation de stock est introuvable.',
         CATALOG_VARIANT_SKU_EXISTS: 'Ce SKU est déjà utilisé par une autre variante.',
+
+        // ── Stockage en agence : produits entreposés et demandes de stock ─────
+        INVENTORY_PRODUCT_NOT_STORED_HERE:
+            "Ce produit n'est pas entreposé par une agence de livraison : son stock se modifie directement.",
+        STOCK_REQUEST_NOT_FOUND: 'Cette demande de stock est introuvable.',
+        STOCK_REQUEST_ALREADY_PENDING: 'Une demande de stock est déjà ouverte pour cette variante.',
+        STOCK_REQUEST_NOT_PENDING: 'Cette demande de stock a déjà été traitée.',
+        STOCK_REQUEST_NOT_YOURS: "Vous ne pouvez pas effectuer cette action sur cette demande de stock.",
+        STOCK_REQUEST_STALE:
+            "Ce produit n'est plus entreposé par cette agence : la demande ne s'applique plus.",
+        STOCK_REQUEST_NO_CHANGE: 'C’est déjà la quantité enregistrée.',
+        CATALOG_PRODUCT_AGENCY_STORAGE_INFINITE_STOCK:
+            "Un produit entreposé chez une agence a besoin d'une quantité chiffrée. Désactivez le stock illimité sur chaque variante active.",
 
         // ── Catalogue : options ───────────────────────────────────────────────
         CATALOG_OPTION_NOT_FOUND: 'Cette option est introuvable.',

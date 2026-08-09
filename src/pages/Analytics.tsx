@@ -37,16 +37,17 @@ function MetricCard({ title, value, change, changeType, icon: Icon }: MetricCard
   return (
     <div className="animate-fade-in h-full">
       <Card className="hover:shadow-lg transition-shadow h-full">
-        <CardContent className="p-3 sm:p-6">
+        {/* Mobile keeps its `p-3` gutters — useTwoUpMetrics measures against them. */}
+        <CardContent className="p-3 sm:p-4">
           <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0 space-y-1 sm:space-y-2">
+            <div className="min-w-0 space-y-1 sm:space-y-1.5">
               {/* On phones the icon rides inline with the label — the badge on the
                   right needs width a half-width tile can't spare. */}
-              <p className="flex items-start gap-1.5 text-xs sm:text-sm font-medium text-muted-foreground leading-tight">
+              <p className="flex items-start gap-1.5 text-xs font-medium text-muted-foreground leading-tight">
                 <Icon className="w-3.5 h-3.5 mt-px flex-shrink-0 sm:hidden" />
                 {title}
               </p>
-              <p className={cn(METRIC_VALUE_CLASS, 'sm:text-2xl')}>{value}</p>
+              <p className={cn(METRIC_VALUE_CLASS, 'sm:text-xl sm:leading-tight')}>{value}</p>
               <div className="flex items-center gap-1">
                 {changeType === 'increase' ? (
                   <TrendingUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-green-500 flex-shrink-0" />
@@ -55,7 +56,7 @@ function MetricCard({ title, value, change, changeType, icon: Icon }: MetricCard
                 ) : null}
                 <span
                   className={cn(
-                    'text-xs sm:text-sm font-medium',
+                    'text-xs font-medium',
                     changeType === 'increase' && 'text-green-500',
                     changeType === 'decrease' && 'text-red-500',
                     changeType === 'neutral' && 'text-muted-foreground'
@@ -63,13 +64,13 @@ function MetricCard({ title, value, change, changeType, icon: Icon }: MetricCard
                 >
                   {change > 0 ? '+' : ''}{change}%
                 </span>
-                <span className="hidden sm:inline text-sm text-muted-foreground">
+                <span className="hidden sm:inline text-xs text-muted-foreground">
                   {t('overview.metrics.vsLastPeriod')}
                 </span>
               </div>
             </div>
-            <div className="hidden sm:block p-3 bg-primary/10 rounded-lg flex-shrink-0">
-              <Icon className="w-5 h-5 text-primary" />
+            <div className="hidden sm:flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+              <Icon className="w-4 h-4 text-primary" />
             </div>
           </div>
         </CardContent>

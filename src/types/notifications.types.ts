@@ -1,7 +1,7 @@
 // Notification settings — mirrors `GET/PATCH /api/vendor/notification-preferences`.
 // See api-doc/vendor/notifications.md.
 
-/** The eleven subscribable events (`preferences.*` keys). See api-doc/vendor/notifications.md. */
+/** The twelve subscribable events (`preferences.*` keys). See api-doc/vendor/notifications.md. */
 export type NotificationEventKey =
   | 'orderCreated'
   | 'orderCancelled'
@@ -9,11 +9,17 @@ export type NotificationEventKey =
   | 'bookingCancelled'
   | 'paymentReceivedPartial'
   | 'paymentReceivedFull'
+  /** Your MEDIA-FILE quota. Unrelated to `agencyStorageUpdates` below. */
   | 'storageAlert'
   | 'connectionUpdated'
   | 'payoutUpdates'
   | 'shipmentRejected'
-  | 'planUpdates';
+  | 'planUpdates'
+  /**
+   * Physical goods an agency warehouses for you: stock requests, depot moves,
+   * and storage suspensions. Shares only a word with `storageAlert`.
+   */
+  | 'agencyStorageUpdates';
 
 export type NotificationEventPreferences = Record<NotificationEventKey, boolean>;
 
@@ -83,17 +89,32 @@ export type NotificationType =
   // Billing: the vendor's plan is nearing expiry or has expired (handed over to a
   // queued plan, or downgraded to free `starter`). `aggregateType` is `plan`.
   | 'plan.expiring'
-  | 'plan.expired';
+  | 'plan.expired'
+  // A stock change on a SKU an agency warehouses for you — the agency proposed
+  // one (yours to answer), or answered one you proposed. `aggregateType` is
+  // `stock_request`, `aggregateId` the request id. Nothing fires for `withdrawn`.
+  | 'storage.stock_request.received'
+  | 'storage.stock_request.approved'
+  | 'storage.stock_request.rejected'
+  // What the storage agency did ALONE to a product it warehouses. There is
+  // nothing to approve, but a suspension takes the product OFF the storefront
+  // and the agency's note is the only explanation. `aggregateType` is `product`.
+  | 'storage.depot_changed'
+  | 'storage.product_suspended'
+  | 'storage.product_unsuspended';
 
 /** Entity kind a notification points at, for deep-linking. */
 export type NotificationAggregateType =
   | 'order'
   | 'booking'
   | 'payment'
+  /** The media-file quota — NOT agency warehousing (that is `stock_request`/`product`). */
   | 'storage'
   | 'connection'
   | 'payout'
-  | 'plan';
+  | 'plan'
+  | 'stock_request'
+  | 'product';
 
 /** Channels a notification was actually delivered on. */
 export type DeliveredVia = 'in-app' | 'push' | 'telegram' | 'email' | 'whatsapp';

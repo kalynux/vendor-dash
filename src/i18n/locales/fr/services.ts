@@ -242,6 +242,11 @@ export const services = {
     bookings: {
         filterTitle: 'Filtrer les réservations',
         applyFilters: 'Afficher les réservations',
+        searchPlaceholder: 'Rechercher par service, e-mail client ou ID de réservation',
+        searchPlaceholderShort: 'Rechercher…',
+        searchScopeNote:
+            'La recherche porte sur vos {{count}} réservations les plus récentes. Ajoutez un '
+            + 'filtre de statut ou de paiement pour remonter plus loin.',
         statusSection: 'Statut de la réservation',
         anyStatus: 'Tous les statuts',
         paymentSection: 'Statut du paiement',
@@ -253,6 +258,10 @@ export const services = {
         emptyTitle: 'Aucune réservation',
         emptyDescription:
             'Les réservations apparaissent ici dès qu’un client réserve un créneau pour vos services.',
+        emptyFilteredTitle: 'Aucune réservation correspondante',
+        emptyFilteredDescription:
+            'Rien ne correspond à votre recherche ni à vos filtres. Essayez un autre terme ou '
+            + 'réinitialisez-les pour voir toutes les réservations.',
         columns: {
             service: 'Service',
             customer: 'Client',

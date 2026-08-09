@@ -11,6 +11,7 @@ import {
   CircleDollarSign,
   CheckCircle2,
   HardDrive,
+  Warehouse,
   Handshake,
   Wallet,
   CalendarClock,
@@ -121,7 +122,11 @@ const EVENTS: EventMeta[] = [
   { key: 'bookingCancelled', labelKey: 'notifications.settings.events.bookingCancelled', descriptionKey: 'notifications.settings.events.bookingCancelledHint', Icon: CalendarX2 },
   { key: 'paymentReceivedPartial', labelKey: 'notifications.settings.events.paymentReceivedPartial', descriptionKey: 'notifications.settings.events.paymentReceivedPartialHint', Icon: CircleDollarSign },
   { key: 'paymentReceivedFull', labelKey: 'notifications.settings.events.paymentReceivedFull', descriptionKey: 'notifications.settings.events.paymentReceivedFullHint', Icon: CheckCircle2 },
+  // These two share only the word "storage": `storageAlert` is the media-file
+  // quota, `agencyStorageUpdates` is physical goods in an agency's building.
+  // Kept adjacent so their labels are read against each other.
   { key: 'storageAlert', labelKey: 'notifications.settings.events.storageAlert', descriptionKey: 'notifications.settings.events.storageAlertHint', Icon: HardDrive },
+  { key: 'agencyStorageUpdates', labelKey: 'notifications.settings.events.agencyStorageUpdates', descriptionKey: 'notifications.settings.events.agencyStorageUpdatesHint', Icon: Warehouse },
   { key: 'connectionUpdated', labelKey: 'notifications.settings.events.connectionUpdated', descriptionKey: 'notifications.settings.events.connectionUpdatedHint', Icon: Handshake },
   { key: 'payoutUpdates', labelKey: 'notifications.settings.events.payoutUpdates', descriptionKey: 'notifications.settings.events.payoutUpdatesHint', Icon: Wallet },
   { key: 'shipmentRejected', labelKey: 'notifications.settings.events.shipmentRejected', descriptionKey: 'notifications.settings.events.shipmentRejectedHint', Icon: PackageX },
@@ -189,7 +194,13 @@ export function NotificationSettings() {
       const ch = deriveChannel(data);
       setChannel(ch);
       setSavedChannel(ch);
-      setEvents({ ...data.preferences });
+      // A backend that predates a key omits it, and `undefined` would render
+      // the row as off — the opposite of its documented default. Coalesce after
+      // the spread so the stored value still wins when it is present.
+      setEvents({
+        ...data.preferences,
+        agencyStorageUpdates: data.preferences.agencyStorageUpdates ?? true,
+      });
     } catch (err) {
       setLoadError(mapProfileError(err));
     } finally {

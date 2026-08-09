@@ -175,7 +175,11 @@ function DashboardShell() {
             <Route index element={<Overview />} />
             <Route path="orders" element={<Orders />} />
             <Route path="products" element={<Products />} />
+            {/* Inventory's four surfaces are sidebar sub-tabs, so each is a real
+                route. The bare path renders the page too — it redirects itself,
+                which is what carries `?view=` (and the legacy `?tab=`) across. */}
             <Route path="inventory" element={<Inventory />} />
+            <Route path="inventory/:tab" element={<Inventory />} />
             <Route path="product-upload" element={<ProductUpload />} />
             {/* Nested under the same prefixes so pathToLegacyRoute keeps
                 highlighting 'products' without needing a new entry. */}

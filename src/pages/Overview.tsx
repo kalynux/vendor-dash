@@ -52,10 +52,10 @@ function MetricCard({ title, value, change, changeType, icon: Icon, isLoading }:
   if (isLoading) {
     return (
       <Card>
-        <CardContent className="p-6">
-          <Skeleton className="h-4 w-24 mb-4" />
-          <Skeleton className="h-8 w-32 mb-2" />
-          <Skeleton className="h-4 w-20" />
+        <CardContent className="p-4">
+          <Skeleton className="h-3 w-24" />
+          <Skeleton className="mt-1.5 h-6 w-32" />
+          <Skeleton className="mt-1.5 h-4 w-20" />
         </CardContent>
       </Card>
     );
@@ -64,11 +64,11 @@ function MetricCard({ title, value, change, changeType, icon: Icon, isLoading }:
   return (
     <div>
       <Card className="group transition-all hover:shadow-lg hover:-translate-y-0.5">
-        <CardContent className="p-6">
+        <CardContent className="p-4">
           <div className="flex items-start justify-between gap-3">
-            <div className="space-y-2">
-              <p className="text-sm font-medium text-muted-foreground">{title}</p>
-              <p className="text-2xl font-display font-bold tracking-tight tabular-nums">{value}</p>
+            <div className="min-w-0 space-y-1.5">
+              <p className="truncate text-xs font-medium text-muted-foreground">{title}</p>
+              <p className="text-xl font-display font-bold leading-tight tracking-tight tabular-nums">{value}</p>
               <div className="flex items-center gap-1.5">
                 <span
                   className={cn(
@@ -88,8 +88,8 @@ function MetricCard({ title, value, change, changeType, icon: Icon, isLoading }:
                 <span className="text-xs text-muted-foreground">{t('overview.metrics.vsLastPeriod')}</span>
               </div>
             </div>
-            <div className="p-3 bg-primary/10 text-primary rounded-xl ring-1 ring-primary/10 transition-colors group-hover:bg-primary/15">
-              <Icon className="w-5 h-5" />
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/10 transition-colors group-hover:bg-primary/15">
+              <Icon className="w-4 h-4" />
             </div>
           </div>
         </CardContent>

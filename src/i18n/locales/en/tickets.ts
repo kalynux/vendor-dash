@@ -145,6 +145,8 @@ export const tickets = {
         optional: '(optional)',
         attachments: 'Attachments',
         attachmentCount: '{{used}}/{{max}} files. Photos and videos supported.',
+        attachmentLockNotice:
+            'Once the ticket is created, these files stay attached to it — they can’t be detached until the ticket is closed.',
         removeFile: 'Remove {{name}}',
         fileFallback: 'file',
         deliveryAgencyFallback: 'Delivery agency',
@@ -182,6 +184,8 @@ export const tickets = {
         keepOpen: 'Keep open',
 
         attachments: 'Attachments',
+        attachmentLockNotice:
+            'Once attached, a file stays on the ticket — it can’t be detached until the ticket is closed.',
         attachmentsClosed: 'This ticket is closed.',
         attachmentNotYours: 'You can only attach files you own.',
         attachmentFailed: 'Failed to attach file',

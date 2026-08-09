@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { isValidE164 } from '@/lib/phone';
+import { isValidEmail } from '@/lib/email';
 
 // ─── Payout details (one entry in the array) ──────────────────────────────────
 
@@ -23,21 +24,100 @@ const bankSchema = z.object({
     country: z.string().length(2, 'onboarding.validation.countryIso2').toUpperCase(),
 });
 
+/**
+ * The `card.brand` vocabulary, exactly as the API stores it (lower case).
+ *
+ * Lives here rather than in the brand catalog because it is an API contract, not
+ * a display concern — `components/payment-methods` imports the *type* from here
+ * to name the marks it draws for each value.
+ */
+export const CARD_BRAND_VALUES = [
+    'visa',
+    'mastercard',
+    'amex',
+    'discover',
+    'unionpay',
+    'jcb',
+    'diners',
+    'verve',
+    'other',
+] as const;
+
+export type CardBrandId = (typeof CARD_BRAND_VALUES)[number];
+
+/**
+ * A card payout destination.
+ *
+ * **No card number, no CVV — ever.** The API rejects `number` / `pan` / `cvv` and
+ * friends outright rather than ignoring them, so a destination is identified by
+ * brand + last 4 + holder + expiry and nothing more
+ * (see api-doc/vendor/payout-methods.md#card).
+ */
+const cardSchema = z
+    .object({
+        brand: z.enum(CARD_BRAND_VALUES, 'onboarding.validation.cardBrandRequired'),
+        last4: z
+            .string()
+            .trim()
+            .regex(/^\d{4}$/, 'onboarding.validation.cardLast4'),
+        card_holder_name: z.string().min(1, 'onboarding.validation.cardHolderRequired').trim(),
+        expiry_month: z
+            .number('onboarding.validation.cardExpiryMonthRequired')
+            .int('onboarding.validation.cardExpiryMonthRequired')
+            .min(1, 'onboarding.validation.cardExpiryMonthRequired')
+            .max(12, 'onboarding.validation.cardExpiryMonthRequired'),
+        expiry_year: z
+            .number('onboarding.validation.cardExpiryYearRequired')
+            .int('onboarding.validation.cardExpiryYearRequired')
+            .min(2000, 'onboarding.validation.cardExpiryYearRequired')
+            .max(2100, 'onboarding.validation.cardExpiryYearRequired'),
+        country: z.string().length(2, 'onboarding.validation.countryIso2').toUpperCase(),
+        issuing_bank: z
+            .string()
+            .max(100, 'onboarding.validation.issuingBankMax')
+            .trim()
+            .nullable()
+            .optional(),
+    })
+    // Checked at write time, the way the backend does it: by payout time nobody
+    // is in the room to fix a card that lapsed. A card is valid *through* the
+    // last day of its expiry month, so the current month still passes.
+    .superRefine((val, ctx) => {
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = now.getMonth() + 1;
+        if (val.expiry_year < year || (val.expiry_year === year && val.expiry_month < month)) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: 'onboarding.validation.cardExpired',
+                path: ['expiry_year'],
+            });
+        }
+    });
+
 export const payoutDetailsSchema = z.discriminatedUnion('method', [
     z.object({
         method: z.literal('mobile_money'),
         mobile_money: mobileMoneySchema,
         bank: z.null().optional(),
+        card: z.null().optional(),
     }),
     z.object({
         method: z.literal('bank'),
         mobile_money: z.null().optional(),
         bank: bankSchema,
+        card: z.null().optional(),
+    }),
+    z.object({
+        method: z.literal('card'),
+        mobile_money: z.null().optional(),
+        bank: z.null().optional(),
+        card: cardSchema,
     }),
 ]);
 
 export type PayoutDetailsFormValues = z.infer<typeof payoutDetailsSchema>;
-export type PayoutMethod = 'mobile_money' | 'bank';
+export type PayoutMethod = 'mobile_money' | 'bank' | 'card';
 
 // ─── Step 1: Basic Setup ──────────────────────────────────────────────────────
 // payout_details is an ordered array — index 0 is the preferred method.
@@ -189,14 +269,24 @@ const supportChannelSchema = z
         type: z.enum(['email', 'phone', 'whatsapp', 'telegram']),
         contact: z.string().min(1, 'onboarding.validation.contactRequired').max(200, 'onboarding.validation.max200Chars'),
     })
-    // A phone/WhatsApp channel is a dialable number in E.164 — the same bar every
-    // other phone field in the dashboard is held to. Email and Telegram are free text.
+    // `contact` has to be valid *for its type*: a phone/WhatsApp channel is a
+    // dialable number in E.164 and an email channel is a real address — the same
+    // bar every other phone/email field in the dashboard is held to. Telegram
+    // stays free text (a @handle or an invite link, neither of which parses).
     .superRefine((val, ctx) => {
+        if (!val.contact) return;
         const isPhoneChannel = val.type === 'phone' || val.type === 'whatsapp';
-        if (isPhoneChannel && val.contact && !isValidE164(val.contact)) {
+        if (isPhoneChannel && !isValidE164(val.contact)) {
             ctx.addIssue({
                 code: z.ZodIssueCode.custom,
                 message: 'common.validation.phone',
+                path: ['contact'],
+            });
+        }
+        if (val.type === 'email' && !isValidEmail(val.contact)) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: 'common.validation.email',
                 path: ['contact'],
             });
         }

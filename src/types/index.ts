@@ -185,6 +185,13 @@ export interface OrderItemDelivery {
   agencyPhone?: string;
   deliveryStatus?: string;
   shipmentId?: string;
+  /**
+   * `ACR-YYMMDD-HHMMSS-XXXXX` — the agency's acronym plus the UTC date/time the
+   * shipment was created. **Platform-generated at shipment creation**, so it is
+   * present from the moment the order exists, including before dispatch; nobody
+   * types it and nobody can change it. `null` only on shipments predating
+   * generation, hence still optional here.
+   */
   trackingNumber?: string | null;
   /** Snapshot of the product's `delivery.freeDelivery` flag at checkout time. */
   freeDelivery?: boolean;

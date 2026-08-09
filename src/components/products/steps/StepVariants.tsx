@@ -20,6 +20,7 @@ import type {
   VariantPhase2Payload,
 } from '@/components/products/variants';
 import { VARIANT_IMAGE_LIMIT } from '@/components/products/media.constants';
+import type { PendingStockInfo } from '@/components/inventory/PendingStockBadge';
 import { useMessage, useTranslation } from '@/i18n';
 import type { WizardState, ApiProductOption, ApiFileDetail } from '@/types/product.types';
 
@@ -40,6 +41,12 @@ interface StepVariantsProps {
   /** Session-local image overrides per variant id (survives a step remount). */
   imageEditsByVariantId: Record<string, ApiFileDetail[]>;
   onVariantImagesChange: (variantId: string, files: ApiFileDetail[]) => void;
+  /**
+   * Open stock requests per saved variant id, held at page level rather than in
+   * the variant reducer — SAVE_COMPLETE rehydrates rows from `serverVariants`
+   * and would wipe anything stored alongside them.
+   */
+  pendingStockByVariantId?: Record<string, PendingStockInfo>;
   onBack: () => void;
 }
 
@@ -54,12 +61,17 @@ export function StepVariants({
   onSaveComplete,
   imageEditsByVariantId,
   onVariantImagesChange,
+  pendingStockByVariantId,
   onBack,
 }: StepVariantsProps) {
   const { t } = useTranslation();
   const m = useMessage();
   const serverOptions: ApiProductOption[] = serverData.serverOptions ?? [];
   const serverVariants = serverData.serverVariants ?? [];
+
+  // A warehoused product cannot carry unlimited stock on any active variant.
+  const infiniteStockLocked =
+    serverData.serverProduct?.delivery?.pickupLocation?.source === 'agency_storage';
 
   const { state, actions, selectors } = useVariantBuilder(serverOptions, serverVariants);
 
@@ -172,6 +184,8 @@ export function StepVariants({
           maxImages={maxImages}
           filesByVariantId={filesByVariantId}
           onVariantImagesChange={onVariantImagesChange}
+          pendingStockByVariantId={pendingStockByVariantId}
+          infiniteStockLocked={infiniteStockLocked}
         />
       )}
 

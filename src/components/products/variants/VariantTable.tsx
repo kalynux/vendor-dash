@@ -17,6 +17,7 @@ import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import { useMessage, useTranslation, type TranslationKey } from '@/i18n';
 import { VariantImageStack } from './VariantImageStack';
+import { PendingStockBadge, type PendingStockInfo } from '@/components/inventory/PendingStockBadge';
 import type { VariantRow, VariantRowPatch, DraftOption } from './variant.types';
 import type { ApiFileDetail } from '@/types/product.types';
 
@@ -42,6 +43,19 @@ interface VariantTableProps {
   /** Resolved image list per saved variant id. */
   filesByVariantId: Record<string, ApiFileDetail[]>;
   onVariantImagesChange: (variantId: string, files: ApiFileDetail[]) => void;
+  // ── Agency-warehoused stock ──
+  /**
+   * Open stock requests per SAVED variant id. On an agency-warehoused product a
+   * quantity is a proposal until the agency approves it, so the input shows the
+   * server's figure and the badge says what is queued.
+   */
+  pendingStockByVariantId?: Record<string, PendingStockInfo>;
+  /**
+   * True when this product's pickup is `agency_storage`. A warehouse holds a
+   * countable number of things, so unlimited stock is refused there — disable
+   * the switch rather than letting the vendor eat a 422 at save time.
+   */
+  infiniteStockLocked?: boolean;
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -64,6 +78,8 @@ export function VariantTable({
   maxImages,
   filesByVariantId,
   onVariantImagesChange,
+  pendingStockByVariantId,
+  infiniteStockLocked = false,
 }: VariantTableProps) {
   const { t } = useTranslation();
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
@@ -215,6 +231,10 @@ export function VariantTable({
               maxImages={maxImages}
               files={row.serverId ? (filesByVariantId[row.serverId] ?? []) : []}
               onImagesChange={onVariantImagesChange}
+              pendingStock={
+                row.serverId ? (pendingStockByVariantId?.[row.serverId] ?? null) : null
+              }
+              infiniteStockLocked={infiniteStockLocked}
             />
           ))}
         </div>
@@ -269,6 +289,10 @@ export function VariantTable({
                   maxImages={maxImages}
                   files={row.serverId ? (filesByVariantId[row.serverId] ?? []) : []}
                   onImagesChange={onVariantImagesChange}
+                  pendingStock={
+                    row.serverId ? (pendingStockByVariantId?.[row.serverId] ?? null) : null
+                  }
+                  infiniteStockLocked={infiniteStockLocked}
                 />
               ))}
             </tbody>
@@ -312,6 +336,8 @@ interface VariantRowComponentProps {
   maxImages: number;
   files: ApiFileDetail[];
   onImagesChange: (variantId: string, files: ApiFileDetail[]) => void;
+  pendingStock: PendingStockInfo | null;
+  infiniteStockLocked: boolean;
 }
 
 function VariantRowComponent({
@@ -325,6 +351,8 @@ function VariantRowComponent({
   maxImages,
   files,
   onImagesChange,
+  pendingStock,
+  infiniteStockLocked,
 }: VariantRowComponentProps) {
   const { t } = useTranslation();
   const statusBadge = STATUS_BADGE[row.status];
@@ -402,6 +430,14 @@ function VariantRowComponent({
               min={0}
             />
           )}
+          {/* Explains why the number above snapped back after a save. */}
+          {pendingStock && (
+            <PendingStockBadge
+              currentStock={row.stock}
+              pending={pendingStock}
+              className="mt-1"
+            />
+          )}
         </td>
 
         <td className="p-2">
@@ -439,7 +475,11 @@ function VariantRowComponent({
       {isExpanded && (
         <tr className="border-b bg-muted/20">
           <td colSpan={sortedOptions.length + 7} className="p-4">
-            <SecondaryFields row={row} onChange={handleFieldChange} />
+            <SecondaryFields
+              row={row}
+              onChange={handleFieldChange}
+              infiniteStockLocked={infiniteStockLocked}
+            />
           </td>
         </tr>
       )}
@@ -460,6 +500,8 @@ function VariantRowCard({
   maxImages,
   files,
   onImagesChange,
+  pendingStock,
+  infiniteStockLocked,
 }: VariantRowComponentProps) {
   const { t } = useTranslation();
   const statusBadge = STATUS_BADGE[row.status];
@@ -558,6 +600,13 @@ function VariantRowCard({
               fullWidth
             />
           )}
+          {pendingStock && (
+            <PendingStockBadge
+              currentStock={row.stock}
+              pending={pendingStock}
+              className="mt-1"
+            />
+          )}
         </FieldRow>
       </div>
 
@@ -593,7 +642,11 @@ function VariantRowCard({
 
       {isExpanded && (
         <div className="pt-3 border-t">
-          <SecondaryFields row={row} onChange={handleFieldChange} />
+          <SecondaryFields
+            row={row}
+            onChange={handleFieldChange}
+            infiniteStockLocked={infiniteStockLocked}
+          />
         </div>
       )}
     </div>
@@ -628,9 +681,11 @@ function FieldRow({
 function SecondaryFields({
   row,
   onChange,
+  infiniteStockLocked = false,
 }: {
   row: VariantRow;
   onChange: (field: keyof VariantRowPatch, value: string | number | boolean | null) => void;
+  infiniteStockLocked?: boolean;
 }) {
   const { t } = useTranslation();
   return (
@@ -704,12 +759,24 @@ function SecondaryFields({
           placeholder="0.00"
         />
       </div>
-      <div className="flex items-center gap-2 col-span-2 md:col-span-1">
-        <Switch
-          checked={row.isInfiniteStock}
-          onCheckedChange={(checked) => onChange('isInfiniteStock', checked)}
-        />
-        <Label className="text-xs">{t('products.variantTable.secondary.infiniteStock')}</Label>
+      {/* A warehouse holds a countable number of things, so `agency_storage` and
+          unlimited stock are mutually exclusive — the backend refuses the pair
+          with 422 CATALOG_PRODUCT_AGENCY_STORAGE_INFINITE_STOCK. Disable rather
+          than let the vendor discover it at save time. */}
+      <div className="col-span-2 md:col-span-1 space-y-1">
+        <div className="flex items-center gap-2">
+          <Switch
+            checked={row.isInfiniteStock}
+            disabled={infiniteStockLocked}
+            onCheckedChange={(checked) => onChange('isInfiniteStock', checked)}
+          />
+          <Label className="text-xs">{t('products.variantTable.secondary.infiniteStock')}</Label>
+        </div>
+        {infiniteStockLocked && (
+          <p className="text-[11px] leading-tight text-muted-foreground">
+            {t('products.fields.unlimitedStockLockedHint')}
+          </p>
+        )}
       </div>
 
       {row.serverId && (

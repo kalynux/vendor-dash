@@ -115,18 +115,42 @@ export const errors = {
                 "That pickup location isn't valid for the delivery agency handling this product.",
             CATALOG_PRODUCT_NO_DEFAULT_VARIANT:
                 'This product lost its variant. Open it in the advanced editor to repair it.',
+            CATALOG_PRODUCT_AGENCY_STORAGE_INFINITE_STOCK:
+                'This product is stored at an agency, so it needs a countable stock quantity. Turn off unlimited stock, or move pickup back to your own address.',
         },
 
         /** Assigning a delivery agency or pickup location to a product. */
         delivery: {
             CATALOG_PRODUCT_INVALID_PICKUP_LOCATION:
                 "This pickup location isn't valid for the assigned delivery agency, or its business address no longer exists.",
+            // A warehouse holds a countable number of things, so agency storage
+            // and unlimited stock are mutually exclusive. The save is refused
+            // rather than accepted-and-silently-unpublished.
+            CATALOG_PRODUCT_AGENCY_STORAGE_INFINITE_STOCK:
+                "You can't store this product at the agency while a variant has unlimited stock. Turn unlimited stock off and record a quantity first.",
             CATALOG_PRODUCT_VECTORISATION_PENDING:
                 'This product is currently processing background operations. Please try again in a few seconds.',
             CATALOG_PRODUCT_VECTORISATION_NOT_ELIGIBLE:
                 'This product is not eligible for AI search indexing. It must be active, have indexing enabled, and have a title, description and category.',
             CONNECTION_NOT_ACTIVE:
                 'You need an active, approved connection with this agency before you can assign it. Send or check your connection request first.',
+        },
+
+        /**
+         * The stock-request inbox. These three need wording only the inbox can
+         * give them, because only the inbox can act on the outcome — elsewhere
+         * they fall through to the shorter `codes` sentence.
+         */
+        stockRequest: {
+            // A compare-and-set miss: the row exists and the other party
+            // resolved it first. Re-sending would apply an intent formed
+            // against a state that no longer holds — so we refetch, not retry.
+            STOCK_REQUEST_NOT_PENDING:
+                "Someone answered this request first. We've reloaded it — check the outcome before proposing anything else.",
+            STOCK_REQUEST_NOT_YOURS:
+                "That button was out of date. We've refreshed what you can do here.",
+            STOCK_REQUEST_ALREADY_PENDING:
+                'A stock request is already open on this SKU. Withdraw yours, or answer theirs, before proposing another.',
         },
 
         /**
@@ -503,6 +527,23 @@ export const errors = {
         CATALOG_VARIANT_RESERVATION_CONFLICT: 'This stock changed while you were editing. Refresh and try again.',
         CATALOG_VARIANT_RESERVATION_NOT_FOUND: 'We could not find that stock reservation.',
         CATALOG_VARIANT_SKU_EXISTS: 'That SKU is already used by another variant.',
+
+        // ── Agency storage: warehoused products & stock requests ──────────────
+        // Only the codes a VENDOR endpoint can actually produce. The agency-side
+        // depot/suspend codes (INVENTORY_LOCATION_UNKNOWN, _NOT_SUSPENDABLE,
+        // _NOT_AGENCY_SUSPENDED, _UNSUSPEND_BLOCKED) live on the agency
+        // dashboard; an unmapped code degrades to `errors.status.<n>` anyway.
+        INVENTORY_PRODUCT_NOT_STORED_HERE:
+            "This product isn't warehoused by a delivery agency, so its stock is edited directly.",
+        STOCK_REQUEST_NOT_FOUND: 'We could not find that stock request.',
+        STOCK_REQUEST_ALREADY_PENDING: 'A stock request is already open for this variant.',
+        STOCK_REQUEST_NOT_PENDING: 'This stock request has already been resolved.',
+        STOCK_REQUEST_NOT_YOURS: "You can't take that action on this stock request.",
+        STOCK_REQUEST_STALE:
+            'This product is no longer warehoused by that agency, so the request no longer applies.',
+        STOCK_REQUEST_NO_CHANGE: 'That is already the recorded quantity.',
+        CATALOG_PRODUCT_AGENCY_STORAGE_INFINITE_STOCK:
+            'A product stored in an agency warehouse needs a countable stock quantity. Turn off unlimited stock on every active variant.',
 
         // ── Catalog: options ──────────────────────────────────────────────────
         CATALOG_OPTION_NOT_FOUND: 'We could not find that option.',

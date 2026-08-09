@@ -38,6 +38,7 @@ import {
   reorderOptions,
 } from '@/services/products.service';
 import { ACTIVATION_ERROR_KEYS, getDeliveryErrorMessage } from '@/services/products.service';
+import type { PendingStockInfo } from '@/components/inventory/PendingStockBadge';
 import { useApiError, useTranslation, type TranslationKey } from '@/i18n';
 import { getAgencyConnectionErrorMessage } from '@/services/agency-connections.service';
 import { getUploadErrorMessage } from '@/lib/uploadErrors';
@@ -153,6 +154,13 @@ export function ProductUpload() {
   // Session-local variant image overrides (persisted immediately server-side;
   // kept here so the matrix shows current images after a step remount).
   const [variantImageEdits, setVariantImageEdits] = useState<Record<string, ApiFileDetail[]>>({});
+  /**
+   * Open stock requests per saved variant id — what explains a stock input that
+   * snapped back after a save on an agency-warehoused product. Page level, not
+   * the variant reducer, which rebuilds rows from `serverVariants` on every
+   * SAVE_COMPLETE and would wipe it.
+   */
+  const [pendingStock, setPendingStock] = useState<Record<string, PendingStockInfo>>({});
   const navigate = useNavigate();
 
   const handleVariantImagesChange = useCallback(
@@ -370,9 +378,10 @@ export function ProductUpload() {
             ),
           );
 
-          await Promise.all(
-            toUpdate.map((row) =>
-              updateVariant(productId, row.serverId, {
+          const updateResults = await Promise.all(
+            toUpdate.map(async (row) => ({
+              row,
+              res: await updateVariant(productId, row.serverId, {
                 sku: row.sku,
                 price: row.price,
                 compareAtPrice: row.compareAtPrice,
@@ -383,9 +392,29 @@ export function ProductUpload() {
                 width: row.width,
                 height: row.height,
               }),
-            ),
+            })),
           );
 
+          // Rows on an agency-warehoused product applied everything EXCEPT the
+          // quantity, which is now a request awaiting the agency's approval.
+          const queued = updateResults.filter((r) => r.res.stockAdjustment);
+          if (queued.length) {
+            setPendingStock((prev) => ({
+              ...prev,
+              ...Object.fromEntries(
+                queued.map((q) => [
+                  q.row.serverId,
+                  {
+                    requestId: q.res.stockAdjustment!.request.id,
+                    requestedQuantity: q.res.stockAdjustment!.request.requestedQuantity,
+                  },
+                ]),
+              ),
+            }));
+          }
+
+          // Authoritative — for a queued row this deliberately returns the OLD
+          // quantity. The pending badge is what explains the difference.
           const freshVariants = await fetchVariants(productId);
 
           // The backend auto-sets the first variant as default when none is set
@@ -403,7 +432,13 @@ export function ProductUpload() {
               ? { ...state.serverProduct, defaultVariantId: freshVariants[0].id }
               : null;
 
-          toast.success(t('products.toast.variantsSaved'));
+          if (queued.length) {
+            toast.warning(
+              t('products.toast.variantsSavedStockQueued', { count: queued.length }),
+            );
+          } else {
+            toast.success(t('products.toast.variantsSaved'));
+          }
           dispatch({
             type: 'SAVE_COMPLETE',
             updates: {
@@ -705,6 +740,7 @@ export function ProductUpload() {
             onSaveComplete={handleVariantsSave}
             imageEditsByVariantId={variantImageEdits}
             onVariantImagesChange={handleVariantImagesChange}
+            pendingStockByVariantId={pendingStock}
           />
         ) : null;
       case 'formats':

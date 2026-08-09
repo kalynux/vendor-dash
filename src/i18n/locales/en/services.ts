@@ -247,6 +247,16 @@ export const services = {
     bookings: {
         filterTitle: 'Filter bookings',
         applyFilters: 'Show bookings',
+        searchPlaceholder: 'Search by service, customer email or booking ID',
+        /** Narrow phones get the short form — the long one truncates to nothing. */
+        searchPlaceholderShort: 'Search…',
+        /**
+         * The list endpoint has no search parameter, so the panel matches over a
+         * scan window. Shown only when that window filled up.
+         */
+        searchScopeNote:
+            'Search covers your {{count}} most recent bookings. Add a status or payment '
+            + 'filter to look further back.',
         statusSection: 'Booking status',
         anyStatus: 'Any status',
         paymentSection: 'Payment status',
@@ -258,6 +268,10 @@ export const services = {
         emptyTitle: 'No bookings',
         emptyDescription:
             'Bookings appear here once customers reserve a time for your services.',
+        emptyFilteredTitle: 'No matching bookings',
+        emptyFilteredDescription:
+            'Nothing matches your search or filters. Try another term, or clear them to see '
+            + 'every booking.',
         columns: {
             service: 'Service',
             customer: 'Customer',

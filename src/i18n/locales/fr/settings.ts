@@ -123,20 +123,25 @@ export const settings = {
         timezonePlaceholder: 'Choisissez votre fuseau horaire',
 
         methodsTitle: 'Moyens de versement',
-        methodsHint: 'Le premier moyen est utilisé par défaut. Jusqu’à 3.',
-        preferred: 'Moyen préféré',
-        fallback: 'Moyen de secours',
+        methodsHint:
+            'Le premier moyen est utilisé par défaut — jusqu’à 3. Le nom du titulaire doit correspondre à celui enregistré chez le prestataire.',
+        preferred: 'Préféré',
         paymentMethod: 'Moyen de paiement',
 
         mobileMoney: 'Mobile Money',
-        mobileMoneyHint: 'MTN, Orange, Wave…',
-        mobileMoneyDetails: 'Détails Mobile Money',
         bankTransfer: 'Virement bancaire',
-        bankTransferHint: 'Versement bancaire direct',
-        bankDetails: 'Détails du compte bancaire',
+        card: 'Carte',
+
+        methodMobileMoney: 'Mobile Money',
+        methodBank: 'Banque',
+        methodCard: 'Carte',
+        mobileMoneyHint: 'Portefeuille mobile',
+        bankTransferHint: 'Compte bancaire',
+        cardHint: 'Carte bancaire',
+        methodSoonNote:
+            '{{methods}} ne peuvent pas encore recevoir vos versements — nous y travaillons.',
 
         provider: 'Opérateur',
-        providerPlaceholder: 'Choisissez un opérateur',
         phoneNumber: 'Numéro de téléphone',
         accountName: 'Nom du titulaire',
         mobileAccountNamePlaceholder: 'Nom sur le compte Mobile Money',
@@ -148,8 +153,45 @@ export const settings = {
         bankCountry: 'Pays de la banque',
         bankCountryPlaceholder: 'Pays où la banque opère',
 
-        addMobileMoney: 'Ajouter Mobile Money',
-        addBank: 'Ajouter un compte bancaire',
+        cardBrand: 'Réseau de la carte',
+        cardBrandPlaceholder: 'Choisissez le réseau de la carte',
+        cardLast4: '4 derniers chiffres',
+        cardLast4Placeholder: '4242',
+        cardLast4Hint:
+            'Nous ne demandons jamais le numéro complet de la carte ni le cryptogramme (CVV).',
+        cardHolderName: 'Nom du titulaire',
+        cardHolderPlaceholder: 'Nom tel qu’il figure sur la carte',
+        cardExpiryMonth: 'Mois d’expiration',
+        cardExpiryYear: 'Année d’expiration',
+        cardMM: 'MM',
+        cardYYYY: 'AAAA',
+        cardCountry: 'Pays d’émission',
+        cardCountryPlaceholder: 'Pays qui a émis la carte',
+        issuingBank: 'Banque émettrice (facultatif)',
+        issuingBankPlaceholder: 'ex. Afriland First Bank',
+        cardSettlementNote:
+            'Les versements par carte sont traités manuellement aujourd’hui, ils mettent donc plus de temps à arriver. Gardez un moyen Mobile Money ou bancaire en moyen préféré si vous voulez être payé au plus vite.',
+
+        addMethod: 'Ajouter un moyen de versement',
+        addTitle: 'Ajouter un moyen de versement',
+        addDescription: 'Là où vos retraits sont envoyés.',
+        editTitle: 'Modifier le moyen de versement',
+        editDescription: 'Changez la destination de ce versement.',
+        saveMethod: 'Enregistrer le moyen',
+        empty: 'Aucun moyen de versement. Ajoutez-en un pour que nous sachions où envoyer vos gains.',
+        atLimit: 'Vous pouvez enregistrer jusqu’à {{max}} moyens de versement.',
+        setPreferred: 'Définir comme préféré',
+        setPreferredAria: 'Définir comme préféré : {{label}}',
+        makePreferred: 'Définir comme préféré',
+        makePreferredHint: 'Utilisé en premier pour chaque versement.',
+        editAria: 'Modifier {{label}}',
+        removeAria: 'Retirer {{label}}',
+        removeTitle: 'Retirer ce moyen de versement ?',
+        removeDescription:
+            '{{label}} sera retiré. Rien ne change tant que vous n’enregistrez pas.',
+        keepOne: 'Gardez au moins un moyen de versement.',
+        incomplete: 'Incomplet',
+        incompleteHint: 'Des informations manquent — ouvrez-le pour compléter.',
 
         paymentMethodsTitle: 'Moyens de paiement',
         paymentMethodsInfo1:
@@ -199,18 +241,19 @@ export const settings = {
         removeAddress: 'Supprimer l’adresse',
         noAddresses: 'Aucune adresse ajoutée. Les clients ne verront aucun point de retrait tant que vous n’en aurez pas ajouté une.',
 
-        findAddress: 'Rechercher une adresse',
+        primaryAddress: 'Adresse principale',
+        otherAddress: 'Adresse {{number}}',
+
         findAddressHintLabel: 'À propos de la recherche d’adresse',
         findAddressHint: 'Tapez une rue, un quartier ou une ville et choisissez un résultat — cela fixe les coordonnées exactes que nous transmettons aux agences de livraison. Les champs ci-dessous sont remplis pour vous et restent modifiables, mais les modifier sans choisir un nouveau résultat bloquera l’enregistrement.',
         searchPlaceholder: 'Recherchez une rue, un quartier ou une ville…',
-        pinned: 'Emplacement fixé sur la carte',
         notPinned: 'Pas encore fixé.',
 
         label: 'Libellé',
         labelHintLabel: 'À propos du libellé d’adresse',
         labelHint: 'Votre propre nom pour cet emplacement, par exemple « Boutique principale » ou « Entrepôt ». C’est ainsi que vous choisissez un point de retrait au moment de publier un produit.',
         labelPlaceholder: 'ex. Boutique principale, Entrepôt',
-        street: 'Adresse',
+        street: 'Adresse / point de repère',
         streetPlaceholder: '123 rue du Marché',
         line2: 'Complément d’adresse',
         line2Placeholder: 'Bureau 4B, 2e étage…',
@@ -218,6 +261,8 @@ export const settings = {
         cityPlaceholder: 'Douala',
         state: 'Région / département',
         statePlaceholder: 'Littoral',
+        fromMapResult: '· d’après le résultat de la carte',
+        notNamedByMap: 'non précisé par le résultat de la carte',
 
         geoRequired: 'Recherchez et sélectionnez cette adresse pour que nous puissions la situer sur la carte.',
         geoCountryMismatch: 'Cette adresse doit se trouver dans votre pays d’enregistrement ({{country}}). Recherchez-la à nouveau à l’intérieur de {{country}}.',
@@ -225,6 +270,10 @@ export const settings = {
 
         removeConfirmTitle: 'Supprimer cette adresse ?',
         removeConfirmBody: 'Si elle est encore définie comme point de retrait sur un produit, l’enregistrement sera bloqué tant que vous n’aurez pas réaffecté ce produit.',
+
+        clearPinTitle: 'Supprimer l’emplacement fixé ?',
+        clearPinBody: 'C’est la coordonnée vers laquelle les agences de livraison se dirigent. Vous devrez rechercher l’adresse et la sélectionner à nouveau avant de pouvoir enregistrer.',
+        clearPinAction: 'Supprimer l’emplacement',
     },
 
     policies: {

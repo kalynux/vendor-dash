@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Truck, AlertCircle, Loader2, Gift, MapPin, Warehouse } from 'lucide-react';
 import { toast } from 'sonner';
 import { Link } from 'react-router-dom';
@@ -11,12 +11,29 @@ import {
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
-import { fetchDefaultDeliveryAgency } from '@/services/agencies.service';
+import { fetchAgencyLocations, fetchDefaultDeliveryAgency } from '@/services/agencies.service';
 import { getActiveConnectedAgencies, getAgencyConnectionErrorMessage } from '@/services/agency-connections.service';
 import { getDeliveryErrorMessage } from '@/services/products.service';
 import { useOnboarding } from '@/onboarding/store/onboarding.store';
+import { formatAgencyLocationLocality } from '@/lib/agencyAddress';
+import { cn } from '@/lib/utils';
 import { useApiError, useMessage, useTranslation } from '@/i18n';
-import type { VendorAgencyListItemDto, ApiPickupLocation, PickupLocationSource } from '@/types/product.types';
+import type {
+  VendorAgencyListItemDto,
+  AgencyLocationDto,
+  ApiPickupLocation,
+  ApiProductPickup,
+  PickupLocationSource,
+} from '@/types/product.types';
+
+/**
+ * Select value standing in for `agencyAddressId: null` — "the agency's primary
+ * depot", which is a real choice and not an absence. We deliberately never
+ * store the primary's *id*: null follows the primary if the agency reorders its
+ * locations, whereas the id pins that one depot. See the note on
+ * `ApiPickupLocation.agencyAddressId`.
+ */
+const PRIMARY_DEPOT = '__primary__';
 
 interface AgencySelectorProps {
   productId: string | null;
@@ -27,6 +44,26 @@ interface AgencySelectorProps {
   onFreeDeliveryChange: (freeDelivery: boolean) => void | Promise<void>;
   pickupLocation: ApiPickupLocation | null;
   onPickupLocationChange: (pickupLocation: ApiPickupLocation | null) => void | Promise<void>;
+  /**
+   * The server-resolved mirror of `pickupLocation` (product detail only). Used
+   * solely to warn when what is stored no longer resolves — a deleted business
+   * address, or a depot the agency has since removed and silently fell back to
+   * the primary for. Optional: surfaces nothing when absent.
+   */
+  pickup?: ApiProductPickup | null;
+  /**
+   * Active variants that currently have UNLIMITED stock.
+   *
+   * A warehouse holds a countable number of things, so `agency_storage` and
+   * `isInfiniteStock` are mutually exclusive — the backend refuses the pair with
+   * `422 CATALOG_PRODUCT_AGENCY_STORAGE_INFINITE_STOCK`, and it is an activation
+   * blocker on the product too.
+   *
+   * Pass the PERSISTED state, plus (for the simple editor, where the switch and
+   * this picker share a screen) the live switch value — that is what the backend
+   * judges the write against.
+   */
+  unlimitedStockVariants?: { id: string; sku: string }[];
   // Called once agencies + default are loaded so parent can decide if it can
   // gate the vectorisation toggle on "no usable agency".
   onAvailabilityResolved?: (info: {
@@ -43,6 +80,8 @@ export function AgencySelector({
   onFreeDeliveryChange,
   pickupLocation,
   onPickupLocationChange,
+  pickup,
+  unlimitedStockVariants,
   onAvailabilityResolved,
 }: AgencySelectorProps) {
   const { t } = useTranslation();
@@ -70,7 +109,7 @@ export function AgencySelector({
         setAgencies(connectedResult.agencies);
         setDefaultAgency(defaultResult);
         onAvailabilityResolved?.({ defaultAgency: defaultResult });
-      } catch (err: unknown) {
+      } catch {
         if (cancelled) return;
         setLoadError('products.delivery.loadAgenciesFailed');
       } finally {
@@ -117,12 +156,107 @@ export function AgencySelector({
   const [localAddressId, setLocalAddressId] = useState<string>(
     pickupLocation?.vendorAddressId ?? '',
   );
+  // `null` agencyAddressId is a choice ("the primary depot"), so it maps to the
+  // sentinel rather than to an empty selection.
+  const [localDepotId, setLocalDepotId] = useState<string>(
+    pickupLocation?.agencyAddressId ?? PRIMARY_DEPOT,
+  );
   const [pickupSaving, setPickupSaving] = useState(false);
 
   useEffect(() => {
     setLocalSource(pickupLocation?.source ?? '');
     setLocalAddressId(pickupLocation?.vendorAddressId ?? '');
-  }, [pickupLocation?.source, pickupLocation?.vendorAddressId, productId]);
+    setLocalDepotId(pickupLocation?.agencyAddressId ?? PRIMARY_DEPOT);
+  }, [
+    pickupLocation?.source,
+    pickupLocation?.vendorAddressId,
+    pickupLocation?.agencyAddressId,
+    productId,
+  ]);
+
+  // The agency's depots, for the "which warehouse?" picker. Only fetched once
+  // the vendor actually picks agency storage — the endpoint is connection-gated
+  // and irrelevant until then. `effectiveAgency` may be the vendor's default
+  // whose connection has since lapsed, in which case the call would 422; that
+  // case already renders `defaultConnectionLost` above, so we simply degrade to
+  // "no picker" instead of surfacing a second error.
+  const [depots, setDepots] = useState<AgencyLocationDto[]>([]);
+  const [depotsLoading, setDepotsLoading] = useState(false);
+  const [depotsFailed, setDepotsFailed] = useState(false);
+
+  useEffect(() => {
+    if (localSource !== 'agency_storage' || !effectiveAgencyId) {
+      setDepots([]);
+      setDepotsFailed(false);
+      return;
+    }
+    let cancelled = false;
+    setDepotsLoading(true);
+    setDepotsFailed(false);
+    fetchAgencyLocations(effectiveAgencyId)
+      .then((locations) => {
+        if (!cancelled) setDepots(locations);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setDepots([]);
+          setDepotsFailed(true);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setDepotsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [localSource, effectiveAgencyId]);
+
+  // `label` is null on entries saved before the agency could name them, so fall
+  // back to "Primary Headquarters" / "Branch N" — numbering branches by their
+  // rank among non-primary entries rather than by array index, which would read
+  // "Branch 2" for the first branch.
+  const depotOptions = useMemo(() => {
+    let branchNumber = 0;
+    return depots.map((depot) => {
+      if (!depot.isPrimary) branchNumber += 1;
+      const name =
+        depot.label?.trim() ||
+        (depot.isPrimary
+          ? t('products.delivery.depotPrimaryName')
+          : t('products.delivery.depotBranchName', { number: branchNumber }));
+      const suffix = depot.isPrimary ? ` (${t('products.delivery.depotDefaultSuffix')})` : '';
+      return {
+        key: depot.id,
+        // The primary is offered as the sentinel, never as its own id — see
+        // PRIMARY_DEPOT.
+        value: depot.isPrimary ? PRIMARY_DEPOT : depot.id,
+        label: `${name} — ${formatAgencyLocationLocality(depot)}${suffix}`,
+      };
+    });
+  }, [depots, t]);
+
+  // A warehouse cannot hold an unbounded quantity, so agency storage is not
+  // offerable while any active variant is unlimited. Note this is NOT a
+  // `stock > 0` rule — a warehoused product may legitimately sit at zero.
+  const blockedByInfinite = (unlimitedStockVariants?.length ?? 0) > 0;
+  const blockedSkus = useMemo(() => {
+    const list = unlimitedStockVariants ?? [];
+    const shown = list.slice(0, 3).map((v) => v.sku).join(', ');
+    // The backend's `details.variants` is an array and cannot interpolate, so
+    // the sentence is assembled here.
+    return list.length > 3
+      ? t('products.delivery.storageSkusMore', { skus: shown, count: list.length - 3 })
+      : shown;
+  }, [unlimitedStockVariants, t]);
+  const alreadyWarehoused = pickupLocation?.source === 'agency_storage';
+
+  // A depot the agency deleted, or a business address the vendor deleted: the
+  // stored id no longer resolves and the backend is standing something else in.
+  const depotFellBackToPrimary =
+    pickup?.source === 'agency_storage' &&
+    pickup.isPrimaryFallback &&
+    !!pickup.agencyAddressId;
+  const vendorAddressMissing = pickup?.source === 'vendor_address' && !pickup.address;
 
   async function handleChange(value: string) {
     if (!productId) return;
@@ -143,6 +277,11 @@ export function AgencySelector({
     try {
       await onPickupLocationChange(next);
     } catch (err: unknown) {
+      // Revert the picker: leaving it showing a value the server rejected is
+      // the same lie as an optimistic success.
+      setLocalSource(pickupLocation?.source ?? '');
+      setLocalAddressId(pickupLocation?.vendorAddressId ?? '');
+      setLocalDepotId(pickupLocation?.agencyAddressId ?? PRIMARY_DEPOT);
       toast.error(getDeliveryErrorMessage(err));
     } finally {
       setPickupSaving(false);
@@ -151,10 +290,18 @@ export function AgencySelector({
 
   async function handleSourceChange(value: string) {
     const source = value as PickupLocationSource;
+    // Hard guard so a keyboard or AT path can't get past the disabled option.
+    if (source === 'agency_storage' && blockedByInfinite) {
+      toast.error(t('products.delivery.storageNeedsCountableStock', { skus: blockedSkus }));
+      return;
+    }
     setLocalSource(source);
     if (source === 'agency_storage') {
       setLocalAddressId('');
-      await savePickupLocation({ source, vendorAddressId: null });
+      setLocalDepotId(PRIMARY_DEPOT);
+      // `agencyAddressId` is left null on purpose — the vendor has not chosen a
+      // depot yet, and null means "the primary", which is publishable as-is.
+      await savePickupLocation({ source, vendorAddressId: null, agencyAddressId: null });
     }
     // For 'vendor_address', wait until the vendor also picks an address below.
   }
@@ -162,6 +309,15 @@ export function AgencySelector({
   async function handleAddressChange(addressId: string) {
     setLocalAddressId(addressId);
     await savePickupLocation({ source: 'vendor_address', vendorAddressId: addressId });
+  }
+
+  async function handleDepotChange(value: string) {
+    setLocalDepotId(value);
+    await savePickupLocation({
+      source: 'agency_storage',
+      vendorAddressId: null,
+      agencyAddressId: value === PRIMARY_DEPOT ? null : value,
+    });
   }
 
   async function handleFreeDeliveryToggle(checked: boolean) {
@@ -296,12 +452,39 @@ export function AgencySelector({
                     </SelectItem>
                   )}
                   {canUseAgencyStorage && (
-                    <SelectItem value="agency_storage">
+                    // Kept rendered but disabled: removing it would read as
+                    // "this agency doesn't offer warehousing", which is a
+                    // different and wrong message — that case is
+                    // `canUseAgencyStorage` above.
+                    <SelectItem
+                      value="agency_storage"
+                      disabled={blockedByInfinite && !alreadyWarehoused}
+                    >
                       {t('products.delivery.pickupFromAgency')}
                     </SelectItem>
                   )}
                 </SelectContent>
               </Select>
+
+              {blockedByInfinite && canUseAgencyStorage && (
+                // Two different situations. Not yet warehoused → the option is
+                // simply unavailable. Already warehoused → the product predates
+                // the rule and stays live until something revalidates it, so
+                // warn rather than disable.
+                <div
+                  className={cn(
+                    'flex items-start gap-2 text-xs',
+                    alreadyWarehoused ? 'text-destructive' : 'text-amber-600',
+                  )}
+                >
+                  <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                  <span>
+                    {alreadyWarehoused
+                      ? t('products.delivery.storageInfiniteLive', { skus: blockedSkus })
+                      : t('products.delivery.storageNeedsCountableStock', { skus: blockedSkus })}
+                  </span>
+                </div>
+              )}
 
               {localSource === 'vendor_address' && (
                 businessAddresses.length === 0 ? (
@@ -336,13 +519,65 @@ export function AgencySelector({
                 )
               )}
 
-              {localSource === 'agency_storage' && (
-                <div className="flex items-start gap-2 text-xs text-muted-foreground">
-                  <Warehouse className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-                  <span>
-                    {t('products.delivery.pickupWarehoused', { name: effectiveAgency.agencyName })}
-                  </span>
+              {localSource === 'vendor_address' && vendorAddressMissing && (
+                <div className="flex items-start gap-2 text-xs text-destructive">
+                  <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                  <span>{t('products.delivery.pickupAddressMissing')}</span>
                 </div>
+              )}
+
+              {localSource === 'agency_storage' && (
+                <>
+                  <div className="flex items-start gap-2 text-xs text-muted-foreground">
+                    <Warehouse className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                    <span>
+                      {t('products.delivery.pickupWarehoused', { name: effectiveAgency.agencyName })}
+                    </span>
+                  </div>
+
+                  {/* Which depot. An agency commonly runs several; the primary
+                      is the default, so this never blocks publishing. */}
+                  {depotsLoading ? (
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      {t('products.delivery.loadingDepots')}
+                    </div>
+                  ) : depotsFailed ? (
+                    <p className="text-xs text-muted-foreground">
+                      {t('products.delivery.depotsUnavailable')}
+                    </p>
+                  ) : depots.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">
+                      {t('products.delivery.noDepots', { name: effectiveAgency.agencyName })}
+                    </p>
+                  ) : (
+                    <>
+                      <Select
+                        value={localDepotId}
+                        onValueChange={handleDepotChange}
+                        disabled={isSaving || pickupSaving || !productId}
+                      >
+                        <SelectTrigger className="w-full" data-size="default">
+                          <SelectValue placeholder={t('products.delivery.depotPlaceholder')} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {depotOptions.map((depot) => (
+                            <SelectItem key={depot.key} value={depot.value}>
+                              {depot.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+
+                      {depotFellBackToPrimary && (
+                        <div className="flex items-start gap-2 text-xs text-destructive">
+                          <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                          <span>{t('products.delivery.depotRemoved')}</span>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </>
               )}
             </>
           )}

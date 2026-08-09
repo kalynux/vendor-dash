@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   CalendarDays, List, ChevronRight, Loader2, CalendarClock,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
-  Empty, EmptyHeader, EmptyTitle, EmptyDescription, EmptyMedia,
+  Empty, EmptyHeader, EmptyTitle, EmptyDescription, EmptyContent, EmptyMedia,
 } from '@/components/ui/empty';
 import {
   ActiveFilterChips,
@@ -13,6 +13,7 @@ import {
   FilterSection,
   FilterSheet,
   FilterTriggerButton,
+  SearchFilterBar,
   type ActiveFilterChip,
 } from '@/components/filters';
 import { cn } from '@/lib/utils';
@@ -31,6 +32,16 @@ import type {
 } from '@/types/services.types';
 
 const PAGE_LIMIT = 20;
+
+// `GET /vendor/bookings` takes no free-text parameter (bookings.md → List
+// Bookings), so the search field matches in the browser. To keep it from being a
+// "filters the twenty rows you can already see" toy, typing a query scans a wide
+// window of the vendor's bookings — still honouring the status/payment filters —
+// and matches service title, customer email and booking id over that window.
+const SEARCH_SCAN_LIMIT = 100; // the endpoint's max page size
+const SEARCH_SCAN_PAGES = 5; // …so at most 500 bookings are scanned
+const SEARCH_SCAN_MAX = SEARCH_SCAN_LIMIT * SEARCH_SCAN_PAGES;
+const SEARCH_DEBOUNCE_MS = 350;
 
 const STATUS_OPTIONS: { value: BookingStatus; labelKey: TranslationKey }[] = [
   { value: 'pending', labelKey: BOOKING_STATUS_META.pending.labelKey },
@@ -72,6 +83,13 @@ export function BookingsPanel({ openBookingId }: { openBookingId?: string | null
   const [filterSheetOpen, setFilterSheetOpen] = useState(false);
   const [page, setPage] = useState(1);
 
+  const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [searchResults, setSearchResults] = useState<Booking[]>([]);
+  const [searchTruncated, setSearchTruncated] = useState(false);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+
   const [detailId, setDetailId] = useState<string | null>(null);
   // Bumped after any mutation so list + calendar refetch.
   const [reloadToken, setReloadToken] = useState(0);
@@ -81,6 +99,29 @@ export function BookingsPanel({ openBookingId }: { openBookingId?: string | null
   useEffect(() => {
     if (openBookingId) setDetailId(openBookingId);
   }, [openBookingId]);
+
+  // Debounce typing so a scan doesn't fire on every keystroke.
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      setDebouncedSearch(searchQuery.trim());
+      setPage(1);
+    }, SEARCH_DEBOUNCE_MS);
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [searchQuery]);
+
+  const searching = debouncedSearch.length > 0;
+
+  // Calendar view can't be searched (it renders its own date-ranged fetch), so
+  // leaving it holds no stale query behind a field the user can no longer see.
+  const changeView = useCallback((next: 'list' | 'calendar') => {
+    setView(next);
+    if (next === 'calendar') {
+      setSearchQuery('');
+      setDebouncedSearch('');
+    }
+  }, []);
 
   const queryParams: BookingsQueryParams = useMemo(() => ({
     status: statusFilter || undefined,
@@ -106,9 +147,78 @@ export function BookingsPanel({ openBookingId }: { openBookingId?: string | null
   }, [apiError]);
 
   useEffect(() => {
-    if (isMobile || view !== 'list') return;
+    if (isMobile || view !== 'list' || searching) return;
     load(queryParams);
-  }, [isMobile, view, queryParams, load, reloadToken]);
+  }, [isMobile, view, searching, queryParams, load, reloadToken]);
+
+  // ── Search scan ─────────────────────────────────────────────────────────────
+  // Pulls the scan window once per (filters × reload), then re-matches locally as
+  // the query changes — so typing another letter costs nothing.
+  const searchReqRef = useRef(0);
+  const runSearch = useCallback(async () => {
+    const reqId = searchReqRef.current + 1;
+    searchReqRef.current = reqId;
+    setSearchLoading(true);
+    setSearchError(null);
+    try {
+      const collected: Booking[] = [];
+      let truncated = false;
+      for (let p = 1; p <= SEARCH_SCAN_PAGES; p += 1) {
+        const result = await fetchBookings({
+          status: statusFilter || undefined,
+          paymentStatus: paymentFilter || undefined,
+          page: p,
+          limit: SEARCH_SCAN_LIMIT,
+        });
+        if (reqId !== searchReqRef.current) return; // superseded
+        collected.push(...result.data);
+        if (p >= result.meta.totalPages) break;
+        if (p === SEARCH_SCAN_PAGES) truncated = true;
+      }
+      setSearchResults(collected);
+      setSearchTruncated(truncated);
+    } catch (err) {
+      if (reqId !== searchReqRef.current) return;
+      setSearchError(apiError.resolve(err, { fallbackKey: 'services.errors.loadBookingsFailed' }));
+      setSearchResults([]);
+      setSearchTruncated(false);
+    } finally {
+      if (reqId === searchReqRef.current) setSearchLoading(false);
+    }
+  }, [statusFilter, paymentFilter, apiError]);
+
+  useEffect(() => {
+    if (view !== 'list' || !searching) {
+      searchReqRef.current += 1; // orphan any in-flight scan
+      setSearchResults([]);
+      setSearchTruncated(false);
+      setSearchError(null);
+      setSearchLoading(false);
+      return;
+    }
+    runSearch();
+  }, [searching, view, runSearch, reloadToken]);
+
+  const matches = useMemo(() => {
+    const q = debouncedSearch.toLowerCase();
+    if (!q) return [];
+    return searchResults.filter((b) => {
+      const title = typeof b.productId === 'object' ? b.productId.title : '';
+      const email = typeof b.userId === 'object' ? b.userId.login_email ?? '' : '';
+      return (
+        title.toLowerCase().includes(q)
+        || email.toLowerCase().includes(q)
+        || b._id.toLowerCase().includes(q)
+      );
+    });
+  }, [searchResults, debouncedSearch]);
+
+  // Desktop pages over the matches locally. A shrinking result set has to drag
+  // the current page back with it, or Prev/Next end up pointing past the end.
+  const searchTotalPages = Math.max(1, Math.ceil(matches.length / PAGE_LIMIT));
+  useEffect(() => {
+    if (searching && page > searchTotalPages) setPage(searchTotalPages);
+  }, [searching, page, searchTotalPages]);
 
   // Mobile infinite list.
   const fetchPage = useCallback(
@@ -125,18 +235,24 @@ export function BookingsPanel({ openBookingId }: { openBookingId?: string | null
   const infinite = useInfiniteList<Booking>({
     fetchPage,
     rowHeight: 80,
-    enabled: isMobile && view === 'list',
+    enabled: isMobile && view === 'list' && !searching,
     deps: [statusFilter, paymentFilter, reloadToken],
   });
 
-  // Bookings have no free-text search endpoint, so this panel shows the same
-  // filter button as every other list — just without a search field beside it.
+  // Search is deliberately not counted here — the field shows its own state.
   const activeFilterCount = (statusFilter ? 1 : 0) + (paymentFilter ? 1 : 0);
+  const hasActiveQuery = activeFilterCount > 0 || searching;
 
   const clearFilters = () => {
     setStatusFilter('');
     setPaymentFilter('');
     setPage(1);
+  };
+
+  const clearAll = () => {
+    setSearchQuery('');
+    setDebouncedSearch('');
+    clearFilters();
   };
 
   const filterChips: ActiveFilterChip[] = [];
@@ -187,36 +303,67 @@ export function BookingsPanel({ openBookingId }: { openBookingId?: string | null
     </FilterSheet>
   );
 
+  // Below `md` the two segments collapse to 44px icon-only squares, so the search
+  // field still gets the lion's share of a narrow row.
   const viewToggle = (
     <div className="inline-flex h-11 shrink-0 overflow-hidden rounded-xl border">
       <button
         type="button"
-        onClick={() => setView('list')}
-        className={cn('flex items-center gap-1.5 px-3 text-sm', view === 'list' ? 'bg-accent' : 'hover:bg-muted/50')}
+        onClick={() => changeView('list')}
+        aria-label={t('services.bookings.viewList')}
+        aria-pressed={view === 'list'}
+        className={cn(
+          'flex w-11 items-center justify-center gap-1.5 text-sm transition-colors md:w-auto md:px-3',
+          view === 'list' ? 'bg-accent' : 'hover:bg-muted/50',
+        )}
       >
-        <List className="h-4 w-4" /> {t('services.bookings.viewList')}
+        <List className="h-4 w-4" />
+        <span className="hidden md:inline">{t('services.bookings.viewList')}</span>
       </button>
       <button
         type="button"
-        onClick={() => setView('calendar')}
-        className={cn('flex items-center gap-1.5 border-l px-3 text-sm', view === 'calendar' ? 'bg-accent' : 'hover:bg-muted/50')}
+        onClick={() => changeView('calendar')}
+        aria-label={t('services.bookings.viewCalendar')}
+        aria-pressed={view === 'calendar'}
+        className={cn(
+          'flex w-11 items-center justify-center gap-1.5 border-l text-sm transition-colors md:w-auto md:px-3',
+          view === 'calendar' ? 'bg-accent' : 'hover:bg-muted/50',
+        )}
       >
-        <CalendarDays className="h-4 w-4" /> {t('services.bookings.viewCalendar')}
+        <CalendarDays className="h-4 w-4" />
+        <span className="hidden md:inline">{t('services.bookings.viewCalendar')}</span>
       </button>
     </div>
   );
 
   const toolbar = (
     <div className="space-y-3">
-      <div className="flex items-center gap-2">
-        <FilterTriggerButton
-          onClick={() => setFilterSheetOpen(true)}
-          activeCount={activeFilterCount}
-          label={t('services.bookings.filterTitle')}
+      {view === 'list' ? (
+        <SearchFilterBar
+          value={searchQuery}
+          onChange={setSearchQuery}
+          placeholder={t(
+            isMobile
+              ? 'services.bookings.searchPlaceholderShort'
+              : 'services.bookings.searchPlaceholder',
+          )}
+          activeFilterCount={activeFilterCount}
+          onOpenFilters={() => setFilterSheetOpen(true)}
+          filterLabel={t('services.bookings.filterTitle')}
+          trailing={viewToggle}
         />
-        <div className="flex-1" />
-        {viewToggle}
-      </div>
+      ) : (
+        // Calendar view has nothing to search — keep the filter + toggle row only.
+        <div className="flex items-center gap-2">
+          <FilterTriggerButton
+            onClick={() => setFilterSheetOpen(true)}
+            activeCount={activeFilterCount}
+            label={t('services.bookings.filterTitle')}
+          />
+          <div className="flex-1" />
+          {viewToggle}
+        </div>
+      )}
       <ActiveFilterChips chips={filterChips} onClearAll={clearFilters} />
     </div>
   );
@@ -225,13 +372,51 @@ export function BookingsPanel({ openBookingId }: { openBookingId?: string | null
     <Empty className="py-16">
       <EmptyHeader>
         <EmptyMedia variant="icon"><CalendarClock className="h-6 w-6" /></EmptyMedia>
-        <EmptyTitle>{t('services.bookings.emptyTitle')}</EmptyTitle>
+        <EmptyTitle>
+          {hasActiveQuery
+            ? t('services.bookings.emptyFilteredTitle')
+            : t('services.bookings.emptyTitle')}
+        </EmptyTitle>
         <EmptyDescription>
-          {t('services.bookings.emptyDescription')}
+          {hasActiveQuery
+            ? t('services.bookings.emptyFilteredDescription')
+            : t('services.bookings.emptyDescription')}
         </EmptyDescription>
       </EmptyHeader>
+      {hasActiveQuery && (
+        <EmptyContent>
+          <Button variant="outline" onClick={clearAll}>{t('common.actions.clearAll')}</Button>
+        </EmptyContent>
+      )}
     </Empty>
   );
+
+  // Note shown when the scan window capped out — tells the vendor why an older
+  // booking they expected isn't in the results, and what to do about it.
+  const searchScopeNote = searching && searchTruncated && !searchLoading && !searchError && (
+    <p className="px-4 text-xs text-muted-foreground md:px-0">
+      {t('services.bookings.searchScopeNote', { count: SEARCH_SCAN_MAX })}
+    </p>
+  );
+
+  // ── Which list is on screen ─────────────────────────────────────────────────
+  // Searching swaps both the source and its loading/error state: desktop keeps
+  // paging (client-side over the matches), mobile shows every match at once.
+  const searchPage = Math.min(page, searchTotalPages);
+
+  const desktopItems = searching
+    ? matches.slice((searchPage - 1) * PAGE_LIMIT, searchPage * PAGE_LIMIT)
+    : bookings;
+  const desktopLoading = searching ? searchLoading : loading;
+  const desktopError = searching ? searchError : error;
+  const desktopMeta: BookingListMeta | null = searching
+    ? { total: matches.length, page: searchPage, limit: PAGE_LIMIT, totalPages: searchTotalPages }
+    : meta;
+
+  const mobileItems = searching ? matches : infinite.items;
+  const mobileLoading = searching ? searchLoading : infinite.loading;
+  const mobileError = searching ? searchError : infinite.error;
+  const retryList = () => (searching ? runSearch() : load(queryParams));
 
   const renderMobileRow = (b: Booking) => (
     <button
@@ -262,30 +447,47 @@ export function BookingsPanel({ openBookingId }: { openBookingId?: string | null
         <BookingCalendar onOpenBooking={setDetailId} reloadToken={reloadToken} />
       ) : isMobile ? (
         <div className="-mx-4">
-          {infinite.loading ? (
+          {mobileLoading ? (
             <ListSkeleton mobile />
-          ) : infinite.error ? (
-            <ErrorState message={infinite.error} onRetry={infinite.reload} />
-          ) : infinite.items.length === 0 ? (
-            emptyNode
+          ) : mobileError ? (
+            <ErrorState message={mobileError} onRetry={searching ? runSearch : infinite.reload} />
+          ) : mobileItems.length === 0 ? (
+            <>
+              {emptyNode}
+              {searchScopeNote}
+            </>
           ) : (
             <div>
-              {infinite.items.map(renderMobileRow)}
-              <div ref={infinite.sentinelRef} className="h-1" />
-              {infinite.loadingMore && (
-                <div className="flex justify-center py-4">
-                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-                </div>
+              {searching && (
+                <p className="px-4 pb-2 text-xs text-muted-foreground">
+                  {t('services.bookings.count', { count: matches.length })}
+                </p>
+              )}
+              {mobileItems.map(renderMobileRow)}
+              {searching ? (
+                searchScopeNote && <div className="pt-3">{searchScopeNote}</div>
+              ) : (
+                <>
+                  <div ref={infinite.sentinelRef} className="h-1" />
+                  {infinite.loadingMore && (
+                    <div className="flex justify-center py-4">
+                      <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                    </div>
+                  )}
+                </>
               )}
             </div>
           )}
         </div>
-      ) : loading ? (
+      ) : desktopLoading ? (
         <ListSkeleton />
-      ) : error ? (
-        <ErrorState message={error} onRetry={() => load(queryParams)} />
-      ) : bookings.length === 0 ? (
-        emptyNode
+      ) : desktopError ? (
+        <ErrorState message={desktopError} onRetry={retryList} />
+      ) : desktopItems.length === 0 ? (
+        <>
+          {emptyNode}
+          {searchScopeNote}
+        </>
       ) : (
         <>
           <div className="overflow-hidden rounded-lg border">
@@ -302,7 +504,7 @@ export function BookingsPanel({ openBookingId }: { openBookingId?: string | null
                 </tr>
               </thead>
               <tbody>
-                {bookings.map((b) => (
+                {desktopItems.map((b) => (
                   <tr
                     key={b._id}
                     onClick={() => setDetailId(b._id)}
@@ -325,27 +527,29 @@ export function BookingsPanel({ openBookingId }: { openBookingId?: string | null
             </table>
           </div>
 
-          {meta && (
+          {desktopMeta && (
             <div className="flex flex-col items-center justify-between gap-3 text-sm text-muted-foreground sm:flex-row">
               <span>
                 {t('common.pagination.showingOf', {
-                  shown: bookings.length,
-                  items: t('services.bookings.count', { count: meta.total }),
+                  shown: desktopItems.length,
+                  items: t('services.bookings.count', { count: desktopMeta.total }),
                 })}
               </span>
-              {meta.totalPages > 1 && (
+              {desktopMeta.totalPages > 1 && (
                 <div className="flex items-center gap-2">
-                  <Button variant="outline" size="sm" disabled={meta.page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
+                  <Button variant="outline" size="sm" disabled={desktopMeta.page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
                     {t('common.pagination.previous')}
                   </Button>
-                  <span>{t('common.pagination.pageOf', { page: meta.page, total: meta.totalPages })}</span>
-                  <Button variant="outline" size="sm" disabled={meta.page >= meta.totalPages} onClick={() => setPage((p) => p + 1)}>
+                  <span>{t('common.pagination.pageOf', { page: desktopMeta.page, total: desktopMeta.totalPages })}</span>
+                  <Button variant="outline" size="sm" disabled={desktopMeta.page >= desktopMeta.totalPages} onClick={() => setPage((p) => p + 1)}>
                     {t('common.pagination.next')}
                   </Button>
                 </div>
               )}
             </div>
           )}
+
+          {searchScopeNote}
         </>
       )}
 

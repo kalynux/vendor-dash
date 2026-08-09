@@ -143,6 +143,8 @@ export const tickets = {
         optional: '(facultatif)',
         attachments: 'Pièces jointes',
         attachmentCount: '{{used}}/{{max}} fichiers. Photos et vidéos acceptées.',
+        attachmentLockNotice:
+            'Une fois le ticket créé, ces fichiers y restent joints — ils ne pourront pas être détachés avant la clôture du ticket.',
         removeFile: 'Retirer {{name}}',
         fileFallback: 'le fichier',
         deliveryAgencyFallback: 'Agence de livraison',
@@ -184,6 +186,8 @@ export const tickets = {
         keepOpen: 'Garder ouvert',
 
         attachments: 'Pièces jointes',
+        attachmentLockNotice:
+            'Une fois joint, un fichier reste sur le ticket — il ne pourra pas être détaché avant la clôture du ticket.',
         attachmentsClosed: 'Ce ticket est fermé.',
         attachmentNotYours: 'Vous ne pouvez joindre que des fichiers qui vous appartiennent.',
         attachmentFailed: 'Échec de l’ajout du fichier',

@@ -17,16 +17,34 @@ export const notifications = {
         daysAgo: 'il y a {{count}} j',
     },
 
-    tabs: {
+    filters: {
+        title: 'Filtrer les notifications',
+        searchPlaceholder: 'Rechercher des notifications…',
+        readStatus: 'Statut de lecture',
         all: 'Toutes',
         unread: 'Non lues',
         read: 'Lues',
+        chipStatus: 'Statut : {{value}}',
+    },
+
+    actionLabels: {
+        default: 'Voir les détails',
+        order: 'Voir la commande',
+        booking: 'Voir la réservation',
+        payment: 'Voir la transaction',
+        storage: 'Voir le stockage',
+        connection: 'Voir les connexions',
+        payout: 'Voir le versement',
+        plan: 'Gérer l’abonnement',
+        stockRequest: 'Répondre à la demande',
+        product: 'Voir le produit',
     },
 
     empty: {
         all: 'Aucune notification pour le moment',
         unread: 'Vous êtes à jour !',
         read: 'Aucune notification lue',
+        filtered: 'Aucune notification ne correspond à votre recherche',
     },
 
     actions: {
@@ -128,8 +146,12 @@ export const notifications = {
             paymentReceivedPartialHint: 'Lorsqu’un paiement partiel est reçu',
             paymentReceivedFull: 'Paiement intégral',
             paymentReceivedFullHint: 'Lorsqu’un paiement est réglé intégralement',
-            storageAlert: 'Alerte de stockage',
-            storageAlertHint: 'Lorsque le stockage média franchit 80 % / 90 % / 100 %',
+            storageAlert: 'Stockage des médias',
+            storageAlertHint:
+                'Lorsque le stockage de vos images produit franchit 80 % / 90 % / 100 %',
+            agencyStorageUpdates: 'Produits entreposés',
+            agencyStorageUpdatesHint:
+                'Lorsqu’une agence qui entrepose vos marchandises propose une modification de stock, répond à l’une des vôtres, déplace un produit vers un autre entrepôt ou le suspend',
             connectionUpdated: 'Connexions d’agence',
             connectionUpdatedHint:
                 'Lorsqu’une demande, une approbation, un refus ou une réapprobation d’agence survient',

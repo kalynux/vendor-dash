@@ -11,12 +11,22 @@ export const inventory = {
         unitsReserved: 'Unités réservées',
         totalUnits: 'Unités en stock',
         outOfStock: 'En rupture',
+        awaitingApproval: 'En attente de votre validation',
     },
 
     tabs: {
         alerts: 'Alertes',
         reservations: 'Réservations',
         history: 'Historique',
+        requests: 'Demandes de stock',
+    },
+
+    tabSubtitles: {
+        alerts: 'Variantes au niveau de leur seuil de stock faible, ou en dessous.',
+        reservations: 'Unités actuellement bloquées par des paiements et commandes en cours.',
+        history: 'Chaque mouvement de stock enregistré, et sa cause.',
+        requests:
+            'Modifications de quantité sur les SKU entreposés, en attente d’une seconde signature.',
     },
 
     columns: {
@@ -70,6 +80,11 @@ export const inventory = {
             'Cette valeur définit la quantité totale — elle ne s’ajoute pas au stock actuel.',
         wholeNumber: 'Saisissez un nombre entier.',
         updated: 'Stock mis à jour pour {{sku}} ({{count}} variante mise à jour).',
+        queued:
+            '{{sku}} : {{from}} → {{to}} envoyé à l’agence de stockage pour validation. Rien n’a encore changé.',
+        hasOpenRequest:
+            'Une demande de stock est déjà ouverte sur ce SKU. Traitez-la avant d’en proposer une autre.',
+        viewRequest: 'Voir la demande',
     },
 
     bulk: {
@@ -99,6 +114,147 @@ export const inventory = {
             'Corrigez les lignes ci-dessus et téléversez à nouveau — le lot s’applique en tout ou rien.',
         rowsReady: plural({ one: '{{count}} ligne prête', other: '{{count}} lignes prêtes' }),
         applyUpdate: 'Appliquer la mise à jour',
+
+        result: {
+            title: 'Résultat de l’import',
+            updated: plural({ one: '{{count}} SKU mis à jour', other: '{{count}} SKU mis à jour' }),
+            requested: plural({
+                one: '{{count}} SKU en attente de validation de l’agence',
+                other: '{{count}} SKU en attente de validation de l’agence',
+            }),
+            requestedHint:
+                'Une agence les entrepose : leurs quantités nécessitent donc son contreseing. Rien n’a encore changé pour eux.',
+            notRequested: plural({
+                one: '{{count}} SKU non appliqué',
+                other: '{{count}} SKU non appliqués',
+            }),
+            notRequestedHint:
+                'Ceux-ci n’ont pu être ni mis à jour ni proposés. Traitez la demande ouverte sur chacun, puis réimportez.',
+            goToRequests: 'Voir les demandes de stock',
+            done: 'Terminé',
+        },
+    },
+
+    pending: {
+        badge: '{{from}} → {{to}} · en attente',
+        requestedTo: '→ {{to}}',
+        awaitingApproval: 'En attente de validation de l’agence de stockage',
+    },
+
+    requests: {
+        status: {
+            pending: 'En attente',
+            approved: 'Approuvée',
+            rejected: 'Refusée',
+            withdrawn: 'Retirée',
+        },
+
+        direction: {
+            awaiting_me: 'À traiter par vous',
+            raised_by_me: 'Proposées par vous',
+        },
+
+        filters: {
+            status: 'Statut',
+            anyStatus: 'Tous les statuts',
+            direction: 'À qui le tour',
+            bothDirections: 'Les deux',
+            variant: 'SKU : {{sku}}',
+        },
+
+        searchPlaceholder: 'Rechercher par SKU ou produit…',
+        searchPartial: 'Recherche sur cette page uniquement — page {{page}} sur {{total}}.',
+        filterTitle: 'Filtrer les demandes de stock',
+
+        columns: {
+            sku: 'SKU',
+            change: 'Modification',
+            raisedBy: 'Proposée par',
+            status: 'Statut',
+            when: 'Proposée le',
+            actions: 'Actions',
+        },
+
+        change: '{{from}} → {{to}}',
+        driftNow: 'actuellement {{current}}',
+        driftHint:
+            'La quantité a changé après cette proposition. L’approbation applique tout de même la valeur demandée.',
+        unlimitedBefore: 'illimité',
+        unknownSku: 'Variante {{id}}',
+
+        raisedByYou: 'Vous',
+        raisedByAgency: 'L’agence',
+        raisedByNamedAgency: '{{name}}',
+
+        actions: {
+            approve: 'Approuver',
+            reject: 'Refuser',
+            withdraw: 'Retirer',
+            confirmReject: 'Refuser la demande',
+            confirmWithdraw: 'Retirer la demande',
+            reasonPlaceholder: 'Pourquoi refusez-vous ? (facultatif, visible par l’agence)',
+            withdrawHint: 'Ceci retire votre proposition. L’agence n’est pas notifiée.',
+        },
+
+        detail: {
+            title: 'Demande de stock',
+            quantities: 'Quantités',
+            quantityBefore: 'À la proposition',
+            currentQuantity: 'Actuellement enregistré',
+            requestedQuantity: 'Demandé',
+            note: 'Note de l’auteur',
+            history: 'Historique',
+            approvedAt: 'Approuvée le {{date}}',
+            approvedApplied: 'Appliquée sur une quantité enregistrée de {{quantity}}.',
+            rejectedAt: 'Refusée le {{date}}',
+            rejectionReason: 'Motif : {{reason}}',
+            withdrawnAt: 'Retirée le {{date}}',
+            noActions: 'Cette demande est traitée — il n’y a plus rien à faire.',
+            viewProduct: 'Ouvrir le produit',
+            skuHistory: 'Historique de ce SKU',
+            loadFailed: "Nous n'avons pas pu charger cette demande de stock.",
+        },
+
+        raise: {
+            action: 'Proposer une modification',
+            title: 'Proposer une modification de stock',
+            description:
+                'L’agence qui entrepose ce produit doit approuver la nouvelle quantité avant qu’elle ne prenne effet.',
+            product: 'Produit',
+            productPlaceholder: 'Choisissez un produit entreposé',
+            variant: 'Variante',
+            variantPlaceholder: 'Choisissez une variante',
+            quantity: 'Nouvelle quantité (absolue)',
+            quantityHint:
+                'C’est le total que doit afficher le SKU — pas une quantité à ajouter. 0 est valide.',
+            wholeNumber: 'Saisissez un nombre entier supérieur ou égal à 0.',
+            note: 'Note pour l’agence',
+            notePlaceholder: 'ex. 30 unités vendues via un autre canal',
+            noteHint: 'Facultatif, mais c’est ce que l’agence lit pour décider.',
+            submit: 'Envoyer la demande',
+            openExisting: 'Ouvrir cette demande',
+        },
+
+        toast: {
+            raised: 'Demande envoyée — l’agence sera notifiée.',
+            approved: 'Approuvée. Le stock est désormais de {{quantity}}.',
+            rejected: 'Demande refusée. Rien n’a été modifié.',
+            withdrawn: 'Demande retirée.',
+        },
+
+        empty: {
+            none: 'Aucune demande de stock pour le moment.',
+            noneHint:
+                'Elles apparaissent lorsque vous ou une agence de stockage proposez une modification de quantité sur un produit entreposé.',
+            filtered: 'Aucune demande de stock ne correspond à ces filtres.',
+            searched: 'Aucune demande de stock de cette page ne correspond à votre recherche.',
+        },
+
+        errors: {
+            loadFailed: "Nous n'avons pas pu charger vos demandes de stock. Réessayez.",
+            actionFailed: "Nous n'avons pas pu effectuer cette action. Réessayez.",
+            raiseFailed: "Nous n'avons pas pu envoyer cette demande. Réessayez.",
+        },
     },
 
     pagination: {

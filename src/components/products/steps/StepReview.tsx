@@ -242,6 +242,10 @@ export function StepReview({
           onFreeDeliveryChange={onFreeDeliveryChange}
           pickupLocation={productPickupLocation}
           onPickupLocationChange={onPickupLocationChange}
+          pickup={product?.pickup ?? null}
+          unlimitedStockVariants={variants
+            .filter((v) => v.status === 'active' && v.isInfiniteStock)
+            .map((v) => ({ id: v.id, sku: v.sku }))}
           onAvailabilityResolved={({ defaultAgency: d }) => setDefaultAgency(d)}
         />
       )}

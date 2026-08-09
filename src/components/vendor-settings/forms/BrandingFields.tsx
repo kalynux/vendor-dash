@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useForm, useFieldArray, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Plus, Trash2, Image as ImageIcon, MapPin } from 'lucide-react';
+import { Building, Plus, Trash2, Image as ImageIcon } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { step3Schema, type Step3FormValues } from '@/onboarding/schemas/onboarding.schemas';
@@ -11,7 +11,7 @@ import type { GeoAddressCandidate } from '@/types/geo.types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { LabelWithHint } from '@/components/ui/info-hint';
+import { InfoHint, LabelWithHint } from '@/components/ui/info-hint';
 import {
     AlertDialog,
     AlertDialogAction,
@@ -54,6 +54,75 @@ export interface BrandingFieldsProps {
     onBrandingFileChange?: (which: 'logo' | 'cover', file: ApiFile | null) => void;
     /** Reports whether the form differs from its initial values (drives a floating save bar). */
     onDirtyChange?: (dirty: boolean) => void;
+}
+
+/** Identity of a geocoded place — its coordinates are what "same place" means. */
+function placeKey(geo?: { coordinates: { coordinates: [number, number] } } | null): string {
+    if (!geo) return '';
+    const [lng, lat] = geo.coordinates.coordinates;
+    return `${lng},${lat}`;
+}
+
+/**
+ * A destructive click waiting on the vendor's confirmation. `remove` drops the
+ * whole address; `clearPin` drops only the coordinates, which leaves the row
+ * un-saveable until a new candidate is picked.
+ */
+type PendingConfirm = { kind: 'remove' | 'clearPin'; index: number };
+
+/**
+ * The heading of one address card — a titled band, not a field label.
+ *
+ * Each card holds a whole address (pin, label, street, city), so its top row is
+ * a section header in its own right: it spans the card's full width, sits on a
+ * tinted band and is closed off by a rule. The vendor's own label is the title;
+ * the row's place in the list ("Primary address", "Address 2") drops to a
+ * sub-line, and stands in as the title for a row that has no label yet. Mirrors
+ * the agency dashboard's Locations screen so both read the same.
+ */
+function AddressRowHeading({
+    index,
+    label,
+    onRemove,
+}: {
+    index: number;
+    label: string;
+    onRemove: () => void;
+}) {
+    const { t } = useTranslation();
+    const name = label.trim();
+    const role =
+        index === 0
+            ? t('settings.branding.primaryAddress')
+            : t('settings.branding.otherAddress', { number: index + 1 });
+
+    return (
+        // Negative margins pull the band out to the card's own padding edges.
+        <div className="-mx-3 -mt-3 flex items-center justify-between gap-2 rounded-t-lg border-b bg-muted/40 px-3 py-2.5 sm:-mx-4 sm:-mt-4 sm:px-4">
+            <span className="flex min-w-0 items-center gap-2">
+                <Building className="w-4 h-4 shrink-0 text-muted-foreground" />
+                <span className="min-w-0">
+                    <span className="block truncate text-sm font-semibold leading-tight">
+                        {name || role}
+                    </span>
+                    {name && (
+                        <span className="block truncate text-[11px] leading-tight text-muted-foreground">
+                            {role}
+                        </span>
+                    )}
+                </span>
+            </span>
+            <button
+                type="button"
+                aria-label={t('settings.branding.removeAddress')}
+                onClick={onRemove}
+                // 32px hit area, pulled flush with the band's right padding.
+                className="-mr-1.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+                <Trash2 className="w-4 h-4" />
+            </button>
+        </div>
+    );
 }
 
 export function BrandingFields({
@@ -118,12 +187,16 @@ export function BrandingFields({
     const requiredCountry = addressCountryBias?.toUpperCase() ?? null;
 
     type AddressValue = NonNullable<Step3FormValues['business_addresses']>[number];
-    const looseFieldsChanged = (initial: AddressValue, current: AddressValue) =>
+    // Moving (or clearing) the pin counts as an edit too — otherwise a row whose
+    // text was left alone would submit `geo: null` and silently wipe the stored
+    // coordinates, since the full-replace endpoint writes exactly what we send.
+    const entryChanged = (initial: AddressValue, current: AddressValue) =>
         (initial.label ?? '') !== (current.label ?? '') ||
         (initial.address_line1 ?? '') !== (current.address_line1 ?? '') ||
         (initial.address_line2 ?? '') !== (current.address_line2 ?? '') ||
         (initial.city ?? '') !== (current.city ?? '') ||
-        (initial.state ?? '') !== (current.state ?? '');
+        (initial.state ?? '') !== (current.state ?? '') ||
+        placeKey(initial.geo) !== placeKey(current.geo);
 
     // Runs after zod validation passes; blocks submit until geo rules are satisfied.
     const submitWithGeoGuard = (values: Step3FormValues) => {
@@ -136,7 +209,7 @@ export function BrandingFields({
                 ? defaultValues.business_addresses?.find((a) => a._id === addr._id)
                 : undefined;
             // No matching saved entry → brand-new (or a regenerated id): needs geo.
-            const isNewOrEdited = !initial || looseFieldsChanged(initial, addr);
+            const isNewOrEdited = !initial || entryChanged(initial, addr);
 
             if (isNewOrEdited && !addr.geo) {
                 setError(`business_addresses.${index}.geo`, {
@@ -168,8 +241,38 @@ export function BrandingFields({
 
     // Existing (already-saved) addresses get a confirmation before removal — the
     // backend hard-rejects the whole update if the address is still in use as a
-    // product's pickup location, so this is a heads-up, not a guarantee.
-    const [confirmRemoveIndex, setConfirmRemoveIndex] = useState<number | null>(null);
+    // product's pickup location, so this is a heads-up, not a guarantee. Clearing
+    // the *stored* pin is confirmed for the same reason: it is the coordinate
+    // delivery agencies route to, and the row can't be saved again until a new
+    // candidate is picked. Clearing a pin the vendor just placed costs nothing.
+    const [pending, setPending] = useState<PendingConfirm | null>(null);
+
+    const savedGeo = (id?: string) =>
+        id ? defaultValues.business_addresses?.find((a) => a._id === id)?.geo : undefined;
+
+    const clearPin = (index: number) =>
+        setValue(`business_addresses.${index}.geo`, null, { shouldDirty: true });
+
+    const requestRemove = (index: number, id?: string) => {
+        if (id) setPending({ kind: 'remove', index });
+        else remove(index);
+    };
+
+    const requestClearPin = (index: number, id?: string) => {
+        const current = watch(`business_addresses.${index}.geo`);
+        if (current && placeKey(current) === placeKey(savedGeo(id))) {
+            setPending({ kind: 'clearPin', index });
+        } else {
+            clearPin(index);
+        }
+    };
+
+    const confirmPending = () => {
+        if (!pending) return;
+        if (pending.kind === 'remove') remove(pending.index);
+        else clearPin(pending.index);
+        setPending(null);
+    };
 
     return (
         <form id={formId} onSubmit={handleSubmit(submitWithGeoGuard)} className="space-y-6" noValidate>
@@ -242,43 +345,52 @@ export function BrandingFields({
                     </p>
                 ) : (
                     <div className="space-y-4">
-                        {fields.map((field, index) => (
-                            <div
-                                key={field.id}
-                                className="rounded-lg border p-3 sm:p-4 space-y-3 relative"
-                            >
-                                <button
-                                    type="button"
-                                    onClick={() => (field._id ? setConfirmRemoveIndex(index) : remove(index))}
-                                    aria-label={t('settings.branding.removeAddress')}
-                                    className="absolute top-3 right-3 text-muted-foreground hover:text-destructive transition-colors"
-                                >
-                                    <Trash2 className="w-4 h-4" />
-                                </button>
+                        {fields.map((field, index) => {
+                            const geo = watch(`business_addresses.${index}.geo`);
+                            const city = (watch(`business_addresses.${index}.city`) ?? '').trim();
+                            const state = (watch(`business_addresses.${index}.state`) ?? '').trim();
+                            // City and region come off the picked candidate, so a pinned
+                            // row only asks for the ones the provider didn't name. A
+                            // legacy row with no pin keeps both editable.
+                            const showCityInput = !geo || !city;
+                            const showStateInput = !geo || !state;
+                            const geoError = errors.business_addresses?.[index]?.geo?.message;
 
-                                {/* Address search — fills the fields below and captures geo coordinates */}
-                                <div className="space-y-1.5 pr-6">
-                                    <LabelWithHint
-                                        hintLabel={t('settings.branding.findAddressHintLabel')}
-                                        hint={t('settings.branding.findAddressHint')}
-                                    >
-                                        {t('settings.branding.findAddress')}
-                                    </LabelWithHint>
+                            return (
+                            <div key={field.id} className="rounded-lg border p-3 sm:p-4 space-y-3">
+                                <AddressRowHeading
+                                    index={index}
+                                    label={watch(`business_addresses.${index}.label`) ?? ''}
+                                    onRemove={() => requestRemove(index, field._id)}
+                                />
+
+                                {/* Address search — fills the fields below and captures geo
+                                    coordinates. No field label: the picked place is echoed
+                                    right underneath, which names the box better than a label. */}
+                                <div className="space-y-1.5">
                                     <AddressSearch
                                         countryBias={addressCountryBias}
                                         placeholder={t('settings.branding.searchPlaceholder')}
+                                        value={geo}
+                                        hasError={!!geoError}
                                         onSelect={(candidate, raw) => applyCandidate(index, candidate, raw)}
+                                        onClear={() => requestClearPin(index, field._id)}
                                     />
-                                    {errors.business_addresses?.[index]?.geo?.message ? (
+                                    {geoError ? (
                                         <p className="text-sm text-destructive" role="alert">
-                                            {m(errors.business_addresses[index]?.geo?.message)}
-                                        </p>
-                                    ) : watch(`business_addresses.${index}.geo`) ? (
-                                        <p className="inline-flex items-center gap-1 text-xs text-emerald-600">
-                                            <MapPin className="w-3 h-3" /> {t('settings.branding.pinned')}
+                                            {m(geoError)}
                                         </p>
                                     ) : (
-                                        <p className="text-xs text-muted-foreground">{t('settings.branding.notPinned')}</p>
+                                        !geo && (
+                                            <p className="flex items-center gap-1 text-xs text-muted-foreground">
+                                                {t('settings.branding.notPinned')}
+                                                <InfoHint
+                                                    label={t('settings.branding.findAddressHintLabel')}
+                                                >
+                                                    {t('settings.branding.findAddressHint')}
+                                                </InfoHint>
+                                            </p>
+                                        )
                                     )}
                                 </div>
 
@@ -323,10 +435,22 @@ export function BrandingFields({
                                         aria-invalid={!!errors.business_addresses?.[index]?.address_line1}
                                         {...register(`business_addresses.${index}.address_line1`)}
                                     />
-                                    {errors.business_addresses?.[index]?.address_line1 && (
+                                    {errors.business_addresses?.[index]?.address_line1 ? (
                                         <p className="text-sm text-destructive" role="alert">
                                             {m(errors.business_addresses[index]?.address_line1?.message)}
                                         </p>
+                                    ) : (
+                                        // What the map result already answered, so the vendor
+                                        // can see it was filled in without a pair of inputs.
+                                        geo &&
+                                        (city || state) && (
+                                            <p className="text-xs text-muted-foreground">
+                                                {t('settings.branding.city')}: {city || t('settings.branding.notNamedByMap')} | {t('settings.branding.state')}: {state || t('settings.branding.notNamedByMap')}
+                                                <span className="ml-1 opacity-70">
+                                                    {t('settings.branding.fromMapResult')}
+                                                </span>
+                                            </p>
+                                        )
                                     )}
                                 </div>
 
@@ -342,61 +466,82 @@ export function BrandingFields({
                                     />
                                 </div>
 
-                                <div className="grid grid-cols-2 gap-3">
-                                    <div className="space-y-2">
-                                        <Label htmlFor={`addr-city-${index}`}>
-                                            {t('settings.branding.city')} <span className="text-destructive">*</span>
-                                        </Label>
-                                        <Input
-                                            id={`addr-city-${index}`}
-                                            placeholder={t('settings.branding.cityPlaceholder')}
-                                            className={cn(
-                                                'h-10',
-                                                errors.business_addresses?.[index]?.city && 'border-destructive',
-                                            )}
-                                            {...register(`business_addresses.${index}.city`)}
-                                        />
-                                        {errors.business_addresses?.[index]?.city && (
-                                            <p className="text-sm text-destructive" role="alert">
-                                                {m(errors.business_addresses[index]?.city?.message)}
-                                            </p>
+                                {(showCityInput || showStateInput) && (
+                                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                        {showCityInput && (
+                                            <div className="space-y-2">
+                                                <Label htmlFor={`addr-city-${index}`}>
+                                                    {t('settings.branding.city')}{' '}
+                                                    <span className="text-destructive">*</span>
+                                                </Label>
+                                                <Input
+                                                    id={`addr-city-${index}`}
+                                                    placeholder={t('settings.branding.cityPlaceholder')}
+                                                    className={cn(
+                                                        'h-10',
+                                                        errors.business_addresses?.[index]?.city && 'border-destructive',
+                                                    )}
+                                                    {...register(`business_addresses.${index}.city`)}
+                                                />
+                                                {errors.business_addresses?.[index]?.city ? (
+                                                    <p className="text-sm text-destructive" role="alert">
+                                                        {m(errors.business_addresses[index]?.city?.message)}
+                                                    </p>
+                                                ) : (
+                                                    geo && (
+                                                        <p className="text-xs text-muted-foreground">
+                                                            {t('settings.branding.notNamedByMap')}
+                                                        </p>
+                                                    )
+                                                )}
+                                            </div>
+                                        )}
+                                        {showStateInput && (
+                                            <div className="space-y-2">
+                                                <Label htmlFor={`addr-state-${index}`}>{t('settings.branding.state')}</Label>
+                                                <Input
+                                                    id={`addr-state-${index}`}
+                                                    placeholder={t('settings.branding.statePlaceholder')}
+                                                    className="h-10"
+                                                    {...register(`business_addresses.${index}.state`)}
+                                                />
+                                                {geo && (
+                                                    <p className="text-xs text-muted-foreground">
+                                                        {t('settings.branding.notNamedByMap')}
+                                                    </p>
+                                                )}
+                                            </div>
                                         )}
                                     </div>
-                                    <div className="space-y-2">
-                                        <Label htmlFor={`addr-state-${index}`}>{t('settings.branding.state')}</Label>
-                                        <Input
-                                            id={`addr-state-${index}`}
-                                            placeholder={t('settings.branding.statePlaceholder')}
-                                            className="h-10"
-                                            {...register(`business_addresses.${index}.state`)}
-                                        />
-                                    </div>
-                                </div>
+                                )}
                             </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 )}
             </div>
             )}
 
-            <AlertDialog open={confirmRemoveIndex !== null} onOpenChange={(open) => !open && setConfirmRemoveIndex(null)}>
+            <AlertDialog open={pending !== null} onOpenChange={(open) => !open && setPending(null)}>
                 <AlertDialogContent>
                     <AlertDialogHeader>
-                        <AlertDialogTitle>{t('settings.branding.removeConfirmTitle')}</AlertDialogTitle>
+                        <AlertDialogTitle>
+                            {pending?.kind === 'clearPin'
+                                ? t('settings.branding.clearPinTitle')
+                                : t('settings.branding.removeConfirmTitle')}
+                        </AlertDialogTitle>
                         <AlertDialogDescription>
-                            {t('settings.branding.removeConfirmBody')}
+                            {pending?.kind === 'clearPin'
+                                ? t('settings.branding.clearPinBody')
+                                : t('settings.branding.removeConfirmBody')}
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                         <AlertDialogCancel type="button">{t('common.actions.cancel')}</AlertDialogCancel>
-                        <AlertDialogAction
-                            type="button"
-                            onClick={() => {
-                                if (confirmRemoveIndex !== null) remove(confirmRemoveIndex);
-                                setConfirmRemoveIndex(null);
-                            }}
-                        >
-                            {t('common.actions.remove')}
+                        <AlertDialogAction type="button" onClick={confirmPending}>
+                            {pending?.kind === 'clearPin'
+                                ? t('settings.branding.clearPinAction')
+                                : t('common.actions.remove')}
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>

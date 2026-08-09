@@ -64,8 +64,10 @@ export function VariantImageStack({
     if (!variantId) return;
     setBusy(true);
     try {
-      const updated = await updateVariant(productId, variantId, { fileIds: nextIds });
-      onChange(variantId, updated.files);
+      // Images only — this write never carries stock, so there is no
+      // `stockAdjustment` to consider here.
+      const { variant } = await updateVariant(productId, variantId, { fileIds: nextIds });
+      onChange(variantId, variant.files);
     } catch (err) {
       toast.error(getUploadErrorMessage(err));
     } finally {

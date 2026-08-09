@@ -93,8 +93,13 @@ export async function fetchReservations(
 
 /**
  * Set absolute stock levels for one or more physical variants (atomic, all-or-
- * nothing). On any row failure the backend rejects the whole batch (400) and no
- * rows change — surfaced here as an ApiError. Max 1,000 rows.
+ * nothing) — **for the rows this endpoint actually writes**. On any row failure
+ * the backend rejects the whole batch (400) and no rows change, surfaced here as
+ * an ApiError. Max 1,000 rows.
+ *
+ * Rows on an agency-warehoused product sit OUTSIDE that transaction: they are
+ * partitioned out before it opens and come back under `requested` as pending
+ * stock requests, never under `variants`. See `normalizeBulkResult` below.
  */
 export async function bulkUpdateStock(updates: BulkStockUpdateRow[]): Promise<BulkStockUpdateResult> {
   const res = await api.patch<Record<string, unknown>>(`${BASE}/bulk-update`, { updates });
@@ -114,13 +119,25 @@ export async function bulkUpdateStockCsv(file: File): Promise<BulkStockUpdateRes
   return normalizeBulkResult(res);
 }
 
-// Response is `{ success, batchId, updated, variants }` (non-standard shape per
-// inventory.md) — tolerate a future `{ success, data }` envelope too.
+// Response is `{ success, batchId, updated, variants, requested, notRequested }`
+// (non-standard shape per inventory.md) — tolerate a future `{ success, data }`
+// envelope too.
+//
+// THREE GROUPS, REPORTED SEPARATELY. `updated` counts `variants` only. A row
+// under `requested` has NOT changed yet — it belongs to an agency-warehoused
+// product, so the quantity needs that agency's countersignature and became a
+// pending stock request instead. Presenting it as updated is the one way to make
+// this response lie. `notRequested` rows neither applied nor queued (almost
+// always STOCK_REQUEST_ALREADY_PENDING — somebody has to go resolve that first);
+// they are reported rather than thrown because the `variants` rows have already
+// committed, and failing the whole call would claim a rollback that did not happen.
 function normalizeBulkResult(res: Record<string, unknown>): BulkStockUpdateResult {
-  const body = (res?.data ?? res) as unknown as BulkStockUpdateResult;
+  const body = (res?.data ?? res) as unknown as Partial<BulkStockUpdateResult>;
   return {
-    batchId: body.batchId,
-    updated: body.updated,
+    batchId: body.batchId ?? '',
+    updated: body.updated ?? 0,
     variants: body.variants ?? [],
+    requested: body.requested ?? [],
+    notRequested: body.notRequested ?? [],
   };
 }

@@ -119,9 +119,9 @@ export const billing = {
         addTitle: 'Ajouter un moyen de paiement',
         addDescription:
             'Enregistrez un moyen pour accélérer le paiement. Nous ne conservons jamais le numéro de carte complet ni le CVV.',
-        type: 'Type',
+        type: 'Moyen de paiement',
         phone: 'Numéro mobile money',
-        operator: 'Opérateur',
+        processedBy: 'Traité par',
         holderNameOptional: 'Nom du titulaire (facultatif)',
         holderNamePlaceholder: 'Titulaire du compte',
         cardHolderName: 'Nom du titulaire de la carte',
@@ -149,18 +149,11 @@ export const billing = {
         card: 'Visa, Mastercard et plus — débité en USD',
     },
 
-    operator: {
-        MTN: 'MTN Mobile Money',
-        ORANGE: 'Orange Money',
-        MOOV: 'Moov Money',
-    },
-
     checkout: {
         savedMethods: 'Moyen de paiement',
         newMethod: 'Nouveau',
         payWith: 'Payer avec',
         phone: 'Numéro mobile money',
-        operator: 'Opérateur',
         usdNotice:
             'Les paiements par carte sont traités en USD ; votre banque peut appliquer sa propre ' +
             'conversion. Le montant exact en dollars sera affiché à l’étape suivante.',

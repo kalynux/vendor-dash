@@ -38,6 +38,7 @@ import type {
   PickupReason,
 } from '@/types/product.types';
 import type { ServiceConfig } from '@/types/services.types';
+import type { StockAdjustmentMeta } from '@/types/stock-requests.types';
 import { ApiError } from '@/types/api';
 import { validateActivation } from '@/components/products/schemas/product.schemas';
 import { fetchDefaultDeliveryAgency } from '@/services/agencies.service';
@@ -146,6 +147,13 @@ export async function duplicateProduct(id: string): Promise<ApiProduct> {
 export interface SimpleProductResult {
   product: SimpleProductData;
   activation: SimpleActivationMeta;
+  /**
+   * Non-null ⇒ the product is agency-warehoused, so `stock`/`isInfiniteStock`
+   * were dropped from the write and queued for the agency's approval:
+   * `product.defaultVariant.stock` is the OLD quantity. Never set on create —
+   * an initial quantity is a declaration, not an adjustment, and is not gated.
+   */
+  stockAdjustment: StockAdjustmentMeta | null;
   message?: string;
 }
 
@@ -167,11 +175,19 @@ export async function createSimpleProduct(
   return {
     product: res.data,
     activation: res.meta?.activation ?? fallbackActivation(res.data),
+    stockAdjustment: res.meta?.stockAdjustment ?? null,
     message: res.message,
   };
 }
 
-/** One flat body edits both the product and its single variant. 200. */
+/**
+ * One flat body edits both the product and its single variant. 200.
+ *
+ * For an agency-warehoused product `stock`/`isInfiniteStock` are dropped from
+ * the write and become a pending stock request — still 200, `product` shows the
+ * OLD quantity, and `stockAdjustment` says what is queued. Every other field in
+ * the body applies as normal.
+ */
 export async function updateSimpleProduct(
   id: string,
   payload: SimpleProductUpdatePayload,
@@ -180,6 +196,7 @@ export async function updateSimpleProduct(
   return {
     product: res.data,
     activation: res.meta?.activation ?? fallbackActivation(res.data),
+    stockAdjustment: res.meta?.stockAdjustment ?? null,
     message: res.message,
   };
 }
@@ -240,16 +257,32 @@ export async function createVariant(
   return res.data;
 }
 
+export interface VariantUpdateResult {
+  variant: ApiVariant;
+  /**
+   * Non-null ⇒ the product is agency-warehoused: `stock`/`isInfiniteStock` were
+   * stripped from the write and queued for the agency's approval, so
+   * `variant.stock` is the OLD quantity. Render `variant` as returned — never as
+   * submitted — and show a "120 → 90 pending" badge.
+   */
+  stockAdjustment: StockAdjustmentMeta | null;
+}
+
+/**
+ * Update a variant. Every field applies immediately EXCEPT `stock`/`isInfiniteStock`
+ * on an agency-warehoused product, which queue as a stock request (still 200, not
+ * 202 — you have to read the body either way). See api-doc/vendor/variants.md.
+ */
 export async function updateVariant(
   productId: string,
   variantId: string,
   payload: UpdateVariantPayload,
-): Promise<ApiVariant> {
+): Promise<VariantUpdateResult> {
   const res = await api.patch<VariantDetailResponse>(
     `/vendor/products/${productId}/variants/${variantId}`,
     payload,
   );
-  return res.data;
+  return { variant: res.data, stockAdjustment: res.meta?.stockAdjustment ?? null };
 }
 
 export async function archiveVariant(productId: string, variantId: string): Promise<void> {
@@ -478,6 +511,7 @@ export const ACTIVATION_ERROR_KEYS: Record<string, TranslationKey> = {
   CATALOG_PRODUCT_NO_DELIVERY_AGENCY: 'errors.codes.CATALOG_PRODUCT_NO_DELIVERY_AGENCY',
   CATALOG_PRODUCT_NO_PICKUP_LOCATION: 'errors.codes.CATALOG_PRODUCT_NO_PICKUP_LOCATION',
   CATALOG_PRODUCT_INVALID_PICKUP_LOCATION: 'errors.contexts.delivery.CATALOG_PRODUCT_INVALID_PICKUP_LOCATION',
+  CATALOG_PRODUCT_AGENCY_STORAGE_INFINITE_STOCK: 'products.activation.agencyStorageInfiniteStock',
   CATALOG_PRODUCT_VECTORISATION_PENDING: 'errors.contexts.delivery.CATALOG_PRODUCT_VECTORISATION_PENDING',
   CATALOG_PRODUCT_VECTORISATION_NOT_ELIGIBLE:
     'errors.contexts.delivery.CATALOG_PRODUCT_VECTORISATION_NOT_ELIGIBLE',
@@ -704,6 +738,16 @@ export async function runActivationPreflight(productId: string): Promise<Transla
     }
     if (!product.delivery?.pickupLocation) {
       errors.push(ACTIVATION_ERROR_KEYS.CATALOG_PRODUCT_NO_PICKUP_LOCATION);
+    }
+    // A warehouse holds a countable number of things, so agency storage and
+    // unlimited stock are mutually exclusive. NOT a `stock > 0` rule — a
+    // warehoused product may legitimately be at zero, and requiring a positive
+    // quantity would demote it the moment it sold out.
+    if (
+      product.delivery?.pickupLocation?.source === 'agency_storage' &&
+      variants.some((v) => v.status === 'active' && v.isInfiniteStock)
+    ) {
+      errors.push(ACTIVATION_ERROR_KEYS.CATALOG_PRODUCT_AGENCY_STORAGE_INFINITE_STOCK);
     }
   }
 

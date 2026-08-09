@@ -4,11 +4,7 @@
 // site: this module has no React context of its own. See src/i18n/README.md.
 
 import type { TranslationKey } from '@/i18n';
-import type {
-  PaymentGateway,
-  PhoneOperator,
-  SubscriberPlanStatus,
-} from '@/types/billing.types';
+import type { PaymentGateway, SubscriberPlanStatus } from '@/types/billing.types';
 import type { PaymentMethodType } from '@/types/payment-method.types';
 
 type Translate = (key: TranslationKey, params?: Record<string, string | number>) => string;
@@ -26,21 +22,19 @@ export const PAYMENT_POLL_INTERVAL_MS = 4000;
 export const PAYMENT_POLL_TIMEOUT_MS = 3 * 60 * 1000;
 
 // ─── Mobile-money operators ──────────────────────────────────────────────────────
-
-export const PHONE_OPERATORS: { value: PhoneOperator; labelKey: TranslationKey }[] = [
-  { value: 'MTN', labelKey: 'billing.operator.MTN' },
-  { value: 'ORANGE', labelKey: 'billing.operator.ORANGE' },
-  { value: 'MOOV', labelKey: 'billing.operator.MOOV' },
-];
+// The operator list itself now lives in `@/components/payment-methods` —
+// `MOBILE_MONEY_BRANDS[].chargeOperator` pairs each `PhoneOperator` with the
+// brand's logo and payout name, so a wallet is described in exactly one place.
 
 /** Gateway used for mobile-money charges (default operator gateway). */
 export const MOBILE_MONEY_GATEWAY: PaymentGateway = 'NOTCHPAY';
 export const CARD_GATEWAY: PaymentGateway = 'STRIPE';
 
-// ─── Gateway catalog (drives the gateway-first checkout chips) ───────────────────
+// ─── Gateway catalog ─────────────────────────────────────────────────────────────
 // Each gateway maps to the method type it collects: mobile-money gateways need a
-// phone + operator; the card gateway (Stripe) tokenises a card. The Stripe chip is
-// only shown when a publishable key is configured (see PaymentDialog).
+// phone + operator; the card gateway (Stripe) tokenises a card. Vendors choose a
+// method category, not a gateway — this drives the "Processed by" select and the
+// currency each category settles in.
 
 export interface GatewayMeta {
   value: PaymentGateway;
@@ -76,6 +70,11 @@ export const GATEWAYS: GatewayMeta[] = [
     chargeCurrency: 'USD',
   },
 ];
+
+/** The gateways that collect a phone + operator, in offer order. */
+export const MOBILE_MONEY_GATEWAYS: GatewayMeta[] = GATEWAYS.filter(
+    (g) => g.methodType === 'mobile_money',
+);
 
 // ─── Saved payment-method display ────────────────────────────────────────────────
 

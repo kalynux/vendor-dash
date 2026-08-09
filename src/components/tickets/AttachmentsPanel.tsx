@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Loader2, Upload, FileText, ImageIcon, Download, Globe, Lock } from 'lucide-react';
+import { Loader2, Upload, FileText, ImageIcon, Download, Globe, Info, Lock } from 'lucide-react';
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
@@ -166,6 +166,12 @@ export function AttachmentsPanel({
             {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
             {t(uploading ? 'tickets.detail.attaching' : 'tickets.detail.uploadAttachment')}
           </button>
+
+          {/* Attaching is one-way for vendors — warn before, not after. */}
+          <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+            <Info className="mt-0.5 h-3 w-3 shrink-0" />
+            {t('tickets.detail.attachmentLockNotice')}
+          </p>
         </div>
       )}
 

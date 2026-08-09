@@ -224,6 +224,28 @@ reference for what the params mean. Plan templates (`agency_plan_expiring`,
 | `agency_cod_deposit_direct_to_platform` | `{{1}}`=agent name, `{{2}}`=currency, `{{3}}`=amount | `cod/deposits/{{depositId}}` · Review deposit | {{1}} paid {{2}} {{3}} of collected cash straight to the platform. Your liability has been reduced by the same amount and the collections it covers are settled — nothing is owed to you for it. |
 | `agency_storage_alert` | `{{1}}`=percent used, `{{2}}`=usage, `{{3}}`=limit | `settings/storage` (static) · Manage storage | *(same copy as `vendor_storage_alert`, §7)* |
 
+### 10a. Agent-contract templates (agency side)
+
+The agency's half of the agent↔agency contract. Button suffix is `agents/{{contractId}}` · **View
+contract** for all eight. See [Agent roster](../agency/agent-roster.md#notifications).
+
+| Template name | Body params | English body |
+|---|---|---|
+| `agency_agent_contract_request_received` | `{{1}}`=agent name | {{1}} applied to deliver for you. |
+| `agency_agent_contract_approved` | `{{1}}`=agent name | {{1}} accepted your request. |
+| `agency_agent_contract_rejected` | `{{1}}`=agent name | {{1}} declined your request. |
+| `agency_agent_contract_status_request_raised` | `{{1}}`=agent name, `{{2}}`=transition label | {{1}} wants to {{2}}. It does not take effect until you answer — open the request to approve or decline it. |
+| `agency_agent_contract_status_request_resolved` | `{{1}}`=agent name, `{{2}}`=transition label, `{{3}}`=resolution label | The request for {{1}} to {{2}} was {{3}}. |
+| `agency_agent_contract_terms_countered` | `{{1}}`=agent name | {{1}} has countered the terms of your pending contract. Review what they are asking, then accept it, decline it, or counter again. |
+| `agency_agent_contract_terms_proposed` | `{{1}}`=agent name | {{1}} has proposed a change to their contract. **The current terms stay in force until you answer** — nothing changes unless you accept. Open it to review, accept, decline or counter. |
+| `agency_agent_contract_terms_resolved` | `{{1}}`=agent name, `{{2}}`=resolution label | The proposed change to the contract with {{1}} was {{2}}. Open the contract to see the terms now in force. |
+
+**Label params are pre-localized by the server**, not enum values — `{{2}}` on
+`status_request_raised` arrives as "end your contract" / "mettre fin à votre contrat" in the
+recipient's language, and the resolution label as "accepted" / "declined" / "withdrawn" / "replaced
+by a counter-offer". Do not translate them inside the template; the body around them is what varies
+per language.
+
 Headers are static `TEXT` — use the situation's `subject` from the catalog
 (e.g. *New connection request*, *Deposit awaiting your confirmation*).
 
@@ -244,10 +266,101 @@ Plan templates (`agent_plan_expiring`, `agent_plan_expired`) are in §9.
 | `agent_shipment_reassigned_away` | `{{1}}`=order number, `{{2}}`=agency name | **none** | The delivery for order {{1}} has been reassigned to another agent by {{2}}. You are no longer responsible for it, and its customer and tracking details are no longer available to you. It stays in your activity history. |
 | `agent_storage_alert` | `{{1}}`=percent used, `{{2}}`=usage, `{{3}}`=limit | `settings/storage` (static) · Manage storage | *(same copy as `vendor_storage_alert`, §7)* |
 
+### 11a. Agent-contract templates (agent side)
+
+The agent's half — the mirror of §10a with the agency named instead. Button suffix is
+`memberships/{{contractId}}` · **View contract** for all eight. See
+[Agency membership](../agent/agency-membership.md#notifications).
+
+| Template name | Body params | English body |
+|---|---|---|
+| `agent_contract_request_received` | `{{1}}`=agency name | {{1}} wants you to deliver for them. |
+| `agent_contract_approved` | `{{1}}`=agency name | {{1}} approved your application. |
+| `agent_contract_rejected` | `{{1}}`=agency name | {{1}} declined your application. |
+| `agent_contract_status_request_raised` | `{{1}}`=agency name, `{{2}}`=transition label | {{1}} wants to {{2}}. It does not take effect until you answer — open the request to approve or decline it. |
+| `agent_contract_status_request_resolved` | `{{1}}`=transition label, `{{2}}`=agency name, `{{3}}`=resolution label | The request to {{1}} with {{2}} was {{3}}. |
+| `agent_contract_terms_countered` | `{{1}}`=agency name | {{1}} has changed the terms of your pending contract. Review what they are offering, then accept it, decline it, or counter again. |
+| `agent_contract_terms_proposed` | `{{1}}`=agency name | {{1}} has proposed a change to your contract. **Your current terms stay in force until you answer** — nothing changes unless you accept. Open it to review, accept, decline or counter. |
+| `agent_contract_terms_resolved` | `{{1}}`=agency name, `{{2}}`=resolution label | The proposed change to your contract with {{1}} was {{2}}. Open the contract to see the terms now in force. |
+
+> **Param order differs between the two sides** — `agent_contract_status_request_resolved` takes the
+> transition label first, its agency twin takes the name first. Copy each from its catalog rather
+> than assuming symmetry.
+>
+> The "stays in force until you answer" clause in `terms_proposed` is **load-bearing copy**, not
+> padding. A live terms proposal changes nothing on its own; a recipient who assumes it already
+> applied will act on the wrong rate. Keep it in every language.
+
 > **Static-header caveat:** the in-app subject for `cod.deposit.recorded` is
 > *"Deposit recorded by {{agencyName}}"*, but a template header must be static —
 > create that template's header as **"Deposit recorded"**. The agency name is
 > already the first body param, so nothing is lost.
+
+---
+
+## 12. Agency-warehoused stock templates
+
+> **"Storage" here means a WAREHOUSE**, not the media-file quota. `vendor_storage_alert`
+> (§7) and `agency_storage_alert` (§10) are the quota ones. These nine are about physical
+> goods on an agency's shelves. Do not merge the two families.
+
+All nine carry a URL button. Base URL is `VENDOR_APP_URL` for the `vendor_*` templates
+and `AGENCY_APP_URL` for the `agency_*` ones.
+
+### 12a. Stock adjustment requests (both sides)
+
+Neither the vendor nor the agency may change `variant.stock` on a warehoused SKU alone;
+one proposes and the other approves. Each side gets the same three situations from its own
+point of view.
+
+| Template | Body params | Button suffix |
+|---|---|---|
+| `agency_storage_stock_request_received` | `vendorName`, `productTitle`, `sku`, `quantityBefore`, `requestedQuantity` | `stock-requests/{{requestId}}` |
+| `agency_storage_stock_request_approved` | `vendorName`, `productTitle`, `sku`, `requestedQuantity` | `stock-requests/{{requestId}}` |
+| `agency_storage_stock_request_rejected` | `vendorName`, `productTitle`, `sku`, `quantityBefore` | `stock-requests/{{requestId}}` |
+| `vendor_storage_stock_request_received` | `agencyName`, `requestedQuantity`, `productTitle`, `sku`, `quantityBefore` | `stock-requests/{{requestId}}` |
+| `vendor_storage_stock_request_approved` | `agencyName`, `productTitle`, `sku`, `requestedQuantity` | `stock-requests/{{requestId}}` |
+| `vendor_storage_stock_request_rejected` | `agencyName`, `productTitle`, `sku`, `quantityBefore` | `stock-requests/{{requestId}}` |
+
+> **Every `received` body carries BOTH quantities, and the order differs between the two
+> sides.** Note `vendor_storage_stock_request_received` puts `requestedQuantity` second
+> (the agency *counted* n) while the agency's puts `quantityBefore` fourth (the vendor
+> wants to go *from* n *to* m). Copy the param order from the table, not from the other
+> side's template.
+>
+> Both numbers are **load-bearing copy**: the decision the recipient has to make is "is 90
+> right, or is 120?", and a body naming only the new figure forces them to go and look up
+> the old one before they can answer.
+
+### 12b. Things the agency did alone (vendor only)
+
+No vendor decision to make — where the goods sit and whether the rent was paid are the
+agency's own business — but a suspension takes the product off the storefront, and the
+vendor must not discover that from their sales figures.
+
+| Template | Body params | Button suffix |
+|---|---|---|
+| `vendor_storage_depot_changed` | `agencyName`, `productTitle`, `locationSuffix` | `products/{{productId}}` |
+| `vendor_storage_product_suspended` | `agencyName`, `productTitle`, `noteSuffix` | `products/{{productId}}` |
+| `vendor_storage_product_unsuspended` | `agencyName`, `productTitle` | `products/{{productId}}` |
+
+> **`locationSuffix` and `noteSuffix` are pre-composed, including their own leading
+> separator.** The backend sends `" (Bonabéri branch)"` or `""`, and
+> `" Their note: “Storage unpaid since June”."` or `""`. That is deliberate: an unnamed
+> depot or an absent note would otherwise render dangling punctuation ("…to a different
+> warehouse ."). When creating these templates, place the placeholder **immediately
+> after** the preceding word with no space or bracket of your own.
+
+### Copy, all five languages
+
+`en` / `fr` / `pt_PT` / `es` / `ar`, as with every other family here. Take the exact
+strings from `NOTIFICATION_CATALOG` (`notification-catalog.ts`) and
+`AGENCY_NOTIFICATION_CATALOG` (`agency-notification-catalog.ts`) — those are the source
+of truth, and the in-app bodies and the template bodies must read the same.
+
+> **Suspension copy must state the consequence plainly.** `storage.product_suspended`
+> says "so customers can no longer buy it" in every language. A vendor who reads it as an
+> administrative note will not act, and the product stays unsellable.
 
 ---
 

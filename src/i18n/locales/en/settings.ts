@@ -126,20 +126,35 @@ export const settings = {
         timezonePlaceholder: 'Select your timezone',
 
         methodsTitle: 'Payout Methods',
-        methodsHint: 'The first method is used by default. Add up to 3.',
-        preferred: 'Preferred Method',
-        fallback: 'Fallback Method',
+        methodsHint:
+            'The first method is used by default — add up to 3. Account names must match your records with the provider.',
+        /** Badge on the row at the front of the list. */
+        preferred: 'Preferred',
         paymentMethod: 'Payment Method',
 
+        /**
+         * Full names — the list rows, the remove confirmation and the "coming
+         * soon" note, all of which have a whole line to themselves.
+         */
         mobileMoney: 'Mobile Money',
-        mobileMoneyHint: 'MTN, Orange, Wave…',
-        mobileMoneyDetails: 'Mobile Money Details',
         bankTransfer: 'Bank Transfer',
-        bankTransferHint: 'Direct bank payout',
-        bankDetails: 'Bank Account Details',
+        card: 'Card',
+
+        /**
+         * The three method tiles. They sit in one row, so a phone gives each of
+         * them about eighty pixels — anything longer than a word or two per line
+         * breaks mid-word, and the descriptions have to earn their place.
+         */
+        methodMobileMoney: 'Mobile Money',
+        methodBank: 'Bank',
+        methodCard: 'Card',
+        mobileMoneyHint: 'Mobile wallet',
+        bankTransferHint: 'Bank account',
+        cardHint: 'Bank card',
+        /** Under the method tiles, naming whichever kinds cannot be picked yet. */
+        methodSoonNote: '{{methods}} cannot receive payouts yet — we are working on it.',
 
         provider: 'Provider',
-        providerPlaceholder: 'Select provider',
         phoneNumber: 'Phone Number',
         accountName: 'Account Name',
         mobileAccountNamePlaceholder: 'Name on the mobile money account',
@@ -151,8 +166,54 @@ export const settings = {
         bankCountry: 'Bank Country',
         bankCountryPlaceholder: 'Country where the bank operates',
 
-        addMobileMoney: 'Add Mobile Money',
-        addBank: 'Add Bank Account',
+        /** Card destinations — brand + last 4 + holder + expiry, and nothing else. */
+        cardBrand: 'Card Network',
+        cardBrandPlaceholder: 'Select the card network',
+        cardLast4: 'Last 4 Digits',
+        cardLast4Placeholder: '4242',
+        cardLast4Hint: 'We never ask for the full card number or the CVV.',
+        cardHolderName: 'Cardholder Name',
+        cardHolderPlaceholder: 'Name as it appears on the card',
+        cardExpiryMonth: 'Expiry Month',
+        cardExpiryYear: 'Expiry Year',
+        /** Placeholders inside the two expiry dropdowns. */
+        cardMM: 'MM',
+        cardYYYY: 'YYYY',
+        cardCountry: 'Issuing Country',
+        cardCountryPlaceholder: 'Country that issued the card',
+        issuingBank: 'Issuing Bank (optional)',
+        issuingBankPlaceholder: 'e.g. Afriland First Bank',
+        cardSettlementNote:
+            'Card payouts are released by hand today, so they take longer to arrive. Keep a mobile money or bank method as your preferred one if you want the fastest payout.',
+
+        /** The saved-methods list and its add/edit dialog. */
+        addMethod: 'Add payout method',
+        addTitle: 'Add payout method',
+        /**
+         * One line each. The account-name rule that used to trail these lives on
+         * the surfaces that have room for it — the tab's own info, and the
+         * methods hint in onboarding — rather than in a dialog subtitle that ran
+         * to three lines on a phone before the form even started.
+         */
+        addDescription: 'Where your withdrawals are sent.',
+        editTitle: 'Edit payout method',
+        editDescription: 'Change where this payout lands.',
+        saveMethod: 'Save method',
+        empty: 'No payout method yet. Add one so we know where to send your earnings.',
+        atLimit: 'You can save up to {{max}} payout methods.',
+        setPreferred: 'Set preferred',
+        /** Opens with the button's own visible text, which speech control types. */
+        setPreferredAria: 'Set preferred: {{label}}',
+        makePreferred: 'Set as preferred',
+        makePreferredHint: 'Used first for every payout.',
+        editAria: 'Edit {{label}}',
+        removeAria: 'Remove {{label}}',
+        removeTitle: 'Remove payout method?',
+        removeDescription: '{{label}} will be removed. Nothing changes until you save.',
+        keepOne: 'Keep at least one payout method.',
+        /** A stored entry that would be rejected on save — usually a legacy record. */
+        incomplete: 'Incomplete',
+        incompleteHint: 'Some details are missing — open it to finish.',
 
         /** Account → Payout, the standalone settings tab. */
         paymentMethodsTitle: 'Payment Methods',
@@ -209,18 +270,20 @@ export const settings = {
         removeAddress: 'Remove address',
         noAddresses: "No addresses added. Customers won't see a pickup location until you add one.",
 
-        findAddress: 'Find address',
+        /** Card heading — the row's place in the list, under the vendor's own label. */
+        primaryAddress: 'Primary address',
+        otherAddress: 'Address {{number}}',
+
         findAddressHintLabel: 'About finding an address',
         findAddressHint: 'Type a street, area, or city and pick a result — that pins the exact coordinates we hand to delivery agencies. The fields below are filled in for you and stay editable, but editing them without re-picking a result will block the save.',
         searchPlaceholder: 'Search a street, area, or city…',
-        pinned: 'Location pinned on map',
         notPinned: 'Not pinned yet.',
 
         label: 'Label',
         labelHintLabel: 'About the address label',
         labelHint: "Your own name for this location, e.g. “Main Shop” or “Warehouse”. It's how you pick a pickup point when publishing a product.",
         labelPlaceholder: 'e.g. Main Shop, Warehouse',
-        street: 'Street Address',
+        street: 'Address / landmark',
         streetPlaceholder: '123 Market Street',
         line2: 'Address Line 2',
         line2Placeholder: 'Suite 4B, Floor 2…',
@@ -228,6 +291,9 @@ export const settings = {
         cityPlaceholder: 'Douala',
         state: 'State / Region',
         statePlaceholder: 'Littoral',
+        /** Trails the city/region line so it reads as filled in, not typed. */
+        fromMapResult: '· from the map result',
+        notNamedByMap: "the map result didn't name one",
 
         geoRequired: 'Search and select this address so we can pin it on the map.',
         geoCountryMismatch: 'This address must be in your registered country ({{country}}). Search for it again within {{country}}.',
@@ -235,6 +301,10 @@ export const settings = {
 
         removeConfirmTitle: 'Remove this address?',
         removeConfirmBody: "If it's still set as a pickup location on a product, saving will be blocked until you reassign that product.",
+
+        clearPinTitle: 'Remove the pinned location?',
+        clearPinBody: 'This is the coordinate delivery agencies route to. You will have to search for the address and pick it again before this can be saved.',
+        clearPinAction: 'Remove pin',
     },
 
     policies: {

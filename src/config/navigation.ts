@@ -3,6 +3,10 @@ import {
   ShoppingCart,
   Package,
   Boxes,
+  AlertTriangle,
+  Lock,
+  History,
+  PackageSearch,
   Users,
   BarChart3,
   Settings,
@@ -75,7 +79,20 @@ export const PRIMARY_NAV: NavItem[] = [
   { id: 'overview', labelKey: 'nav.items.overview', path: '/dashboard', icon: LayoutDashboard },
   { id: 'orders', labelKey: 'nav.items.orders', path: '/dashboard/orders', icon: ShoppingCart, badge: 'orders' },
   { id: 'products', labelKey: 'nav.items.products', path: '/dashboard/products', icon: Package },
-  { id: 'inventory', labelKey: 'nav.items.inventory', path: '/dashboard/inventory', icon: Boxes },
+  {
+    id: 'inventory',
+    labelKey: 'nav.items.inventory',
+    path: '/dashboard/inventory',
+    icon: Boxes,
+    // Labelled from `inventory.tabs.*` rather than `nav.items.*`: the page header
+    // and the mobile pill strip read the same keys, so the three can't drift.
+    children: [
+      { id: 'inventory-alerts', labelKey: 'inventory.tabs.alerts', path: '/dashboard/inventory/alerts', icon: AlertTriangle },
+      { id: 'inventory-reservations', labelKey: 'inventory.tabs.reservations', path: '/dashboard/inventory/reservations', icon: Lock },
+      { id: 'inventory-history', labelKey: 'inventory.tabs.history', path: '/dashboard/inventory/history', icon: History },
+      { id: 'inventory-requests', labelKey: 'inventory.tabs.requests', path: '/dashboard/inventory/requests', icon: PackageSearch },
+    ],
+  },
   {
     id: 'bookings',
     labelKey: 'nav.items.bookings',

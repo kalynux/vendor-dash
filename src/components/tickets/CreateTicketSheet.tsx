@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Loader2, Paperclip, X, FileText } from 'lucide-react';
+import { Loader2, Paperclip, X, FileText, Info } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetBody, SheetFooter,
@@ -496,6 +496,13 @@ export function CreateTicketSheet({ open, onOpenChange, onCreated }: CreateTicke
                   max: MAX_CREATE_ATTACHMENTS,
                 })}
               </p>
+              {/* Files can still be removed here; once the ticket exists, they're stuck to it. */}
+              {selectedFiles.length > 0 && (
+                <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+                  <Info className="mt-0.5 h-3 w-3 shrink-0" />
+                  {t('tickets.create.attachmentLockNotice')}
+                </p>
+              )}
               {errors.attachments && (
                 <p className="text-xs text-destructive">{m(errors.attachments.message as string)}</p>
               )}

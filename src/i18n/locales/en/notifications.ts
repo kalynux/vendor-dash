@@ -18,16 +18,40 @@ export const notifications = {
         daysAgo: '{{count}}d ago',
     },
 
-    tabs: {
+    /** Search + read-state filter above the feed (replaces the old tab strip). */
+    filters: {
+        title: 'Filter notifications',
+        searchPlaceholder: 'Search notifications…',
+        readStatus: 'Read status',
         all: 'All',
         unread: 'Unread',
         read: 'Read',
+        chipStatus: 'Status: {{value}}',
+    },
+
+    /**
+     * The action-button label on a notification row, keyed off its aggregate. We
+     * build this rather than trusting the backend's `action.label`, which comes
+     * back as a generic "View order" for every event type.
+     */
+    actionLabels: {
+        default: 'View details',
+        order: 'View order',
+        booking: 'View booking',
+        payment: 'View transaction',
+        storage: 'View storage',
+        connection: 'View connections',
+        payout: 'View payout',
+        plan: 'Manage plan',
+        stockRequest: 'Answer request',
+        product: 'View product',
     },
 
     empty: {
         all: 'No notifications yet',
         unread: 'All caught up!',
         read: 'No read notifications',
+        filtered: 'No notifications match your search',
     },
 
     actions: {
@@ -132,8 +156,14 @@ export const notifications = {
             paymentReceivedPartialHint: 'When a partial payment is received',
             paymentReceivedFull: 'Full payment',
             paymentReceivedFullHint: 'When a payment is completed in full',
-            storageAlert: 'Storage alert',
-            storageAlertHint: 'When media storage crosses 80% / 90% / 100%',
+            // `storageAlert` and `agencyStorageUpdates` share only a word: the
+            // first is the MEDIA-FILE quota, the second is physical goods
+            // sitting in an agency's building. Labelled to keep them apart.
+            storageAlert: 'Media storage',
+            storageAlertHint: 'When your product-image storage crosses 80% / 90% / 100%',
+            agencyStorageUpdates: 'Warehoused products',
+            agencyStorageUpdatesHint:
+                'When an agency that warehouses your goods proposes a stock change, answers one of yours, moves a product to another depot, or suspends it',
             connectionUpdated: 'Agency connections',
             connectionUpdatedHint:
                 'When an agency request, approval, rejection, or re-approval happens',
