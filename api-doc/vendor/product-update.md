@@ -50,7 +50,7 @@ Content-Type: application/json
 {
   "description": "<p>Full-grain leather...</p>",
   "tags": ["leather", "jacket", "premium"],
-  "seoTitle": "Buy Vintage Leather Jacket | Jovi Mall",
+  "seoTitle": "Buy Vintage Leather Jacket | WiMall",
   "seoDescription": "Shop our premium vintage leather jacket."
 }
 ```

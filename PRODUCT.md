@@ -8,7 +8,7 @@ web
 
 ## Users
 
-Primary users are **vendors (sellers)** on the wi-mall marketplace — a deliberately broad base. A single vendor account may combine informal/social-commerce selling (merchants graduating from WhatsApp/Instagram into a real storefront), established SMB retail (existing shops digitizing catalog, inventory, and delivery), and service/booking businesses (appointment-led, availability- and calendar-driven). Physical goods, digital products, and bookable services can all live on the same account.
+Primary users are **vendors (sellers)** on the WiMall marketplace — a deliberately broad base. A single vendor account may combine informal/social-commerce selling (merchants graduating from WhatsApp/Instagram into a real storefront), established SMB retail (existing shops digitizing catalog, inventory, and delivery), and service/booking businesses (appointment-led, availability- and calendar-driven). Physical goods, digital products, and bookable services can all live on the same account.
 
 Vendors use this dashboard to run the operational side of selling: listing and pricing, inventory, incoming orders and their delivery, bookings/appointments, customers, money (earnings, payouts, billing, credit), and support.
 
@@ -16,7 +16,7 @@ The broader platform is multi-role: an account holds one or more of `customer`, 
 
 ## Product Purpose
 
-wi-mall is a multi-vendor marketplace and commerce platform. The vendor dashboard is where a seller operates their storefront end to end: configure the store, build the catalog (simple products, advanced products with options/variants, digital/downloadable products, and services with availability and bookings), manage inventory, receive and fulfill orders through connected delivery agencies, handle customers, track earnings and request payouts, manage subscription/billing and credit, and stay in touch through notifications and support tickets. Success is a vendor running the entire selling operation — from listing to delivery to getting paid — without leaving the dashboard.
+WiMall is a multi-vendor marketplace and commerce platform. The vendor dashboard is where a seller operates their storefront end to end: configure the store, build the catalog (simple products, advanced products with options/variants, digital/downloadable products, and services with availability and bookings), manage inventory, receive and fulfill orders through connected delivery agencies, handle customers, track earnings and request payouts, manage subscription/billing and credit, and stay in touch through notifications and support tickets. Success is a vendor running the entire selling operation — from listing to delivery to getting paid — without leaving the dashboard.
 
 ## Positioning
 
@@ -53,7 +53,7 @@ Supporting capabilities that reinforce this position but were not named as the c
 
 ## Brand Commitments
 
-- **Name:** **wi-mall** is the product name to use in the vendor-facing UI (confirmed by the user). Note: the codebase and API still identify internally as **"jovi-mall"** (package `jovi-mall-vendor-dash`, API service `jovi-mall`) — treat that as a legacy/internal identifier, not the customer-facing brand. The scaffold README's "MarketHub" is stale and is not the brand.
+- **Name:** **WiMall** is the product name — used verbatim in the vendor-facing UI, and lowercased as the internal identifier (package `wimall-vendor-dash`, API service `wimall`, domain `wimall.com`). Earlier scaffold and pre-launch names are legacy and must not reappear anywhere in the codebase.
 - No other binding brand assets — logo, palette, typography, or voice — were established during init. *(Undecided — not yet captured.)*
 
 ## Evidence on Hand

@@ -180,7 +180,7 @@ Create a `.env` file in the root directory:
 
 ```env
 VITE_API_URL=https://your-api-url.com
-VITE_APP_NAME=MarketHub
+VITE_APP_NAME=WiMall
 ```
 
 ## Customization
@@ -246,8 +246,8 @@ MIT License - see LICENSE file for details
 
 ## Support
 
-For support, email support@markethub.com or join our Slack channel.
+For support, email support@wimall.com or join our Slack channel.
 
 ---
 
-Built with ❤️ by the MarketHub Team
+Built with ❤️ by the WiMall Team

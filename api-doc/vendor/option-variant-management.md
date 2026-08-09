@@ -1,7 +1,7 @@
 # Option / Value / Variant Management — Frontend Developer Guide
 
 This document is the definitive reference for frontend developers implementing the product options, option values,
-and variant management UI for **physical products** on Jovi Mall.
+and variant management UI for **physical products** on WiMall.
 
 ---
 

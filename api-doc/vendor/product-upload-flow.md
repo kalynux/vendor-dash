@@ -1,6 +1,6 @@
 # Vendor Product Upload Reference
 
-> **Document Purpose**: Frontend-consumable API reference for building the product management UI in Jovi Mall.
+> **Document Purpose**: Frontend-consumable API reference for building the product management UI in WiMall.
 >
 > **Intended Audience**: Frontend engineers implementing product creation, editing, and publishing flows.
 

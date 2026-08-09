@@ -24,7 +24,7 @@
 
 ## Overview
 
-The **File Management Service** is an enterprise-grade, multi-tenant file storage and management system designed for the Jovi Mall marketplace platform. It provides:
+The **File Management Service** is an enterprise-grade, multi-tenant file storage and management system designed for the WiMall marketplace platform. It provides:
 
 - **Provider-agnostic storage** (local, S3, GCS, R2, Firebase, Cloudinary)
 - **Role-based upload limits** (100MB - 2GB per file)
@@ -52,7 +52,7 @@ The **File Management Service** is an enterprise-grade, multi-tenant file storag
 First-class database entity representing a stored file with provider-agnostic metadata.
 
 **Key Properties:**
-- [id](file:///c:/Users/Fante/Desktop/projects/jovi-mall/src/core/storage/storage-provider.interface.ts#74-80): Unique identifier
+- `id`: Unique identifier
 - `key`: Provider-specific storage key (path or object ID)
 - `provider`: Storage backend type
 - `usageCount`: Reference count for safe cleanup
@@ -585,7 +585,7 @@ Retrieve metadata for a single file by ID.
 **Authentication:** Required
 
 **Path Parameters:**
-- [id](file:///c:/Users/Fante/Desktop/projects/jovi-mall/src/core/storage/storage-provider.interface.ts#74-80): File ID (MongoDB ObjectId)
+- `id`: File ID (MongoDB ObjectId)
 
 **Success Response (200):**
 ```json
@@ -674,7 +674,7 @@ Update file metadata (only `originalName` is editable).
 **Authorization:** Owner or admin only
 
 **Path Parameters:**
-- [id](file:///c:/Users/Fante/Desktop/projects/jovi-mall/src/core/storage/storage-provider.interface.ts#74-80): File ID
+- `id`: File ID
 
 **Request Body:**
 ```json
@@ -721,7 +721,7 @@ Soft delete a file (mark for garbage collection).
 **Authorization:** Owner or admin only
 
 **Path Parameters:**
-- [id](file:///c:/Users/Fante/Desktop/projects/jovi-mall/src/core/storage/storage-provider.interface.ts#74-80): File ID
+- `id`: File ID
 
 **Success Response (200):**
 ```json
@@ -786,7 +786,7 @@ Permanently delete a file (admin only).
 **Authorization:** Admin only
 
 **Path Parameters:**
-- [id](file:///c:/Users/Fante/Desktop/projects/jovi-mall/src/core/storage/storage-provider.interface.ts#74-80): File ID
+- `id`: File ID
 
 **Success Response (200):**
 ```json
@@ -928,7 +928,7 @@ List orphaned files for garbage collection (admin only).
 ### 3. Linking File to Domain Entities
 
 **Domain Services:**
-- [FileAttachService](file:///c:/Users/Fante/Desktop/projects/jovi-mall/src/modules/catalog/domain/services/media/FileAttachService.ts#27-149): Attach file to product or variant
+- `FileAttachService`: Attach file to product or variant
 - `FileDetachService`: Detach file from product or variant (not shown in docs, but inferred)
 
 #### Attach Flow
@@ -1242,7 +1242,7 @@ interface Variant {
 ```
 
 **Linking Process:**
-1. Vendor uploads file → [File](file:///c:/Users/Fante/Desktop/projects/jovi-mall/src/modules/catalog/models/file.model.ts#21-35) created with `ownerType: 'vendor'`, `usageCount: 0`
+1. Vendor uploads file → `File` created with `ownerType: 'vendor'`, `usageCount: 0`
 2. Vendor attaches file to product → `product.fileIds.push(fileId)`, `file.usageCount++`
 3. Vendor detaches file → `product.fileIds.remove(fileId)`, `file.usageCount--`
 
@@ -1357,7 +1357,7 @@ STORAGE_PROVIDER=local  # local, s3, gcs, r2, firebase, cloudinary
 
 ### Provider Switching
 
-**Zero Code Changes:** Business logic uses [IStorageProvider](file:///c:/Users/Fante/Desktop/projects/jovi-mall/src/core/storage/storage-provider.interface.ts#28-81) interface.
+**Zero Code Changes:** Business logic uses `IStorageProvider` interface.
 
 **Steps to Switch:**
 1. Update environment variable: `STORAGE_PROVIDER=s3`
@@ -1536,7 +1536,7 @@ async function reconcileStorage() {
 | Admin    | 2 GB          | System assets, bulk imports       |
 | Customer | 100 MB        | Profile pictures, ticket attachments |
 
-**Enforcement:** Pre-upload validation in [FileUploadController](file:///c:/Users/Fante/Desktop/projects/jovi-mall/src/api/controllers/file-upload.controller.ts#48-165)
+**Enforcement:** Pre-upload validation in `FileUploadController`
 
 ### Who Can Read Files
 
@@ -1702,8 +1702,8 @@ const signedUrl = await api.getSignedUrl(fileId); // Short-lived
 **Scenario:** S3 is down, upload requested.
 
 **Behavior:**
-- Storage provider throws error during [put()](file:///c:/Users/Fante/Desktop/projects/jovi-mall/src/core/storage/storage-provider.interface.ts#29-36)
-- Error caught in [UploadIntakeService](file:///c:/Users/Fante/Desktop/projects/jovi-mall/src/core/uploads/upload-intake.service.ts#28-138)
+- Storage provider throws error during `put()`
+- Error caught in `UploadIntakeService`
 - No database record created
 - 500 response to client
 

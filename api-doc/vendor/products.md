@@ -1,6 +1,6 @@
 # Vendor Product Management API
 
-Complete API reference for managing products in the Jovi Mall multi-vendor platform.
+Complete API reference for managing products in the WiMall multi-vendor platform.
 
 > [!IMPORTANT]
 > **Authentication Required**
