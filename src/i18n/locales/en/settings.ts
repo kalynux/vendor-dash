@@ -198,6 +198,19 @@ export const settings = {
         addDescription: 'Where your withdrawals are sent.',
         editTitle: 'Edit payout method',
         editDescription: 'Change where this payout lands.',
+
+        /**
+         * A destination saved before its kind was switched off. It still shows
+         * and is still paid — it just cannot be sent back, and because the whole
+         * list is replaced on save, keeping it would fail the save entirely.
+         */
+        retired: 'Replace',
+        retiredHint:
+            'This destination can no longer be saved. Replace it with a mobile money one — payouts already sent to it are unaffected.',
+        replaceTitle: 'Replace payout method',
+        replaceDescription:
+            'This kind of destination is no longer accepted. Enter a mobile money account to replace it.',
+        replaceAria: 'Replace {{label}}',
         saveMethod: 'Save method',
         empty: 'No payout method yet. Add one so we know where to send your earnings.',
         atLimit: 'You can save up to {{max}} payout methods.',

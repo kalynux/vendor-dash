@@ -12,6 +12,20 @@ export const errors = {
     fieldInvalid: 'Veuillez vérifier ce champ.',
     retrying: 'Nouvelle tentative…',
 
+    withRequestId: '{{message}} Référence : {{requestId}}',
+
+    category: {
+        authentication: 'Votre session a pris fin. Veuillez vous reconnecter.',
+        authorization: "Vous n'avez pas l'autorisation de faire cela.",
+        validation: "Certaines informations ne sont pas valides. Vérifiez votre saisie et réessayez.",
+        not_found: "Nous n'avons pas trouvé ce que vous cherchiez.",
+        conflict: 'Cela a changé pendant que vous y travailliez. Actualisez puis réessayez.',
+        business_rule: "Ce n'est pas autorisé pour le moment.",
+        rate_limit: 'Trop de requêtes. Patientez un instant puis réessayez.',
+        external_service: "Un service dont nous dépendons n'a pas répondu. Veuillez réessayer.",
+        internal: 'Une erreur serveur est survenue. Réessayez dans un instant.',
+    },
+
     status: {
         400: "Cette requête n'est pas valide. Vérifiez vos informations et réessayez.",
         401: 'Votre session a expiré. Veuillez vous reconnecter.',
@@ -49,6 +63,7 @@ export const errors = {
         namedFile: '{{name}} {{reason}}.',
         someFile: 'Un fichier {{reason}}.',
         violations: {
+            NO_FILES_UPLOADED: "n'a pas été joint — veuillez choisir un fichier",
             FILE_TOO_LARGE: 'est trop volumineux',
             MIME_NOT_ALLOWED: 'a un type de fichier non pris en charge',
             TOO_MANY_FILES: 'dépasse le nombre maximum de fichiers',
@@ -89,6 +104,10 @@ export const errors = {
                 "Ce produit a perdu sa variante. Ouvrez-le dans l'éditeur avancé pour la rétablir.",
             CATALOG_PRODUCT_AGENCY_STORAGE_INFINITE_STOCK:
                 "Ce produit est stocké chez une agence : il lui faut donc une quantité chiffrée. Désactivez le stock illimité, ou remettez le retrait à votre propre adresse.",
+            CATALOG_VARIANT_BARGAIN_RANGE_INVALID:
+                'Le plafond de négociation doit être au moins égal au prix.',
+            CATALOG_VARIANT_BARGAIN_PRICE_MISMATCH:
+                'La fenêtre de négociation ne correspond plus au prix. Rechargez le produit et redéfinissez le plafond.',
         },
 
         delivery: {
@@ -208,6 +227,15 @@ export const errors = {
         AUTH_FORBIDDEN: "Vous n'avez pas l'autorisation de faire cela.",
         AUTH_OAUTH_STATE_INVALID: "Cette tentative de connexion n'a pas pu être vérifiée. Réessayez.",
         AUTH_OAUTH_STATE_EXPIRED: 'Cette tentative de connexion a pris trop de temps. Réessayez.',
+        AUTH_PASSWORD_CHANGED:
+            'Votre mot de passe a été modifié : toutes les autres sessions ont été déconnectées. Reconnectez-vous — et si ce n’était pas vous, changez-le immédiatement.',
+        AUTH_ACCOUNT_SUSPENDED:
+            'Ce compte a été suspendu. Contactez le support pour le faire réexaminer.',
+        AUTH_VENDOR_SUSPENDED:
+            'Votre boutique a été suspendue, le tableau de bord est donc indisponible. Contactez le support pour la faire réexaminer.',
+        AUTH_ADMIN_CALLER_NOT_CONFIGURED: "Cette requête n'a pas pu être autorisée.",
+        AUTH_ADMIN_CALLER_TOKEN_INVALID: "Cette requête n'a pas pu être autorisée.",
+        AUTH_ADMIN_CALLER_ACTOR_MISSING: "Cette requête n'a pas pu être autorisée.",
 
         // ── Paiements ─────────────────────────────────────────────────────────
         PAYMENT_ORDER_NOT_FOUND: 'Cette commande est introuvable.',
@@ -246,6 +274,11 @@ export const errors = {
         REFUND_ORDER_NOT_PAID: "Cette commande n'a pas été payée, il n'y a donc rien à rembourser.",
         REFUND_GATEWAY_FAILED: "Le prestataire de paiement n'a pas pu traiter le remboursement. Réessayez.",
         REFUND_GATEWAY_NOT_SUPPORTED: 'Les remboursements ne sont pas pris en charge pour ce moyen de paiement.',
+        REFUND_ORDER_NOT_FOUND: "Nous n'avons pas trouvé cette commande.",
+        REFUND_ORDER_IS_COD:
+            "Cette commande a été payée en espèces à la livraison : il n'y a aucun paiement à rembourser. Réglez cela directement avec le client.",
+        REFUND_POLICY_OVERRIDE_REQUIRED: 'Ce remboursement sort de votre politique de retour.',
+        ORDER_DISPUTE_NOT_ACTIVE: "Aucun litige n'est ouvert sur cette commande.",
 
         // ── Tickets ───────────────────────────────────────────────────────────
         TICKET_NOT_FOUND: 'Ce ticket est introuvable.',
@@ -454,6 +487,13 @@ export const errors = {
             'Ceci est un produit simple. Convertissez-le en produit avancé pour utiliser des options et plusieurs variantes.',
         CATALOG_PRODUCT_NOT_SIMPLE_MODE: "Ceci est un produit avancé et ne peut pas être modifié comme un produit simple.",
         CATALOG_PRODUCT_INVALID_TYPE: "Cela ne s'applique pas à ce type de produit.",
+        CATALOG_PRODUCT_VENDOR_SUSPENDED:
+            'Votre boutique est suspendue : ses annonces ne peuvent pas être remises en vente. Contactez le support pour la faire réexaminer.',
+        VENDOR_PRODUCT_NOT_SUSPENDABLE: 'Seul un produit en vente peut en être retiré.',
+        VENDOR_PRODUCT_NOT_OVERSIGHT_SUSPENDED:
+            "Ce produit a été suspendu par quelqu'un d'autre : c'est à l'auteur de la suspension de le rétablir.",
+        VENDOR_PRODUCT_UNSUSPEND_BLOCKED:
+            'Ce produit ne peut pas être remis en vente tant que les problèmes signalés ne sont pas corrigés.',
 
         // ── Catalogue : variantes ─────────────────────────────────────────────
         CATALOG_VARIANT_NOT_FOUND: 'Cette variante est introuvable.',
@@ -462,6 +502,12 @@ export const errors = {
         CATALOG_VARIANT_INVALID_STOCK: 'Saisissez une quantité en stock valide.',
         CATALOG_VARIANT_INVALID_PRICE: 'Saisissez un prix valide.',
         CATALOG_VARIANT_COMPARE_PRICE_INVALID: 'Le prix barré doit être supérieur au prix de vente.',
+        CATALOG_VARIANT_BARGAIN_NOT_SUPPORTED:
+            'La négociation du prix n’est pas disponible pour ce type de produit.',
+        CATALOG_VARIANT_BARGAIN_PRICE_MISMATCH:
+            'La fenêtre de négociation ne correspond plus au prix de « {{variant}} ». Rechargez la page et redéfinissez le plafond.',
+        CATALOG_VARIANT_BARGAIN_RANGE_INVALID:
+            'Le plafond de négociation de « {{variant}} » doit être au moins égal à son prix.',
         CATALOG_VARIANT_LIMIT_EXCEEDED: 'Ce produit a atteint son nombre maximum de variantes.',
         CATALOG_VARIANT_NO_OPTIONS: 'Ajoutez au moins une option avant de créer des variantes.',
         CATALOG_VARIANT_OPTION_EMPTY: 'Chaque option doit avoir au moins une valeur.',
@@ -477,6 +523,13 @@ export const errors = {
         CATALOG_VARIANT_SKU_EXISTS: 'Ce SKU est déjà utilisé par une autre variante.',
 
         // ── Stockage en agence : produits entreposés et demandes de stock ─────
+        INVENTORY_STOCK_LEVEL_NOT_FOUND: "Aucun stock enregistré pour cet article.",
+        INVENTORY_LOCATION_UNKNOWN: "Cet entrepôt n'est pas exploité par l'agence.",
+        INVENTORY_PRODUCT_NOT_SUSPENDABLE: 'Seul un produit en vente peut en être retiré.',
+        INVENTORY_PRODUCT_NOT_AGENCY_SUSPENDED:
+            "Ce produit n'a pas été suspendu par l'agence de stockage : elle ne peut donc pas le rétablir.",
+        INVENTORY_PRODUCT_UNSUSPEND_BLOCKED:
+            'Ce produit ne peut pas être remis en vente tant que les problèmes signalés ne sont pas corrigés.',
         INVENTORY_PRODUCT_NOT_STORED_HERE:
             "Ce produit n'est pas entreposé par une agence de livraison : son stock se modifie directement.",
         STOCK_REQUEST_NOT_FOUND: 'Cette demande de stock est introuvable.',
@@ -664,6 +717,13 @@ export const errors = {
         BOOKING_INVALID_SLOT_ID: "Ce créneau n'est pas valide.",
         BOOKING_NOT_RESCHEDULABLE: 'Cette réservation ne peut plus être reportée.',
         BOOKING_SLOT_FULL: 'Ce créneau est complet. Choisissez-en un autre.',
+        BOOKING_NOT_CANCELLABLE: "Cette réservation ne peut plus être annulée.",
+        BOOKING_SLOT_UNAVAILABLE: 'Ce créneau a été pris pendant la réservation. Choisissez-en un autre.',
+        BOOKING_NOT_COMPLETED: 'Terminez cette réservation avant de régler son solde.',
+        BOOKING_NO_BALANCE_DUE: "Aucun solde n'est dû sur cette réservation.",
+        BOOKING_BALANCE_ALREADY_SETTLED: 'Ce solde a déjà été réglé.',
+        BOOKING_BALANCE_PAYMENT_IN_PROGRESS:
+            'Le client est en train de payer ce solde. Attendez la fin du paiement avant de l’enregistrer vous-même.',
 
         // ── Règles de disponibilité ───────────────────────────────────────────
         AVAILABILITY_PRODUCT_NOT_FOUND: 'Ce service est introuvable.',
@@ -672,6 +732,7 @@ export const errors = {
         AVAILABILITY_INVALID_TIME_RANGE: "L'heure de fin doit suivre l'heure de début.",
         AVAILABILITY_TIME_OVERLAP: 'Cela chevauche une autre règle de disponibilité.',
         AVAILABILITY_FORBIDDEN: "Vous n'avez pas l'autorisation de modifier cette disponibilité.",
+        AVAILABILITY_INVALID_TIMEZONE: 'Choisissez un fuseau horaire dans la liste.',
 
         // ── Administration ────────────────────────────────────────────────────
         ADMIN_NOT_FOUND: 'Cet administrateur est introuvable.',
@@ -734,8 +795,66 @@ export const errors = {
         COD_DISCREPANCY_NOT_FOUND: 'Cet écart est introuvable.',
         COD_DISCREPANCY_ALREADY_RESOLVED: 'Cet écart a déjà été résolu.',
 
+        // ── Comptes & boutiques (relayé depuis la console admin) ──────────────
+        USER_STATUS_CONFLICT: 'Ce compte a changé pendant que vous le consultiez. Actualisez puis réessayez.',
+        USER_CONTACT_REQUIRED: 'Un compte doit conserver au moins une adresse e-mail ou un numéro de téléphone.',
+        VENDOR_NOT_FOUND: 'Cette boutique est introuvable.',
+        VENDOR_STATUS_CONFLICT: 'Cette boutique a changé pendant que vous la consultiez. Actualisez puis réessayez.',
+        VENDOR_KYC_STATUS_CONFLICT: 'Cette vérification a déjà été tranchée.',
+
+        // ── Agences & contrats ────────────────────────────────────────────────
+        DELIVERY_AGENCY_STATUS_CONFLICT:
+            'Cette agence a changé pendant que vous la consultiez. Actualisez puis réessayez.',
+        CONTRACT_COVERAGE_REGION_INVALID: "Ce n'est pas une région de ce pays.",
+        MAGAZIN_LOCATION_IN_USE:
+            "Cet entrepôt contient encore des produits : il ne peut pas être supprimé. Sortez d'abord le stock.",
+
+        // ── Notifications client (relayé) ─────────────────────────────────────
+        CUSTOMER_NOTIFICATION_NOT_FOUND: 'Cette notification est introuvable.',
+        CUSTOMER_NOTIFICATION_CHANNEL_NOT_VERIFIED: "Ce canal de contact n'a pas encore été vérifié.",
+        CUSTOMER_NOTIFICATION_DELIVERY_FAILED: "Nous n'avons pas pu délivrer cette notification.",
+
+        // ── Blog / éditorial ──────────────────────────────────────────────────
+        BLOG_ARTICLE_NOT_FOUND: 'Cet article est introuvable.',
+        BLOG_ARTICLE_MOVED: 'Cet article a été déplacé.',
+        BLOG_ARTICLE_GONE: "Cet article n'est plus publié.",
+        BLOG_SLUG_RESERVED: 'Cette adresse web est réservée. Choisissez-en une autre.',
+        BLOG_SLUG_TAKEN: 'Un autre article utilise déjà cette adresse web.',
+        BLOG_ARTICLE_KEY_TAKEN: 'Un autre article utilise déjà cet identifiant.',
+        BLOG_ARTICLE_ALREADY_PUBLISHED: 'Cet article est déjà publié.',
+        BLOG_ARTICLE_DELETE_NOT_ALLOWED:
+            'Cet article a été en ligne : il ne peut pas être supprimé. Archivez-le plutôt.',
+        BLOG_ARTICLE_NOT_PUBLISHABLE: "Cet article n'est pas encore prêt à être publié.",
+        BLOG_AUTHOR_NOT_FOUND: 'Cet auteur est introuvable.',
+        BLOG_AUTHOR_KEY_TAKEN: 'Un autre auteur utilise déjà cet identifiant.',
+        BLOG_AUTHOR_IN_USE:
+            "Cet auteur est crédité sur des articles publiés. Réattribuez-les avant de supprimer la signature.",
+
+        // ── Exploitation de la plateforme ─────────────────────────────────────
+        SYSTEM_MAINTENANCE_ACTIVE: 'La plateforme est en maintenance. Réessayez sous peu.',
+        SYSTEM_LOGS_UNAVAILABLE: 'Cette information est indisponible pour le moment.',
+        SYSTEM_DB_INSPECT_UNAVAILABLE: 'Cette information est indisponible pour le moment.',
+        SYSTEM_CONFIG_EXPOSURE_UNSAFE: 'Cette information ne peut pas être affichée.',
+        SYSTEM_REDIS_COMMAND_REFUSED: 'Cette opération a été refusée.',
+        SYSTEM_MAINTENANCE_REASON_REQUIRED: 'Un motif est requis.',
+        INTEGRATION_PROBE_FAILED: "Ce service n'a pas pu être joint.",
+        CONFIG_INVALID_ENV: 'Le service est mal configuré. Contactez le support.',
+        CONFIG_MISSING_JWT_SECRET: 'Le service est mal configuré. Contactez le support.',
+        CONFIG_CACHE_POLICY_MISSING: 'Le service est mal configuré. Contactez le support.',
+        CONFIG_METRICS_CARDINALITY_UNBOUNDED: 'Le service est mal configuré. Contactez le support.',
+        DEV_TOOLS_WORKER_UNKNOWN: 'Cette opération a été refusée.',
+        DEV_TOOLS_WORKER_BUSY: 'Cette tâche est déjà en cours. Attendez qu’elle se termine.',
+        DEV_TOOLS_CACHE_UNAVAILABLE: 'Cette opération a été refusée.',
+        DEV_TOOLS_CACHE_DB_UNKNOWN: 'Cette opération a été refusée.',
+        DEV_TOOLS_CACHE_FLUSH_REFUSED: 'Cette opération a été refusée.',
+        DEV_TOOLS_OUTBOX_PRUNE_REFUSED: 'Cette opération a été refusée.',
+
         // ── Repli global ──────────────────────────────────────────────────────
         INTERNAL_SERVER_ERROR: 'Une erreur serveur est survenue. Réessayez dans un instant.',
+        REQUEST_BODY_INVALID: "Cette requête n'a pas pu être lue. Veuillez réessayer.",
+        REQUEST_BODY_TOO_LARGE: 'Cette requête est trop volumineuse. Envoyez moins de données à la fois.',
+        REQUEST_MEDIA_TYPE_UNSUPPORTED: "Cette requête n'a pas pu être lue. Veuillez réessayer.",
+        RATE_LIMIT_EXCEEDED: 'Trop de requêtes. Patientez un instant puis réessayez.',
         NOT_FOUND: "Nous n'avons pas trouvé ce que vous cherchiez.",
         VALIDATION_ERROR: 'Certaines informations ne sont pas valides. Vérifiez les champs signalés.',
 

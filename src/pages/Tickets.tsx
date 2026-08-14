@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Plus, Ticket as TicketIcon, ChevronRight,
-  ShoppingCart, Package, Calendar, User, Tag, HelpCircle, Loader2,
+  ShoppingCart, Package, Calendar, User, Store, Truck, Tag, HelpCircle, Loader2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -576,11 +576,20 @@ export function Tickets() {
 
 // ─── Row identity (icon + subject + ref + entity) ─────────────────────────────
 
+// Keyed loosely on purpose: a ticket filed under any of the API's entity types
+// can come back here, including the ones this dashboard never offers, and an
+// unknown key falls through to the generic tag icon.
 const ENTITY_ICONS: Record<string, typeof Tag> = {
   ORDER: ShoppingCart,
   PRODUCT: Package,
   BOOKING: Calendar,
-  ACCOUNT: User,
+  VENDOR: Store,
+  USER: User,
+  CUSTOMER: User,
+  AGENT: User,
+  AGENCY: Store,
+  SHIPMENT: Truck,
+  DELIVERY: Truck,
 };
 
 function EntityChip({ entity, entityType }: { entity: TicketEntityRef | null; entityType: string }) {

@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronRight, ChevronDown, Settings } from 'lucide-react';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
+import { AppLogo } from '@/components/layout/AppLogo';
+import { PlatformStatus } from '@/components/layout/PlatformStatus';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/App';
 import { useNotificationStore } from '@/store';
@@ -164,7 +166,17 @@ export function MobileMoreDrawer({ open, onOpenChange }: MobileMoreDrawerProps) 
             <MenuGroup items={primaryItems} handlers={handlers} />
             <MenuGroup items={FOOTER_NAV} handlers={handlers} />
 
-            <div className="h-8" />
+            {/* Platform identity + health. Counterpart to the sidebar footer,
+                which mobile never renders — this drawer is the only place the
+                vendor sees who they are signed in to and whether it is up. */}
+            <div className="flex items-center justify-center gap-2 px-4 py-6">
+              <AppLogo className="w-5 h-5" />
+              <span className="text-sm font-display font-bold tracking-tight leading-none">
+                WiMall
+              </span>
+              <span aria-hidden className="text-muted-foreground/50">·</span>
+              <PlatformStatus />
+            </div>
           </div>
         </div>
       </SheetContent>

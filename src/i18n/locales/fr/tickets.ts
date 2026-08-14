@@ -37,9 +37,8 @@ export const tickets = {
     },
 
     priority: {
-        normal: 'Normale',
         low: 'Basse',
-        medium: 'Moyenne',
+        normal: 'Normale',
         high: 'Haute',
         urgent: 'Urgente',
     },
@@ -55,7 +54,7 @@ export const tickets = {
         ORDER: 'Commande',
         PRODUCT: 'Produit',
         BOOKING: 'Réservation',
-        ACCOUNT: 'Compte',
+        VENDOR: 'Ma boutique',
         OTHER: 'Autre',
     },
 
@@ -345,10 +344,10 @@ export const tickets = {
     },
 
     validation: {
-        subjectMin: 'L’objet doit contenir au moins 3 caractères',
+        subjectMin: 'Saisissez un objet',
         subjectMax: 'L’objet ne doit pas dépasser 200 caractères',
-        descriptionMin: 'La description doit contenir au moins 10 caractères',
-        descriptionMax: 'La description ne doit pas dépasser 5000 caractères',
+        descriptionMin: 'Décrivez ce qui s’est passé',
+        descriptionMax: 'La description est trop longue — veuillez la raccourcir',
         typeRequired: 'Veuillez sélectionner un type de ticket',
         importanceRequired: 'Veuillez sélectionner un niveau d’importance',
         entityTypeRequired: 'Veuillez sélectionner un type d’élément associé',
@@ -360,7 +359,7 @@ export const tickets = {
         attachmentRequired:
             'Au moins une photo ou une vidéo est exigée par votre politique d’assistance.',
         noteRequired: 'La note ne peut pas être vide',
-        noteMax: 'La note ne doit pas dépasser 2000 caractères',
+        noteMax: 'La note ne doit pas dépasser 300 caractères',
     },
 };
 

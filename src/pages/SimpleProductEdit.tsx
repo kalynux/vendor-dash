@@ -247,6 +247,13 @@ export function SimpleProductEdit() {
               compareAtPrice: saved.compareAtPrice ?? values.compareAtPrice,
               lowStockThreshold: saved.lowStockThreshold ?? values.lowStockThreshold,
               allowOversell: saved.allowOversell ?? values.allowOversell,
+              // NOT the `?? values.x` fallback the others use: an absent `bargain`
+              // legitimately means "the window was cleared", and falling back to
+              // what was typed would mark a clear as unsaved forever. The `in`
+              // check separates "the server omitted the key" (older backend —
+              // trust what we sent) from "the server returned no window".
+              bargainMaxPrice:
+                'bargain' in saved ? saved.bargain?.maxPrice : values.bargainMaxPrice,
             }
           : values;
         const wasDemoted = applyResult(res, wasActive);
@@ -545,6 +552,9 @@ export function SimpleProductEdit() {
               onCancel={goToList}
               disableUnlimitedStock={isWarehoused}
               onStockModeChange={setLiveInfiniteStock}
+              // Revealed only once AI discovery is on — the window is inert without
+              // it, and the toggle that governs it is rendered just above.
+              showBargainField={product.vectorisationEnabled === true}
               stockNotice={
                 pendingStockRequest ? (
                   <PendingStockRequestNotice

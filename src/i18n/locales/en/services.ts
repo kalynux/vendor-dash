@@ -225,6 +225,7 @@ export const services = {
             paid: 'Paid',
             disputed: 'Disputed',
             failed: 'Payment failed',
+            refund_pending: 'Refund pending',
             refunded: 'Refunded',
         },
         /** Filter-chip wording, where the section title already says "Payment". */
@@ -234,6 +235,7 @@ export const services = {
             paid: 'Paid',
             disputed: 'Disputed',
             failed: 'Failed',
+            refund_pending: 'Refund pending',
             refunded: 'Refunded',
         },
         transitions: {
@@ -297,6 +299,14 @@ export const services = {
             'action is needed. If lost, the booking is refunded and cancelled.',
         cancellationReason: 'Cancellation reason',
         markCashReceived: 'Mark cash payment received',
+
+        /** What completion settled to, and whether money is still open on it. */
+        settlement: 'Settlement',
+        finalPrice: 'Final price',
+        balanceOutstanding: '{{amount}} still owed by the customer.',
+        balanceSettled: 'Balance settled ({{method}}).',
+        creditRecorded: '{{amount}} overpaid — recorded, not refunded automatically.',
+        settleBalanceInCash: 'Record {{amount}} received in cash',
         reschedule: 'Reschedule',
         statusConfirmDescription:
             'Apply this change? Confirmed bookings sync to your Google Calendar.',
@@ -331,12 +341,23 @@ export const services = {
         resultTitle: 'Booking completed',
         resultDescription: 'The final price has been settled.',
         originallyBooked: 'Originally booked',
+        amountPaid: 'Already paid',
         finalPrice: 'Final price',
         peakSurcharge: 'Incl. peak surcharge',
-        additionalDue: '{{amount}} additional due',
+        additionalDue: '{{amount}} still owed',
+        /**
+         * No longer "collection isn't enabled yet": the customer is notified and
+         * can pay online, and the vendor can record cash instead. What the
+         * platform still won't do is charge them without asking — they agreed to
+         * the quoted price, not to whatever the service settled at.
+         */
         additionalDueHelp:
-            'The shortfall is recorded on the booking, but automatic collection isn’t enabled ' +
-            'yet — arrange the extra payment with the customer directly.',
+            'The customer has been notified and can pay this online. If you take it in cash, ' +
+            'record it on the booking so the balance clears.',
+        creditDue: '{{amount}} overpaid',
+        creditDueHelp:
+            'The customer paid more than the final price. This is recorded, not refunded ' +
+            'automatically — use a refund if you want the platform to return it.',
         errors: {
             actualEndRequired: 'Pick the actual end time',
             extraMinutesRequired: 'Enter the extra minutes',
@@ -497,6 +518,7 @@ export const services = {
         bookingCancelled: 'Booking cancelled',
         bookingRescheduled: 'Booking rescheduled',
         markedPaid: 'Marked as paid',
+        balanceSettled: 'Balance recorded as paid in cash',
     },
 
     errors: {
@@ -517,6 +539,7 @@ export const services = {
         bookingUpdateFailed: "We couldn't update this booking. Please try again.",
         bookingCancelFailed: "We couldn't cancel this booking. Please try again.",
         markPaidFailed: "We couldn't mark this booking as paid. Please try again.",
+        settleBalanceFailed: "We couldn't record that balance. Please try again.",
         completeFailed: "We couldn't complete this booking. Please try again.",
         rescheduleFailed: "We couldn't reschedule this booking. Please try again.",
         disconnectFailed: "We couldn't disconnect Google Calendar. Please try again.",

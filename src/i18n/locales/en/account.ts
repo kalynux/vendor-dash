@@ -71,7 +71,7 @@ export const account = {
     security: {
         passwordTitle: 'Change Password',
         passwordInfo:
-            "Use a password you don't use anywhere else. Changing it doesn't sign you out of this device, but you'll need the new one next time you log in.",
+            "Use a password you don't use anywhere else. Changing it signs out every other device and browser — this one stays signed in.",
         currentPassword: 'Current Password',
         newPassword: 'New Password',
         confirmPassword: 'Confirm New Password',
@@ -80,7 +80,8 @@ export const account = {
         passwordHint: '8+ chars with upper & lower case, a number, and a special character.',
         passwordsDontMatch: "Passwords don't match.",
         updatePassword: 'Update Password',
-        updated: 'Password updated. Use your new password next time you log in.',
+        updated: 'Password updated. Every other device has been signed out.',
+        updateFailed: 'We could not change your password. Please try again.',
         rules: {
             length: 'At least 8 characters',
             uppercase: 'At least one uppercase letter',
@@ -92,10 +93,17 @@ export const account = {
         twoFactorInfo:
             'A second step at login — a code from your phone on top of your password. Not available yet.',
         twoFactorToggle: 'Enable two-factor authentication',
-        sessionsTitle: 'Active Sessions',
+        sessionsTitle: 'Signed-in Devices',
+        /**
+         * There will be no device list to show: sign-in tokens are stateless by
+         * design, so the platform keeps no record of which devices hold one.
+         * Changing the password is the revocation — that is the whole mechanism,
+         * so the panel says so instead of promising a list that isn't coming.
+         */
         sessionsInfo:
-            'Review the devices signed in to your account and sign them out remotely. Not available yet.',
-        revoke: 'Revoke',
+            'Signing out other devices is done by changing your password — it invalidates every sign-in but this one, everywhere, straight away.',
+        sessionsHowTo:
+            'Changing your password above signs out every other device and browser immediately. Use it if you think someone else has access.',
         notAvailableYet: 'Not available yet — this will be enabled in a future update.',
     },
 

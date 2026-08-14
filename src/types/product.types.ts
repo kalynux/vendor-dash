@@ -194,6 +194,31 @@ export function getProductFileCount(product: ApiProduct | ApiProductDetail): num
   return product.fileIds.length;
 }
 
+/**
+ * The bargainable-pricing window, as READ from the server.
+ *
+ * `minPrice` mirrors the variant's selling price — the backend keeps the two
+ * equal on every write path — so it is not a second price and is never sent by
+ * this client. Only `maxPrice`, the ceiling negotiation may reach, is a vendor
+ * decision. It is NOT a "was" price: never render it struck through or as a
+ * discount reference. That is `compareAtPrice`, and the two are unrelated.
+ */
+export interface ApiVariantBargain {
+  minPrice: number;
+  maxPrice: number;
+}
+
+/**
+ * What a client may SEND for a bargain window.
+ *
+ * `minPrice` is deliberately absent: the backend derives it from `price`, and
+ * sending one that differs is 422 CATALOG_VARIANT_BARGAIN_PRICE_MISMATCH.
+ * Making it untypeable is cheaper than remembering not to send it.
+ */
+export interface BargainWrite {
+  maxPrice: number;
+}
+
 export interface ApiVariant {
   id: string;
   productId: string;
@@ -203,6 +228,16 @@ export interface ApiVariant {
   optionSignature: string; // READ-ONLY — system-generated, never send to server
   price: number;
   compareAtPrice?: number;
+  /** The configured negotiation window. Absent when the vendor set none. */
+  bargain?: ApiVariantBargain;
+  /**
+   * Whether the window is live RIGHT NOW: `vectorisationEnabled && bargain != null`.
+   * Never infer this from the presence of `bargain` — a window is fully stored and
+   * validated while vectorisation is off, it is simply inert. The flag can also flip
+   * on its own when the indexing pipeline demotes an ineligible product, so re-read
+   * it rather than caching it.
+   */
+  bargainable: boolean;
   stock: number;
   isInfiniteStock: boolean;
   lowStockThreshold: number | null;
@@ -337,6 +372,12 @@ export interface SimpleProductPayload {
   stock?: number;             // integer ≥ 0, default 0
   isInfiniteStock?: boolean;  // default false
   compareAtPrice?: number;
+  /**
+   * Negotiation window for the single variant. `{ maxPrice }` alone is a complete
+   * configuration — `minPrice` defaults to `price`. No `| null`: clearing is only
+   * valid on the update endpoint. Stored but INERT until vectorisation is on.
+   */
+  bargain?: BargainWrite;
   sku?: string;               // 1–100 chars; auto-generated when omitted
   tags?: string[];            // unique, non-empty
   fileIds?: string[];         // max 7
@@ -376,6 +417,13 @@ export interface SimpleProductUpdatePayload {
   // → its single variant
   price?: number;
   compareAtPrice?: number;
+  /**
+   * `null` CLEARS the window. NOTE this schema is STRICT — a mistyped key is a 400
+   * here, unlike the variant PATCH which silently ignores unknown keys. A bare
+   * `price` edit auto-moves `minPrice`, but 422s if it would rise above the stored
+   * `maxPrice`; send both together to raise the ceiling as well.
+   */
+  bargain?: BargainWrite | null;
   stock?: number;
   isInfiniteStock?: boolean;
   lowStockThreshold?: number | null;
@@ -438,6 +486,8 @@ export type SimpleDefaultVariant = Pick<
       ApiVariant,
       | 'displayName'
       | 'compareAtPrice'
+      | 'bargain'
+      | 'bargainable'
       | 'isInfiniteStock'
       | 'lowStockThreshold'
       | 'allowOversell'
@@ -481,6 +531,11 @@ export interface CreateVariantPayload {
   price: number;
   name?: string;
   compareAtPrice?: number;
+  /**
+   * No `| null` on purpose — `bargain: null` on a CREATE endpoint is a 400
+   * VALIDATION_ERROR. Rejected outright (400) on service variants.
+   */
+  bargain?: BargainWrite;
   stock?: number;
   isInfiniteStock?: boolean;
   // Physical products only — will be rejected (400) for digital:
@@ -504,6 +559,8 @@ export interface UpdateVariantPayload {
   name?: string;
   price?: number;
   compareAtPrice?: number;
+  /** `null` CLEARS the window. Rejected (400) on service variants except `null`. */
+  bargain?: BargainWrite | null;
   stock?: number;
   isInfiniteStock?: boolean;
   lowStockThreshold?: number | null;

@@ -1,25 +1,34 @@
 import { z } from 'zod';
 import {
   TICKET_IMPORTANCES, ENTITY_TYPES, TRACKING_NUMBER_MAX, MAX_CREATE_ATTACHMENTS,
+  SUBJECT_MAX_LENGTH, DESCRIPTION_CREATE_MAX, DESCRIPTION_UPDATE_MAX, NOTE_MAX_LENGTH,
 } from '@/components/tickets/ticket.constants';
 
 // Validation rules derived exactly from api-doc/vendor/tickets.md field constraints.
 
 const subjectField = z
   .string()
-  .min(3, 'tickets.validation.subjectMin')
-  .max(200, 'tickets.validation.subjectMax');
+  .min(1, 'tickets.validation.subjectMin')
+  .max(SUBJECT_MAX_LENGTH, 'tickets.validation.subjectMax');
 
-const descriptionField = z
-  .string()
-  .min(10, 'tickets.validation.descriptionMin')
-  .max(5000, 'tickets.validation.descriptionMax');
+/**
+ * The two description ceilings genuinely differ, and this is not a transcription
+ * slip: creating a ticket caps the description at 700 characters, editing one
+ * afterwards allows 10000. Sending the create limit to the edit form would
+ * refuse text the API accepts, and the reverse would be refused after a round
+ * trip — so each carries its own.
+ */
+const description = (max: number) =>
+  z
+    .string()
+    .min(1, 'tickets.validation.descriptionMin')
+    .max(max, 'tickets.validation.descriptionMax');
 
 // ─── Create ───────────────────────────────────────────────────────────────────
 
 const baseCreateTicketSchema = z.object({
   subject: subjectField,
-  description: descriptionField,
+  description: description(DESCRIPTION_CREATE_MAX),
   // Type is one of the authoritative ticket_types.txt values; validated as a
   // non-empty string and narrowed to TicketType on submit.
   type: z.string().min(1, 'tickets.validation.typeRequired'),
@@ -55,7 +64,9 @@ export function makeCreateTicketSchema(requiredInfo: string[] = []) {
     const isOrder = val.entityType === 'ORDER';
     const isProduct = val.entityType === 'PRODUCT';
 
-    // entityId is required for every entity type except `OTHER`.
+    // entityId is required for every entity type except `OTHER`, where the
+    // backend defaults it to the requester's own id. `VENDOR` also has no
+    // picker, but its id is filled in by the form rather than by the server.
     if (val.entityType !== 'OTHER' && !val.entityId.trim()) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -94,19 +105,22 @@ export type CreateTicketFormValues = z.infer<typeof baseCreateTicketSchema>;
 
 export const editTicketSchema = z.object({
   subject: subjectField,
-  description: descriptionField,
+  description: description(DESCRIPTION_UPDATE_MAX),
 });
 
 export type EditTicketFormValues = z.infer<typeof editTicketSchema>;
 
 // ─── Note ─────────────────────────────────────────────────────────────────────
 
+// The field is `content`, and note visibility is LOWERCASE — while attachment
+// visibility on the same ticket is uppercase. The two validators genuinely
+// disagree; each is sent exactly as its own endpoint documents it.
 export const noteSchema = z.object({
-  message: z
+  content: z
     .string()
     .min(1, 'tickets.validation.noteRequired')
-    .max(2000, 'tickets.validation.noteMax'),
-  visibility: z.enum(['PUBLIC', 'PRIVATE']).default('PUBLIC'),
+    .max(NOTE_MAX_LENGTH, 'tickets.validation.noteMax'),
+  visibility: z.enum(['public', 'private']).default('public'),
 });
 
 export type NoteFormValues = z.infer<typeof noteSchema>;

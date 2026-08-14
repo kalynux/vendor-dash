@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   Loader2, XCircle, CalendarClock, User, Banknote, CalendarSync,
-  CheckCircle2, Ban,
+  CheckCircle2, Ban, Receipt,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -19,6 +19,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { useTranslation, useFormatters, useApiError } from '@/i18n';
 import {
   fetchBookingById, updateBookingStatus, markBookingPaid, cancelBooking,
+  settleBookingBalance,
 } from '@/services/services.service';
 import { BookingStatusBadge, PaymentStatusBadge } from '@/components/services/StatusBadges';
 import { RescheduleSheet } from '@/components/services/RescheduleSheet';
@@ -130,6 +131,29 @@ export function BookingDetailSheet({ bookingId, open, onOpenChange, onChanged }:
     }
   }
 
+  /**
+   * Record the completion balance as taken in cash.
+   *
+   * A service business usually collects an overrun at the counter rather than
+   * chasing an online payment; without this the balance sits open forever on a
+   * booking the vendor considers finished. Sends no `amount`, which settles the
+   * whole outstanding balance.
+   */
+  async function handleSettleBalance() {
+    if (!booking) return;
+    setBusy(true);
+    try {
+      await settleBookingBalance(booking._id);
+      await load(booking._id);
+      toast.success(t('services.toast.balanceSettled'));
+      onChanged();
+    } catch (err) {
+      apiError.toast(err, { fallbackKey: 'services.errors.settleBalanceFailed' });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function onTransitionClick(t: BookingTransition) {
     if (t.kind === 'cancel') {
       setCancelOpen(true);
@@ -147,6 +171,14 @@ export function BookingDetailSheet({ bookingId, open, onOpenChange, onChanged }:
     booking.paymentStatus !== 'paid' &&
     (!booking.paymentMethod || booking.paymentMethod === 'cash');
   const canReschedule = !!booking && (booking.status === 'pending' || booking.status === 'confirmed');
+  /**
+   * What completion settled to, and what of it is still outstanding. Only a
+   * completed booking has a `settlement`, so an unfinished one shows nothing.
+   */
+  const settlement = booking?.settlement ?? null;
+  const outstandingBalance = settlement
+    ? Math.max(0, settlement.balanceDue - settlement.balancePaid)
+    : 0;
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -210,6 +242,39 @@ export function BookingDetailSheet({ bookingId, open, onOpenChange, onChanged }:
                 )}
               </InfoCard>
 
+              {/* Settlement — only after completion, and only worth a card when
+                  the final price moved off the quote or money is still open. */}
+              {settlement && (
+                <InfoCard icon={<Receipt className="h-4 w-4" />} title={t('services.detail.settlement')}>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">{t('services.detail.finalPrice')}</span>
+                    <span className="font-medium">
+                      {fmt.currency(toMajorUnits(settlement.finalPrice), booking.currency)}
+                    </span>
+                  </div>
+                  {outstandingBalance > 0 ? (
+                    <p className="mt-2 rounded-md bg-amber-50 px-2.5 py-2 text-xs text-amber-700 dark:bg-amber-500/10 dark:text-amber-400">
+                      {t('services.detail.balanceOutstanding', {
+                        amount: fmt.currency(toMajorUnits(outstandingBalance), booking.currency),
+                      })}
+                    </p>
+                  ) : settlement.balanceDue > 0 ? (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      {t('services.detail.balanceSettled', {
+                        method: settlement.balancePaymentMethod ?? '',
+                      })}
+                    </p>
+                  ) : null}
+                  {settlement.creditDue > 0 && (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      {t('services.detail.creditRecorded', {
+                        amount: fmt.currency(toMajorUnits(settlement.creditDue), booking.currency),
+                      })}
+                    </p>
+                  )}
+                </InfoCard>
+              )}
+
               {booking.cancelledReason && (
                 <InfoCard icon={<Ban className="h-4 w-4" />} title={t('services.detail.cancellationReason')}>
                   <p className="text-sm text-muted-foreground">{booking.cancelledReason}</p>
@@ -219,11 +284,22 @@ export function BookingDetailSheet({ bookingId, open, onOpenChange, onChanged }:
           ) : null}
         </SheetBody>
 
-        {booking && (transitions.length > 0 || canMarkPaid || canReschedule) && (
+        {booking && (transitions.length > 0 || canMarkPaid || canReschedule || outstandingBalance > 0) && (
           <SheetFooter className="flex-col gap-2 border-t">
             {canMarkPaid && (
               <Button variant="outline" className="w-full gap-2" disabled={busy} onClick={handleMarkPaid}>
                 <CheckCircle2 className="h-4 w-4" /> {t('services.detail.markCashReceived')}
+              </Button>
+            )}
+            {/* Distinct from "cash received" above, which settles the ORIGINAL
+                price of an unpaid booking. This settles the completion balance
+                on one that was already paid. */}
+            {outstandingBalance > 0 && (
+              <Button variant="outline" className="w-full gap-2" disabled={busy} onClick={handleSettleBalance}>
+                <Banknote className="h-4 w-4" />
+                {t('services.detail.settleBalanceInCash', {
+                  amount: fmt.currency(toMajorUnits(outstandingBalance), booking.currency),
+                })}
               </Button>
             )}
             {canReschedule && (

@@ -13,7 +13,7 @@ import {
   fetchRules, createRules, updateRule, toggleRule, deleteRule,
 } from '@/services/services.service';
 import {
-  DAY_ORDER, DAY_LABEL_KEYS, browserTimezone, getAvailabilityRuleId,
+  DAY_ORDER, DAY_LABEL_KEYS, getAvailabilityRuleId,
 } from '@/components/services/service.constants';
 import type {
   AvailabilityRule, CreateAvailabilityRulePayload, DayOfWeek,
@@ -44,8 +44,13 @@ interface HourSet {
   serverId: string | null;
   startTime: string; // 'HH:mm'
   endTime: string; // 'HH:mm'
-  // Preserved across edits; not shown in this UI (defaulted for new sets).
-  timezone: string;
+  /**
+   * Preserved across edits; never shown in this UI. `null` on a new set, which
+   * makes the rule inherit the vendor profile's timezone server-side — the right
+   * default, since these are the shop's opening hours and the shop does not move
+   * when the vendor opens the dashboard from another country.
+   */
+  timezone: string | null;
   serverActive: boolean; // isActive at load time — used to diff activation on save
 }
 
@@ -83,7 +88,7 @@ function buildSchedule(rules: AvailabilityRule[]): Schedule {
       serverId,
       startTime: r.startTime,
       endTime: r.endTime,
-      timezone: r.timezone,
+      timezone: r.timezone ?? null,
       serverActive: r.isActive,
     });
     // A day reads as "open" when it has at least one published (active) rule.
@@ -101,7 +106,10 @@ function newSet(): HourSet {
     serverId: null,
     startTime: DEFAULT_OPEN,
     endTime: DEFAULT_CLOSE,
-    timezone: browserTimezone(),
+    // Omitted on the wire so the rule inherits the vendor profile's timezone.
+    // Sending the *browser's* zone instead made a shop's opening hours shift
+    // whenever its owner travelled.
+    timezone: null,
     serverActive: false,
   };
 }
@@ -277,7 +285,9 @@ export const AvailabilityRulesEditor = forwardRef<
               dayOfWeek: day,
               startTime: set.startTime,
               endTime: set.endTime,
-              timezone: set.timezone,
+              // Omit rather than send null: the field is optional, and omitting
+              // it is what tells the backend to use the vendor's timezone.
+              ...(set.timezone ? { timezone: set.timezone } : {}),
               isActive: true,
             });
           }

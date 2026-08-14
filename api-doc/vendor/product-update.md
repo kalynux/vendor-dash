@@ -50,7 +50,7 @@ Content-Type: application/json
 {
   "description": "<p>Full-grain leather...</p>",
   "tags": ["leather", "jacket", "premium"],
-  "seoTitle": "Buy Vintage Leather Jacket | WiMall",
+  "seoTitle": "Buy Vintage Leather Jacket | Jovi Mall",
   "seoDescription": "Shop our premium vintage leather jacket."
 }
 ```
@@ -141,6 +141,7 @@ Content-Type: application/json
   "sku": "JACKET-LEATHER-ONE-SIZE",
   "price": 199.99,
   "compareAtPrice": 249.99,
+  "bargain": { "maxPrice": 260.00 },
   "stock": 25,
   "isInfiniteStock": false,
   "weight": 1500,
@@ -394,6 +395,13 @@ PATCH /api/vendor/products/:productId/variants/:variantId
   "lowStockThreshold": 10
 }
 ```
+
+> [!NOTE]
+> On a variant with a [bargain window](./variants.md#bargainable-pricing), a `price` edit
+> also moves `bargain.minPrice` — the two are kept identical, so a client that knows nothing
+> about bargaining cannot break the invariant. A price that would rise above the stored
+> `bargain.maxPrice` is refused (`422`); send `"bargain": { "maxPrice": … }` in the same body
+> to raise both, or `"bargain": null` to drop the window.
 
 ### Reassigning the Default Variant
 

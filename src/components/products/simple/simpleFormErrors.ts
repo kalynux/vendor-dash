@@ -31,6 +31,7 @@ const FORM_KEYS = new Set<string>([
   'fileIds',
   'price',
   'compareAtPrice',
+  'bargainMaxPrice',
   'stock',
   'isInfiniteStock',
   'sku',
@@ -80,6 +81,28 @@ export function projectSimpleError(err: unknown): SimpleErrorProjection {
       return {
         formError: SIMPLE_MODE_ERROR_KEYS.BILLING_LIMIT_EXCEEDED,
         offerDraftFallback: true,
+      };
+
+    // One input is at fault and the number is the whole story — a banner on top
+    // would send the vendor hunting for which field. Note the backend also raises
+    // this for a bare `price` edit that rises above the stored ceiling, which is
+    // why the copy names neither direction.
+    case 'CATALOG_VARIANT_BARGAIN_RANGE_INVALID':
+      return {
+        formError: null,
+        fieldErrors: {
+          bargainMaxPrice: SIMPLE_MODE_ERROR_KEYS.CATALOG_VARIANT_BARGAIN_RANGE_INVALID,
+        },
+        offerDraftFallback: false,
+      };
+
+    // Unreachable by construction — `BargainWrite` has no `minPrice`, so we never
+    // send one to disagree with. Mapped anyway so a future regression surfaces as
+    // a sentence rather than a raw error code.
+    case 'CATALOG_VARIANT_BARGAIN_PRICE_MISMATCH':
+      return {
+        formError: SIMPLE_MODE_ERROR_KEYS.CATALOG_VARIANT_BARGAIN_PRICE_MISMATCH,
+        offerDraftFallback: false,
       };
 
     default:

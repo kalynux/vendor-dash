@@ -47,6 +47,8 @@ import type {
   CompleteBookingPayload,
   CompleteBookingResult,
   CompleteBookingResponse,
+  SettleBalanceResult,
+  SettleBalanceResponse,
 } from '@/types/services.types';
 
 const BASE = '/vendor';
@@ -320,12 +322,35 @@ export async function rescheduleBooking(id: string, newSlotId: string): Promise<
  * one pricing mode (actualEndAt | additionalMinutes | fixedPrice); an empty
  * payload settles at the originally booked duration. The backend recomputes the
  * price — the frontend never does. Returns finalPrice + additionalAmountDue.
+ *
+ * A shortfall is *requested*, not charged: the customer gets a
+ * `booking.balance.due` notification and can pay it online, or the vendor takes
+ * it at the counter via `settleBookingBalance` below.
  */
 export async function completeBooking(
   id: string,
   payload: CompleteBookingPayload = {},
 ): Promise<CompleteBookingResult> {
   const res = await api.post<CompleteBookingResponse>(`${BASE}/bookings/${id}/complete`, payload);
+  return res.data;
+}
+
+/**
+ * Record that the outstanding completion balance was collected in cash.
+ *
+ * Omit `amount` to settle the whole outstanding balance; a partial amount is
+ * accepted and over-declaring is clamped to what is owed. Distinct from
+ * `markBookingPaid`, which settles the **original** price of an unpaid cash
+ * booking — this settles the **completion balance** on one already paid.
+ */
+export async function settleBookingBalance(
+  id: string,
+  amount?: number,
+): Promise<SettleBalanceResult> {
+  const res = await api.post<SettleBalanceResponse>(
+    `${BASE}/bookings/${id}/settle-balance`,
+    amount !== undefined ? { amount } : undefined,
+  );
   return res.data;
 }
 

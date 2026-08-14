@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import { uploadMediaWithProgress } from '@/services/files.service';
+import { getUploadErrorMessage } from '@/lib/uploadErrors';
 import { useTranslation } from '@/i18n';
 import type { ApiFile } from '@/types/file.types';
 
@@ -48,8 +49,11 @@ export function BrandingImageUpload({
                 const [uploaded] = await uploadMediaWithProgress([file]);
                 setLocalPreview(URL.createObjectURL(file));
                 onChange(uploaded.id, uploaded);
-            } catch {
-                setError('Upload failed. Please try again.');
+            } catch (err) {
+                // Per-file violation reasons ("… is too large", "… failed the
+                // security scan") rather than one generic sentence — this was
+                // the only upload call site not going through the helper.
+                setError(getUploadErrorMessage(err, [file]));
             } finally {
                 setUploading(false);
             }

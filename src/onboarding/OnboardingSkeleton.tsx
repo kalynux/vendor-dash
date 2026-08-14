@@ -1,11 +1,18 @@
+import { AppLogo } from '@/components/layout/AppLogo';
 import { Skeleton } from '@/components/ui/skeleton';
 
 export function OnboardingSkeleton() {
     return (
         <div className="min-h-screen bg-background flex flex-col">
-            {/* Header */}
+            {/* Header — the brand is known before the session resolves, so it is
+                painted for real rather than greyed out. This is the app's first
+                frame on a cold load; a placeholder block there would read as a
+                blank app. */}
             <div className="h-16 border-b flex items-center justify-between px-4 md:px-8">
-                <Skeleton className="h-8 w-28" />
+                <div className="flex items-center gap-2">
+                    <AppLogo className="w-8 h-8" />
+                    <span className="font-bold text-sm leading-none">WiMall</span>
+                </div>
                 <Skeleton className="h-8 w-8 rounded-full" />
             </div>
 

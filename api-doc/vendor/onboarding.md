@@ -160,10 +160,10 @@ Captures the vendor's country, timezone, and payout method.
 | `country` | `string` | Yes | Exactly 2 chars, ISO-2 country code | Auto-uppercased (e.g. `"CM"`, `"NG"`). **Locks at onboarding completion** — it can still be corrected on step re-edits while onboarding is in progress, but never afterwards (`403 PROFILE_COUNTRY_IMMUTABLE` on the profile PATCH). Correcting it is rejected (`400 ADDRESS_COUNTRY_MISMATCH`) if geocoded business addresses added in Step 3 already resolve in the old country. All business addresses must be located within it. |
 | `timezone` | `string` | Yes | Min 1 char, IANA timezone string | E.g. `"Africa/Douala"`, `"Africa/Lagos"`. |
 | `payout_details` | `object[]` | Yes | Min 1 entry, Max 3 entries | Ordered array — index 0 is the preferred method. Full reference, including masking and what happens at payout time: **[Payout methods](./payout-methods.md)**. |
-| `payout_details[].method` | `string` | Yes | Enum: `"mobile_money"`, `"bank"` or `"card"` | Determines which sub-object is required. |
+| `payout_details[].method` | `string` | Yes | **Today: `"mobile_money"` only** — `"bank"` and `"card"` are 🚧 [switched off](./payout-methods.md#availability) | Determines which sub-object is required. |
 | `payout_details[].mobile_money` | `object \| null` | Conditional | Required if `method === "mobile_money"` | See sub-fields below. |
-| `payout_details[].bank` | `object \| null` | Conditional | Required if `method === "bank"` | See sub-fields below. |
-| `payout_details[].card` | `object \| null` | Conditional | Required if `method === "card"` | See sub-fields below. |
+| `payout_details[].bank` | `object \| null` | Conditional | Required if `method === "bank"` | 🚧 Switched off. See sub-fields below. |
+| `payout_details[].card` | `object \| null` | Conditional | Required if `method === "card"` | 🚧 Switched off. See sub-fields below. |
 | `version` | `number (integer)` | No | Must match profile `version` if provided | Optimistic concurrency guard. |
 
 **`mobile_money` sub-fields:**
@@ -174,7 +174,8 @@ Captures the vendor's country, timezone, and payout method.
 | `phone_number` | `string` | Yes | **E.164** — leading `+` and country code required (e.g. `+237670000000`). [Contact formats](../README.md#contact-formats-phone--email) |
 | `account_name` | `string` | Yes | Min 1 char |
 
-**`bank` sub-fields:**
+**`bank` sub-fields** — 🚧 **switched off, not configurable right now**
+([why](./payout-methods.md#availability)):
 
 | Field | Type | Required? | Validation |
 |-------|------|-----------|------------|
@@ -183,7 +184,8 @@ Captures the vendor's country, timezone, and payout method.
 | `account_name` | `string` | Yes | Min 1 char |
 | `country` | `string` | Yes | Min 1 char. ISO country code recommended (e.g. `"CM"`) |
 
-**`card` sub-fields** (Visa / Mastercard / …):
+**`card` sub-fields** (Visa / Mastercard / …) — 🚧 **switched off, not configurable right now**
+([why](./payout-methods.md#availability)):
 
 > **The API never accepts a card number or CVV** — send them and the request is **rejected**, not
 > silently ignored. A card destination is identified by brand + last 4 + holder + expiry. Full
@@ -201,7 +203,9 @@ Captures the vendor's country, timezone, and payout method.
 | `gateway_provider` | `string \| null` | No | E.g. `"stripe"` — the gateway that issued the token below |
 | `gateway_token` | `string \| null` | No | The gateway's handle for this card, if your client tokenized it |
 
-```json
+```jsonc
+// 🚧 Refused today with 400 on payout_details.n.method — this is the shape for
+// when `card` is switched back on.
 {
   "method": "card",
   "card": {

@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { useOnboarding } from '@/onboarding/store/onboarding.store';
 import { OnboardingSkeleton } from "./OnboardingSkeleton";
 
@@ -17,7 +17,6 @@ interface OnboardingGuardProps {
 export function OnboardingGuard({ children, requireComplete = false }: OnboardingGuardProps) {
     const { session, isInitializing, currentStep, initialize } = useOnboarding();
     const location = useLocation();
-    const navigate = useNavigate();
 
     // Boot the auth check exactly once per provider mount.
     // The store's initCalled ref prevents double-firing in StrictMode.
@@ -25,13 +24,9 @@ export function OnboardingGuard({ children, requireComplete = false }: Onboardin
         initialize();
     }, [initialize]);
 
-    // Listen for hard-logout events dispatched by the API client on terminal
-    // refresh failure so this guard reacts even if it is not unmounted.
-    useEffect(() => {
-        const handler = () => navigate('/login', { replace: true });
-        window.addEventListener('auth:logout', handler);
-        return () => window.removeEventListener('auth:logout', handler);
-    }, [navigate]);
+    // `auth:logout` is handled by OnboardingProvider, which owns the session and
+    // sits above every route — a listener here only fired on the screens this
+    // guard wraps, which is not where a session usually dies.
 
     // Block render while auth check is in flight — no partial dashboard flash.
     if (isInitializing) {

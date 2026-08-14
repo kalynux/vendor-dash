@@ -11,6 +11,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { AppLogo } from '@/components/layout/AppLogo';
 import { PlatformStatus } from '@/components/layout/PlatformStatus';
 import { PRIMARY_NAV, FOOTER_NAV, type NavItem, type NavChild, type NavBadge } from '@/config/navigation';
 import { useTranslation } from '@/i18n';
@@ -484,8 +485,8 @@ export function Sidebar() {
       <div className="border-t flex-shrink-0">
         {sidebarCollapsed ? (
           <div className="flex justify-center py-3">
-            <div className="relative w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-emerald-400 shadow-brand flex items-center justify-center">
-              <Store className="w-4 h-4 text-white" />
+            <div className="relative w-8 h-8">
+              <AppLogo alt="WiMall" className="w-8 h-8" />
               <span className="absolute -bottom-0.5 -right-0.5 rounded-full bg-card p-0.5">
                 <PlatformStatus compact />
               </span>
@@ -493,9 +494,7 @@ export function Sidebar() {
           </div>
         ) : (
           <div className="flex items-center gap-2 px-4 py-3">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-emerald-400 shadow-brand flex items-center justify-center flex-shrink-0">
-              <Store className="w-4 h-4 text-white" />
-            </div>
+            <AppLogo className="w-8 h-8" />
             <div className="flex-1 min-w-0">
               <p className="text-sm font-display font-bold tracking-tight leading-tight">WiMall</p>
               <PlatformStatus />

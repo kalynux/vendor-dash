@@ -407,11 +407,39 @@ export interface AgencyListMeta {
 
 // ─── API Error ────────────────────────────────────────────────────────────────
 
-/** Shape of individual validation error entries returned by the backend. */
+/**
+ * One field-level validation failure, normalized.
+ *
+ * The backend's Zod projection sends `details.fields[] = { path, message, code }`;
+ * a few older endpoints documented a bare `details[] = { field, message }`.
+ * `buildApiError` flattens both into this shape, so `field` is always populated
+ * and `path`/`code` carry the raw values through for callers that want them.
+ */
 export interface ApiErrorDetail {
   field: string;
   message: string;
+  /** The backend's dotted path (`translations.0.body.3.href`), when it sent one. */
+  path?: string;
+  /** Zod issue code (`invalid_string`, `too_small`, `custom`, …), when sent. */
+  code?: string;
 }
+
+/**
+ * `error.category` — the nine-value taxonomy every error carries (Phase 16).
+ *
+ * Branch on `error.code` when there is something particular to do; fall back to
+ * the category for the ~547 codes there is not. See api-doc/errors/README.md.
+ */
+export type ApiErrorCategory =
+  | 'authentication'
+  | 'authorization'
+  | 'validation'
+  | 'not_found'
+  | 'conflict'
+  | 'business_rule'
+  | 'rate_limit'
+  | 'external_service'
+  | 'internal';
 
 /**
  * Machine-readable reasons returned per file when a file upload fails the
@@ -419,6 +447,13 @@ export interface ApiErrorDetail {
  * `api-doc/errors/README.md` §7.
  */
 export type UploadViolationCode =
+  /**
+   * The four cheap pre-pipeline gates used to answer with hand-built
+   * `{ code, message }` bodies; they now raise the same
+   * `UPLOAD_POLICY_VIOLATION` the sniffing pipeline does, and their names appear
+   * here instead of as a top-level `error.code`.
+   */
+  | 'NO_FILES_UPLOADED'
   | 'FILE_TOO_LARGE'
   | 'MIME_NOT_ALLOWED'
   | 'TOO_MANY_FILES'
@@ -465,11 +500,39 @@ export interface ApiRowError {
   message?: string;
 }
 
+/**
+ * Everything past `(status, code, message)`. An options bag rather than nine
+ * positional parameters, so a call site that only carries violations does not
+ * have to count `undefined`s to reach them.
+ */
+export interface ApiErrorExtras {
+  details?: ApiErrorDetail[];
+  requestId?: string;
+  category?: ApiErrorCategory;
+  retryAfterSeconds?: number;
+  violations?: UploadViolation[];
+  blockedAddresses?: BlockedAddress[];
+  rowErrors?: ApiRowError[];
+  detailsObject?: Record<string, unknown>;
+}
+
 export class ApiError extends Error {
   readonly status: number;
   readonly code: string;
   readonly details?: ApiErrorDetail[];
   readonly requestId?: string;
+  /**
+   * The nine-value taxonomy, present on every backend error. Use it as the
+   * default branch for codes with no specific handling — it is what tells you
+   * whether to retry, re-authenticate, blame the input, or blame us.
+   */
+  readonly category?: ApiErrorCategory;
+  /**
+   * Seconds to wait before retrying, on a `429 RATE_LIMIT_EXCEEDED`. Read from
+   * the `Retry-After` header first (the documented preference), falling back to
+   * `details.retryAfterSeconds`.
+   */
+  readonly retryAfterSeconds?: number;
   /** Populated for `UPLOAD_POLICY_VIOLATION` — per-file upload failure reasons. */
   readonly violations?: UploadViolation[];
   /** Populated for `VENDOR_BUSINESS_ADDRESS_IN_USE` — which addresses blocked the update. */
@@ -484,27 +547,19 @@ export class ApiError extends Error {
    */
   readonly detailsObject?: Record<string, unknown>;
 
-  constructor(
-    status: number,
-    code: string,
-    message: string,
-    details?: ApiErrorDetail[],
-    requestId?: string,
-    violations?: UploadViolation[],
-    blockedAddresses?: BlockedAddress[],
-    rowErrors?: ApiRowError[],
-    detailsObject?: Record<string, unknown>,
-  ) {
+  constructor(status: number, code: string, message: string, extra: ApiErrorExtras = {}) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
     this.code = code;
-    this.details = details;
-    this.requestId = requestId;
-    this.violations = violations;
-    this.blockedAddresses = blockedAddresses;
-    this.rowErrors = rowErrors;
-    this.detailsObject = detailsObject;
+    this.details = extra.details;
+    this.requestId = extra.requestId;
+    this.category = extra.category;
+    this.retryAfterSeconds = extra.retryAfterSeconds;
+    this.violations = extra.violations;
+    this.blockedAddresses = extra.blockedAddresses;
+    this.rowErrors = extra.rowErrors;
+    this.detailsObject = extra.detailsObject;
   }
 
   get isUnauthorized() {
@@ -525,6 +580,20 @@ export class ApiError extends Error {
 
   get isServer() {
     return this.status >= 500;
+  }
+
+  /**
+   * The session ended and no refresh can save it: the account's password was
+   * changed, so every token minted before it is refused — the refresh cookie
+   * included. Terminal by contract: clear local state and sign in again.
+   */
+  get isPasswordChanged() {
+    return this.status === 401 && this.code === 'AUTH_PASSWORD_CHANGED';
+  }
+
+  /** True when the file being deleted is still attached to something. */
+  get isFileStillReferenced() {
+    return this.status === 409 && this.code === 'CATALOG_FILE_STILL_REFERENCED';
   }
 
   /** True when a concurrent write was detected (OCC version mismatch). */
@@ -555,12 +624,12 @@ export class ApiError extends Error {
   }
 
   /**
-   * Field-level validation errors from either documented shape:
-   * `details: [{ field, message }]` or `details: { fields: [{ field, message }] }`.
+   * Field-level validation errors, already flattened from either documented
+   * shape by `buildApiError` — `details: [{ field, message }]` (legacy) or
+   * `details: { fields: [{ path, message, code }] }` (the platform-wide Zod
+   * projection). `field` is populated in both cases.
    */
   get fieldErrors(): ApiErrorDetail[] {
-    if (this.details?.length) return this.details;
-    const fields = this.detailsObject?.fields;
-    return Array.isArray(fields) ? (fields as ApiErrorDetail[]) : [];
+    return this.details ?? [];
   }
 }

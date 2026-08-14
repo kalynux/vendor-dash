@@ -221,6 +221,7 @@ export const services = {
             paid: 'Payée',
             disputed: 'Contestée',
             failed: 'Paiement échoué',
+            refund_pending: 'Remboursement en attente',
             refunded: 'Remboursée',
         },
         paymentShort: {
@@ -229,6 +230,7 @@ export const services = {
             paid: 'Payée',
             disputed: 'Contestée',
             failed: 'Échoué',
+            refund_pending: 'Remb. en attente',
             refunded: 'Remboursée',
         },
         transitions: {
@@ -286,6 +288,13 @@ export const services = {
             'de votre part. En cas de perte, la réservation est remboursée et annulée.',
         cancellationReason: 'Motif de l’annulation',
         markCashReceived: 'Marquer le paiement en espèces reçu',
+
+        settlement: 'Règlement',
+        finalPrice: 'Prix final',
+        balanceOutstanding: '{{amount}} encore dû par le client.',
+        balanceSettled: 'Solde réglé ({{method}}).',
+        creditRecorded: '{{amount}} payé en trop — enregistré, non remboursé automatiquement.',
+        settleBalanceInCash: 'Enregistrer {{amount}} reçus en espèces',
         reschedule: 'Reporter',
         statusConfirmDescription:
             'Appliquer ce changement ? Les réservations confirmées sont synchronisées avec votre Google Agenda.',
@@ -320,12 +329,17 @@ export const services = {
         resultTitle: 'Réservation terminée',
         resultDescription: 'Le prix final a été réglé.',
         originallyBooked: 'Initialement réservé',
+        amountPaid: 'Déjà payé',
         finalPrice: 'Prix final',
         peakSurcharge: 'Dont majoration heures de pointe',
         additionalDue: '{{amount}} restant dû',
         additionalDueHelp:
-            'Le solde est enregistré sur la réservation, mais l’encaissement automatique n’est pas ' +
-            'encore actif — convenez du paiement complémentaire directement avec le client.',
+            'Le client a été prévenu et peut payer ce solde en ligne. Si vous l’encaissez en ' +
+            'espèces, enregistrez-le sur la réservation pour solder le montant.',
+        creditDue: '{{amount}} payé en trop',
+        creditDueHelp:
+            'Le client a payé plus que le prix final. Ce montant est enregistré, mais pas remboursé ' +
+            'automatiquement — utilisez un remboursement si vous souhaitez le lui restituer.',
         errors: {
             actualEndRequired: 'Choisissez l’heure de fin réelle',
             extraMinutesRequired: 'Saisissez les minutes supplémentaires',
@@ -480,6 +494,7 @@ export const services = {
         bookingCancelled: 'Réservation annulée',
         bookingRescheduled: 'Réservation reportée',
         markedPaid: 'Marquée comme payée',
+        balanceSettled: 'Solde enregistré comme payé en espèces',
     },
 
     errors: {
@@ -502,6 +517,7 @@ export const services = {
         bookingUpdateFailed: "Nous n'avons pas pu mettre à jour cette réservation. Réessayez.",
         bookingCancelFailed: "Nous n'avons pas pu annuler cette réservation. Réessayez.",
         markPaidFailed: "Nous n'avons pas pu marquer cette réservation comme payée. Réessayez.",
+        settleBalanceFailed: "Nous n'avons pas pu enregistrer ce solde. Réessayez.",
         completeFailed: "Nous n'avons pas pu terminer cette réservation. Réessayez.",
         rescheduleFailed: "Nous n'avons pas pu reporter cette réservation. Réessayez.",
         disconnectFailed: "Nous n'avons pas pu déconnecter Google Agenda. Réessayez.",

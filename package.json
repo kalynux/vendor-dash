@@ -12,7 +12,8 @@
     "i18n:audit:deep": "node tools/i18n/audit-deep.mjs",
     "i18n:unused": "node tools/i18n/unused-keys.mjs",
     "i18n:smoke": "esbuild tools/i18n/smoke.ts --bundle --platform=node --format=cjs --outfile=node_modules/.cache/i18n-smoke.cjs --define:import.meta.env.DEV=false --alias:@=./src --log-level=error && node node_modules/.cache/i18n-smoke.cjs",
-    "i18n:check": "npm run i18n:audit && npm run i18n:smoke"
+    "i18n:check": "npm run i18n:audit && npm run i18n:smoke",
+    "richtext:verify": "esbuild tools/richtext/verify.ts --bundle --platform=node --format=cjs --outfile=node_modules/.cache/richtext-verify.cjs --alias:@=./src --log-level=error && node node_modules/.cache/richtext-verify.cjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

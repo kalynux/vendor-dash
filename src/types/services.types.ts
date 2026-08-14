@@ -136,9 +136,15 @@ export interface AvailabilityRule {
   productId: string;
   vendorId: string;
   dayOfWeek: DayOfWeek;
-  startTime: string; // 'HH:mm'
+  startTime: string; // 'HH:mm' wall-clock, resolved in `timezone`
   endTime: string; // 'HH:mm'
-  timezone: string; // IANA
+  /**
+   * IANA zone. Absent means the rule inherits the vendor profile's timezone —
+   * the normal case. It used to default to a literal `'UTC'` that was never
+   * actually read (hours resolved against the server clock); the backend
+   * migration clears those rows to "inherit".
+   */
+  timezone?: string | null;
   // Buffers are NOT on availability rules — they live on the service variant's
   // serviceConfig (bufferBeforeMinutes / bufferAfterMinutes). See availability-rules.md.
   isActive: boolean;
@@ -172,7 +178,20 @@ export type BookingStatus =
 
 // `disputed` = a card payment is under chargeback; the backend resolves it to
 // `paid` (won) or `refunded`/cancelled (lost). No vendor action is possible.
-export type PaymentStatus = 'unpaid' | 'pending' | 'paid' | 'disputed' | 'failed' | 'refunded';
+//
+// `refund_pending` = a paid booking was cancelled but its gateway cannot refund
+// programmatically (cash, and mobile money until those refund APIs land), so a
+// HIGH-importance support ticket was raised for a manual payout. The vendor's
+// escrowed earnings are already reversed either way — a cancelled service is
+// never paid for.
+export type PaymentStatus =
+  | 'unpaid'
+  | 'pending'
+  | 'paid'
+  | 'disputed'
+  | 'failed'
+  | 'refund_pending'
+  | 'refunded';
 
 export type PaymentMethod = 'cash' | string;
 
@@ -205,6 +224,28 @@ export interface Booking {
   externalCalendarEventId?: string | null;
   cancelledAt?: string | null;
   cancelledReason?: string | null;
+  /** Present once the booking has been completed. See `BookingSettlement`. */
+  settlement?: BookingSettlement | null;
+}
+
+/**
+ * What completion settled to, persisted on the booking rather than buried in
+ * `metadata` — so an outstanding balance is still readable long after the
+ * completion dialog closed.
+ */
+export interface BookingSettlement {
+  /** The recomputed (or flat) price, in minor units. */
+  finalPrice: number;
+  /** What the customer still owes: `max(0, finalPrice − amountPaid)`. */
+  balanceDue: number;
+  /** How much of `balanceDue` has been collected, online or in cash. */
+  balancePaid: number;
+  /** Overpayment — recorded, never refunded automatically. */
+  creditDue: number;
+  pricingMode?: string;
+  settledAt?: string | null;
+  /** `cash` once the vendor records the balance at the counter. */
+  balancePaymentMethod?: string | null;
 }
 
 // Complete a booking + settle its final price (bookings.md → Complete Booking).
@@ -220,8 +261,32 @@ export interface CompleteBookingResult {
   booking: Booking;
   priceSnapshot: number; // originally booked estimate (minor units)
   finalPrice: number; // recomputed/flat price (minor units)
-  additionalAmountDue: number; // max(0, finalPrice − priceSnapshot)
+  /** What the customer has actually paid so far — `0` unless the booking is `paid`. */
+  amountPaid?: number;
+  /**
+   * `max(0, finalPrice − amountPaid)` — measured against what was **paid**, not
+   * what was quoted. An unpaid booking therefore owes the whole final price,
+   * not just the overrun.
+   */
+  additionalAmountDue: number;
+  /** `max(0, amountPaid − finalPrice)`. Recorded, not auto-refunded. */
+  creditDue?: number;
+  /**
+   * Always `false`: the balance is *requested*, never charged automatically —
+   * the customer agreed to the quoted price, not to whatever is settled after.
+   */
+  additionalAmountCharged?: boolean;
+  additionalAmountNote?: string;
   breakdown: { basePrice: number; peakHoursSurcharge: number };
+}
+
+/** Result of recording a completion balance taken in cash. */
+export interface SettleBalanceResult {
+  bookingId: string;
+  balanceDue: number;
+  balancePaid: number;
+  outstanding: number;
+  balancePaymentMethod: string;
 }
 
 export interface BookingsQueryParams {
@@ -383,6 +448,12 @@ export interface MarkPaidResponse {
 export interface CompleteBookingResponse {
   success: boolean;
   data: CompleteBookingResult;
+  message?: string;
+}
+
+export interface SettleBalanceResponse {
+  success: boolean;
+  data: SettleBalanceResult;
   message?: string;
 }
 

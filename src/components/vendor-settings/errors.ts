@@ -26,3 +26,16 @@ export function mapProfileError(err: unknown): string {
         fallbackKey: 'errors.unknown',
     });
 }
+
+/**
+ * The same job for the password form.
+ *
+ * Deliberately not `mapProfileError`: that one carries `context:
+ * 'agencyConnection'`, which narrows wording for codes this form cannot raise
+ * and would silently reinterpret one it can. Password failures are
+ * `USER_INVALID_PASSWORD` (wrong current password) and a strength
+ * `VALIDATION_ERROR`, both of which read correctly from the shared catalog.
+ */
+export function mapPasswordError(err: unknown): string {
+    return apiErrorMessage(err, { fallbackKey: 'account.security.updateFailed' });
+}

@@ -21,8 +21,8 @@ import {
 } from '@/components/tickets/schemas/ticket.schemas';
 import {
   TICKET_TYPE_GROUPS, TICKET_IMPORTANCES, IMPORTANCE_LABEL_KEYS, ENTITY_TYPES, ENTITY_TYPE_LABEL_KEYS,
-  responsiveSheetProps, DESCRIPTION_MAX_LENGTH, TRACKING_NUMBER_MAX, MAX_CREATE_ATTACHMENTS,
-  humanizeEnum,
+  responsiveSheetProps, DESCRIPTION_CREATE_MAX, TRACKING_NUMBER_MAX, MAX_CREATE_ATTACHMENTS,
+  ENTITY_TYPES_WITHOUT_PICKER, humanizeEnum,
 } from '@/components/tickets/ticket.constants';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useOnboarding } from '@/onboarding/store/onboarding.store';
@@ -118,6 +118,11 @@ export function CreateTicketSheet({ open, onOpenChange, onCreated }: CreateTicke
 
   // Policy requirements are order/product-centric — enforced only on the relevant context.
   const entityRequired = entityType !== 'OTHER';
+  /**
+   * `VENDOR` and `OTHER` have nothing to search: one is the vendor's own shop,
+   * the other is filled in server-side. Only the two that do get a picker.
+   */
+  const hasEntityPicker = !ENTITY_TYPES_WITHOUT_PICKER.includes(entityType as TicketEntityType);
   const trackingRequired = entityType === 'ORDER' && requiredInfo.includes('tracking_number');
   const attachmentsRequired =
     (entityType === 'ORDER' || entityType === 'PRODUCT') &&
@@ -130,6 +135,20 @@ export function CreateTicketSheet({ open, onOpenChange, onCreated }: CreateTicke
       setTrackingManual(false);
     }
   }, [entityType]);
+
+  /**
+   * Keep `entityId` in step with a type that has no picker. A `VENDOR` ticket is
+   * about the caller's own shop, so the id is known without asking; anything
+   * carried over from a previously-picked order would otherwise be sent against
+   * the new type and rejected.
+   */
+  useEffect(() => {
+    if (entityType === 'VENDOR') {
+      setValue('entityId', session?.role_entity?._id ?? '', { shouldValidate: false });
+    } else if (entityType === 'OTHER') {
+      setValue('entityId', '', { shouldValidate: false });
+    }
+  }, [entityType, session, setValue]);
 
   // Tracking numbers arrive inline with the selected order's shipments (no extra fetch).
   function handleOrderSelected(options: OrderTrackingOption[] | null) {
@@ -235,7 +254,7 @@ export function CreateTicketSheet({ open, onOpenChange, onCreated }: CreateTicke
               <Textarea
                 id="description"
                 rows={5}
-                maxLength={DESCRIPTION_MAX_LENGTH}
+                maxLength={DESCRIPTION_CREATE_MAX}
                 placeholder={t('tickets.create.descriptionPlaceholder')}
                 {...register('description')}
                 aria-invalid={!!errors.description}
@@ -324,34 +343,36 @@ export function CreateTicketSheet({ open, onOpenChange, onCreated }: CreateTicke
                 />
               </div>
 
-              <div className="space-y-1.5">
-                <Label>
-                  {t('tickets.create.entity')}{' '}
-                  {entityRequired ? (
-                    <span className="text-destructive">*</span>
-                  ) : (
-                    <span className="text-xs font-normal text-muted-foreground">
-                      {t('tickets.create.optional')}
-                    </span>
+              {hasEntityPicker && (
+                <div className="space-y-1.5">
+                  <Label>
+                    {t('tickets.create.entity')}{' '}
+                    {entityRequired ? (
+                      <span className="text-destructive">*</span>
+                    ) : (
+                      <span className="text-xs font-normal text-muted-foreground">
+                        {t('tickets.create.optional')}
+                      </span>
+                    )}
+                  </Label>
+                  <Controller
+                    control={control}
+                    name="entityId"
+                    render={({ field }) => (
+                      <EntityPicker
+                        entityType={entityType as TicketEntityType}
+                        value={field.value}
+                        onChange={field.onChange}
+                        onOrderSelected={handleOrderSelected}
+                        invalid={!!errors.entityId}
+                      />
+                    )}
+                  />
+                  {errors.entityId && (
+                    <p className="text-xs text-destructive">{m(errors.entityId.message)}</p>
                   )}
-                </Label>
-                <Controller
-                  control={control}
-                  name="entityId"
-                  render={({ field }) => (
-                    <EntityPicker
-                      entityType={entityType as TicketEntityType}
-                      value={field.value}
-                      onChange={field.onChange}
-                      onOrderSelected={handleOrderSelected}
-                      invalid={!!errors.entityId}
-                    />
-                  )}
-                />
-                {errors.entityId && (
-                  <p className="text-xs text-destructive">{m(errors.entityId.message)}</p>
-                )}
-              </div>
+                </div>
+              )}
             </div>
 
             {/* Tracking number — only relevant for order tickets */}

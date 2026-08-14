@@ -17,12 +17,34 @@ import { formatPhoneInternational } from '@/lib/phone';
 import {
     payoutDetailsSchema,
     type PayoutDetailsFormValues,
+    type PayoutMethod,
 } from '@/onboarding/schemas/onboarding.schemas';
 
 type Translate = (key: TranslationKey, params?: Record<string, string | number>) => string;
 
 /** One entry of the ordered payout array — index 0 is the preferred method. */
 export type PayoutEntry = PayoutDetailsFormValues;
+
+/**
+ * The destinations a vendor can configure today.
+ *
+ * Bank and card are built, validated and documented, but switched off at the
+ * API's write path. Turning one back on is one edit here.
+ */
+export const ENABLED_PAYOUT_METHODS: readonly PayoutMethod[] = ['mobile_money'];
+
+/**
+ * True for an entry whose kind can no longer be written.
+ *
+ * Reads are not gated by the switch — an entry configured before it still shows
+ * in full, and a payout already addressed to it is still paid. What cannot
+ * happen is *re-sending* it: payout writes are a full replace, and a single
+ * switched-off entry anywhere in the list is a `400` that rejects the whole
+ * list, good entries included. So such an entry has to be replaced, not edited.
+ */
+export function isRetiredPayoutMethod(entry: PayoutEntry | null | undefined): boolean {
+    return !!entry && !ENABLED_PAYOUT_METHODS.includes(entry.method);
+}
 
 /** `•••• 4321` — enough to recognise an account without printing it in full. */
 function maskTail(value: string): string {

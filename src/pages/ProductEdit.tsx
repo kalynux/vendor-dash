@@ -35,11 +35,13 @@ import {
   renameOption,
   renameOptionValue,
   reorderOptions,
+  applyBargainEdits,
 } from '@/services/products.service';
 import { ACTIVATION_ERROR_KEYS, getDeliveryErrorMessage } from '@/services/products.service';
+import type { BargainCeilingEdit } from '@/components/products/bargain';
 import { fetchStockRequests } from '@/services/stockRequests.service';
 import type { PendingStockInfo } from '@/components/inventory/PendingStockBadge';
-import { useApiError, useTranslation, type TranslationKey } from '@/i18n';
+import { useApiError, useFormatters, useTranslation, type TranslationKey } from '@/i18n';
 import { getAgencyConnectionErrorMessage } from '@/services/agency-connections.service';
 import { getUploadErrorMessage } from '@/lib/uploadErrors';
 import { ApiError } from '@/types/api';
@@ -167,6 +169,7 @@ function nextStep(current: WizardStep, productType: ApiProductType | null): Wiza
 
 export function ProductEdit() {
   const { t } = useTranslation();
+  const fmt = useFormatters();
   const apiError = useApiError();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -719,8 +722,58 @@ export function ProductEdit() {
 
   // ─── Publish ──────────────────────────────────────────────────────────────────
 
+  /**
+   * Write the review step's negotiation ceilings. Returns false when any row
+   * failed, in which case the caller must stop.
+   *
+   * These are variant writes, so they have to land BEFORE `vectorisationEnabled`
+   * is flipped: that flip sets `vectorisationStatus: 'pending'`, after which every
+   * variant write returns 409. They also go before the status change, so a product
+   * that is already indexing fails here with nothing else having moved.
+   */
+  const flushBargainEdits = useCallback(
+    async (productId: string, edits: BargainCeilingEdit[]): Promise<boolean> => {
+      const failures = await applyBargainEdits(productId, edits);
+      if (failures.length === 0) return true;
+
+      // Per-variant, not a single count: the rows fail independently and for
+      // different reasons, and the vendor has to know which one to fix.
+      for (const f of failures) {
+        toast.error(
+          `${f.label} — ${apiError.resolve(f.error, {
+            fallbackKey: 'products.errors.variantsFailed',
+          })}`,
+        );
+      }
+      dispatch({
+        type: 'SET_STEP_ERROR',
+        error: t('products.errors.bargainPartial', {
+          variants: fmt.list(failures.map((f) => f.label)),
+        }),
+      });
+      // The rows that succeeded are saved; re-read so a retry sends only what is
+      // still outstanding. "Render as returned, never as submitted."
+      try {
+        dispatch({
+          type: 'SET_SERVER_VARIANTS',
+          variants: await fetchVariants(productId),
+        });
+      } catch {
+        // Best-effort refresh — the error above is what the vendor acts on.
+      }
+      return false;
+    },
+    [apiError, fmt, t],
+  );
+
   const handlePublish = useCallback(
-    async ({ vectorisationEnabled }: { vectorisationEnabled: boolean }) => {
+    async ({
+      vectorisationEnabled,
+      bargainEdits,
+    }: {
+      vectorisationEnabled: boolean;
+      bargainEdits: BargainCeilingEdit[];
+    }) => {
       const productId = state.productId;
       if (!productId) return;
       // Activation is only vendor-triggerable from draft (allowed-transitions
@@ -730,6 +783,11 @@ export function ProductEdit() {
 
       dispatch({ type: 'SET_SAVING', value: true });
       try {
+        // Ceilings first — see flushBargainEdits. Aborting rather than publishing
+        // anyway: flipping vectorisation on a half-applied set would send the
+        // product into `pending`, where the failed row cannot be retried at all.
+        if (!(await flushBargainEdits(productId, bargainEdits))) return;
+
         // Always send vectorisationEnabled in the general PATCH so the body is
         // never empty and the backend persists the toggle on publish.
         await updateProductStatus(productId, 'active');
@@ -754,16 +812,28 @@ export function ProductEdit() {
         }
       }
     },
-    [state.productId, state.serverProduct, navigate],
+    [state.productId, state.serverProduct, navigate, flushBargainEdits],
   );
 
   const handleSaveDraft = useCallback(
-    async ({ vectorisationEnabled }: { vectorisationEnabled: boolean }) => {
+    async ({
+      vectorisationEnabled,
+      bargainEdits,
+    }: {
+      vectorisationEnabled: boolean;
+      bargainEdits: BargainCeilingEdit[];
+    }) => {
       const productId = state.productId;
       if (!productId) {
         navigate('/dashboard/products');
         return;
       }
+      // Deliberately outside the try/finally below: that block navigates away
+      // regardless of outcome, which is right for the vectorisation write but
+      // wrong here — a rejected ceiling has to keep the vendor on this step.
+      dispatch({ type: 'SET_SAVING', value: true });
+      if (!(await flushBargainEdits(productId, bargainEdits))) return;
+
       try {
         await updateProduct(productId, { vectorisationEnabled });
         toast.success(t('products.toast.changesSaved'));
@@ -773,7 +843,7 @@ export function ProductEdit() {
         navigate('/dashboard/products');
       }
     },
-    [state.productId, navigate],
+    [state.productId, navigate, flushBargainEdits],
   );
 
   const handleBack = useCallback(() => {

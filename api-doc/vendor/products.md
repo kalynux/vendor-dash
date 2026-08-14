@@ -1,6 +1,6 @@
 # Vendor Product Management API
 
-Complete API reference for managing products in the WiMall multi-vendor platform.
+Complete API reference for managing products in the Jovi Mall multi-vendor platform.
 
 > [!IMPORTANT]
 > **Authentication Required**
@@ -1030,8 +1030,11 @@ The payload sent to the vectoriser is **fully populated** — no raw ObjectIds, 
   - `deliveryAgency` — the resolved agency when the variant overrides the default.
   - `digitalConfig` (digital variants) — `maxDownloads`, `expiresAfterDays`, and the resolved `asset` (`originalName`, `mimeType`, `size`), not the asset ID.
   - `serviceConfig` (service variants) — `durationMinutes`, buffers, `bookingMode`, `maxBookings`, and the optional peak-hours surcharge.
+  - `bargain` — the [bargainable-pricing](./variants.md#bargainable-pricing) window, `{ minPrice, maxPrice }`, or `null` when the vendor configured none. `minPrice` always equals the variant's `price`; `maxPrice` is the ceiling the negotiating agent may go up to.
 
 So a service variant is indexed with its full booking config, a digital variant with its asset details and limits, and a physical variant with its options/dimensions/agency — each on the variant it belongs to.
+
+Only **active** variants are indexed, so an archived variant's bargain window never reaches the negotiator.
 
 ### Enabling / Disabling Vectorisation
 
@@ -1065,6 +1068,34 @@ PATCH /api/vendor/products/:id/vectorisation
 Use this when you only need to flip the flag and aren't changing anything else. See [Vectorisation Endpoints](#vectorisation-endpoints) below for the full contract.
 
 Both routes share the same backend logic — they run the same eligibility check, mark `pending`, call the vectoriser, and write the result. The dedicated endpoint just lets you skip the rest of the update payload.
+
+> [!IMPORTANT]
+> ## `vectorisationEnabled` is also the bargainable-pricing gate
+>
+> A variant's [bargain window](./variants.md#bargainable-pricing) only applies while its
+> parent product has `vectorisationEnabled: true` — the agent that negotiates reads its
+> catalogue from the AI index. Variant read models report this as `bargainable`.
+>
+> Four consequences:
+>
+> - **A window can be configured at any time**, whether or not the flag is on. It is fully
+>   price-validated either way, and simply inert until the flag flips. So a brand-new
+>   product may carry a window and report `bargainable: false`; that is expected.
+> - **Turning vectorisation off never deletes a window.** `bargainable` goes `false`, the
+>   configuration stays visible and editable, and re-enabling brings it straight back.
+> - **The flag can turn itself off.** A product that stops being *eligible* — demoted out of
+>   `active`, or its `title` / `description` / `category` emptied — has `vectorisationEnabled`
+>   reset to `false` by the pipeline (see the `ineligible` outcome below). `bargainable` will
+>   therefore flip with no pricing edit having taken place. Re-read it rather than caching it.
+> - **Route 1 responds before the toggle is applied.** `PATCH /api/vendor/products/:id`
+>   sends its response and *then* applies `vectorisationEnabled`, so the `data` it returns —
+>   and any variant read racing it — still reflects the old flag. Route 2
+>   (`PATCH /:id/vectorisation`) awaits the toggle, so use it when you need the flag and its
+>   effect in one round trip.
+>
+> Also note that while `vectorisationStatus` is `pending`, **every** variant and product write
+> returns `409 CATALOG_PRODUCT_VECTORISATION_PENDING`. A UI that reveals a bargain editor the
+> moment vectorisation is enabled reveals it inside exactly that window — handle the 409.
 
 ### Status Lifecycle
 

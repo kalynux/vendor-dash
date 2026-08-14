@@ -19,6 +19,7 @@ import type { PayoutDetailsFormValues } from '@/onboarding/schemas/onboarding.sc
 import { PayoutMethodDialog } from './PayoutMethodDialog';
 import {
     isPayoutEntryComplete,
+    isRetiredPayoutMethod,
     payoutEntryBrand,
     payoutEntryDetail,
     payoutEntryTitle,
@@ -111,6 +112,11 @@ export function PayoutMethodsEditor({ value, onChange, country }: PayoutMethodsE
                         const complete = isPayoutEntryComplete(entry);
                         const label = payoutEntryTitle(entry, t);
                         const detail = payoutEntryDetail(entry);
+                        // Still displayed, still paid — but it cannot be sent
+                        // back, and because the write is a full replace it takes
+                        // the rest of the list down with it. Flag it here rather
+                        // than at Save, where the whole form fails at once.
+                        const retired = isRetiredPayoutMethod(entry);
                         return (
                             <li
                                 key={index}
@@ -130,7 +136,17 @@ export function PayoutMethodsEditor({ value, onChange, country }: PayoutMethodsE
                                                 {t('settings.payout.preferred')}
                                             </Badge>
                                         )}
-                                        {!complete && (
+                                        {retired && (
+                                            <Badge
+                                                variant="destructive"
+                                                className="gap-1"
+                                                title={t('settings.payout.retiredHint')}
+                                            >
+                                                <AlertCircle className="size-3" />
+                                                {t('settings.payout.retired')}
+                                            </Badge>
+                                        )}
+                                        {!complete && !retired && (
                                             <Badge
                                                 variant="destructive"
                                                 className="gap-1"
@@ -142,7 +158,9 @@ export function PayoutMethodsEditor({ value, onChange, country }: PayoutMethodsE
                                         )}
                                     </div>
                                     <p className="truncate text-xs text-muted-foreground">
-                                        {detail || t('settings.payout.incompleteHint')}
+                                        {retired
+                                            ? t('settings.payout.retiredHint')
+                                            : detail || t('settings.payout.incompleteHint')}
                                     </p>
                                 </div>
                                 <div className="flex shrink-0 items-center gap-1">
@@ -168,7 +186,12 @@ export function PayoutMethodsEditor({ value, onChange, country }: PayoutMethodsE
                                         variant="ghost"
                                         size="icon"
                                         onClick={() => openEdit(index)}
-                                        aria-label={t('settings.payout.editAria', { label })}
+                                        aria-label={t(
+                                            retired
+                                                ? 'settings.payout.replaceAria'
+                                                : 'settings.payout.editAria',
+                                            { label },
+                                        )}
                                     >
                                         <Pencil className="size-4" />
                                     </Button>

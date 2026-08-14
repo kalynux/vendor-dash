@@ -1,7 +1,8 @@
 import { type ReactNode } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Store, LogOut, ChevronLeft } from 'lucide-react';
+import { LogOut, ChevronLeft } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { AppLogo } from '@/components/layout/AppLogo';
 import { Button } from '@/components/ui/button';
 import { useOnboarding } from '@/onboarding/store/onboarding.store';
 import { useTranslation, type TranslationKey } from '@/i18n';
@@ -154,9 +155,7 @@ export function OnboardingLayout({ children, ctaSlot, stepKey }: OnboardingLayou
                     )}
 
                     <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-                            <Store className="w-4 h-4 text-primary-foreground" />
-                        </div>
+                        <AppLogo className="w-8 h-8" />
                         <div className="flex flex-col leading-tight">
                             <span className="font-bold text-sm leading-none">{t('onboarding.layout.brand')}</span>
                             <span className="text-[10px] text-muted-foreground leading-none truncate max-w-[120px]">

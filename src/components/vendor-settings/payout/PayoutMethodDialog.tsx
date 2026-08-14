@@ -38,6 +38,7 @@ import {
     type PayoutDetailsFormValues,
     type PayoutMethod,
 } from '@/onboarding/schemas/onboarding.schemas';
+import { ENABLED_PAYOUT_METHODS, isRetiredPayoutMethod } from './payoutEntry.helpers';
 
 export interface PayoutMethodDialogProps {
     open: boolean;
@@ -98,15 +99,9 @@ const METHOD_OPTIONS: PayoutMethodOption[] = [
     },
 ];
 
-/**
- * The destinations a vendor can pick today.
- *
- * Bank and card entries are collected, validated and written exactly as the API
- * specifies — only settling them is not live yet — so they list *disabled*
- * rather than disappearing: an option that is simply absent reads as "never
- * supported", which is the wrong message. Turning one back on is one edit here.
- */
-const ENABLED_PAYOUT_METHODS: readonly PayoutMethod[] = ['mobile_money'];
+// Which kinds can still be written — and the "this one can't" test — live in
+// `payoutEntry.helpers`, next to the other entry-level facts, so the list row
+// and this dialog agree and Fast Refresh keeps working.
 
 /**
  * Add / edit one payout destination, in the same shell Billing uses to add a
@@ -141,13 +136,16 @@ export function PayoutMethodDialog({
     const seedCard = entry?.method === 'card' ? entry.card : null;
 
     /**
-     * An entry already saved under a disabled kind stays selectable — the vendor
-     * stored it while it was on offer, and greying out its own row would leave it
-     * uneditable and unfixable.
+     * No escape hatch for an already-saved entry of a switched-off kind. Letting
+     * the vendor edit one would produce a list the API refuses outright — the
+     * write is a full replace and one switched-off entry rejects every entry in
+     * it. The honest affordance is "replace this", which is what opening on
+     * mobile money below offers.
      */
-    const isMethodAvailable = (value: PayoutMethod) =>
-        ENABLED_PAYOUT_METHODS.includes(value) || entry?.method === value;
+    const isMethodAvailable = (value: PayoutMethod) => ENABLED_PAYOUT_METHODS.includes(value);
     const unavailableMethods = METHOD_OPTIONS.filter((o) => !isMethodAvailable(o.value));
+    /** Editing a destination stored before its kind was switched off. */
+    const replacingRetired = isRetiredPayoutMethod(entry);
 
     // Read once, at mount: an expiry list that shifted under the vendor mid-edit
     // would silently invalidate a choice they had already made.
@@ -157,7 +155,11 @@ export function PayoutMethodDialog({
         (_, i) => thisYear + i,
     );
 
-    const [method, setMethod] = useState<PayoutMethod>(entry?.method ?? 'mobile_money');
+    // A retired entry opens on mobile money: its own kind is not selectable, so
+    // seeding it there would leave the dialog on a tile the vendor cannot choose.
+    const [method, setMethod] = useState<PayoutMethod>(
+        entry && !isRetiredPayoutMethod(entry) ? entry.method : 'mobile_money',
+    );
     const [brandId, setBrandId] = useState<MobileMoneyBrandId | null>(() =>
         seedMm
             ? ((mobileMoneyBrandByPayoutValue(seedMm.provider) ??
@@ -269,9 +271,19 @@ export function PayoutMethodDialog({
         <ResponsiveModal
             open={open}
             onOpenChange={onOpenChange}
-            title={t(entry ? 'settings.payout.editTitle' : 'settings.payout.addTitle')}
+            title={t(
+                replacingRetired
+                    ? 'settings.payout.replaceTitle'
+                    : entry
+                      ? 'settings.payout.editTitle'
+                      : 'settings.payout.addTitle',
+            )}
             description={t(
-                entry ? 'settings.payout.editDescription' : 'settings.payout.addDescription',
+                replacingRetired
+                    ? 'settings.payout.replaceDescription'
+                    : entry
+                      ? 'settings.payout.editDescription'
+                      : 'settings.payout.addDescription',
             )}
             desktopClassName="sm:max-w-lg"
             // A short form — let the sheet size to it rather than standing at the

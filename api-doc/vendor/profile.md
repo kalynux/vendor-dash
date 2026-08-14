@@ -64,19 +64,14 @@ Authorization: Bearer <jwt_token>
       }
     ],
     "payoutDetails": {
-      "method": "card",
-      "mobile_money": null,
+      "method": "mobile_money",
+      "mobile_money": {
+        "provider": "MTN Mobile Money",
+        "phone_number_masked": "••••••0000",
+        "account_name": "Tech Solutions Sarl"
+      },
       "bank": null,
-      "card": {
-        "brand": "visa",
-        "last4": "4242",
-        "number_masked": "•••• •••• •••• 4242",
-        "card_holder_name": "JEAN DUPONT",
-        "expiry_month": 8,
-        "expiry_year": 2029,
-        "issuing_bank": "Afriland First Bank",
-        "country": "CM"
-      }
+      "card": null
     },
     "notificationPreferences": {
       "email": true,
@@ -97,8 +92,11 @@ Authorization: Bearer <jwt_token>
 > sent. You store an ordered list of up to 3; this read returns index 0, the one payouts actually
 > use. It is **masked**: `mobile_money.phone_number` → `phone_number_masked`,
 > `bank.account_number` → `account_number_masked`. A `card` block is not redacted because nothing
-> sensitive is stored for it in the first place — no card number, no CVV, ever. Full contract:
-> **[Payout methods](./payout-methods.md)**.
+> sensitive is stored for it in the first place — no card number, no CVV, ever.
+>
+> Only `mobile_money` can be **configured** right now (🚧 `bank` and `card` are switched off), but a
+> `bank` or `card` entry stored before the switch still reads back here exactly as shown above, with
+> its own block populated. Full contract: **[Payout methods](./payout-methods.md)**.
 
 > [!IMPORTANT]
 > **Each `businessAddresses[]` entry is identified by `_id`, not `id`.** Unlike the outer profile
@@ -226,7 +224,7 @@ All fields are **optional except `version`**. Every field below maps to a profil
 | `timezone` | `string` | Min 1 char, IANA tz | Step 1 (Basic Setup) | E.g. `"Africa/Douala"`. Freely editable — this (plus `preferred_language`) is the profile's localization surface. |
 | `preferred_language` | `string` | One of `en`, `fr`, `pt`, `es`, `ar` | — (general) | The vendor's language, stored on this profile and used for **all notifications** (in-app, email, WhatsApp templates). There is no separate "notification language" — this is it. Defaults to `en`. |
 | `avatarFileId` | `string \| null` | MongoDB ObjectId of a file uploaded via `POST /api/files/upload`, or `null` | — (general) | The vendor's **personal profile avatar** (distinct from the business logo/banner, which live on the [Store](./store.md)). A **file reference**: registers the file as *in use* (`entityType: "vendor", field: "avatar"`) and blocks its deletion until detached. *Clearable*: `null` or `""` detaches it. Read back as the populated `avatar` file object. |
-| `payout_details` | `object[]` | 1–3 entries, ordered (index 0 = preferred) | Step 1 (Basic Setup) | Full replace. Sub-schema (`method`, `mobile_money`, `bank`, `card`) is identical to onboarding — see [Step 1 field reference](./onboarding.md#step-1-basic-setup-required), or **[Payout methods](./payout-methods.md)** for the full reference. Card destinations never accept a card number or CVV. |
+| `payout_details` | `object[]` | 1–3 entries, ordered (index 0 = preferred). **`method` must be `"mobile_money"` today** — `"bank"` and `"card"` are 🚧 switched off | Step 1 (Basic Setup) | Full replace. Sub-schema is identical to onboarding — see [Step 1 field reference](./onboarding.md#step-1-basic-setup-required), or **[Payout methods](./payout-methods.md)** for the full reference. Entries stored before the switch still read back and are still paid; you just cannot re-send one. |
 | `business_addresses` | `object[]` | See onboarding sub-schema | Step 3 (Branding) | Full replace — **include each existing address's `_id`** (from the `GET` response) to preserve its identity, or a fresh id is generated (and the "old" one is treated as removed — see below). These are the vendor's **physical store locations and pickup points**, so every **new or edited** entry must carry a `geo` (selected `/api/geo/search` result; see [Geospatial addresses](../geo/README.md)) that resolves **inside the profile's `country`** — otherwise `400 ADDRESS_GEO_REQUIRED` / `400 ADDRESS_COUNTRY_MISMATCH`. Entries echoed back byte-identical (same loose fields, same `geo`) are grandfathered, so legacy plain-text addresses keep working until next touched. Because it is a full replace, echo `geo` back on unchanged entries or it counts as an edit. See [Step 3 field reference](./onboarding.md#step-3-branding-optional--skippable). |
 | `operating_hours` | `object[]` | Per-day `{ day, open_time "HH:MM", close_time "HH:MM", is_closed }` | — (general) | Full replace. |
 | `policies` | `object \| null` | `{ return_policy?, cancellation_policy?, support_policy?, documents? }` (sub-policies nullable) | Step 4 (Policy Setup) | Full replace of the **whole** `policies` object — include every sub-policy you want to keep. `documents` (max 2 URLs) is cleared if omitted. See [Step 4 field reference](./onboarding.md#step-4-policy-setup-optional--skippable). |
@@ -464,9 +462,11 @@ Content-Type: application/json
 ```json
 {
   "success": true,
-  "message": "Password updated successfully. Please use your new password on next login."
+  "message": "Password updated successfully. All other sessions have been signed out."
 }
 ```
+
+Also sets fresh `access_token` and `refresh_token` cookies — see the session note below.
 
 #### Error Responses
 
@@ -503,7 +503,11 @@ Content-Type: application/json
 #### Notes
 
 - **Password Verification**: The old password must be correct before the new password is set.
-- **Session Invalidation**: Future implementation will invalidate all active sessions, requiring re-authentication with the new password.
+- **Session Invalidation**: **Implemented.** Every session issued under the old password ends
+  — any access or refresh token minted before the change is refused with
+  `401 AUTH_PASSWORD_CHANGED`. The caller's own pair is replaced via `Set-Cookie` on this
+  response, so this session survives and no other one does. Full description in
+  [me/password.md](../me/password.md).
 
 ---
 
@@ -946,11 +950,17 @@ if (vendor.plan === 'pro' || vendor.plan === 'enterprise') {
 
 ### Session Management
 
-Password change currently logs intent to invalidate sessions. Future implementation:
+A password change invalidates every session issued under the old password. There is **no**
+session store, and deliberately so: tokens here are stateless JWTs, so the revocation is a
+per-account instant (`password_changed_at`) written in the same update as the new hash, and
+both credential paths — every authenticated request and every refresh — refuse a token whose
+`iat` predates it with `401 AUTH_PASSWORD_CHANGED`.
 
-- Store sessions in Redis with `vendor:{vendorId}:sessions` key
-- On password change, delete all sessions
-- Force re-authentication on next request
+- No Redis key per vendor, no session list to delete, nothing to keep in step with the token.
+- Revocation is account-wide, not vendor-wide: the password lives on the **User**, so every
+  role the account holds is signed out together.
+- The caller performing the change receives a replacement cookie pair on the response and
+  keeps working.
 
 ---
 
@@ -1031,6 +1041,9 @@ curl -X PATCH https://api.example.com/api/vendor/profile \
 
 Onboarding is already complete, so `PUT /onboarding/basic-setup` would return `409`. Edit via the profile endpoint instead. Send the **complete** payout array (full replace):
 
+> 🚧 Only `mobile_money` can be configured right now — `bank` and `card` are switched off. See
+> [Payout methods](./payout-methods.md#availability).
+
 ```bash
 # 1. Read current version
 curl -X GET https://api.example.com/api/vendor/profile \
@@ -1044,21 +1057,26 @@ curl -X PATCH https://api.example.com/api/vendor/profile \
   -d '{
     "payout_details": [
       {
-        "method": "bank",
-        "mobile_money": null,
-        "bank": {
-          "bank_name": "Afriland First Bank",
-          "account_number": "10005000123456",
-          "account_name": "Tech Solutions Sarl",
-          "country": "CM"
-        }
+        "method": "mobile_money",
+        "mobile_money": {
+          "provider": "MTN Mobile Money",
+          "phone_number": "+237670000000",
+          "account_name": "Tech Solutions Sarl"
+        },
+        "bank": null
       }
     ],
     "version": 7
   }'
 ```
 
-### Add a card as your payout destination
+### Add a card as your payout destination — 🚧 switched off
+
+> **Not available right now.** `bank` and `card` are switched off at the write path; only
+> `mobile_money` can be configured today, and sending anything else returns `400 VALIDATION_ERROR`
+> on `payout_details[n].method`. See
+> [Payout methods](./payout-methods.md#availability). The recipe below
+> is kept for when the switch flips back.
 
 Same endpoint, same full-replace rule — `"method": "card"` with a `card` sub-object. Here the card
 is made the **preferred** destination (index 0) and an existing mobile-money entry is kept as the

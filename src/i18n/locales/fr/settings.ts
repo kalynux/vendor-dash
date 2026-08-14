@@ -177,6 +177,14 @@ export const settings = {
         addDescription: 'Là où vos retraits sont envoyés.',
         editTitle: 'Modifier le moyen de versement',
         editDescription: 'Changez la destination de ce versement.',
+
+        retired: 'À remplacer',
+        retiredHint:
+            'Cette destination ne peut plus être enregistrée. Remplacez-la par un compte mobile money — les versements déjà envoyés ne sont pas affectés.',
+        replaceTitle: 'Remplacer le moyen de versement',
+        replaceDescription:
+            'Ce type de destination n’est plus accepté. Saisissez un compte mobile money pour le remplacer.',
+        replaceAria: 'Remplacer {{label}}',
         saveMethod: 'Enregistrer le moyen',
         empty: 'Aucun moyen de versement. Ajoutez-en un pour que nous sachions où envoyer vos gains.',
         atLimit: 'Vous pouvez enregistrer jusqu’à {{max}} moyens de versement.',

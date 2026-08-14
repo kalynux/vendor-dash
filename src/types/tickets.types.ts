@@ -20,18 +20,32 @@ export type TicketStatus =
 
 /**
  * Stored ticket priority. Admin-influenced and lockable. The backend default on
- * creation is `normal`; the updatable enum is low/medium/high/urgent.
+ * creation is `normal`, and that is also a value the enum accepts — so the
+ * stored and updatable sets are the same four.
  */
-export type TicketPriority = 'normal' | 'low' | 'medium' | 'high' | 'urgent';
+export type TicketPriority = 'low' | 'normal' | 'high' | 'urgent';
 
-/** Priorities a vendor may set via PATCH /priority. */
-export type UpdatablePriority = 'low' | 'medium' | 'high' | 'urgent';
+/**
+ * Priorities a vendor may set via `PATCH /priority` — identical to the stored
+ * set. Kept as its own name because the two were once different and call sites
+ * read better for saying which they mean.
+ */
+export type UpdatablePriority = TicketPriority;
 
-/** Vendor-supplied importance at creation time. Distinct from `priority`. */
+/**
+ * Vendor-supplied importance at creation time. Deliberately a *different*
+ * vocabulary from `priority`: importance is what the reporter claims, priority
+ * is what support decides, and the two are stored separately.
+ */
 export type TicketImportance = 'low' | 'medium' | 'high' | 'critical';
 
-/** Entity type as sent on create (UPPERCASE), matching the `entity_type` echoed back in responses. */
-export type TicketEntityType = 'ORDER' | 'PRODUCT' | 'BOOKING' | 'ACCOUNT' | 'OTHER';
+/**
+ * Entity type as sent on create (UPPERCASE), matching the `entity_type` echoed
+ * back in responses. The API accepts SHIPMENT / DELIVERY / USER / CUSTOMER /
+ * AGENT / AGENCY too, but a vendor has no picker to supply an `entityId` for
+ * those, and `entityId` is required for everything except `OTHER`.
+ */
+export type TicketEntityType = 'ORDER' | 'PRODUCT' | 'BOOKING' | 'VENDOR' | 'OTHER';
 
 /**
  * Authoritative ticket-type identifiers from api-doc/ticket_types.txt — the
@@ -251,7 +265,11 @@ export interface TicketReferenceOrder {
   fulfillmentStatus: string;
   createdAt: string;
   customerName: string | null;
-  customerAvatarUrl: string | null;
+  /**
+   * A resolved file object, not a URL string — the platform-wide convention for
+   * every single-file slot. Read it through `fileRefUrl`.
+   */
+  customerAvatar: FileRef | null;
   shipments: TicketReferenceShipment[];
 }
 
@@ -306,6 +324,6 @@ export interface TicketsQueryParams {
   q?: string;
   page?: number;
   limit?: number;
-  sortBy?: 'createdAt' | 'updatedAt' | 'priority';
+  sortBy?: 'createdAt' | 'updatedAt' | 'priority' | 'status';
   sortOrder?: 'asc' | 'desc';
 }

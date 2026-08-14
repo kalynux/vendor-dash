@@ -1,8 +1,38 @@
 # Vendor Payout Methods
 
-**Where the platform sends your money.** Mobile money, bank transfer, or **card** (Visa,
-Mastercard, …). This page is the complete field reference for `payout_details` on the vendor side —
-the [Onboarding](./onboarding.md) and [Profile](./profile.md) docs link here for the sub-schema.
+**Where the platform sends your money.** This page is the complete field reference for
+`payout_details` on the vendor side — the [Onboarding](./onboarding.md) and
+[Profile](./profile.md) docs link here for the sub-schema.
+
+<a name="availability"></a>
+
+> [!IMPORTANT]
+> ## 🚧 Only mobile money is available right now
+>
+> **`bank` and `card` are switched off.** They are built, validated and documented — the switch is
+> temporary — but today they are refused at the write path:
+>
+> ```json
+> {
+>   "success": false,
+>   "error": {
+>     "code": "VALIDATION_ERROR",
+>     "statusCode": 400,
+>     "details": { "fields": [
+>       { "path": "payout_details.0.method", "message": "Bank transfer payouts are not available right now. Currently accepted: mobile money." }
+>     ] }
+>   }
+> }
+> ```
+>
+> **Build the mobile-money form now**; leave bank and card out of the UI, or render them disabled.
+> Their field references are kept below so you can build against them the day they come back.
+>
+> **Nothing already stored is affected.** An entry configured before the switch still reads back in
+> full, and a payout already destined for it is still paid — switching a kind off never strands
+> money. The one catch: writes are a **full replace**, so you cannot re-send a list containing a
+> switched-off entry. Replace it with a mobile-money one. (Omitting `payout_details` entirely leaves
+> the stored list untouched, so unrelated profile edits are unaffected.)
 
 > [!IMPORTANT]
 > **Not to be confused with [Payment methods](./payment-methods.md).** Those are the cards you pay
@@ -33,26 +63,27 @@ The schema is shared byte-for-byte with agencies and agents, so anything you lea
 - **Minimum 1** entry, **maximum 3**.
 - **Index 0 is the preferred method** — the one a payout request actually uses. Reordering *is* the
   edit.
-- **Any mix of kinds is allowed**, including duplicates: three cards, or two banks and a card, are
-  all valid. Nothing dedupes by `method`.
+- **Any mix of kinds is allowed**, including duplicates: two mobile-money numbers are valid.
+  Nothing dedupes by `method`.
 - **Full replace, never a merge.** Send the complete desired array every time; the value you send
   replaces the stored one wholesale.
 
 ```jsonc
 "payout_details": [
   { "method": "mobile_money", "mobile_money": { /* … */ } },   // ← preferred
-  { "method": "card",         "card":         { /* … */ } },
-  { "method": "bank",         "bank":         { /* … */ } }
+  { "method": "mobile_money", "mobile_money": { /* … */ } }
 ]
 ```
 
 | Field | Type | Required? | Validation | Notes |
 |---|---|---|---|---|
 | `payout_details` | `object[]` | Yes | 1–3 entries | Ordered; index 0 is preferred. |
-| `payout_details[].method` | `string` | Yes | Enum: `"mobile_money"` · `"bank"` · `"card"` | Selects which sub-object is required. |
+| `payout_details[].method` | `string` | Yes | **Today: `"mobile_money"` only.** `"bank"` and `"card"` are [switched off](#availability) | Selects which sub-object is required. |
 | `payout_details[].mobile_money` | `object \| null` | Conditional | Required iff `method === "mobile_money"` | [Sub-fields](#mobile-money) |
-| `payout_details[].bank` | `object \| null` | Conditional | Required iff `method === "bank"` | [Sub-fields](#bank) |
-| `payout_details[].card` | `object \| null` | Conditional | Required iff `method === "card"` | [Sub-fields](#card) |
+| `payout_details[].bank` | `object \| null` | Conditional | Required iff `method === "bank"` | 🚧 Switched off — [sub-fields](#bank) |
+| `payout_details[].card` | `object \| null` | Conditional | Required iff `method === "card"` | 🚧 Switched off — [sub-fields](#card) |
+
+One switched-off entry rejects the **whole list**, wherever it sits — index 0 or last.
 
 The unused branches may be omitted or sent as `null` — either way the server normalises them to
 `null`. Sending a populated sub-object that doesn't match `method` is a `400 VALIDATION_ERROR`.
@@ -87,7 +118,10 @@ un-dialable number is a payout instruction nobody can execute.
 ---
 
 <a name="bank"></a>
-## `bank`
+## `bank` 🚧 switched off
+
+> **Not configurable right now** — see [the notice above](#availability).
+> Kept documented because the switch is temporary and stored entries still read back.
 
 | Field | Type | Required? | Validation |
 |---|---|---|---|
@@ -111,7 +145,11 @@ un-dialable number is a payout instruction nobody can execute.
 ---
 
 <a name="card"></a>
-## `card` — Visa, Mastercard & friends
+## `card` — Visa, Mastercard & friends 🚧 switched off
+
+> **Not configurable right now** — see [the notice above](#availability).
+> Everything below is live in the code and under test; it is the *switch* that is off, not the
+> feature that is unfinished. Read it when you build the form, not before.
 
 > [!WARNING]
 > **Read this before you build the form.**
@@ -122,7 +160,7 @@ un-dialable number is a payout instruction nobody can execute.
 > + expiry**, and nothing more.
 >
 > This is the same rule the pay-in side already follows: full PANs and CVVs live at the payment
-> gateway, never in wimall's database. Storing one here would put every collection in PCI-DSS
+> gateway, never in jovi-mall's database. Storing one here would put every collection in PCI-DSS
 > scope for no product benefit.
 
 | Field | Type | Required? | Validation |
@@ -201,7 +239,7 @@ or bank entry your **index 0**.
 
 ---
 
-## Full example — set a card as preferred, keep mobile money as fallback
+## Full example — replace your payout list
 
 ```bash
 # 1. Read your current version
@@ -209,29 +247,25 @@ curl -X GET https://api.example.com/api/vendor/profile \
   -H "Authorization: Bearer YOUR_JWT_TOKEN"
 # Response: { "data": { "version": 8, ... } }
 
-# 2. Replace the whole payout list
+# 2. Replace the whole list — a primary number and a fallback
 curl -X PATCH https://api.example.com/api/vendor/profile \
   -H "Authorization: Bearer YOUR_JWT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "payout_details": [
       {
-        "method": "card",
-        "card": {
-          "brand": "visa",
-          "last4": "4242",
-          "card_holder_name": "JEAN DUPONT",
-          "expiry_month": 8,
-          "expiry_year": 2029,
-          "country": "CM",
-          "issuing_bank": "Afriland First Bank"
+        "method": "mobile_money",
+        "mobile_money": {
+          "provider": "MTN Mobile Money",
+          "phone_number": "+237670000000",
+          "account_name": "Tech Solutions Sarl"
         }
       },
       {
         "method": "mobile_money",
         "mobile_money": {
-          "provider": "MTN Mobile Money",
-          "phone_number": "+237670000000",
+          "provider": "Orange Money",
+          "phone_number": "+237690000000",
           "account_name": "Tech Solutions Sarl"
         }
       }
@@ -240,6 +274,9 @@ curl -X PATCH https://api.example.com/api/vendor/profile \
   }'
 ```
 
+Swapping either entry for a `bank` or `card` object is what will work once those are switched back
+on; today it returns `400` on `payout_details[n].method`.
+
 ---
 
 ## Reading it back
@@ -247,6 +284,9 @@ curl -X PATCH https://api.example.com/api/vendor/profile \
 Payout details are **write-mostly by design**. You already know your own account, so echoing a full
 account number to anything that can read your profile would turn a session hijack into a banking
 detail leak for no benefit.
+
+**Reads are not gated by the switch.** All three kinds render, because an entry configured before
+`bank`/`card` were switched off must still be visible to the owner who set it.
 
 - `mobile_money.phone_number` → `phone_number_masked`
 - `bank.account_number` → `account_number_masked`
@@ -260,6 +300,24 @@ detail leak for no benefit.
 > because there is nothing to compare it to. You store an ordered list of up to 3; this read returns
 > index 0, the one payouts actually use. (Agencies and agents get the whole list, each entry flagged
 > with `is_preferred`.)
+
+```json
+{
+  "payoutDetails": {
+    "method": "mobile_money",
+    "mobile_money": {
+      "provider": "MTN Mobile Money",
+      "phone_number_masked": "••••••0000",
+      "account_name": "Tech Solutions Sarl"
+    },
+    "bank": null,
+    "card": null
+  }
+}
+```
+
+A pre-switch card entry reads back like this — still rendered, still masked, just no longer
+re-writable:
 
 ```json
 {
@@ -299,12 +357,18 @@ With **no** payout method configured, `POST /api/vendor/earnings/payout` is refu
 `409 EARNINGS_PAYOUT_METHOD_MISSING`, and the nightly automatic-payout sweep (at 2,000,000 XAF) hits
 the same wall on your behalf and logs it. Configure at least one before your balance matures.
 
+**A switched-off kind is still paid.** The snapshot and the admin queue don't consult the switch —
+if your index 0 was a bank entry before `bank` was switched off, that payout goes where it always
+would have. Switching a kind off closes the door on *new* configuration, never on money already
+addressed.
+
 ---
 
 ## Errors
 
 | Status | Code | When |
 |---|---|---|
+| `400` | `VALIDATION_ERROR` on `payout_details[n].method` | The kind is **switched off** — today, anything but `mobile_money`. Message: *"Bank transfer payouts are not available right now. Currently accepted: mobile money."* |
 | `400` | `VALIDATION_ERROR` | Any field above fails — including a PAN/CVV in the card object, an expired card, an off-vocabulary brand, a `last4` that isn't 4 digits, or a list outside 1–3 entries. Map `details.fields[].path` to your form. |
 | `409` | `EARNINGS_PAYOUT_METHOD_MISSING` | A payout was requested with an empty list. |
 | `409` | `CONFLICT` | The `version` you sent to `PATCH /profile` is stale (optimistic locking) — re-read and retry. |

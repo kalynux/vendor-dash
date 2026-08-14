@@ -38,10 +38,10 @@ export const tickets = {
         closed: 'Closed',
     },
 
+    /** Support's own ranking. `normal` where importance says `medium`. */
     priority: {
-        normal: 'Normal',
         low: 'Low',
-        medium: 'Medium',
+        normal: 'Normal',
         high: 'High',
         urgent: 'Urgent',
     },
@@ -58,7 +58,8 @@ export const tickets = {
         ORDER: 'Order',
         PRODUCT: 'Product',
         BOOKING: 'Booking',
-        ACCOUNT: 'Account',
+        /** Was `ACCOUNT`, which the API no longer accepts. */
+        VENDOR: 'My shop',
         OTHER: 'Other',
     },
 
@@ -351,10 +352,16 @@ export const tickets = {
      * interpolated: the schema is built at module load, with no locale in scope.
      */
     validation: {
-        subjectMin: 'Subject must be at least 3 characters',
+        subjectMin: 'Enter a subject',
         subjectMax: 'Subject must be 200 characters or less',
-        descriptionMin: 'Description must be at least 10 characters',
-        descriptionMax: 'Description must be 5000 characters or less',
+        descriptionMin: 'Describe what happened',
+        /**
+         * One key, two limits: creating a ticket caps the description at 700
+         * characters and editing one allows 10000, so the message says which
+         * form the reader is on rather than naming a number that would be wrong
+         * on the other.
+         */
+        descriptionMax: 'Description is too long — please shorten it',
         typeRequired: 'Please select a ticket type',
         importanceRequired: 'Please select an importance level',
         entityTypeRequired: 'Please select a related entity type',
@@ -365,7 +372,7 @@ export const tickets = {
         attachmentRequired:
             'At least one photo or video attachment is required by your support policy.',
         noteRequired: 'Note cannot be empty',
-        noteMax: 'Note must be 2000 characters or less',
+        noteMax: 'Note must be 300 characters or less',
     },
 } as const;
 

@@ -7,7 +7,9 @@ export { PayoutMethodDialog } from './PayoutMethodDialog';
 export type { PayoutMethodDialogProps } from './PayoutMethodDialog';
 
 export {
+    ENABLED_PAYOUT_METHODS,
     isPayoutEntryComplete,
+    isRetiredPayoutMethod,
     payoutEntryBrand,
     payoutEntryDetail,
     payoutEntryTitle,

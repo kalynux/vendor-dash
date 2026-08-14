@@ -3,8 +3,8 @@
 // Flat file model (no folders). Attachment status comes from the `usage` object
 // on GET /files/:id — never from `usageCount`.
 
-import { api, BASE_URL } from './api';
-import { ApiError, type ApiErrorDetail, type UploadViolation } from '@/types/api';
+import { api, BASE_URL, errorFromBody } from './api';
+import { ApiError } from '@/types/api';
 import { tStatic } from '@/i18n';
 import type {
   ApiFile,
@@ -150,7 +150,10 @@ export async function updateFileName(
   return res.data;
 }
 
-/** Soft delete. Rejects with `409 FILE_IN_USE` when the file is still referenced. */
+/**
+ * Soft delete. Rejects with `409 CATALOG_FILE_STILL_REFERENCED` when the file is
+ * still attached to something; `details.usage` names the holders.
+ */
 export async function deleteFile(id: string): Promise<void> {
   await api.delete<{ success: boolean; message: string }>(`/files/${id}`);
 }
@@ -226,29 +229,18 @@ function errorFromXhr(xhr: XMLHttpRequest, files: File[]): ApiError {
   } catch {
     // response may not be JSON
   }
-  const error = (body.error ?? body) as Record<string, unknown>;
-  const message =
-    (error.message as string) ??
-    (body.message as string) ??
-    `Upload failed with status ${xhr.status}`;
-  const code = (error.code as string) ?? String(xhr.status || 0);
-  const rawDetails = error.details;
-  const details = Array.isArray(rawDetails) ? (rawDetails as ApiErrorDetail[]) : undefined;
-  const violations =
-    rawDetails &&
-    typeof rawDetails === 'object' &&
-    Array.isArray((rawDetails as Record<string, unknown>).violations)
-      ? ((rawDetails as Record<string, unknown>).violations as UploadViolation[])
-      : undefined;
+  // Same envelope as `fetch`, so it goes through the same parser — `category`,
+  // `requestId` and the normalized field errors come along for free.
+  const err = errorFromBody(xhr.status, body, xhr.getResponseHeader('Retry-After'));
   // `fileIndex` is scoped to this request's own file list. Because a mixed
   // selection is split across two requests, backfill each violation's filename
   // from THIS request so per-file messaging stays correct after the split.
-  violations?.forEach((v) => {
+  err.violations?.forEach((v) => {
     if (!v.metadata?.originalName && typeof v.fileIndex === 'number' && files[v.fileIndex]) {
       v.metadata = { ...v.metadata, originalName: files[v.fileIndex].name };
     }
   });
-  return new ApiError(xhr.status, code, message, details, undefined, violations);
+  return err;
 }
 
 /** Low-level XHR upload to a single route. Reports bytes loaded for aggregation. */

@@ -41,6 +41,7 @@ import type { ServiceConfig } from '@/types/services.types';
 import type { StockAdjustmentMeta } from '@/types/stock-requests.types';
 import { ApiError } from '@/types/api';
 import { validateActivation } from '@/components/products/schemas/product.schemas';
+import { bargainBody, type BargainCeilingEdit } from '@/components/products/bargain';
 import { fetchDefaultDeliveryAgency } from '@/services/agencies.service';
 import { apiErrorMessage, type TranslationKey } from '@/i18n';
 
@@ -283,6 +284,39 @@ export async function updateVariant(
     payload,
   );
   return { variant: res.data, stockAdjustment: res.meta?.stockAdjustment ?? null };
+}
+
+export interface BargainWriteFailure {
+  variantId: string;
+  label: string;
+  /** Raw — the caller resolves it through `apiError`, which needs React context. */
+  error: unknown;
+}
+
+/**
+ * Apply per-variant negotiation ceilings.
+ *
+ * `allSettled`, not `all`: these are independent requests, so the ones that
+ * succeed commit regardless, and the docs require reporting WHICH variants
+ * failed. A single rejection would discard the successes' identities.
+ *
+ * Callers must run this BEFORE flipping `vectorisationEnabled` — that flip sets
+ * `vectorisationStatus: 'pending'`, after which every variant write returns
+ * 409 CATALOG_PRODUCT_VECTORISATION_PENDING.
+ */
+export async function applyBargainEdits(
+  productId: string,
+  edits: BargainCeilingEdit[],
+): Promise<BargainWriteFailure[]> {
+  if (edits.length === 0) return [];
+  const results = await Promise.allSettled(
+    edits.map((e) => updateVariant(productId, e.variantId, bargainBody(e.maxPrice))),
+  );
+  return results.flatMap((r, i) =>
+    r.status === 'rejected'
+      ? [{ variantId: edits[i].variantId, label: edits[i].label, error: r.reason }]
+      : [],
+  );
 }
 
 export async function archiveVariant(productId: string, variantId: string): Promise<void> {
@@ -544,6 +578,10 @@ export const SIMPLE_MODE_ERROR_KEYS: Record<string, TranslationKey> = {
     'errors.contexts.simpleProduct.CATALOG_PRODUCT_INVALID_PICKUP_LOCATION',
   CATALOG_PRODUCT_NO_DEFAULT_VARIANT:
     'errors.contexts.simpleProduct.CATALOG_PRODUCT_NO_DEFAULT_VARIANT',
+  CATALOG_VARIANT_BARGAIN_RANGE_INVALID:
+    'errors.contexts.simpleProduct.CATALOG_VARIANT_BARGAIN_RANGE_INVALID',
+  CATALOG_VARIANT_BARGAIN_PRICE_MISMATCH:
+    'errors.contexts.simpleProduct.CATALOG_VARIANT_BARGAIN_PRICE_MISMATCH',
 };
 
 // Chains through ACTIVATION_ERROR_MAP so blocker codes that also arrive as

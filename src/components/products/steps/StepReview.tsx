@@ -1,12 +1,22 @@
 import { useEffect, useState } from 'react';
-import { AlertCircle, CheckCircle2, ChevronLeft, Globe, Package, FileDigit, Sparkles } from 'lucide-react';
+import { AlertCircle, CheckCircle2, ChevronLeft, Globe, Handshake, Package, FileDigit, Sparkles } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { cn } from '@/lib/utils';
 import { validateActivation } from '@/components/products/schemas/product.schemas';
+import {
+  collectCeilingEdits,
+  seedCeilings,
+  validateCeilings,
+  variantLabel,
+  type BargainCeilingEdit,
+} from '@/components/products/bargain';
 import { AgencySelector } from '@/components/products/review/AgencySelector';
-import { useMessage, useTranslation, type TranslationKey } from '@/i18n';
+import { useFormatters, useMessage, useTranslation, type TranslationKey } from '@/i18n';
 import type { WizardState, VendorAgencyListItemDto, ApiPickupLocation } from '@/types/product.types';
 import { getProductFileCount } from '@/types/product.types';
 
@@ -15,8 +25,8 @@ interface StepReviewProps {
   serverData: Partial<WizardState>;
   isSaving: boolean;
   stepError: string | null;
-  onPublish: (values: { vectorisationEnabled: boolean }) => void;
-  onSaveDraft: (values: { vectorisationEnabled: boolean }) => void;
+  onPublish: (values: { vectorisationEnabled: boolean; bargainEdits: BargainCeilingEdit[] }) => void;
+  onSaveDraft: (values: { vectorisationEnabled: boolean; bargainEdits: BargainCeilingEdit[] }) => void;
   onBack: () => void;
   onAgencyChange: (agencyId: string | null) => Promise<void> | void;
   onFreeDeliveryChange: (freeDelivery: boolean) => Promise<void> | void;
@@ -36,6 +46,7 @@ export function StepReview({
 }: StepReviewProps) {
   const { t } = useTranslation();
   const m = useMessage();
+  const fmt = useFormatters();
   const product = serverData.serverProduct;
   const variants = serverData.serverVariants ?? [];
   const isDigital = product?.type === 'digital';
@@ -51,6 +62,44 @@ export function StepReview({
   useEffect(() => {
     setVectorisationEnabled(product?.vectorisationEnabled ?? false);
   }, [product?.vectorisationEnabled, product?.id]);
+
+  // ── Bargainable pricing ───────────────────────────────────────────────────
+  // Active variants only: an archived variant is never sent to the AI index, so
+  // a negotiation ceiling on one would be meaningless.
+  //
+  // `serviceConfig` also excludes service variants, which the backend refuses with
+  // 400 CATALOG_VARIANT_BARGAIN_NOT_SUPPORTED — their price is a base rate the
+  // booking engine prorates, so a flat range would not describe what is charged.
+  // Services normally render StepServiceReview rather than this step, but the
+  // variant-level check holds even if one is reached some other way.
+  const bargainVariants = variants.filter((v) => v.status === 'active' && !v.serviceConfig);
+
+  // Ceilings are held as strings: the inputs produce strings, '' is exactly the
+  // "no window" signal, and it avoids a NaN dance on every keystroke.
+  const [ceilings, setCeilings] = useState<Record<string, string>>(() =>
+    seedCeilings(bargainVariants),
+  );
+
+  // `serverVariants` is replaced wholesale on every save, so array identity is a
+  // useless dependency. Key off the values we actually care about — which also
+  // catches a PRICE change, since that can invalidate a ceiling already typed.
+  const variantsKey = bargainVariants
+    .map((v) => `${v.id}:${v.price}:${v.bargain?.maxPrice ?? ''}`)
+    .join('|');
+  useEffect(() => {
+    setCeilings(seedCeilings(bargainVariants));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [variantsKey]);
+
+  // Derived during render rather than held in state: nothing here is async, and
+  // the error clears the instant the number is fixed with no effect round-trip.
+  // Same approach as `activationErrors` below.
+  const ceilingErrors = validateCeilings(bargainVariants, ceilings);
+  const hasCeilingErrors = Object.keys(ceilingErrors).length > 0;
+  const submitValues = () => ({
+    vectorisationEnabled,
+    bargainEdits: collectCeilingEdits(bargainVariants, ceilings),
+  });
 
   const activationErrors: TranslationKey[] = product
     ? validateActivation({
@@ -273,6 +322,88 @@ export function StepReview({
         </div>
       </div>
 
+      {/* Bargainable pricing — one ceiling per variant.
+          Gated on the LOCAL toggle state, not `product.vectorisationEnabled`, so it
+          appears the moment the switch flips; the flip is persisted by the same
+          handler that writes these ceilings. */}
+      {vectorisationEnabled && product && bargainVariants.length > 0 && (
+        <div className="rounded-xl border border-border p-5 space-y-4">
+          <div className="flex items-start gap-3">
+            <Handshake className="w-5 h-5 text-muted-foreground mt-0.5 shrink-0" />
+            <div className="min-w-0">
+              <p className="font-medium text-sm">{t('products.bargain.title')}</p>
+              <p className="text-xs text-muted-foreground mt-0.5 max-w-md">
+                {t('products.bargain.description')}
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            {bargainVariants.map((v) => {
+              const rowError = ceilingErrors[v.id];
+              return (
+                <div
+                  key={v.id}
+                  className="grid grid-cols-1 gap-2 border-t border-border pt-3 first:border-t-0 first:pt-0 sm:grid-cols-[1fr_auto] sm:items-start"
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium truncate">{variantLabel(v)}</p>
+                    <div className="mt-0.5 flex flex-wrap items-center gap-2">
+                      <span className="font-mono text-xs text-muted-foreground">{v.sku}</span>
+                      <span className="text-xs tabular-nums text-muted-foreground">
+                        {fmt.currency(v.price)}
+                      </span>
+                      {/* A stored window shows regardless; `bargainable` only decides
+                          whether it reads as live or dimmed. Never struck through —
+                          this is a ceiling, not a "was" price. */}
+                      {v.bargain && (
+                        <Badge
+                          variant="outline"
+                          className={cn('text-[10px] font-normal', !v.bargainable && 'opacity-60')}
+                        >
+                          {t('products.bargain.badge', { max: fmt.currency(v.bargain.maxPrice) })}
+                        </Badge>
+                      )}
+                      {v.bargain && !v.bargainable && (
+                        <span className="text-[10px] text-muted-foreground">
+                          {t('products.bargain.inertHint')}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="sm:w-[180px]">
+                    <Label htmlFor={`bargain-${v.id}`} className="sr-only">
+                      {t('products.bargain.ceilingLabel')}
+                    </Label>
+                    <Input
+                      id={`bargain-${v.id}`}
+                      type="number"
+                      min={v.price}
+                      step="any"
+                      inputMode="decimal"
+                      value={ceilings[v.id] ?? ''}
+                      placeholder={t('products.bargain.ceilingPlaceholder')}
+                      disabled={controlsDisabled}
+                      onChange={(e) =>
+                        setCeilings((prev) => ({ ...prev, [v.id]: e.target.value }))
+                      }
+                      aria-invalid={!!rowError}
+                      className={cn('h-9 text-sm', rowError && 'border-destructive')}
+                    />
+                    {rowError && (
+                      <p className="mt-1 text-xs text-destructive">{t(rowError)}</p>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <p className="text-xs text-muted-foreground">{t('products.bargain.clearHint')}</p>
+        </div>
+      )}
+
       {/* Activation checklist */}
       <div className="space-y-2">
         <p className="text-sm font-medium">{t('products.review.requirements')}</p>
@@ -304,8 +435,8 @@ export function StepReview({
             <Button
               type="button"
               variant="outline"
-              onClick={() => onSaveDraft({ vectorisationEnabled })}
-              disabled={isSaving || isLockedForVectorisation}
+              onClick={() => onSaveDraft(submitValues())}
+              disabled={isSaving || isLockedForVectorisation || hasCeilingErrors}
             >
               {t('products.review.keepAsDraft')}
             </Button>
@@ -313,8 +444,8 @@ export function StepReview({
           {showPublish && (
             <Button
               type="button"
-              onClick={() => onPublish({ vectorisationEnabled })}
-              disabled={isSaving || !canPublish || isLockedForVectorisation}
+              onClick={() => onPublish(submitValues())}
+              disabled={isSaving || !canPublish || isLockedForVectorisation || hasCeilingErrors}
               className="gap-1.5"
             >
               {isSaving ? (
@@ -330,8 +461,8 @@ export function StepReview({
           {showSaveChanges && (
             <Button
               type="button"
-              onClick={() => onSaveDraft({ vectorisationEnabled })}
-              disabled={isSaving || isLockedForVectorisation}
+              onClick={() => onSaveDraft(submitValues())}
+              disabled={isSaving || isLockedForVectorisation || hasCeilingErrors}
               className="gap-1.5"
             >
               {isSaving ? t('common.actions.saving') : t('common.actions.saveChanges')}

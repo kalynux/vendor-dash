@@ -9,12 +9,19 @@
  *
  * Resolution order:
  *   1. `errors.codes.<CODE>`            — the specific, human-written message
- *   2. `errors.status.<httpStatus>`     — a sane message for an unknown code
- *   3. `errors.unknown`                 — last resort
+ *   2. `errors.category.<category>`     — the backend's nine-value taxonomy
+ *   3. `errors.status.<httpStatus>`     — a sane message for an unknown code
+ *   4. `errors.unknown`                 — last resort
  *
  * An unmapped code therefore degrades to "that request was rejected" rather
  * than to a stack-trace fragment, and is reported to the console in dev so it
  * can be added to the catalog.
+ *
+ * Step 2 is the tier the backend added for exactly this: with 547 registered
+ * codes, no client has specific copy for all of them, and the category is what
+ * says the four things that change behaviour — retry, re-authenticate, fix the
+ * input, or it's ours. It sits above the status because `409` alone cannot tell
+ * a stale-state conflict from a deliberate business refusal.
  */
 
 import { ApiError } from '@/types/api';
@@ -112,16 +119,34 @@ export function resolveApiError(
     }
 
     const codeKey = `errors.codes.${err.code}`;
-    if (hasKey(codeKey)) return t(codeKey, params);
+    if (hasKey(codeKey)) return withRequestId(err, t(codeKey, params), t);
 
     reportUnmapped(err.code, err.status);
 
-    const statusKey = `errors.status.${err.status}`;
-    if (hasKey(statusKey)) return t(statusKey, params);
+    const categoryKey = `errors.category.${err.category}`;
+    if (err.category && hasKey(categoryKey)) return withRequestId(err, t(categoryKey, params), t);
 
-    if (err.status >= 500) return t('errors.status.500', params);
+    const statusKey = `errors.status.${err.status}`;
+    if (hasKey(statusKey)) return withRequestId(err, t(statusKey, params), t);
+
+    if (err.status >= 500) return withRequestId(err, t('errors.status.500', params), t);
     if (fallbackKey) return t(fallbackKey, params);
     return t('errors.unknown', params);
+}
+
+/**
+ * Append the `requestId` to a server-side failure.
+ *
+ * On a 5xx the backend deliberately sends no cause — `message` is a fixed
+ * sentence and `details` is omitted entirely, in every environment. The
+ * `requestId` is the only handle anyone has, and a user who can quote it turns
+ * an unactionable "something went wrong" into a support conversation that
+ * resolves. Client-invented codes (`REFRESH_FAILED` and friends) carry no
+ * requestId, so they are unaffected.
+ */
+function withRequestId(err: ApiError, message: string, t: Translate): string {
+    if (err.status < 500 || !err.requestId) return message;
+    return t('errors.withRequestId', { message, requestId: err.requestId });
 }
 
 /**
@@ -135,12 +160,21 @@ export function resolveFieldErrors(
     t: Translate,
     hasKey: (key: string) => boolean,
 ): Record<string, string> {
-    if (!(err instanceof ApiError) || !err.details?.length) return {};
+    if (!(err instanceof ApiError)) return {};
     const out: Record<string, string> = {};
-    for (const detail of err.details) {
-        if (!detail?.field) continue;
+    for (const detail of err.fieldErrors) {
+        if (!detail.field) continue;
+        // The backend's path is dotted and can be indexed
+        // (`payout_details.0.method`); a form input is keyed by its own name, so
+        // try the full path first and fall back to its last segment.
+        const leaf = detail.field.split('.').pop() ?? detail.field;
         const fieldKey = `errors.fields.${detail.field}`;
-        out[detail.field] = hasKey(fieldKey) ? t(fieldKey) : t('errors.fieldInvalid');
+        const leafKey = `errors.fields.${leaf}`;
+        out[detail.field] = hasKey(fieldKey)
+            ? t(fieldKey)
+            : hasKey(leafKey)
+              ? t(leafKey)
+              : t('errors.fieldInvalid');
     }
     return out;
 }

@@ -57,6 +57,7 @@ const PAYMENT_OPTIONS: { value: PaymentStatus; labelKey: TranslationKey }[] = [
   { value: 'paid', labelKey: PAYMENT_STATUS_FILTER_KEYS.paid },
   { value: 'disputed', labelKey: PAYMENT_STATUS_FILTER_KEYS.disputed },
   { value: 'failed', labelKey: PAYMENT_STATUS_FILTER_KEYS.failed },
+  { value: 'refund_pending', labelKey: PAYMENT_STATUS_FILTER_KEYS.refund_pending },
   { value: 'refunded', labelKey: PAYMENT_STATUS_FILTER_KEYS.refunded },
 ];
 

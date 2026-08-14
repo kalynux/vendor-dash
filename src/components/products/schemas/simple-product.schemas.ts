@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { basicInfoSchema } from './product.schemas';
+import { bargainPatch } from '@/components/products/bargain';
 import { PRODUCT_IMAGE_LIMIT } from '@/components/products/media.constants';
 import type { TranslationKey } from '@/i18n';
 import type {
@@ -62,6 +63,12 @@ export const simpleProductSchema = basicInfoSchema.extend({
   ),
   compareAtPrice: optionalNonNegative('products.validation.compareAtMin'),
 
+  // The negotiation CEILING, and the only number the vendor picks: `bargain.minPrice`
+  // IS the selling price and the backend keeps the two equal, so it is never sent.
+  // Empty = no window. Unrelated to `compareAtPrice` despite both sitting above the
+  // price — that one is a "was" price, this one is a haggling bound.
+  bargainMaxPrice: optionalNonNegative('products.validation.bargainMin'),
+
   stock: z.preprocess(
     emptyToUndefined,
     z
@@ -90,6 +97,25 @@ export const simpleProductSchema = basicInfoSchema.extend({
   length: optionalNonNegative('products.validation.lengthMin'),
   width: optionalNonNegative('products.validation.widthMin'),
   height: optionalNonNegative('products.validation.heightMin'),
+}).superRefine((values, ctx) => {
+  // Pre-empts 422 CATALOG_VARIANT_BARGAIN_RANGE_INVALID. Equality is legal —
+  // "bargainable, no headroom yet". A per-field `.refine` cannot see `price`,
+  // hence the object-level rule.
+  //
+  // This one check also covers the backend's price auto-sync trap: after
+  // `toFormValues`, the initial `bargainMaxPrice` IS the stored ceiling, so
+  // RAISING the price past it trips exactly the same rule. That is why the
+  // message is worded neutrally rather than "lower the ceiling".
+  //
+  // Blocks rather than silently widening the window: quietly raising a ceiling
+  // is a money decision made on the vendor's behalf.
+  if (values.bargainMaxPrice !== undefined && values.bargainMaxPrice < values.price) {
+    ctx.addIssue({
+      code: 'custom',
+      message: 'products.validation.bargainMaxBelowPrice',
+      path: ['bargainMaxPrice'],
+    });
+  }
 });
 
 export type SimpleProductFormValues = z.infer<typeof simpleProductSchema>;
@@ -114,6 +140,7 @@ export function toFormValues(
     fileIds: product.files.map((f) => f.id),
     price: variant?.price ?? 0,
     compareAtPrice: variant?.compareAtPrice,
+    bargainMaxPrice: variant?.bargain?.maxPrice,
     stock: variant?.stock ?? 0,
     isInfiniteStock: variant?.isInfiniteStock ?? false,
     sku: variant?.sku ?? '',
@@ -151,6 +178,8 @@ export function toCreatePayload(
   // Sending a stock number the backend ignores is just noise.
   if (!values.isInfiniteStock) payload.stock = values.stock;
   if (values.compareAtPrice !== undefined) payload.compareAtPrice = values.compareAtPrice;
+  // `allowNull: false` — `bargain: null` on a create endpoint is a 400.
+  Object.assign(payload, bargainPatch(values.bargainMaxPrice, undefined, { allowNull: false }));
   if (values.tags.length > 0) payload.tags = values.tags;
 
   const sku = trimmedOrUndefined(values.sku);
@@ -223,6 +252,12 @@ export function toUpdatePayload(
   ) {
     payload.compareAtPrice = current.compareAtPrice;
   }
+  // Unlike compareAtPrice, a bargain window IS clearable — `bargain: null` is the
+  // documented way to remove it — so a cleared field is sent rather than ignored.
+  Object.assign(
+    payload,
+    bargainPatch(current.bargainMaxPrice, initial.bargainMaxPrice, { allowNull: true }),
+  );
   if (current.stock !== initial.stock) payload.stock = current.stock;
   if (current.isInfiniteStock !== initial.isInfiniteStock) {
     payload.isInfiniteStock = current.isInfiniteStock;

@@ -1,5 +1,6 @@
 import {
     useContext,
+    useEffect,
     useState,
     useCallback,
     useRef,
@@ -416,6 +417,28 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
             initCalled.current = false;
             navigate('/login', { replace: true });
         }
+    }, [navigate]);
+
+    /**
+     * The API client dispatches `auth:logout` when a session ends underneath us
+     * — a dead refresh cookie, or a password change elsewhere that revoked every
+     * token this account holds (`401 AUTH_PASSWORD_CHANGED`, terminal by
+     * contract). Cookies are already cleared by then; what is left is the local
+     * state, and the contract is to drop it and send the user to sign-in.
+     *
+     * This lives on the provider rather than a route guard so it fires on every
+     * screen. Mounted only on a dashboard route, a guard-local listener left the
+     * user staring at a stale page with a dead session behind it.
+     */
+    useEffect(() => {
+        const handler = () => {
+            setSession(null);
+            setDrafts({ basicSetup: null, deliveryLinking: null, branding: null, policySetup: null });
+            initCalled.current = false;
+            navigate('/login', { replace: true });
+        };
+        window.addEventListener('auth:logout', handler);
+        return () => window.removeEventListener('auth:logout', handler);
     }, [navigate]);
 
     const clearError = useCallback(() => setError(null), []);

@@ -28,7 +28,7 @@ import {
   PRIORITY_LABEL_KEYS, PRIORITY_BADGE_CLASSES, PRIORITY_DOT_CLASSES, TICKET_PRIORITIES,
   IMPORTANCE_LABEL_KEYS, IMPORTANCE_BADGE_CLASSES, WAITING_STATUS_ROLE,
   ticketTypeKey, ROLE_LABEL_KEYS, getTypeVisual, shortTicketRef, relativeTime,
-  responsiveSheetProps, DESCRIPTION_MAX_LENGTH,
+  responsiveSheetProps, DESCRIPTION_UPDATE_MAX,
 } from '@/components/tickets/ticket.constants';
 import { useIsMobile } from '@/hooks/use-mobile';
 import {
@@ -258,12 +258,12 @@ export function TicketDetailSheet({ ticketId, open, onOpenChange, onUpdated }: T
                         <Textarea
                           id="edit-description"
                           rows={6}
-                          maxLength={DESCRIPTION_MAX_LENGTH}
+                          maxLength={DESCRIPTION_UPDATE_MAX}
                           value={draftDescription}
                           onChange={(e) => setDraftDescription(e.target.value)}
                         />
                         <p className="text-right text-xs tabular-nums text-muted-foreground">
-                          {draftDescription.length}/{DESCRIPTION_MAX_LENGTH}
+                          {draftDescription.length}/{DESCRIPTION_UPDATE_MAX}
                         </p>
                       </div>
                       <div className="flex justify-end gap-2">

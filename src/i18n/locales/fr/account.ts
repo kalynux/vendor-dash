@@ -63,7 +63,7 @@ export const account = {
     security: {
         passwordTitle: 'Changer le mot de passe',
         passwordInfo:
-            'Utilisez un mot de passe que vous n’employez nulle part ailleurs. Le changer ne vous déconnecte pas de cet appareil, mais vous devrez utiliser le nouveau à votre prochaine connexion.',
+            'Utilisez un mot de passe que vous n’employez nulle part ailleurs. Le changer déconnecte tous les autres appareils et navigateurs — celui-ci reste connecté.',
         currentPassword: 'Mot de passe actuel',
         newPassword: 'Nouveau mot de passe',
         confirmPassword: 'Confirmer le nouveau mot de passe',
@@ -73,8 +73,8 @@ export const account = {
             '8 caractères minimum, avec majuscules et minuscules, un chiffre et un caractère spécial.',
         passwordsDontMatch: 'Les mots de passe ne correspondent pas.',
         updatePassword: 'Mettre à jour le mot de passe',
-        updated:
-            'Mot de passe mis à jour. Utilisez le nouveau à votre prochaine connexion.',
+        updated: 'Mot de passe mis à jour. Tous les autres appareils ont été déconnectés.',
+        updateFailed: 'Nous n’avons pas pu changer votre mot de passe. Veuillez réessayer.',
         rules: {
             length: 'Au moins 8 caractères',
             uppercase: 'Au moins une majuscule',
@@ -86,10 +86,11 @@ export const account = {
         twoFactorInfo:
             'Une seconde étape à la connexion — un code sur votre téléphone en plus de votre mot de passe. Pas encore disponible.',
         twoFactorToggle: 'Activer l’authentification à deux facteurs',
-        sessionsTitle: 'Sessions actives',
+        sessionsTitle: 'Appareils connectés',
         sessionsInfo:
-            'Consultez les appareils connectés à votre compte et déconnectez-les à distance. Pas encore disponible.',
-        revoke: 'Révoquer',
+            'La déconnexion des autres appareils passe par le changement de mot de passe : il invalide immédiatement toutes les connexions sauf celle-ci, partout.',
+        sessionsHowTo:
+            'Changer votre mot de passe ci-dessus déconnecte immédiatement tous les autres appareils et navigateurs. Utilisez-le si vous pensez que quelqu’un d’autre y a accès.',
         notAvailableYet:
             'Pas encore disponible — cette fonctionnalité arrivera dans une prochaine mise à jour.',
     },

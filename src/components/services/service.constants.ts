@@ -188,6 +188,9 @@ export const PAYMENT_STATUS_META: Record<PaymentStatus, { labelKey: TranslationK
   paid: { labelKey: 'services.booking.payment.paid', tone: 'success' },
   disputed: { labelKey: 'services.booking.payment.disputed', tone: 'orange' },
   failed: { labelKey: 'services.booking.payment.failed', tone: 'danger' },
+  // Owed back but not yet sent — a manual payout is queued behind a support
+  // ticket, so it is in-flight rather than finished.
+  refund_pending: { labelKey: 'services.booking.payment.refund_pending', tone: 'warning' },
   refunded: { labelKey: 'services.booking.payment.refunded', tone: 'neutral' },
 };
 
@@ -198,6 +201,7 @@ export const PAYMENT_STATUS_FILTER_KEYS: Record<PaymentStatus, TranslationKey> =
   paid: 'services.booking.paymentShort.paid',
   disputed: 'services.booking.paymentShort.disputed',
   failed: 'services.booking.paymentShort.failed',
+  refund_pending: 'services.booking.paymentShort.refund_pending',
   refunded: 'services.booking.paymentShort.refunded',
 };
 
@@ -268,14 +272,9 @@ export function toMajorUnits(amount: number): number {
 
 // ─── Timezones ───────────────────────────────────────────────────────────────────
 
-/** Browser's IANA timezone, used as the default for new availability rules. */
-export function browserTimezone(): string {
-  try {
-    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-  } catch {
-    return 'UTC';
-  }
-}
+// `browserTimezone()` used to seed new availability rules. It is gone on
+// purpose: a rule with no timezone inherits the vendor profile's, which is the
+// shop's own zone — the browser's is wherever its owner happens to be sitting.
 
 // A small curated timezone list for the rule form; the browser tz is prepended.
 export const COMMON_TIMEZONES = [

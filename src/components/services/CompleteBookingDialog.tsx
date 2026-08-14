@@ -115,6 +115,11 @@ export function CompleteBookingDialog({ booking, open, onOpenChange, onCompleted
             </DialogHeader>
             <div className="space-y-2 rounded-lg border p-3 text-sm">
               <Row label={t('services.complete.originallyBooked')} value={money(result.priceSnapshot)} />
+              {/* What is owed is measured against what was PAID, so showing the
+                  paid figure is what makes the balance below add up. */}
+              {result.amountPaid !== undefined && (
+                <Row label={t('services.complete.amountPaid')} value={money(result.amountPaid)} muted />
+              )}
               <Row label={t('services.complete.finalPrice')} value={money(result.finalPrice)} strong />
               {result.breakdown?.peakHoursSurcharge > 0 && (
                 <Row
@@ -135,6 +140,22 @@ export function CompleteBookingDialog({ booking, open, onOpenChange, onCompleted
                   </p>
                   <p className="mt-0.5 text-xs text-amber-700 dark:text-amber-400">
                     {t('services.complete.additionalDueHelp')}
+                  </p>
+                </div>
+              </div>
+            )}
+            {/* Settling *below* what was already paid. Surfaced but never sent
+                back automatically — it is usually a goodwill discount the vendor
+                intends to hand over themselves. */}
+            {!!result.creditDue && result.creditDue > 0 && (
+              <div className="flex gap-2 rounded-lg border p-3 text-sm">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                <div>
+                  <p className="font-medium">
+                    {t('services.complete.creditDue', { amount: money(result.creditDue) })}
+                  </p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {t('services.complete.creditDueHelp')}
                   </p>
                 </div>
               </div>

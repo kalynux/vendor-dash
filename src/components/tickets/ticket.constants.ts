@@ -118,29 +118,26 @@ export const STATUS_TABS: { labelKey: TranslationKey; value: TicketStatus | null
 // ─── Priority ─────────────────────────────────────────────────────────────────
 
 /** Priorities a vendor may set (the updatable enum, per tickets.md PATCH /priority). */
-export const TICKET_PRIORITIES: TicketPriority[] = ['low', 'medium', 'high', 'urgent'];
+export const TICKET_PRIORITIES: TicketPriority[] = ['low', 'normal', 'high', 'urgent'];
 
 export const PRIORITY_LABEL_KEYS: Record<TicketPriority, TranslationKey> = {
-  normal: 'tickets.priority.normal',
   low: 'tickets.priority.low',
-  medium: 'tickets.priority.medium',
+  normal: 'tickets.priority.normal',
   high: 'tickets.priority.high',
   urgent: 'tickets.priority.urgent',
 };
 
 export const PRIORITY_BADGE_CLASSES: Record<TicketPriority, string> = {
-  normal: 'bg-muted text-muted-foreground',
   low: 'bg-muted text-muted-foreground',
-  medium: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+  normal: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
   high: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
   urgent: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
 };
 
 /** Dot colour used next to a priority label in pills. */
 export const PRIORITY_DOT_CLASSES: Record<TicketPriority, string> = {
-  normal: 'bg-muted-foreground/50',
   low: 'bg-muted-foreground/50',
-  medium: 'bg-blue-500',
+  normal: 'bg-blue-500',
   high: 'bg-orange-500',
   urgent: 'bg-red-500',
 };
@@ -165,15 +162,26 @@ export const IMPORTANCE_BADGE_CLASSES: Record<TicketImportance, string> = {
 
 // ─── Entity types ─────────────────────────────────────────────────────────────
 
-export const ENTITY_TYPES: TicketEntityType[] = ['ORDER', 'PRODUCT', 'BOOKING', 'ACCOUNT', 'OTHER'];
+/**
+ * `ACCOUNT` is gone from the API's enum — it is now `VENDOR`, whose `entityId`
+ * is the vendor's own role-entity id (filled in for them, since there is nothing
+ * to pick).
+ */
+export const ENTITY_TYPES: TicketEntityType[] = ['ORDER', 'PRODUCT', 'BOOKING', 'VENDOR', 'OTHER'];
 
 export const ENTITY_TYPE_LABEL_KEYS: Record<TicketEntityType, TranslationKey> = {
   ORDER: 'tickets.entityType.ORDER',
   PRODUCT: 'tickets.entityType.PRODUCT',
   BOOKING: 'tickets.entityType.BOOKING',
-  ACCOUNT: 'tickets.entityType.ACCOUNT',
+  VENDOR: 'tickets.entityType.VENDOR',
   OTHER: 'tickets.entityType.OTHER',
 };
+
+/**
+ * Entity types the vendor never picks an entity for — the id is either their own
+ * (`VENDOR`) or filled in server-side (`OTHER`).
+ */
+export const ENTITY_TYPES_WITHOUT_PICKER: TicketEntityType[] = ['VENDOR', 'OTHER'];
 
 // ─── Ticket types (grouped, authoritative) ────────────────────────────────────
 
@@ -225,6 +233,16 @@ export const TICKET_TYPE_GROUPS: TicketTypeGroup[] = [
 /** Maximum attachments per ticket (api-doc/vendor/tickets.md §Attachment Limits). */
 export const MAX_ATTACHMENTS = 5;
 
+/** Subject ceiling — the same on create and on edit. */
+export const SUBJECT_MAX_LENGTH = 200;
+
+/**
+ * The description ceilings differ between the two endpoints, deliberately:
+ * `POST /tickets` caps at 700 characters, `PATCH /tickets/:id` at 10000.
+ */
+export const DESCRIPTION_CREATE_MAX = 700;
+export const DESCRIPTION_UPDATE_MAX = 10000;
+
 /** Maximum attachments accepted at ticket-creation time (api-doc/vendor/tickets.md). */
 export const MAX_CREATE_ATTACHMENTS = 5;
 
@@ -232,8 +250,10 @@ export const MAX_CREATE_ATTACHMENTS = 5;
 export const TRACKING_NUMBER_MAX = 120;
 
 /** Character limits for free-text fields (kept in sync with ticket.schemas.ts). */
-export const NOTE_MAX_LENGTH = 2000;
-export const DESCRIPTION_MAX_LENGTH = 5000;
+export const NOTE_MAX_LENGTH = 300;
+// Superseded by DESCRIPTION_CREATE_MAX / DESCRIPTION_UPDATE_MAX above: the two
+// endpoints cap the description differently, so one shared number was wrong on
+// whichever form it wasn't written for.
 
 /**
  * Responsive props for a ticket Sheet: a bottom sheet on mobile, a right-side

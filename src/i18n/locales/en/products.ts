@@ -109,6 +109,13 @@ export const products = {
         compareAtOptional: 'Optional',
         compareAtHigherHint: 'Shown struck through when higher than the price.',
         compareAtTooLowHint: 'Customers only see a discount when this is higher than the price.',
+        bargainMaxPrice: 'Negotiable up to',
+        bargainOptional: 'Optional — no negotiation',
+        bargainHint:
+            'Buyers can make an offer between your price and this ceiling. Leave it blank to switch negotiation off.',
+        /** Create flow: the window saves fine, it just does nothing until AI discovery is on. */
+        bargainInertHint:
+            'Buyers can make an offer between your price and this ceiling. It starts working once you turn on AI discovery for this product.',
         unlimitedStock: 'Unlimited stock',
         unlimitedStockHint: 'Never runs out.',
         /** Shown instead of the hint when the product is warehoused by an agency. */
@@ -180,6 +187,22 @@ export const products = {
             allowOversell: 'Allow Oversell',
             nonePlaceholder: 'None',
         },
+    },
+
+    /**
+     * Per-variant negotiation ceilings — the panel under the AI-discovery toggle
+     * on the review step. `maxPrice` is a ceiling, never a "was" price, so none of
+     * this copy may frame it as a discount.
+     */
+    bargain: {
+        title: 'Price negotiation',
+        description:
+            'Buyers can make an offer between the price and the ceiling you set here. Leave a row blank to switch negotiation off for it.',
+        ceilingLabel: 'Negotiable up to',
+        ceilingPlaceholder: 'No negotiation',
+        badge: 'Negotiable up to {{max}}',
+        inertHint: 'Saved, but only active while AI discovery is on.',
+        clearHint: 'Clear a field to remove that variant’s negotiation window.',
     },
 
     /** The option builder that generates the variant matrix. */
@@ -667,6 +690,13 @@ export const products = {
         priceRequired: 'Price is required',
         priceMin: 'Price must be 0 or more',
         compareAtMin: 'Compare-at price must be 0 or more',
+        bargainMin: 'The negotiation ceiling must be 0 or more',
+        bargainMaxNumber: 'Enter a valid negotiation ceiling',
+        /**
+         * Worded neutrally on purpose: the vendor can land here either by lowering
+         * the ceiling or by raising the price past a stored one.
+         */
+        bargainMaxBelowPrice: 'The negotiation ceiling has to be at least the price',
         stockNumber: 'Stock must be a number',
         stockInteger: 'Stock must be a whole number',
         stockMin: 'Stock cannot be negative',
@@ -730,6 +760,9 @@ export const products = {
         freeDeliveryFailed: "We couldn't update free delivery. Please try again.",
         pickupFailed: "We couldn't update the pickup location. Please try again.",
         draftFailed: "We couldn't save your draft. Please try again.",
+        /** Ceilings are independent requests — the ones that worked stayed saved. */
+        bargainPartial:
+            'We couldn’t set the negotiation ceiling for {{variants}}. Nothing else was changed — fix those and try again.',
     },
 } as const;
 

@@ -6,6 +6,7 @@ import { Command, CommandInput, CommandList } from '@/components/ui/command';
 import { ResponsiveModal } from '@/components/services/ResponsiveModal';
 import { cn } from '@/lib/utils';
 import { fetchReferenceOrders, fetchReferenceProducts } from '@/services/tickets.service';
+import { fileRefUrl } from '@/services/files.service';
 import { tStatic, useApiError, useTranslation } from '@/i18n';
 import type { OrderTrackingOption, TicketEntityType } from '@/types/tickets.types';
 
@@ -263,7 +264,7 @@ async function searchEntities(entityType: TicketEntityType, query: string): Prom
         status: titleCase(o.fulfillmentStatus),
       }),
       caption: o.orderNumber,
-      imageUrl: o.customerAvatarUrl,
+      imageUrl: fileRefUrl(o.customerAvatar),
       trackingOptions: o.shipments
         .filter((s) => s.trackingNumber)
         .map((s) => ({

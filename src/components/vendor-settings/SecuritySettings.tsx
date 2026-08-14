@@ -3,7 +3,7 @@ import { Eye, EyeOff, Globe, Loader2, Lock, Save, Shield } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { onboardingService } from '@/services/onboarding.service';
-import { mapProfileError } from '@/components/vendor-settings/errors';
+import { mapPasswordError } from '@/components/vendor-settings/errors';
 import { Button } from '@/components/ui/button';
 import {
   SettingsSection,
@@ -55,7 +55,7 @@ export function SecuritySettings() {
       setNext('');
       setConfirm('');
     } catch (err) {
-      setError(mapProfileError(err));
+      setError(mapPasswordError(err));
     } finally {
       setSaving(false);
     }
@@ -172,25 +172,21 @@ export function SecuritySettings() {
           </div>
       </SettingsSection>
 
+      {/*
+        Not a "coming soon" panel. Sign-in tokens are stateless by design, so
+        there is no device list to render and never will be — changing the
+        password is the revocation, and it is already live. Saying so is more
+        useful than a disabled Revoke button promising a screen that isn't
+        coming.
+      */}
       <SettingsSection
-        className="opacity-60"
         icon={Globe}
-        title={
-          <span className="flex items-center gap-2">
-            {t('account.security.sessionsTitle')}
-            <Badge variant="outline">{t('common.states.comingSoon')}</Badge>
-          </span>
-        }
+        title={t('account.security.sessionsTitle')}
         info={t('account.security.sessionsInfo')}
       >
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-sm text-muted-foreground">
-              {t('account.security.notAvailableYet')}
-            </p>
-            <Button variant="outline" size="sm" disabled>
-              {t('account.security.revoke')}
-            </Button>
-          </div>
+          <p className="text-sm text-muted-foreground">
+            {t('account.security.sessionsHowTo')}
+          </p>
       </SettingsSection>
     </SettingsSections>
   );

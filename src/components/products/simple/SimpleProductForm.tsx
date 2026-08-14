@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { AlertCircle, X, Plus, ChevronDown, Settings2 } from 'lucide-react';
+import { AlertCircle, X, Plus, ChevronDown, Settings2, Handshake } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -76,6 +76,14 @@ export interface SimpleProductFormProps {
    * endpoints, and therefore not this form's business.
    */
   children?: React.ReactNode;
+  /**
+   * Whether to offer the bargainable-pricing ceiling. The edit page passes the
+   * product's `vectorisationEnabled` so the field appears under the AI-search
+   * toggle it depends on; create passes nothing and always shows it, because a
+   * brand-new product is never vectorisation-enabled yet the backend stores and
+   * validates the window happily — it is simply inert until the flag is on.
+   */
+  showBargainField?: boolean;
 }
 
 const EMPTY_VALUES: SimpleProductFormValues = {
@@ -88,6 +96,7 @@ const EMPTY_VALUES: SimpleProductFormValues = {
   fileIds: [],
   price: 0,
   compareAtPrice: undefined,
+  bargainMaxPrice: undefined,
   stock: 0,
   isInfiniteStock: false,
   sku: '',
@@ -114,6 +123,7 @@ export function SimpleProductForm({
   stockNotice,
   disableUnlimitedStock = false,
   onStockModeChange,
+  showBargainField = true,
 }: SimpleProductFormProps) {
   const { t } = useTranslation();
   const m = useMessage();
@@ -577,6 +587,42 @@ export function SimpleProductForm({
       </Collapsible>
 
       {children}
+
+      {/* Bargainable pricing. Placed after `children` deliberately: the edit page's
+          last child is the AI-search card, so this lands directly beneath the
+          toggle that governs it, while staying a field of this one form. */}
+      {showBargainField && (
+        <div className="rounded-xl border border-border p-5">
+          <div className="flex items-start gap-3">
+            <Handshake className="w-5 h-5 text-muted-foreground mt-0.5 shrink-0" />
+            <div className="flex-1 min-w-0 space-y-1.5">
+              <div>
+                <Label htmlFor="bargainMaxPrice" className="text-sm font-medium">
+                  {t('products.fields.bargainMaxPrice')}
+                </Label>
+                <p className="text-xs text-muted-foreground mt-0.5 max-w-md">
+                  {t(isEdit ? 'products.fields.bargainHint' : 'products.fields.bargainInertHint')}
+                </p>
+              </div>
+              <Input
+                id="bargainMaxPrice"
+                type="number"
+                min={0}
+                step="any"
+                inputMode="decimal"
+                placeholder={t('products.fields.bargainOptional')}
+                disabled={isBusy}
+                className="sm:max-w-[220px]"
+                {...register('bargainMaxPrice')}
+                aria-invalid={!!errors.bargainMaxPrice}
+              />
+              {errors.bargainMaxPrice && (
+                <p className="text-xs text-destructive">{m(errors.bargainMaxPrice.message)}</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Action bar */}
       <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-2 pt-2 border-t border-border">

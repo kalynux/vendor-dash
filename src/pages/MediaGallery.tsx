@@ -680,7 +680,10 @@ export function MediaGallery() {
         if (isMobile) infinite.reload();
         toast.success(t('media.toast.fileDeleted'));
       } catch (err) {
-        if (err instanceof ApiError && err.status === 409) {
+        // `CATALOG_FILE_STILL_REFERENCED`, not any 409: the entities holding the
+        // file are in `details.usage`, and matching on the status alone would
+        // also swallow an unrelated conflict under the wrong message.
+        if (err instanceof ApiError && err.isFileStillReferenced) {
           toast.error(t('media.errors.stillReferenced'));
         } else {
           apiError.toast(err, { fallbackKey: 'media.errors.deleteFailed' });

@@ -117,6 +117,12 @@ export const products = {
         compareAtHigherHint: 'Affiché barré lorsqu’il est supérieur au prix.',
         compareAtTooLowHint:
             'Les clients ne voient une remise que si ce montant est supérieur au prix.',
+        bargainMaxPrice: 'Négociable jusqu’à',
+        bargainOptional: 'Facultatif — pas de négociation',
+        bargainHint:
+            'Les acheteurs peuvent proposer un montant entre votre prix et ce plafond. Laissez vide pour désactiver la négociation.',
+        bargainInertHint:
+            'Les acheteurs peuvent proposer un montant entre votre prix et ce plafond. Cela s’active dès que vous activez la découverte par IA pour ce produit.',
         unlimitedStock: 'Stock illimité',
         unlimitedStockHint: 'Ne s’épuise jamais.',
         unlimitedStockLockedHint:
@@ -191,6 +197,17 @@ export const products = {
             allowOversell: 'Autoriser la survente',
             nonePlaceholder: 'Aucune',
         },
+    },
+
+    bargain: {
+        title: 'Négociation du prix',
+        description:
+            'Les acheteurs peuvent proposer un montant entre le prix et le plafond que vous fixez ici. Laissez une ligne vide pour désactiver la négociation.',
+        ceilingLabel: 'Négociable jusqu’à',
+        ceilingPlaceholder: 'Pas de négociation',
+        badge: 'Négociable jusqu’à {{max}}',
+        inertHint: 'Enregistré, mais actif uniquement si la découverte par IA est activée.',
+        clearHint: 'Videz un champ pour retirer la négociation sur cette variante.',
     },
 
     options: {
@@ -667,6 +684,9 @@ export const products = {
         priceRequired: 'Le prix est obligatoire',
         priceMin: 'Le prix doit être supérieur ou égal à 0',
         compareAtMin: 'Le prix barré doit être supérieur ou égal à 0',
+        bargainMin: 'Le plafond de négociation doit être supérieur ou égal à 0',
+        bargainMaxNumber: 'Saisissez un plafond de négociation valide',
+        bargainMaxBelowPrice: 'Le plafond de négociation doit être au moins égal au prix',
         stockNumber: 'Le stock doit être un nombre',
         stockInteger: 'Le stock doit être un nombre entier',
         stockMin: 'Le stock ne peut pas être négatif',
@@ -733,6 +753,8 @@ export const products = {
         freeDeliveryFailed: "Nous n'avons pas pu mettre à jour la livraison offerte. Réessayez.",
         pickupFailed: "Nous n'avons pas pu mettre à jour le point de retrait. Réessayez.",
         draftFailed: "Nous n'avons pas pu enregistrer votre brouillon. Réessayez.",
+        bargainPartial:
+            'Nous n’avons pas pu définir le plafond de négociation pour {{variants}}. Rien d’autre n’a été modifié — corrigez ces lignes et réessayez.',
     },
 };
 

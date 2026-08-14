@@ -1,4 +1,11 @@
-import { ApiError, type ApiErrorDetail, type UploadViolation, type BlockedAddress, type ApiRowError } from '@/types/api';
+import {
+    ApiError,
+    type ApiErrorCategory,
+    type ApiErrorDetail,
+    type UploadViolation,
+    type BlockedAddress,
+    type ApiRowError,
+} from '@/types/api';
 
 export const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8022/api';
 
@@ -39,10 +46,20 @@ function flushQueue(err?: ApiError) {
     pendingQueue = [];
 }
 
+/**
+ * Mint a fresh access cookie from the refresh cookie.
+ *
+ * `POST /auth/browser/refresh` is the only refresh endpoint on the service —
+ * there is no `POST /auth/refresh`. It sits behind `requireJsonContent` (a CSRF
+ * mitigation), so the JSON content type is mandatory even though it takes no
+ * body. `requireAuth` also refreshes silently for cookie clients, so reaching
+ * here usually means the refresh cookie is dead too.
+ */
 async function refreshTokens(): Promise<void> {
-    const res = await fetch(`${BASE_URL}/auth/me`, {
-        method: 'GET',
+    const res = await fetch(`${BASE_URL}/auth/browser/refresh`, {
+        method: 'POST',
         credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
     });
     if (!res.ok) {
         throw await buildApiError(res);
@@ -65,29 +82,43 @@ async function hardLogout(): Promise<void> {
 
 // ─── Error builder ────────────────────────────────────────────────────────────
 
-async function buildApiError(res: Response): Promise<ApiError> {
-    let body: Record<string, unknown> = {};
-    try {
-        body = await res.json();
-    } catch {
-        // response body may not be JSON
-    }
-
+/**
+ * Turn a parsed error body into an `ApiError`.
+ *
+ * Shared with the XHR upload path (`files.service.ts`), which cannot use
+ * `fetch`'s `Response` but hits exactly the same envelope — keeping one parser
+ * is what stops the two drifting.
+ *
+ * `retryAfterHeader` is the raw `Retry-After` value; the docs say to prefer the
+ * headers over the body's convenience field.
+ */
+export function errorFromBody(
+    status: number,
+    body: Record<string, unknown>,
+    retryAfterHeader?: string | null,
+): ApiError {
     const error = (body.error ?? body) as Record<string, unknown>;
     const message =
         (error.message as string) ??
         (body.message as string) ??
-        `Request failed with status ${res.status}`;
-    const code = (error.code as string) ?? String(res.status);
+        `Request failed with status ${status}`;
+    const code = (error.code as string) ?? String(status);
     const requestId = (body.requestId as string) ?? undefined;
+    // Present on every error since Phase 16 — the default branch for a code we
+    // have no specific handling for. Not narrowed at runtime: an unrecognised
+    // value simply misses the category lookup and falls through to the status.
+    const category = (error.category as ApiErrorCategory) ?? undefined;
 
     // `error.details` shape varies by code:
-    //  - VALIDATION_ERROR                 → an array of { field, message }
+    //  - VALIDATION_ERROR                 → an object { fields: [{ path, message, code }] }
+    //                                       (older endpoints: a bare array of { field, message })
     //  - UPLOAD_POLICY_VIOLATION          → an object { violations: [...] }
     //  - VENDOR_BUSINESS_ADDRESS_IN_USE   → an object { blockedAddresses: [...] }
-    // Keep the array path as `details`; lift the object-shaped payloads out separately.
+    //  - RATE_LIMIT_EXCEEDED              → an object { retryAfterSeconds }
+    // Field errors are normalized to `details` from either shape; the other
+    // object-shaped payloads are lifted out separately.
     const rawDetails = error.details;
-    const details = Array.isArray(rawDetails) ? (rawDetails as ApiErrorDetail[]) : undefined;
+    const details = normalizeFieldErrors(rawDetails);
     const violations =
         rawDetails && typeof rawDetails === 'object' && Array.isArray((rawDetails as Record<string, unknown>).violations)
             ? ((rawDetails as Record<string, unknown>).violations as UploadViolation[])
@@ -117,17 +148,103 @@ async function buildApiError(res: Response): Promise<ApiError> {
             ? (rawDetails as Record<string, unknown>)
             : undefined;
 
-    return new ApiError(
-        res.status,
-        code,
-        message,
+    return new ApiError(status, code, message, {
         details,
         requestId,
+        category,
+        retryAfterSeconds: readRetryAfter(retryAfterHeader, detailsObject),
         violations,
         blockedAddresses,
         rowErrors,
         detailsObject,
-    );
+    });
+}
+
+/**
+ * Flatten `error.details` into field errors, from either documented shape.
+ *
+ * The platform-wide Zod projection sends `{ fields: [{ path, message, code }] }`;
+ * a handful of older endpoints documented a bare `[{ field, message }]`. Callers
+ * only ever want `field`, so both become that — otherwise a form maps nothing
+ * and `detail.field.split(...)` throws on the shape the backend actually sends.
+ */
+function normalizeFieldErrors(rawDetails: unknown): ApiErrorDetail[] | undefined {
+    const source = Array.isArray(rawDetails)
+        ? rawDetails
+        : rawDetails && typeof rawDetails === 'object'
+          ? (rawDetails as Record<string, unknown>).fields
+          : undefined;
+    if (!Array.isArray(source) || source.length === 0) return undefined;
+
+    const normalized: ApiErrorDetail[] = [];
+    for (const raw of source) {
+        if (!raw || typeof raw !== 'object') continue;
+        const entry = raw as Record<string, unknown>;
+        const path = typeof entry.path === 'string' ? entry.path : undefined;
+        const field = typeof entry.field === 'string' ? entry.field : path;
+        if (!field) continue;
+        normalized.push({
+            field,
+            message: typeof entry.message === 'string' ? entry.message : '',
+            path,
+            code: typeof entry.code === 'string' ? entry.code : undefined,
+        });
+    }
+
+    return normalized.length ? normalized : undefined;
+}
+
+/**
+ * Seconds to wait after a 429. The header is authoritative (it is what the
+ * gateway actually enforces); `details.retryAfterSeconds` is the convenience
+ * copy. `Retry-After` may also be an HTTP-date — convert that to a delay.
+ */
+function readRetryAfter(
+    header: string | null | undefined,
+    detailsObject: Record<string, unknown> | undefined,
+): number | undefined {
+    if (header) {
+        const seconds = Number(header);
+        if (Number.isFinite(seconds) && seconds >= 0) return Math.ceil(seconds);
+        const at = Date.parse(header);
+        if (!Number.isNaN(at)) return Math.max(0, Math.ceil((at - Date.now()) / 1000));
+    }
+    const fromBody = detailsObject?.retryAfterSeconds;
+    return typeof fromBody === 'number' && Number.isFinite(fromBody) ? fromBody : undefined;
+}
+
+/** Read a `fetch` failure into an `ApiError`, tolerating a non-JSON body. */
+async function buildApiError(res: Response): Promise<ApiError> {
+    let body: Record<string, unknown> = {};
+    try {
+        body = await res.json();
+    } catch {
+        // response body may not be JSON
+    }
+    return errorFromBody(res.status, body, res.headers.get('Retry-After'));
+}
+
+/**
+ * A 401 that no refresh can fix.
+ *
+ * `AUTH_PASSWORD_CHANGED` means the account's password changed, and *both*
+ * credential paths refuse any token minted before it — the refresh cookie
+ * included. The contract is explicit: do not retry, do not attempt a refresh,
+ * clear local state and send the user to sign-in. Returns the error to throw,
+ * or `null` when the ordinary refresh-and-retry is worth attempting.
+ *
+ * The message is worth surfacing verbatim: to someone who did not change their
+ * own password, it is the first sign that somebody else did.
+ */
+async function terminalAuthError(res: Response): Promise<ApiError | null> {
+    const err = await buildApiError(res);
+    if (!err.isPasswordChanged) return null;
+    // Anything parked behind an in-flight refresh is dead too — the same rule
+    // refuses every token this session holds.
+    isRefreshing = false;
+    flushQueue(err);
+    await hardLogout();
+    return err;
 }
 
 // ─── Core request function ────────────────────────────────────────────────────
@@ -149,6 +266,9 @@ async function request<T>(
     });
 
     if (res.status === 401 && !isRetry) {
+        const terminal = await terminalAuthError(res);
+        if (terminal) throw terminal;
+
         // If another refresh is already in flight, queue this request
         if (isRefreshing) {
             return new Promise<T>((resolve, reject) => {
@@ -208,6 +328,9 @@ async function requestFormData<T>(
     });
 
     if (res.status === 401 && !isRetry) {
+        const terminal = await terminalAuthError(res);
+        if (terminal) throw terminal;
+
         if (isRefreshing) {
             return new Promise<T>((resolve, reject) => {
                 pendingQueue.push({

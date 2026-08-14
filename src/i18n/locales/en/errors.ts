@@ -26,6 +26,31 @@ export const errors = {
     /** Shown while a request is being retried after a recoverable failure. */
     retrying: 'Retrying…',
 
+    /**
+     * Appended to a server-side failure. On a 5xx the backend deliberately
+     * sends no cause, so the request id is the only thing that turns "something
+     * went wrong" into a support conversation that resolves.
+     */
+    withRequestId: '{{message}} Reference: {{requestId}}',
+
+    /**
+     * Fallbacks by `error.category` — the backend's nine-value taxonomy, present
+     * on every error. Used when a code has no entry in `codes` below, and
+     * checked before the HTTP status: `409` alone cannot tell a stale-state
+     * conflict from a deliberate business refusal, but the category can.
+     */
+    category: {
+        authentication: 'Your session has ended. Please sign in again.',
+        authorization: "You don't have permission to do that.",
+        validation: "Some of the information isn't valid. Please check your input and try again.",
+        not_found: "We couldn't find what you were looking for.",
+        conflict: 'This changed while you were working on it. Refresh and try again.',
+        business_rule: "That isn't allowed right now.",
+        rate_limit: 'Too many requests. Please wait a moment and try again.',
+        external_service: "A service we rely on didn't respond. Please try again.",
+        internal: 'A server error occurred. Please try again in a moment.',
+    },
+
     /** Fallbacks by HTTP status, used when a code is not in `codes` below. */
     status: {
         400: "That request wasn't valid. Please check your input and try again.",
@@ -69,6 +94,9 @@ export const errors = {
         namedFile: '{{name}} {{reason}}.',
         someFile: 'A file {{reason}}.',
         violations: {
+            /* Reported when the request carried no file at all — a picker that
+               submitted empty rather than a problem with any one file. */
+            NO_FILES_UPLOADED: 'was not attached — please choose a file',
             FILE_TOO_LARGE: 'is too large',
             MIME_NOT_ALLOWED: 'has an unsupported file type',
             TOO_MANY_FILES: 'exceeds the maximum number of files',
@@ -117,6 +145,15 @@ export const errors = {
                 'This product lost its variant. Open it in the advanced editor to repair it.',
             CATALOG_PRODUCT_AGENCY_STORAGE_INFINITE_STOCK:
                 'This product is stored at an agency, so it needs a countable stock quantity. Turn off unlimited stock, or move pickup back to your own address.',
+            // Param-free on purpose: this context is resolved through useMessage(),
+            // which takes no interpolation params, and a simple product has exactly
+            // one variant so naming it would add nothing anyway.
+            CATALOG_VARIANT_BARGAIN_RANGE_INVALID:
+                'The negotiation ceiling has to be at least the price.',
+            // Unreachable by construction — BargainWrite has no minPrice. Mapped so a
+            // future regression surfaces as a sentence rather than a raw code.
+            CATALOG_VARIANT_BARGAIN_PRICE_MISMATCH:
+                'The negotiation window no longer matches the price. Reload the product and set the ceiling again.',
         },
 
         /** Assigning a delivery agency or pickup location to a product. */
@@ -260,6 +297,20 @@ export const errors = {
         AUTH_FORBIDDEN: "You don't have permission to do that.",
         AUTH_OAUTH_STATE_INVALID: 'That sign-in attempt could not be verified. Please try again.',
         AUTH_OAUTH_STATE_EXPIRED: 'That sign-in attempt took too long. Please try again.',
+        /**
+         * Worth saying plainly rather than as a generic "session expired": to
+         * someone who did not change their own password, this is the first sign
+         * that somebody else did.
+         */
+        AUTH_PASSWORD_CHANGED:
+            'Your password was changed, so every other session was signed out. Please sign in again — and if that was not you, change it again straight away.',
+        AUTH_ACCOUNT_SUSPENDED:
+            'This account has been suspended. Contact support to have it reviewed.',
+        AUTH_VENDOR_SUSPENDED:
+            'Your shop has been suspended, so the dashboard is unavailable. Contact support to have it reviewed.',
+        AUTH_ADMIN_CALLER_NOT_CONFIGURED: 'That request could not be authorised.',
+        AUTH_ADMIN_CALLER_TOKEN_INVALID: 'That request could not be authorised.',
+        AUTH_ADMIN_CALLER_ACTOR_MISSING: 'That request could not be authorised.',
 
         // ── Payments ──────────────────────────────────────────────────────────
         PAYMENT_ORDER_NOT_FOUND: 'We could not find that order.',
@@ -298,6 +349,11 @@ export const errors = {
         REFUND_ORDER_NOT_PAID: 'This order has not been paid, so there is nothing to refund.',
         REFUND_GATEWAY_FAILED: 'The payment provider could not process the refund. Please try again.',
         REFUND_GATEWAY_NOT_SUPPORTED: 'Refunds are not supported for the payment method used.',
+        REFUND_ORDER_NOT_FOUND: 'We could not find that order.',
+        REFUND_ORDER_IS_COD:
+            'This order was paid in cash on delivery, so there is no payment to refund. Settle it with the customer directly.',
+        REFUND_POLICY_OVERRIDE_REQUIRED: 'That refund falls outside your return policy.',
+        ORDER_DISPUTE_NOT_ACTIVE: 'There is no open dispute on this order.',
 
         // ── Tickets ───────────────────────────────────────────────────────────
         TICKET_NOT_FOUND: 'We could not find that ticket.',
@@ -506,6 +562,15 @@ export const errors = {
             'This is a simple product. Convert it to an advanced product to use options and multiple variants.',
         CATALOG_PRODUCT_NOT_SIMPLE_MODE: 'This is an advanced product and cannot be edited as a simple one.',
         CATALOG_PRODUCT_INVALID_TYPE: "That doesn't apply to this type of product.",
+        CATALOG_PRODUCT_VENDOR_SUSPENDED:
+            'Your shop is suspended, so its listings cannot go back on sale. Contact support to have it reviewed.',
+        // Platform-oversight suspension, lifted by the platform rather than by you.
+        VENDOR_PRODUCT_NOT_SUSPENDABLE: 'Only a product that is on sale can be taken off it.',
+        VENDOR_PRODUCT_NOT_OVERSIGHT_SUSPENDED:
+            'This product was suspended by someone else — whoever suspended it is who can restore it.',
+        /** `details.blockers[]` carries the checklist — render every entry. */
+        VENDOR_PRODUCT_UNSUSPEND_BLOCKED:
+            'This product cannot go back on sale until the outstanding issues are fixed.',
 
         // ── Catalog: variants ─────────────────────────────────────────────────
         CATALOG_VARIANT_NOT_FOUND: 'We could not find that variant.',
@@ -514,6 +579,14 @@ export const errors = {
         CATALOG_VARIANT_INVALID_STOCK: 'Enter a valid stock quantity.',
         CATALOG_VARIANT_INVALID_PRICE: 'Enter a valid price.',
         CATALOG_VARIANT_COMPARE_PRICE_INVALID: 'The compare-at price has to be higher than the price.',
+        // `{{variant}}` comes free from `details.variant` via paramsFromError —
+        // the backend sends the variant's name or sku on all three of these.
+        CATALOG_VARIANT_BARGAIN_NOT_SUPPORTED:
+            'Price negotiation is not available for this product type.',
+        CATALOG_VARIANT_BARGAIN_PRICE_MISMATCH:
+            'The negotiation window no longer matches the price on “{{variant}}”. Reload and set the ceiling again.',
+        CATALOG_VARIANT_BARGAIN_RANGE_INVALID:
+            'The negotiation ceiling on “{{variant}}” has to be at least its price.',
         CATALOG_VARIANT_LIMIT_EXCEEDED: 'This product has reached its maximum number of variants.',
         CATALOG_VARIANT_NO_OPTIONS: 'Add at least one option before creating variants.',
         CATALOG_VARIANT_OPTION_EMPTY: 'Every option needs at least one value.',
@@ -529,10 +602,17 @@ export const errors = {
         CATALOG_VARIANT_SKU_EXISTS: 'That SKU is already used by another variant.',
 
         // ── Agency storage: warehoused products & stock requests ──────────────
-        // Only the codes a VENDOR endpoint can actually produce. The agency-side
-        // depot/suspend codes (INVENTORY_LOCATION_UNKNOWN, _NOT_SUSPENDABLE,
-        // _NOT_AGENCY_SUSPENDED, _UNSUSPEND_BLOCKED) live on the agency
-        // dashboard; an unmapped code degrades to `errors.status.<n>` anyway.
+        // The agency-side depot/suspend codes are translated too: a vendor sees
+        // them relayed when an agency acts on their warehoused listing, and an
+        // untranslated code would surface as the raw string.
+        INVENTORY_STOCK_LEVEL_NOT_FOUND: 'We could not find a stock record for that item.',
+        INVENTORY_LOCATION_UNKNOWN: 'That warehouse is not one the agency operates.',
+        INVENTORY_PRODUCT_NOT_SUSPENDABLE: 'Only a product that is on sale can be taken off it.',
+        INVENTORY_PRODUCT_NOT_AGENCY_SUSPENDED:
+            'This product was not suspended by the storage agency, so the agency cannot restore it.',
+        /** `details.blockers[]` carries the checklist — render every entry. */
+        INVENTORY_PRODUCT_UNSUSPEND_BLOCKED:
+            'This product cannot go back on sale until the outstanding issues are fixed.',
         INVENTORY_PRODUCT_NOT_STORED_HERE:
             "This product isn't warehoused by a delivery agency, so its stock is edited directly.",
         STOCK_REQUEST_NOT_FOUND: 'We could not find that stock request.',
@@ -720,6 +800,14 @@ export const errors = {
         BOOKING_INVALID_SLOT_ID: 'That time slot is not valid.',
         BOOKING_NOT_RESCHEDULABLE: 'This booking can no longer be rescheduled.',
         BOOKING_SLOT_FULL: 'That time slot is fully booked. Pick another.',
+        BOOKING_NOT_CANCELLABLE: 'This booking is past the point where it can be cancelled.',
+        BOOKING_SLOT_UNAVAILABLE: 'That time was taken while you were booking it. Pick another.',
+        // Completion balance — see the settle-in-cash flow on a completed booking.
+        BOOKING_NOT_COMPLETED: 'Complete this booking before settling its balance.',
+        BOOKING_NO_BALANCE_DUE: 'There is no outstanding balance on this booking.',
+        BOOKING_BALANCE_ALREADY_SETTLED: 'This balance has already been settled.',
+        BOOKING_BALANCE_PAYMENT_IN_PROGRESS:
+            'The customer is paying this balance right now. Wait for that to finish before recording it yourself.',
 
         // ── Availability rules ────────────────────────────────────────────────
         AVAILABILITY_PRODUCT_NOT_FOUND: 'We could not find that service.',
@@ -728,6 +816,7 @@ export const errors = {
         AVAILABILITY_INVALID_TIME_RANGE: 'The end time has to come after the start time.',
         AVAILABILITY_TIME_OVERLAP: 'That overlaps with another availability rule.',
         AVAILABILITY_FORBIDDEN: "You don't have permission to change this availability.",
+        AVAILABILITY_INVALID_TIMEZONE: 'Pick a timezone from the list.',
 
         // ── Admin ─────────────────────────────────────────────────────────────
         ADMIN_NOT_FOUND: 'We could not find that administrator.',
@@ -790,10 +879,77 @@ export const errors = {
         COD_DISCREPANCY_NOT_FOUND: 'We could not find that discrepancy.',
         COD_DISCREPANCY_ALREADY_RESOLVED: 'That discrepancy has already been resolved.',
 
+        // ── Account & vendor administration (relayed from the admin console) ──
+        USER_STATUS_CONFLICT: 'That account changed while you were looking at it. Refresh and try again.',
+        USER_CONTACT_REQUIRED: 'An account needs at least an email address or a phone number.',
+        VENDOR_NOT_FOUND: 'We could not find that shop.',
+        VENDOR_STATUS_CONFLICT: 'That shop changed while you were looking at it. Refresh and try again.',
+        VENDOR_KYC_STATUS_CONFLICT: 'That verification has already been decided.',
+
+        // ── Agency & contract administration ──────────────────────────────────
+        DELIVERY_AGENCY_STATUS_CONFLICT:
+            'That agency changed while you were looking at it. Refresh and try again.',
+        CONTRACT_COVERAGE_REGION_INVALID: 'That is not a region of this country.',
+        MAGAZIN_LOCATION_IN_USE:
+            'That warehouse still holds products, so it cannot be removed. Move the stock out first.',
+
+        // ── Customer notifications (relayed) ──────────────────────────────────
+        CUSTOMER_NOTIFICATION_NOT_FOUND: 'We could not find that notification.',
+        CUSTOMER_NOTIFICATION_CHANNEL_NOT_VERIFIED:
+            'That contact channel has not been verified yet.',
+        CUSTOMER_NOTIFICATION_DELIVERY_FAILED: 'We could not deliver that notification.',
+
+        // ── Blog / editorial (public reader + admin editor) ───────────────────
+        BLOG_ARTICLE_NOT_FOUND: 'We could not find that article.',
+        BLOG_ARTICLE_MOVED: 'That article has moved.',
+        BLOG_ARTICLE_GONE: 'That article is no longer published.',
+        BLOG_SLUG_RESERVED: 'That web address is reserved. Choose another.',
+        BLOG_SLUG_TAKEN: 'Another article already uses that web address.',
+        BLOG_ARTICLE_KEY_TAKEN: 'Another article already uses that identifier.',
+        BLOG_ARTICLE_ALREADY_PUBLISHED: 'That article is already published.',
+        BLOG_ARTICLE_DELETE_NOT_ALLOWED:
+            'This article has been live, so it cannot be deleted. Archive it instead.',
+        /** `details.blockers[]` carries the checklist — render every entry. */
+        BLOG_ARTICLE_NOT_PUBLISHABLE: 'This article is not ready to publish yet.',
+        BLOG_AUTHOR_NOT_FOUND: 'We could not find that author.',
+        BLOG_AUTHOR_KEY_TAKEN: 'Another author already uses that identifier.',
+        BLOG_AUTHOR_IN_USE:
+            'That author is credited on published articles. Re-point them before removing the byline.',
+
+        // ── Platform operations (surfaced, never actionable from here) ────────
+        SYSTEM_MAINTENANCE_ACTIVE:
+            'The platform is down for maintenance. Please try again shortly.',
+        SYSTEM_LOGS_UNAVAILABLE: 'That information is unavailable right now.',
+        SYSTEM_DB_INSPECT_UNAVAILABLE: 'That information is unavailable right now.',
+        SYSTEM_CONFIG_EXPOSURE_UNSAFE: 'That information cannot be shown.',
+        SYSTEM_REDIS_COMMAND_REFUSED: 'That operation was refused.',
+        SYSTEM_MAINTENANCE_REASON_REQUIRED: 'A reason is required.',
+        INTEGRATION_PROBE_FAILED: 'That service could not be reached.',
+        CONFIG_INVALID_ENV: 'The service is misconfigured. Please contact support.',
+        CONFIG_MISSING_JWT_SECRET: 'The service is misconfigured. Please contact support.',
+        CONFIG_CACHE_POLICY_MISSING: 'The service is misconfigured. Please contact support.',
+        CONFIG_METRICS_CARDINALITY_UNBOUNDED:
+            'The service is misconfigured. Please contact support.',
+        DEV_TOOLS_WORKER_UNKNOWN: 'That operation was refused.',
+        DEV_TOOLS_WORKER_BUSY: 'That job is already running. Wait for it to finish.',
+        DEV_TOOLS_CACHE_UNAVAILABLE: 'That operation was refused.',
+        DEV_TOOLS_CACHE_DB_UNKNOWN: 'That operation was refused.',
+        DEV_TOOLS_CACHE_FLUSH_REFUSED: 'That operation was refused.',
+        DEV_TOOLS_OUTBOX_PRUNE_REFUSED: 'That operation was refused.',
+
         // ── Router / global handler fallbacks ─────────────────────────────────
         INTERNAL_SERVER_ERROR: 'A server error occurred. Please try again in a moment.',
         NOT_FOUND: "We couldn't find what you were looking for.",
         VALIDATION_ERROR: "Some of the information isn't valid. Please check the highlighted fields.",
+        /**
+         * Body-parser rejections — raised before any route or schema ran, so
+         * they name no field. These used to arrive as `500`s.
+         */
+        REQUEST_BODY_INVALID: "That request couldn't be read. Please try again.",
+        REQUEST_BODY_TOO_LARGE: 'That request is too large. Try sending less at once.',
+        REQUEST_MEDIA_TYPE_UNSUPPORTED: "That request couldn't be read. Please try again.",
+        /** `{{seconds}}` comes from `Retry-After`; absent on an unusual gateway. */
+        RATE_LIMIT_EXCEEDED: 'Too many requests. Please wait a moment and try again.',
 
         // ── Client-side codes raised by this app ──────────────────────────────
         REFRESH_FAILED: 'Your session has expired. Please sign in again.',
