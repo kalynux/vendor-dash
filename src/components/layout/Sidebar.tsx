@@ -481,12 +481,12 @@ export function Sidebar() {
         </ScrollArea>
       </div>
 
-      {/* Footer — WiMall platform + health, then the collapse toggle */}
+      {/* Footer — Wi-Mall platform + health, then the collapse toggle */}
       <div className="border-t flex-shrink-0">
         {sidebarCollapsed ? (
           <div className="flex justify-center py-3">
             <div className="relative w-8 h-8">
-              <AppLogo alt="WiMall" className="w-8 h-8" />
+              <AppLogo alt="Wi-Mall" className="w-8 h-8" />
               <span className="absolute -bottom-0.5 -right-0.5 rounded-full bg-card p-0.5">
                 <PlatformStatus compact />
               </span>
@@ -496,7 +496,7 @@ export function Sidebar() {
           <div className="flex items-center gap-2 px-4 py-3">
             <AppLogo className="w-8 h-8" />
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-display font-bold tracking-tight leading-tight">WiMall</p>
+              <p className="text-sm font-display font-bold tracking-tight leading-tight">Wi-Mall</p>
               <PlatformStatus />
             </div>
           </div>

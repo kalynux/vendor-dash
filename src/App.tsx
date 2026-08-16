@@ -34,6 +34,7 @@ import { MobileTabBar } from '@/components/layout/MobileTabBar';
 import { NotificationsBootstrap } from '@/components/notifications/NotificationsBootstrap';
 import { useIsMobile, useIsTablet } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
+import { storefrontUrl } from '@/lib/storefront/urls';
 
 // Onboarding system
 import { OnboardingProvider } from '@/onboarding/store/onboarding.store';
@@ -268,19 +269,23 @@ function AppContent() {
                 {/* Applies the vendor's saved language once the session loads. */}
                 <SessionLocaleSync />
                 <Routes>
-                  {/* Login — placeholder, auth happens on example.com */}
+                  {/* Login — placeholder, auth happens on the main site
+                      (wi-mall.com in production). The destination is derived
+                      from VITE_STOREFRONT_BASE_URL rather than hardcoded, so a
+                      deployed build sends the vendor to the real sign-in page
+                      instead of a dev server that isn't there. */}
                   <Route
                     path="/login"
                     element={
                       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center p-4">
                         <div className="text-center space-y-4 max-w-sm">
-                          <AppLogo alt="WiMall" className="w-20 h-20 mx-auto" />
+                          <AppLogo alt="Wi-Mall" className="w-20 h-20 mx-auto" />
                           <h1 className="text-2xl font-bold">{t('nav.login.title')}</h1>
                           <p className="text-muted-foreground text-sm">
                             {t('nav.login.description')}
                           </p>
                           <a
-                            href="http://localhost:3000/login"
+                            href={storefrontUrl('/login')}
                             className="inline-flex items-center justify-center gap-2 h-11 px-6 rounded-lg bg-primary text-primary-foreground font-semibold text-sm hover:bg-primary/90 transition-colors w-full"
                           >
                             {t('nav.login.goToLogin')}

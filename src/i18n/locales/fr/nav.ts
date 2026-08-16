@@ -104,7 +104,7 @@ export const nav = {
     },
 
     login: {
-        title: 'WiMall Vendeur',
+        title: 'Wi-Vendor',
         description: 'Connectez-vous depuis le site principal pour accéder à votre tableau de bord vendeur.',
         goToLogin: 'Aller à la connexion',
     },

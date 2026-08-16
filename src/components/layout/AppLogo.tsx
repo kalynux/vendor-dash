@@ -1,8 +1,8 @@
-import logoUrl from '@/assets/brand/wimall-logo.png';
+import logoUrl from '@/assets/brand/wi-mall-logo.png';
 import { cn } from '@/lib/utils';
 
 /**
- * The WiMall app mark.
+ * The Wi-Mall app mark.
  *
  * One component for every surface that shows the *platform's* identity — the
  * sidebar footer, the onboarding header, the login screen. Not to be confused
@@ -22,7 +22,7 @@ import { cn } from '@/lib/utils';
 export function AppLogo({
   className,
   /**
-   * Every placement but one pairs the mark with the "WiMall" wordmark beside
+   * Every placement but one pairs the mark with the "Wi-Mall" wordmark beside
    * it, where a second announcement is just noise — hence the decorative
    * default. Pass a label when the mark stands alone.
    */

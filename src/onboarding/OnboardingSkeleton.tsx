@@ -11,7 +11,7 @@ export function OnboardingSkeleton() {
             <div className="h-16 border-b flex items-center justify-between px-4 md:px-8">
                 <div className="flex items-center gap-2">
                     <AppLogo className="w-8 h-8" />
-                    <span className="font-bold text-sm leading-none">WiMall</span>
+                    <span className="font-bold text-sm leading-none">Wi-Mall</span>
                 </div>
                 <Skeleton className="h-8 w-8 rounded-full" />
             </div>

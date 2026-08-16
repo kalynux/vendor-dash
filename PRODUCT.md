@@ -8,7 +8,7 @@ web
 
 ## Users
 
-Primary users are **vendors (sellers)** on the WiMall marketplace — a deliberately broad base. A single vendor account may combine informal/social-commerce selling (merchants graduating from WhatsApp/Instagram into a real storefront), established SMB retail (existing shops digitizing catalog, inventory, and delivery), and service/booking businesses (appointment-led, availability- and calendar-driven). Physical goods, digital products, and bookable services can all live on the same account.
+Primary users are **vendors (sellers)** on the Wi-Mall marketplace — a deliberately broad base. A single vendor account may combine informal/social-commerce selling (merchants graduating from WhatsApp/Instagram into a real storefront), established SMB retail (existing shops digitizing catalog, inventory, and delivery), and service/booking businesses (appointment-led, availability- and calendar-driven). Physical goods, digital products, and bookable services can all live on the same account.
 
 Vendors use this dashboard to run the operational side of selling: listing and pricing, inventory, incoming orders and their delivery, bookings/appointments, customers, money (earnings, payouts, billing, credit), and support.
 
@@ -16,7 +16,7 @@ The broader platform is multi-role: an account holds one or more of `customer`, 
 
 ## Product Purpose
 
-WiMall is a multi-vendor marketplace and commerce platform. The vendor dashboard is where a seller operates their storefront end to end: configure the store, build the catalog (simple products, advanced products with options/variants, digital/downloadable products, and services with availability and bookings), manage inventory, receive and fulfill orders through connected delivery agencies, handle customers, track earnings and request payouts, manage subscription/billing and credit, and stay in touch through notifications and support tickets. Success is a vendor running the entire selling operation — from listing to delivery to getting paid — without leaving the dashboard.
+Wi-Mall is a multi-vendor marketplace and commerce platform. The vendor dashboard is where a seller operates their storefront end to end: configure the store, build the catalog (simple products, advanced products with options/variants, digital/downloadable products, and services with availability and bookings), manage inventory, receive and fulfill orders through connected delivery agencies, handle customers, track earnings and request payouts, manage subscription/billing and credit, and stay in touch through notifications and support tickets. Success is a vendor running the entire selling operation — from listing to delivery to getting paid — without leaving the dashboard.
 
 ## Positioning
 
@@ -53,7 +53,8 @@ Supporting capabilities that reinforce this position but were not named as the c
 
 ## Brand Commitments
 
-- **Name:** **WiMall** is the product name — used verbatim in the vendor-facing UI, and lowercased as the internal identifier (package `wimall-vendor-dash`, API service `wimall`, domain `wimall.com`). Earlier scaffold and pre-launch names are legacy and must not reappear anywhere in the codebase.
+- **Name:** **Wi-Mall** is the platform name and **Wi-Vendor** is this app's name — both written with the hyphen and both capitals, verbatim, wherever they appear in the vendor-facing UI. Lowercased and hyphenated as the internal identifier: package `wi-vendor`, project `wi-mall`, domain `wi-mall.com`. The unhyphenated `wimall.com` belongs to another company and must never be used; earlier scaffold and pre-launch names (`WiMall`, `Jovi Mall`, `jovi-mall`) are legacy and must not reappear anywhere in the codebase.
+- **Production hosts:** the main site is `wi-mall.com`; this dashboard is served at `vendor.wi-mall.com`, the agency dashboard at `agency.wi-mall.com`, the agent web app at `agent.wi-mall.com`, and the backend API at `api.wi-mall.com`. None of these are hardcoded — they are supplied per environment (see `.env.example`).
 - No other binding brand assets — logo, palette, typography, or voice — were established during init. *(Undecided — not yet captured.)*
 
 ## Evidence on Hand

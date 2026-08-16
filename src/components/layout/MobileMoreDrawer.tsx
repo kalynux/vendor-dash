@@ -172,7 +172,7 @@ export function MobileMoreDrawer({ open, onOpenChange }: MobileMoreDrawerProps) 
             <div className="flex items-center justify-center gap-2 px-4 py-6">
               <AppLogo className="w-5 h-5" />
               <span className="text-sm font-display font-bold tracking-tight leading-none">
-                WiMall
+                Wi-Mall
               </span>
               <span aria-hidden className="text-muted-foreground/50">·</span>
               <PlatformStatus />

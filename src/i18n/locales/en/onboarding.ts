@@ -18,7 +18,7 @@ export const onboarding = {
     },
 
     layout: {
-        brand: 'WiMall',
+        brand: 'Wi-Mall',
         goBack: 'Go back',
         goBackTo: 'Go back to {{step}}',
         progress: 'Onboarding progress',

@@ -100,7 +100,7 @@ Reference implementation (the frontend's, which the schema below mirrors exactly
       "type": "paragraph",
       "text": [
         { "type": "text", "text": "Voir le " },
-        { "type": "link", "text": "guide des tailles", "href": "https://wimall.cm/guide" }
+        { "type": "link", "text": "guide des tailles", "href": "https://wi-mall.com/guide" }
       ]
     }
   ]
@@ -115,7 +115,7 @@ Its `description` projection — what the same request also sends:
 • Cuir véritable
 • Garantie 2 ans
 
-Voir le guide des tailles: https://wimall.cm/guide
+Voir le guide des tailles: https://wi-mall.com/guide
 ```
 
 ---
@@ -343,17 +343,17 @@ Telegram  🔥 <b>Sac en raphia tressé</b> — fait main à Douala.
 **B. Links — the channel divergence**
 
 ```
-doc: "Voir le " + link("guide des tailles", "https://wimall.cm/guide?ref=a&size=eu") + " avant de commander."
-     link("https://wimall.cm/boutique", "https://wimall.cm/boutique")
+doc: "Voir le " + link("guide des tailles", "https://wi-mall.com/guide?ref=a&size=eu") + " avant de commander."
+     link("https://wi-mall.com/boutique", "https://wi-mall.com/boutique")
 ```
 ```
-WhatsApp  Voir le guide des tailles: https://wimall.cm/guide?ref=a&size=eu avant de commander.
+WhatsApp  Voir le guide des tailles: https://wi-mall.com/guide?ref=a&size=eu avant de commander.
           ⏎⏎
-          https://wimall.cm/boutique
+          https://wi-mall.com/boutique
 
-Telegram  Voir le <a href="https://wimall.cm/guide?ref=a&amp;size=eu">guide des tailles</a> avant de commander.
+Telegram  Voir le <a href="https://wi-mall.com/guide?ref=a&amp;size=eu">guide des tailles</a> avant de commander.
           ⏎⏎
-          <a href="https://wimall.cm/boutique">https://wimall.cm/boutique</a>
+          <a href="https://wi-mall.com/boutique">https://wi-mall.com/boutique</a>
 ```
 
 **C. Marker collision (WhatsApp drops the mark, Telegram keeps it)**

@@ -40,7 +40,7 @@ interface ChatPreviewProps {
  * Platform palettes, taken from the clients themselves.
  *
  * Hard-coded hex rather than theme tokens, deliberately: this panel is a picture
- * of somebody else's app. Tinting it with WiMall's palette would make it a
+ * of somebody else's app. Tinting it with Wi-Mall's palette would make it a
  * prettier component and a worse preview — the point is for the vendor to
  * recognise the surface their customer will see.
  *

@@ -1,4 +1,4 @@
-# Multi-Vendor E-commerce Dashboard
+# Wi-Vendor — the Wi-Mall vendor dashboard
 
 A production-ready, multi-vendor e-commerce dashboard built with React, TypeScript, and Tailwind CSS. Inspired by Shopify's admin interface, this dashboard provides a comprehensive solution for managing products, orders, vendors, and analytics.
 
@@ -176,12 +176,26 @@ api.interceptors.request.use((config) => {
 
 ## Environment Variables
 
-Create a `.env` file in the root directory:
+Copy `.env.example` to `.env` and fill it in — that file is the authoritative
+list, with a comment on every variable. The two that decide which deployment
+this build talks to:
 
 ```env
-VITE_API_URL=https://your-api-url.com
-VITE_APP_NAME=WiMall
+# Local development
+VITE_API_BASE_URL=http://localhost:8022/api
+VITE_STOREFRONT_BASE_URL=http://localhost:3000
 ```
+
+```env
+# Production (this dashboard is served at https://vendor.wi-mall.com)
+VITE_API_BASE_URL=https://api.wi-mall.com/api
+VITE_STOREFRONT_BASE_URL=https://wi-mall.com
+```
+
+Neither origin is hardcoded anywhere in `src/` — the storefront links a vendor
+copies, the preview iframe, and the sign-in redirect are all built from
+`VITE_STOREFRONT_BASE_URL`, so getting these two right is the whole of the
+per-environment configuration.
 
 ## Customization
 
@@ -246,8 +260,8 @@ MIT License - see LICENSE file for details
 
 ## Support
 
-For support, email support@wimall.com or join our Slack channel.
+For support, email support@wi-mall.com or join our Slack channel.
 
 ---
 
-Built with ❤️ by the WiMall Team
+Built with ❤️ by the Wi-Mall Team

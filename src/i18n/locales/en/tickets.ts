@@ -3,7 +3,7 @@ import { plural } from '../../types';
 /** Support tickets with the platform team. */
 export const tickets = {
     title: 'Tickets',
-    subtitle: 'Track and resolve issues with the WiMall team.',
+    subtitle: 'Track and resolve issues with the Wi-Mall team.',
 
     empty: {
         title: 'No tickets yet',

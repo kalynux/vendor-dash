@@ -18,7 +18,7 @@ export const onboarding = {
     },
 
     layout: {
-        brand: 'WiMall',
+        brand: 'Wi-Mall',
         goBack: 'Retour',
         goBackTo: 'Revenir à {{step}}',
         progress: 'Progression de l’inscription',

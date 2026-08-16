@@ -115,7 +115,7 @@ export const nav = {
     },
 
     login: {
-        title: 'WiMall Vendor',
+        title: 'Wi-Vendor',
         description: 'Please log in via the main site to access your vendor dashboard.',
         goToLogin: 'Go to login',
     },

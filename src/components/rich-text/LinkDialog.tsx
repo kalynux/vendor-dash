@@ -22,7 +22,7 @@ const FORM_ID = 'rt-link-form';
 /**
  * Turn what a vendor types into a URL we are willing to store.
  *
- * Almost nobody types a scheme. `wimall.cm` is what gets entered, and rejecting
+ * Almost nobody types a scheme. `wi-mall.com` is what gets entered, and rejecting
  * it as invalid would be technically correct and practically useless, so a bare
  * host is promoted to `https://`. A typed scheme is left alone — including one
  * we will then refuse, because silently rewriting `javascript:` into something
@@ -95,7 +95,7 @@ function LinkForm({
           autoCorrect="off"
           spellCheck={false}
           onChange={(e) => setHref(e.target.value)}
-          placeholder="wimall.cm/guide"
+          placeholder="wi-mall.com/guide"
           aria-invalid={touched && !valid}
         />
         {touched && !valid && (

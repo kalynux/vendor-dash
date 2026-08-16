@@ -96,21 +96,21 @@ export const FIXTURES: Fixture[] = [
         type: 'paragraph',
         text: [
           { type: 'text', text: 'Voir le ' },
-          { type: 'link', text: 'guide des tailles', href: 'https://wimall.cm/guide?ref=a&size=eu' },
+          { type: 'link', text: 'guide des tailles', href: 'https://wi-mall.com/guide?ref=a&size=eu' },
           { type: 'text', text: ' avant de commander.' },
         ],
       },
       {
         type: 'paragraph',
-        text: [{ type: 'link', text: 'https://wimall.cm/boutique', href: 'https://wimall.cm/boutique' }],
+        text: [{ type: 'link', text: 'https://wi-mall.com/boutique', href: 'https://wi-mall.com/boutique' }],
       },
     ]),
     expectWhatsApp:
-      'Voir le guide des tailles: https://wimall.cm/guide?ref=a&size=eu avant de commander.\n\n' +
-      'https://wimall.cm/boutique',
+      'Voir le guide des tailles: https://wi-mall.com/guide?ref=a&size=eu avant de commander.\n\n' +
+      'https://wi-mall.com/boutique',
     expectTelegramHtml:
-      'Voir le <a href="https://wimall.cm/guide?ref=a&amp;size=eu">guide des tailles</a> avant de commander.\n\n' +
-      '<a href="https://wimall.cm/boutique">https://wimall.cm/boutique</a>',
+      'Voir le <a href="https://wi-mall.com/guide?ref=a&amp;size=eu">guide des tailles</a> avant de commander.\n\n' +
+      '<a href="https://wi-mall.com/boutique">https://wi-mall.com/boutique</a>',
   },
 
   {
