@@ -40,6 +40,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { QUICK_ACTIONS, type QuickAction } from '@/config/quickActions';
 import { notificationRoute, notificationVisual, notificationTimeAgo } from '@/lib/notifications.utils';
+import { storePath, storefrontUrl } from '@/lib/storefront/urls';
 import { useFormatters, useTranslation } from '@/i18n';
 
 function initialsOf(name: string): string {
@@ -241,10 +242,10 @@ export function Header() {
                   <User className="w-4 h-4" />
                   {t('nav.header.profile')}
                 </DropdownMenuItem>
-                {store?.publicUrl && (
+                {store?.slug && (
                   <DropdownMenuItem asChild className="gap-2">
                     <a
-                      href={store.publicUrl}
+                      href={storefrontUrl(storePath(store.slug))}
                       target="_blank"
                       rel="noopener noreferrer"
                     >

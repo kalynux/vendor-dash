@@ -26,6 +26,7 @@ import { MobileOrderDetailSheet } from '@/components/orders/MobileOrderDetailShe
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useRouter } from '@/App';
 import { cn } from '@/lib/utils';
+import { storePath, storefrontUrl } from '@/lib/storefront/urls';
 import {
   AreaChart,
   Area,
@@ -246,9 +247,9 @@ export function Overview() {
               <h1 className="text-xl font-bold truncate">{store?.name ?? t('overview.myStore')}</h1>
             </div>
           </div>
-          {store?.publicUrl && (
+          {store?.slug && (
             <a
-              href={store.publicUrl}
+              href={storefrontUrl(storePath(store.slug))}
               target="_blank"
               rel="noopener noreferrer"
               className="flex-shrink-0 flex items-center gap-1.5 text-xs font-medium border rounded-full px-3 py-1.5 bg-background hover:bg-accent transition-colors"

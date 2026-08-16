@@ -44,6 +44,7 @@ import type { PendingStockInfo } from '@/components/inventory/PendingStockBadge'
 import { useApiError, useFormatters, useTranslation, type TranslationKey } from '@/i18n';
 import { getAgencyConnectionErrorMessage } from '@/services/agency-connections.service';
 import { getUploadErrorMessage } from '@/lib/uploadErrors';
+import { descriptionCreateWire } from '@/lib/richtext';
 import { ApiError } from '@/types/api';
 import type {
   WizardState,
@@ -223,7 +224,9 @@ export function ProductUpload() {
           type: state.productType,
           title: values.title,
           category: values.category,
-          description: values.description,
+          // Emits `description` (the plain projection) plus `descriptionRich`
+          // once the backend accepts it — see RICH_DESCRIPTION_WIRE_ENABLED.
+          ...descriptionCreateWire(values.descriptionRich),
           tags: values.tags,
           seoTitle: values.seoTitle || undefined,
           seoDescription: values.seoDescription || undefined,

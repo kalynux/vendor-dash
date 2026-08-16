@@ -25,6 +25,7 @@ import type {
   ServiceBasicsFormValues,
   ServiceSettingsFormValues,
 } from '@/components/services/schemas/service.schemas';
+import { descriptionCreateWire, hydrateDoc } from '@/lib/richtext';
 import type { ServiceProduct, ServiceConfig } from '@/types/services.types';
 import type { TranslationKey } from '@/i18n';
 
@@ -162,7 +163,7 @@ export function ServiceEdit() {
         const service = await updateService(id, {
           title: values.title,
           category: values.category,
-          description: values.description,
+          ...descriptionCreateWire(values.descriptionRich),
           tags: values.tags,
           seoTitle: values.seoTitle || undefined,
           seoDescription: values.seoDescription || undefined,
@@ -332,6 +333,7 @@ export function ServiceEdit() {
               title: service.title,
               category: service.category,
               description: service.description,
+              descriptionRich: hydrateDoc(service.descriptionRich, service.description),
               seoTitle: service.seo?.title ?? '',
               seoDescription: service.seo?.description ?? '',
               tags: service.tags ?? [],

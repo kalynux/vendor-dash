@@ -1,11 +1,13 @@
 import { useReducer, useCallback, useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { AlertCircle, Box, Package, ImageIcon, Tag, FileDigit, CheckSquare } from 'lucide-react';
+import { AlertCircle, Box, Package, ImageIcon, Tag, FileDigit, CheckSquare, Eye, Share2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { PageBackButton } from '@/components/layout/PageBackButton';
+import { ShareProductDialog } from '@/components/products/ShareProductDialog';
 import { ProductStepIndicator } from '@/components/products/ProductStepIndicator';
 import { StepTypeSelect } from '@/components/products/steps/StepTypeSelect';
 import { StepBasicInfo } from '@/components/products/steps/StepBasicInfo';
@@ -44,6 +46,7 @@ import type { PendingStockInfo } from '@/components/inventory/PendingStockBadge'
 import { useApiError, useFormatters, useTranslation, type TranslationKey } from '@/i18n';
 import { getAgencyConnectionErrorMessage } from '@/services/agency-connections.service';
 import { getUploadErrorMessage } from '@/lib/uploadErrors';
+import { descriptionCreateWire } from '@/lib/richtext';
 import { ApiError } from '@/types/api';
 import type {
   WizardState,
@@ -190,6 +193,7 @@ export function ProductEdit() {
    * refresh and also covers requests the AGENCY raised, not just ours.
    */
   const [pendingStock, setPendingStock] = useState<Record<string, PendingStockInfo>>({});
+  const [shareOpen, setShareOpen] = useState(false);
 
   const handleVariantImagesChange = useCallback(
     (variantId: string, files: ApiFileDetail[]) => {
@@ -284,7 +288,9 @@ export function ProductEdit() {
         const { data: updated } = await updateProduct(productId, {
           title: values.title,
           category: values.category,
-          description: values.description,
+          // This step sends its whole form on every save (no diff), so the
+          // create-shaped wire builder is the right one here.
+          ...descriptionCreateWire(values.descriptionRich),
           tags: values.tags,
           seoTitle: values.seoTitle || undefined,
           seoDescription: values.seoDescription || undefined,
@@ -926,13 +932,49 @@ export function ProductEdit() {
           label={t('products.wizard.backToProducts')}
           className="mb-1"
         />
-        <h1 className="text-xl sm:text-2xl font-bold">{t('products.wizard.editTitle')}</h1>
-        {state.serverProduct && (
-          <p className="text-muted-foreground text-xs sm:text-sm mt-1 truncate">
-            {state.serverProduct.title}
-          </p>
-        )}
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="text-xl sm:text-2xl font-bold">{t('products.wizard.editTitle')}</h1>
+            {state.serverProduct && (
+              <p className="text-muted-foreground text-xs sm:text-sm mt-1 truncate">
+                {state.serverProduct.title}
+              </p>
+            )}
+          </div>
+          {/* Preview and Share sit next to the product being edited because that
+              is where a vendor is when they finish writing a description and want
+              to see how it lands — on the storefront, and in a real chat. */}
+          {state.productId && (
+            <div className="flex shrink-0 items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="shrink-0 gap-1.5"
+                onClick={() => navigate(`/preview/product/${state.productId}`)}
+              >
+                <Eye className="w-4 h-4" />
+                <span className="hidden sm:inline">{t('products.preview.action')}</span>
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="shrink-0 gap-1.5"
+                onClick={() => setShareOpen(true)}
+              >
+                <Share2 className="w-4 h-4" />
+                <span className="hidden sm:inline">{t('products.share.action')}</span>
+              </Button>
+            </div>
+          )}
+        </div>
       </div>
+
+      <ShareProductDialog
+        productId={shareOpen ? state.productId : null}
+        onOpenChange={(open) => !open && setShareOpen(false)}
+      />
 
       {state.productType && (
         <Card className="rounded-none border-x-0 sm:rounded-xl sm:border">

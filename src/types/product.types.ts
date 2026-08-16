@@ -1,5 +1,6 @@
 // ─── Product Types & Status ───────────────────────────────────────────────────
 
+import type { RichDoc } from '@/lib/richtext';
 import type { ApiFile, FileRef } from '@/types/file.types';
 // Service variants carry serviceConfig. Type-only import (erased at compile) —
 // no runtime circular dependency with services.types.
@@ -143,6 +144,17 @@ export interface ApiProduct {
   mode?: ProductMode;
   title: string;
   description: string;
+  /**
+   * The structured description the editor produces, and the source of truth for
+   * WhatsApp / Telegram formatting. `description` above is its plain-text
+   * projection — that is what the storefront renders, what the text index
+   * tokenises and what the vectoriser embeds, so the two must never disagree.
+   *
+   * Optional because the backend does not persist it yet (see
+   * `docs_requirement.md` and `RICH_DESCRIPTION_WIRE_ENABLED`); absent means
+   * "rebuild it from `description`", never "the vendor cleared the formatting".
+   */
+  descriptionRich?: RichDoc | null;
   slug: string;
   category: string;
   tags: string[];
@@ -326,6 +338,8 @@ export interface CreateProductPayload {
   title: string;
   category: string;
   description: string;
+  /** Built by `descriptionCreateWire`; omitted while the wire gate is off. */
+  descriptionRich?: RichDoc | null;
   tags?: string[];
   seoTitle?: string;
   seoDescription?: string;
@@ -335,6 +349,8 @@ export interface UpdateProductPayload {
   title?: string;
   category?: string;
   description?: string;
+  /** `null` clears it — see `descriptionUpdateWire`. */
+  descriptionRich?: RichDoc | null;
   tags?: string[];
   seoTitle?: string;
   seoDescription?: string;
@@ -367,6 +383,12 @@ export interface UpdateProductPayload {
 export interface SimpleProductPayload {
   title: string;              // 3–200 chars
   description: string;        // non-empty — an empty description blocks publishing
+  /**
+   * NOTE: this endpoint's backend schema is `.strict()`, so sending this key
+   * before the backend accepts it rejects the WHOLE request with a 400. It is
+   * attached only through `descriptionCreateWire`, behind the wire gate.
+   */
+  descriptionRich?: RichDoc | null;
   category: string;           // non-empty
   price: number;              // > 0 — zero is rejected outright
   stock?: number;             // integer ≥ 0, default 0
@@ -406,6 +428,8 @@ export interface SimpleProductUpdatePayload {
   // → the product
   title?: string;
   description?: string;
+  /** Same `.strict()` caveat as the create payload — gated, never sent bare. */
+  descriptionRich?: RichDoc | null;
   category?: string;
   tags?: string[];
   /** FULL REPLACEMENT, same as PATCH /products/:id. Order matters (index 0 = thumbnail). */

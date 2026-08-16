@@ -255,6 +255,21 @@ export const common = {
         copyFailed: 'Impossible de copier dans le presse-papiers',
     },
 
+    preview: {
+        frameTitle: 'Aperçu de la boutique',
+        loading: 'Chargement de la boutique…',
+        refresh: 'Actualiser l’aperçu',
+        openLive: 'Ouvrir en ligne',
+        copyFailed: 'Impossible de copier le lien',
+        statusActions: 'Statut',
+        device: {
+            label: 'Largeur de l’aperçu',
+            mobile: 'Mobile',
+            tablet: 'Tablette',
+            desktop: 'Ordinateur',
+        },
+    },
+
     address: {
         useMyLocation: 'Utiliser ma position actuelle',
         myLocation: 'Ma position',

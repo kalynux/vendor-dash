@@ -62,6 +62,18 @@ export const settings = {
         addLogo: 'Add logo',
         viewStore: 'View store',
 
+        /** The customer preview — your real storefront page, embedded. */
+        preview: {
+            action: 'Preview as customer',
+            subtitle: 'What a customer sees',
+            edit: 'Edit storefront',
+            onVacation:
+                'Your store is on vacation — customers can still browse, but they see a notice and cannot order.',
+            noStoreTitle: 'No storefront yet',
+            noStoreHelp:
+                'Your storefront has not been set up, so there is no customer page to preview. Add your store details and it appears here.',
+        },
+
         identity: {
             title: 'Store identity',
             info: 'The name and description customers see on your storefront page and in search results. Changing the name here does not change your store URL.',

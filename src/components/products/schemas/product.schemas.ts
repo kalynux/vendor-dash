@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { TranslationKey } from '@/i18n';
+import { EMPTY_DOC, richDocSchema } from '@/lib/richtext';
 import type { ApiProductType, ApiVariant } from '@/types/product.types';
 
 // ─── Step 2: Basic Info ───────────────────────────────────────────────────────
@@ -15,7 +16,20 @@ export const basicInfoSchema = z.object({
     .min(3, 'products.validation.titleMin')
     .max(200, 'products.validation.titleMax'),
   category: z.string().min(1, 'products.validation.categoryRequired'),
+  /**
+   * The plain-text projection of `descriptionRich`, written by the editor on
+   * every change. It stays the validated field — so the required-ness rule, the
+   * activation gate below and the backend's own `description` error projection
+   * all keep working unchanged — and it is what actually ships to `description`
+   * on the wire.
+   */
   description: z.string().min(1, 'products.validation.descriptionRequired'),
+  /**
+   * Never validated for content: an empty document is caught by `description`
+   * being empty, and a second error message on the same field would just be
+   * noise. It is here so the form owns it and the payload builders can read it.
+   */
+  descriptionRich: richDocSchema.default(EMPTY_DOC),
   tags: z
     .array(z.string().min(1, 'products.validation.tagEmpty'))
     .refine(

@@ -7,6 +7,7 @@
 // product endpoints (with a `type: "service"` literal) rather than widening the
 // product-module `ApiProductType` union, keeping the product wizard untouched.
 
+import type { RichDoc } from '@/lib/richtext';
 import type { ApiFileDetail, ApiVectorisationStatus } from '@/types/product.types';
 
 // ─── Service product status ───────────────────────────────────────────────────
@@ -73,6 +74,8 @@ export interface ServiceProduct {
   status: ServiceStatus;
   title: string;
   description: string;
+  /** Structured description; `description` is its plain projection. See product.types.ts. */
+  descriptionRich?: RichDoc | null;
   slug: string;
   category: string;
   tags: string[];
@@ -108,6 +111,7 @@ export interface CreateServicePayload {
   title: string;
   category: string;
   description: string;
+  descriptionRich?: RichDoc | null;
   tags?: string[];
   seoTitle?: string;
   seoDescription?: string;
@@ -117,6 +121,7 @@ export interface UpdateServicePayload {
   title?: string;
   category?: string;
   description?: string;
+  descriptionRich?: RichDoc | null;
   tags?: string[];
   seoTitle?: string;
   seoDescription?: string;

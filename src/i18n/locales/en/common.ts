@@ -268,6 +268,26 @@ export const common = {
         copyFailed: "Couldn't copy to clipboard",
     },
 
+    /**
+     * The vendor-facing chrome around a storefront preview. Everything inside
+     * the frame is served by the storefront in the customer's own language —
+     * only this bar is ours to translate.
+     */
+    preview: {
+        frameTitle: 'Storefront preview',
+        loading: 'Loading the storefront…',
+        refresh: 'Refresh preview',
+        openLive: 'Open live',
+        copyFailed: 'Could not copy the link',
+        statusActions: 'Status',
+        device: {
+            label: 'Preview width',
+            mobile: 'Mobile',
+            tablet: 'Tablet',
+            desktop: 'Desktop',
+        },
+    },
+
     /** Address autocomplete, used by onboarding, settings and the product forms. */
     address: {
         useMyLocation: 'Use my current location',

@@ -23,6 +23,8 @@ import { Agency } from '@/pages/Agency';
 import { Services } from '@/pages/Services';
 import { ServiceUpload } from '@/pages/ServiceUpload';
 import { ServiceEdit } from '@/pages/ServiceEdit';
+import { ProductPreview } from '@/pages/ProductPreview';
+import { StorePreview } from '@/pages/StorePreview';
 
 // Layout
 import { AppLogo } from '@/components/layout/AppLogo';
@@ -294,6 +296,28 @@ function AppContent() {
                     element={
                       <OnboardingGuard>
                         <OnboardingRouter />
+                      </OnboardingGuard>
+                    }
+                  />
+
+                  {/* Storefront preview — gated like the dashboard, but rendered
+                      outside DashboardShell. The page it embeds lays itself out
+                      against the viewport, so the sidebar, header and padded
+                      `main` would squeeze it into something that is no longer a
+                      faithful preview. Same reasoning as /onboarding/*. */}
+                  <Route
+                    path="/preview/product/:id"
+                    element={
+                      <OnboardingGuard requireComplete>
+                        <ProductPreview />
+                      </OnboardingGuard>
+                    }
+                  />
+                  <Route
+                    path="/preview/store"
+                    element={
+                      <OnboardingGuard requireComplete>
+                        <StorePreview />
                       </OnboardingGuard>
                     }
                   />

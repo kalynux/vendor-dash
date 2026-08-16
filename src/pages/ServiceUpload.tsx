@@ -24,6 +24,7 @@ import type {
   ServiceBasicsFormValues,
   ServiceSettingsFormValues,
 } from '@/components/services/schemas/service.schemas';
+import { descriptionCreateWire, hydrateDoc } from '@/lib/richtext';
 import type { ServiceProduct, ServiceConfig } from '@/types/services.types';
 import type { TranslationKey } from '@/i18n';
 
@@ -127,7 +128,7 @@ export function ServiceUpload() {
         const payload = {
           title: values.title,
           category: values.category,
-          description: values.description,
+          ...descriptionCreateWire(values.descriptionRich),
           tags: values.tags,
           seoTitle: values.seoTitle || undefined,
           seoDescription: values.seoDescription || undefined,
@@ -291,6 +292,10 @@ export function ServiceUpload() {
               title: state.service?.title ?? '',
               category: state.service?.category ?? '',
               description: state.service?.description ?? '',
+              descriptionRich: hydrateDoc(
+                state.service?.descriptionRich,
+                state.service?.description,
+              ),
               seoTitle: state.service?.seo?.title ?? '',
               seoDescription: state.service?.seo?.description ?? '',
               tags: state.service?.tags ?? [],

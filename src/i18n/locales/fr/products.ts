@@ -60,7 +60,6 @@ export const products = {
         restore: 'Restaurer',
         importCsv: 'Importer un CSV',
         exportCsv: 'Exporter en CSV',
-        preview: 'Aperçu',
         convertToAdvanced: 'Convertir en avancé',
         convertToAdvancedEditor: 'Passer à l’éditeur avancé',
         productActions: 'Actions du produit',
@@ -87,6 +86,111 @@ export const products = {
             one: '{{count}} produit archivé.',
             other: '{{count}} produits archivés.',
         }),
+    },
+
+    /** Éditeur de description pour le chat et son aperçu WhatsApp / Telegram. */
+    editor: {
+        placeholder:
+            'Nike Air Max 90 — originales, pointures 40 à 45 👟\n\n' +
+            'Points forts :\n' +
+            '• Tige en cuir véritable\n' +
+            '• Amorti Air, confort toute la journée\n' +
+            '• Garantie 2 ans\n\n' +
+            'Livraison en 48h à Douala et Yaoundé 🚚',
+        hint: 'Sélectionnez le texte, puis utilisez la barre d’outils. Aucun symbole à taper.',
+
+        toolbar: {
+            label: 'Mise en forme du texte',
+            bold: 'Gras',
+            italic: 'Italique',
+            strike: 'Barré',
+            bulletList: 'Liste à puces',
+            orderedList: 'Liste numérotée',
+            link: 'Lien',
+            emoji: 'Émoji',
+            undo: 'Annuler',
+            redo: 'Rétablir',
+        },
+
+        emoji: {
+            title: 'Ajouter un émoji',
+            commerce: 'Vente',
+            objects: 'Produits',
+            quality: 'Qualité et couleurs',
+            people: 'Personnes',
+            food: 'Alimentation',
+            info: 'Infos',
+        },
+
+        link: {
+            title: 'Ajouter un lien',
+            description:
+                'Les liens ouvrent une page hors du chat : privilégiez des adresses courtes et fiables.',
+            label: 'Texte du lien',
+            labelPlaceholder: 'ex. Guide des tailles',
+            labelHint: 'Sur WhatsApp, l’adresse complète s’affiche à la place de ce texte.',
+            url: 'Adresse',
+            invalid: 'Saisissez une adresse web, un e-mail ou un numéro valide.',
+            remove: 'Supprimer le lien',
+        },
+
+        preview: {
+            label: 'Aperçu',
+            whatsapp: 'WhatsApp',
+            telegram: 'Telegram',
+            empty: 'Votre description apparaîtra ici, telle que vos clients la recevront.',
+        },
+
+        lint: {
+            overBudget:
+                'Plus long qu’un message de chat ne le permet — la fin sera coupée au partage. Visez moins de {{max}} caractères.',
+            tooLong:
+                'Cette description devient longue pour un message. Les descriptions courtes sont mieux lues.',
+            markerCollision:
+                'Votre texte contient * _ ou ~, que WhatsApp interprète comme de la mise en forme : cet effet ne s’affichera pas là-bas.',
+            linkLabel: 'WhatsApp affiche l’adresse complète à la place du texte de votre lien.',
+            longList:
+                'Les longues listes se lisent mal dans un chat. Gardez plutôt les {{max}} premiers éléments.',
+        },
+
+        errors: {
+            linkScheme: 'Seuls les liens web, e-mail et téléphone sont autorisés.',
+        },
+    },
+
+    share: {
+        action: 'Partager dans un chat',
+        title: 'Partager ce produit',
+        description: 'Choisissez un canal — le message s’ouvre prêt à envoyer.',
+        whatsapp: 'Partager sur WhatsApp',
+        telegram: 'Partager sur Telegram',
+        copy: 'Copier le message',
+        copied: 'Message copié.',
+        telegramPlainNote:
+            'L’écran de partage Telegram envoie du texte brut : le gras et l’italique ne sont pas conservés. Vos listes, sauts de ligne et émojis le sont.',
+        noStoreUrl:
+            'Le lien de votre boutique n’est pas encore prêt : le message partira sans celui-ci.',
+    },
+
+    preview: {
+        action: 'Aperçu client',
+        subtitle: 'Ce que voit un client',
+        linkUnavailable: 'Disponible une fois le produit publié',
+        unavailable: {
+            title: 'Rien à prévisualiser pour l’instant',
+            draft: 'Brouillon — les clients ne voient pas encore ce produit.',
+            pendingReview: 'En attente de validation — les clients ne voient pas encore ce produit.',
+            archived: 'Archivé — les clients ne voient plus ce produit.',
+            suspended: 'Suspendu — les clients ne voient pas ce produit.',
+            helpDraft:
+                'Votre boutique n’affiche que les produits publiés : il n’existe donc pas encore de page client pour celui-ci. Publiez-le et l’aperçu apparaîtra ici.',
+            helpArchived:
+                'Votre boutique n’affiche que les produits publiés. Restaurez celui-ci en brouillon puis publiez-le pour voir la page client.',
+            helpPendingReview:
+                'Ce produit attend une validation. Dès qu’il sera approuvé et publié, sa page client apparaîtra ici — il n’y a rien à faire d’ici là.',
+            helpSuspended:
+                'Ce produit a été suspendu à cause d’un problème d’agence de livraison, et non de quelque chose que vous pourriez publier. Il redeviendra visible une fois ce problème résolu ; vous pouvez toujours le modifier ici.',
+        },
     },
 
     fields: {

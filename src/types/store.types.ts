@@ -25,7 +25,16 @@ export interface VendorStore {
   supportWhatsapp: string | null;
   /** Vacation-mode toggle: true = open for business, false = temporarily closed. */
   isOpen: boolean;
-  /** Computed from `slug` — the public storefront URL. */
+  /**
+   * Computed from `slug` — the public storefront URL.
+   *
+   * @deprecated Do not render or copy this. The backend bakes it from its own
+   * `STORE_PUBLIC_URL_BASE`, so it is an absolute production URL that is wrong
+   * whenever the storefront is running anywhere else (every local dev setup).
+   * Use `storefrontUrl(storePath(store.slug))` from `@/lib/storefront/urls`,
+   * which mirrors the storefront's route module and honours
+   * `VITE_STOREFRONT_BASE_URL`.
+   */
   publicUrl: string;
   /** Optimistic-locking counter. */
   version: number;

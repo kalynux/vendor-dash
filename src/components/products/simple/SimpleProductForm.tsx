@@ -16,7 +16,9 @@ import {
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
 import { ProductMediaUpload } from '@/components/products/ProductMediaUpload';
-import { useTranslation, useMessage } from '@/i18n';
+import { ChatRichTextEditor } from '@/components/rich-text';
+import { useTranslation, useMessage, useFormatters } from '@/i18n';
+import { EMPTY_DOC, toPlainText, type RichDoc } from '@/lib/richtext';
 import { PRODUCT_IMAGE_LIMIT } from '@/components/products/media.constants';
 import {
   simpleProductSchema,
@@ -90,6 +92,7 @@ const EMPTY_VALUES: SimpleProductFormValues = {
   title: '',
   category: '',
   description: '',
+  descriptionRich: EMPTY_DOC,
   tags: [],
   seoTitle: '',
   seoDescription: '',
@@ -151,6 +154,19 @@ export function SimpleProductForm({
   const compareAtPrice = watch('compareAtPrice');
   const seoTitle = watch('seoTitle') ?? '';
   const seoDesc = watch('seoDescription') ?? '';
+  const descriptionRich = watch('descriptionRich') as RichDoc;
+  const titleValue = watch('title') ?? '';
+
+  // The simple editor has the price right there in the form, so the preview can
+  // show the message as it will actually go out — title, price, description.
+  const { currency } = useFormatters();
+  const previewPrice = typeof price === 'number' && price > 0 ? currency(price) : null;
+
+  /** Keeps `description` a derived projection of the document. See StepBasicInfo. */
+  function onDescriptionChange(doc: RichDoc) {
+    setValue('descriptionRich', doc, { shouldValidate: false, shouldDirty: true });
+    setValue('description', toPlainText(doc), { shouldValidate: true, shouldDirty: true });
+  }
 
   // Report the live switch value up, including the value it mounted with, so the
   // pickup picker judges "agency storage" against what the vendor sees rather
@@ -267,13 +283,14 @@ export function SimpleProductForm({
         <Label htmlFor="description">
           {t('products.fields.description')} <span className="text-destructive">*</span>
         </Label>
-        <Textarea
+        <ChatRichTextEditor
           id="description"
-          placeholder={t('products.fields.descriptionHelp')}
-          rows={4}
+          value={descriptionRich}
+          onChange={onDescriptionChange}
+          previewTitle={titleValue}
+          previewPrice={previewPrice}
           disabled={isBusy}
-          {...register('description')}
-          aria-invalid={!!errors.description}
+          invalid={!!errors.description}
         />
         {errors.description ? (
           <p className="text-xs text-destructive">{m(errors.description.message)}</p>

@@ -293,7 +293,8 @@ All products start in `draft` status. The `type` cannot be changed after creatio
 | `type` | string | ✅ | `physical`, `digital`, or `service` |
 | `title` | string | ✅ | 3–200 characters |
 | `category` | string | ✅ | Non-empty string |
-| `description` | string | ✅ | Non-empty string |
+| `description` | string | ✅ | Non-empty string. Plain text — no markup. |
+| `descriptionRich` | object \| null | No | Structured description powering WhatsApp / Telegram formatting. `description` must be its plain-text projection — see [product-description-rich.md](./product-description-rich.md). |
 | `tags` | string[] | No | Array of unique, non-empty strings |
 | `seoTitle` | string | No | Max 60 characters |
 | `seoDescription` | string | No | Max 160 characters |
@@ -379,7 +380,8 @@ Partial update — only provided fields are changed. Allowed on `draft` and `act
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
 | `title` | string | No | 3–200 characters |
-| `description` | string | No | — |
+| `description` | string | No | Plain text — no markup. |
+| `descriptionRich` | object \| null | No | Structured description powering WhatsApp / Telegram formatting. `description` must be its plain-text projection — see [product-description-rich.md](./product-description-rich.md). |
 | `category` | string | No | Non-empty string |
 | `tags` | string[] | No | **Full replacement** of tags array |
 | `seoTitle` | string | No | Max 60 characters |

@@ -9,8 +9,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
+import { ChatRichTextEditor } from '@/components/rich-text';
 import { basicInfoSchema, type BasicInfoFormValues } from '@/components/products/schemas/product.schemas';
 import { useMessage, useTranslation } from '@/i18n';
+import { hydrateDoc, toPlainText, type RichDoc } from '@/lib/richtext';
 import type { WizardState } from '@/types/product.types';
 
 interface StepBasicInfoProps {
@@ -47,6 +49,10 @@ export function StepBasicInfo({
       title: product?.title ?? '',
       category: product?.category ?? '',
       description: product?.description ?? '',
+      // A saved rich document wins; otherwise the plain description is parsed
+      // back into one, so a product written before this editor existed opens
+      // with its paragraphs and lists intact.
+      descriptionRich: hydrateDoc(product?.descriptionRich, product?.description),
       tags: product?.tags ?? [],
       seoTitle: product?.seo?.title ?? '',
       seoDescription: product?.seo?.description ?? '',
@@ -54,6 +60,22 @@ export function StepBasicInfo({
   });
 
   const tags = watch('tags') as string[];
+  const descriptionRich = watch('descriptionRich') as RichDoc;
+  const titleValue = watch('title') ?? '';
+
+  /**
+   * The editor owns both halves of the description.
+   *
+   * `description` is derived here rather than being typed into, so the plain
+   * projection and the document can never drift apart — a `description` that is
+   * not `toPlainText(doc)` would be shown to customers on the storefront.
+   * `shouldValidate` keeps the required-field error clearing as the vendor types,
+   * exactly as the old textarea did.
+   */
+  function onDescriptionChange(doc: RichDoc) {
+    setValue('descriptionRich', doc, { shouldValidate: false });
+    setValue('description', toPlainText(doc), { shouldValidate: true, shouldDirty: true });
+  }
 
   function addTag() {
     const input = tagInputRef.current;
@@ -132,12 +154,12 @@ export function StepBasicInfo({
         <Label htmlFor="description">
           {t('products.fields.description')} <span className="text-destructive">*</span>
         </Label>
-        <Textarea
+        <ChatRichTextEditor
           id="description"
-          placeholder={t('products.fields.descriptionHelp')}
-          rows={4}
-          {...register('description')}
-          aria-invalid={!!errors.description}
+          value={descriptionRich}
+          onChange={onDescriptionChange}
+          previewTitle={titleValue}
+          invalid={!!errors.description}
         />
         {errors.description && (
           <p className="text-xs text-destructive">{m(errors.description.message)}</p>

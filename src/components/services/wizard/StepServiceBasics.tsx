@@ -1,6 +1,7 @@
 import { useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import type { z } from 'zod';
 import { AlertCircle, X, Plus, ChevronRight, ChevronLeft } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -8,6 +9,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
+import { ChatRichTextEditor } from '@/components/rich-text';
+import { toPlainText, type RichDoc } from '@/lib/richtext';
 import { useTranslation, useMessage } from '@/i18n';
 import {
   SEO_TITLE_MAX, SEO_DESCRIPTION_MAX,
@@ -44,12 +47,23 @@ export function StepServiceBasics({
     watch,
     setValue,
     formState: { errors },
-  } = useForm<ServiceBasicsFormValues>({
+    // Three generics because `descriptionRich` carries a zod `.default()`, so the
+    // form's input type (field optional) and its output type (field guaranteed)
+    // are no longer the same — the same shape the product forms already use.
+  } = useForm<z.input<typeof serviceBasicsSchema>, unknown, ServiceBasicsFormValues>({
     resolver: zodResolver(serviceBasicsSchema),
     defaultValues,
   });
 
   const tags = watch('tags') as string[];
+  const descriptionRich = watch('descriptionRich') as RichDoc;
+  const titleValue = watch('title') ?? '';
+
+  /** Keeps `description` a derived projection of the document. See StepBasicInfo. */
+  function onDescriptionChange(doc: RichDoc) {
+    setValue('descriptionRich', doc, { shouldValidate: false });
+    setValue('description', toPlainText(doc), { shouldValidate: true, shouldDirty: true });
+  }
 
   function addTag() {
     const input = tagInputRef.current;
@@ -124,12 +138,12 @@ export function StepServiceBasics({
         <Label htmlFor="description">
           {t('services.basics.descriptionLabel')} <span className="text-destructive">*</span>
         </Label>
-        <Textarea
+        <ChatRichTextEditor
           id="description"
-          placeholder={t('services.basics.descriptionPlaceholder')}
-          rows={4}
-          {...register('description')}
-          aria-invalid={!!errors.description}
+          value={descriptionRich}
+          onChange={onDescriptionChange}
+          previewTitle={titleValue}
+          invalid={!!errors.description}
         />
         {errors.description && (
           <p className="text-xs text-destructive">{m(errors.description.message)}</p>

@@ -74,7 +74,8 @@ Creates the product, its single variant and its delivery config in **one transac
 | Field | Type | Required | Notes |
 |---|---|---|---|
 | `title` | string | ✅ | 3–200 chars |
-| `description` | string | ✅ | Non-empty. Required here (unlike the draft endpoint) because an empty description blocks publishing. |
+| `description` | string | ✅ | Non-empty. Required here (unlike the draft endpoint) because an empty description blocks publishing. Plain text — no markup. |
+| `descriptionRich` | object \| null | No | Structured description powering WhatsApp / Telegram formatting. `description` must be its plain-text projection — see [product-description-rich.md](./product-description-rich.md). |
 | `category` | string | ✅ | Non-empty |
 | `price` | number | ✅ | **> 0**. Zero is rejected outright — a zero-priced product can never be activated. |
 | `stock` | integer | | ≥ 0, default `0` |

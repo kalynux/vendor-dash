@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
-import { AlertCircle, MoreHorizontal, Sparkles, Wand2, Copy } from 'lucide-react';
+import { AlertCircle, Eye, MoreHorizontal, Sparkles, Wand2, Copy } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -462,6 +462,10 @@ export function SimpleProductEdit() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => navigate(`/preview/product/${product.id}`)}>
+              <Eye className="w-4 h-4 mr-2" />
+              {t('products.preview.action')}
+            </DropdownMenuItem>
             <DropdownMenuItem onClick={() => setConvertOpen(true)}>
               <Wand2 className="w-4 h-4 mr-2" />
               {t('products.actions.convertToAdvancedEditor')}

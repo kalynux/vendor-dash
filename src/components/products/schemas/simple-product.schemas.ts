@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { basicInfoSchema } from './product.schemas';
 import { bargainPatch } from '@/components/products/bargain';
 import { PRODUCT_IMAGE_LIMIT } from '@/components/products/media.constants';
+import { descriptionCreateWire, descriptionUpdateWire, hydrateDoc } from '@/lib/richtext';
 import type { TranslationKey } from '@/i18n';
 import type {
   ApiProductDetail,
@@ -134,6 +135,10 @@ export function toFormValues(
     title: product.title,
     category: product.category,
     description: product.description,
+    // Falls back to parsing the plain description when the backend has no rich
+    // document for this product — every product predating the editor, plus
+    // every save made while the wire gate was off.
+    descriptionRich: hydrateDoc(product.descriptionRich, product.description),
     tags: product.tags ?? [],
     seoTitle: product.seo?.title ?? '',
     seoDescription: product.seo?.description ?? '',
@@ -164,7 +169,10 @@ export function toCreatePayload(
 ): SimpleProductPayload {
   const payload: SimpleProductPayload = {
     title: values.title.trim(),
-    description: values.description.trim(),
+    // `toPlainText` already trims, so this is the same string the old
+    // `values.description.trim()` produced — derived from the document rather
+    // than from the (now read-only) mirror the form carries.
+    ...descriptionCreateWire(values.descriptionRich),
     category: values.category.trim(),
     price: values.price,
     isInfiniteStock: values.isInfiniteStock,
@@ -222,8 +230,10 @@ export function toUpdatePayload(
   const title = current.title.trim();
   if (title !== initial.title.trim()) payload.title = title;
 
-  const description = current.description.trim();
-  if (description !== initial.description.trim()) payload.description = description;
+  // Diffed on the document, not on the plain text: two documents can share a
+  // projection while differing in their marks, and comparing the strings would
+  // silently drop a bold-only edit.
+  Object.assign(payload, descriptionUpdateWire(current.descriptionRich, initial.descriptionRich));
 
   const category = current.category.trim();
   if (category !== initial.category.trim()) payload.category = category;

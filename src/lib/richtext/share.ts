@@ -1,3 +1,4 @@
+import { productPath, storefrontUrl } from '@/lib/storefront/urls';
 import { isEmptyDoc } from './doc';
 import { toWhatsApp } from './format/whatsapp';
 import { toTelegramPlain } from './format/telegram';
@@ -27,14 +28,22 @@ export type ShareProductInput = {
  * The storefront URL for a product.
  *
  * There is no product-level `publicUrl` on the vendor API — the product carries
- * a bare `slug` and the store carries its own `publicUrl` — so the customer-
- * facing address has to be composed here. Isolated in one function precisely
- * because it is the piece most likely to need correcting against the live
- * storefront's routing.
+ * a bare `slug` — so the customer-facing address has to be composed from the
+ * store's slug and the product's.
+ *
+ * This used to compose from `store.publicUrl`, which produced a link that 404s
+ * twice over: the backend's base pointed at `/store/:slug` rather than the
+ * `/shop/stores/:slug` the storefront actually serves, and an absolute URL baked
+ * for production is wrong whenever the storefront is running anywhere else. Both
+ * concerns now live in `lib/storefront/urls`, which mirrors the storefront's own
+ * route module.
  */
-export function productPublicUrl(storePublicUrl: string | null | undefined, slug: string | null | undefined): string | null {
-  if (!storePublicUrl || !slug) return null;
-  return `${storePublicUrl.replace(/\/+$/, '')}/products/${encodeURIComponent(slug)}`;
+export function productPublicUrl(
+  storeSlug: string | null | undefined,
+  productSlug: string | null | undefined,
+): string | null {
+  if (!storeSlug || !productSlug) return null;
+  return storefrontUrl(productPath(storeSlug, productSlug));
 }
 
 /**

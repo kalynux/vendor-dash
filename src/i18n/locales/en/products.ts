@@ -60,7 +60,6 @@ export const products = {
         restore: 'Restore',
         importCsv: 'Import CSV',
         exportCsv: 'Export CSV',
-        preview: 'Preview',
         convertToAdvanced: 'Convert to advanced',
         convertToAdvancedEditor: 'Convert to advanced editor',
         productActions: 'Product actions',
@@ -80,6 +79,122 @@ export const products = {
         partial:
             'Archived {{success}} of {{total}} — {{failed}} skipped (only draft or active products can be archived).',
         done: plural({ one: '{{count}} product archived.', other: '{{count}} products archived.' }),
+    },
+
+    /** The chat-native description editor and its WhatsApp / Telegram preview. */
+    editor: {
+        // Shown inside the empty editor. It is an example rather than an
+        // instruction because vendors copy the shape of what they see, and the
+        // shape — short intro, features, specs, one practical line — is most of
+        // what makes a description read well in a chat bubble.
+        placeholder:
+            'Nike Air Max 90 — original, sizes 40 to 45 👟\n\n' +
+            'Key features:\n' +
+            '• Genuine leather upper\n' +
+            '• Air cushioning, all-day comfort\n' +
+            '• 2-year warranty\n\n' +
+            'Delivery in 48h across Douala and Yaoundé 🚚',
+        hint: 'Select text, then use the toolbar. No need to type any symbols.',
+
+        toolbar: {
+            label: 'Text formatting',
+            bold: 'Bold',
+            italic: 'Italic',
+            strike: 'Strikethrough',
+            bulletList: 'Bullet list',
+            orderedList: 'Numbered list',
+            link: 'Link',
+            emoji: 'Emoji',
+            undo: 'Undo',
+            redo: 'Redo',
+        },
+
+        emoji: {
+            title: 'Add an emoji',
+            commerce: 'Selling',
+            objects: 'Products',
+            quality: 'Quality & colours',
+            people: 'People',
+            food: 'Food',
+            info: 'Info',
+        },
+
+        link: {
+            title: 'Add a link',
+            description: 'Links open outside the chat, so keep them short and trustworthy.',
+            label: 'Link text',
+            labelPlaceholder: 'e.g. Size guide',
+            // The single genuine surprise in this feature, stated where it lands.
+            labelHint: 'On WhatsApp the full address is shown instead of this text.',
+            url: 'Address',
+            invalid: 'Enter a valid web address, e-mail or phone link.',
+            remove: 'Remove link',
+        },
+
+        preview: {
+            label: 'Preview',
+            whatsapp: 'WhatsApp',
+            telegram: 'Telegram',
+            empty: 'Your description will appear here, exactly as customers receive it.',
+        },
+
+        lint: {
+            overBudget:
+                'Longer than a chat message allows — the end will be cut off when shared. Aim for under {{max}} characters.',
+            tooLong: 'This is getting long for a chat message. Shorter descriptions get read.',
+            markerCollision:
+                'Your text contains * _ or ~, which WhatsApp reads as formatting — that emphasis will not show there.',
+            linkLabel: 'WhatsApp shows the full web address instead of your link text.',
+            longList: 'Long lists are hard to scan in a chat. Consider keeping the top {{max}}.',
+        },
+
+        errors: {
+            linkScheme: 'Only web, e-mail and phone links are allowed.',
+        },
+    },
+
+    share: {
+        action: 'Share to chat',
+        title: 'Share this product',
+        description: 'Pick a channel — the message opens ready to send.',
+        whatsapp: 'Share on WhatsApp',
+        telegram: 'Share on Telegram',
+        copy: 'Copy message',
+        copied: 'Message copied.',
+        // Telegram's share link renders its text verbatim, so bold and italic
+        // do not survive that route. Said plainly rather than hidden.
+        telegramPlainNote:
+            'Telegram’s share screen sends plain text — bold and italic are not carried over. Your lists, line breaks and emojis are.',
+        noStoreUrl: 'Your storefront link is not ready yet, so the message will go out without it.',
+    },
+
+    /** The customer preview — the real storefront page, embedded. */
+    preview: {
+        action: 'Preview as customer',
+        subtitle: 'What a customer sees',
+        linkUnavailable: 'Available once the product is published',
+        unavailable: {
+            title: 'Nothing to preview yet',
+            /** Shown in the banner: why customers cannot see this right now. */
+            draft: 'Draft — customers cannot see this product yet.',
+            pendingReview: 'Pending review — customers cannot see this product yet.',
+            archived: 'Archived — customers can no longer see this product.',
+            suspended: 'Suspended — customers cannot see this product.',
+            /**
+             * One per status, because the way out differs. `pending_review` and
+             * `suspended` accept no vendor-triggered transition at all, so
+             * telling either of them to "publish it" would be advice they cannot
+             * act on.
+             */
+            helpDraft:
+                'Your storefront only shows published products, so there is no customer page for this one yet. Publish it and the preview appears here.',
+            helpArchived:
+                'Your storefront only shows published products. Restore this one to draft and publish it to see the customer page.',
+            helpPendingReview:
+                'This product is waiting on moderation. Once it is approved and published, its customer page appears here — there is nothing to do in the meantime.',
+            helpSuspended:
+                'This product was suspended over a delivery-agency problem, not anything you can publish your way out of. It becomes visible again once that is resolved; you can still edit it here.',
+        },
     },
 
     fields: {

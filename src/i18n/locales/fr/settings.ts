@@ -61,6 +61,17 @@ export const settings = {
         addLogo: 'Ajouter un logo',
         viewStore: 'Voir la boutique',
 
+        preview: {
+            action: 'Aperçu client',
+            subtitle: 'Ce que voit un client',
+            edit: 'Modifier la boutique',
+            onVacation:
+                'Votre boutique est en vacances — les clients peuvent toujours parcourir vos produits, mais ils voient un avis et ne peuvent pas commander.',
+            noStoreTitle: 'Pas encore de boutique',
+            noStoreHelp:
+                'Votre boutique n’a pas été configurée : il n’existe donc pas de page client à prévisualiser. Renseignez les informations de votre boutique et l’aperçu apparaîtra ici.',
+        },
+
         identity: {
             title: 'Identité de la boutique',
             info: 'Le nom et la description que les clients voient sur la page de votre boutique et dans les résultats de recherche. Changer le nom ici ne change pas l’URL de votre boutique.',

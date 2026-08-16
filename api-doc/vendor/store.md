@@ -72,7 +72,7 @@ Authorization: Bearer <jwt_token>
     "supportPhone": "+237612345678",
     "supportWhatsapp": "+237612345678",
     "isOpen": true,
-    "publicUrl": "https://yourdomain.com/store/techsolutions",
+    "publicUrl": "https://yourdomain.com/shop/stores/techsolutions",
     "version": 5,
     "createdAt": "2024-01-15T10:30:00.000Z",
     "updatedAt": "2024-01-28T14:22:00.000Z"
@@ -221,7 +221,7 @@ are equivalent: both remove the logo. A non-empty invalid value (e.g. `"logoFile
     "supportPhone": "+237698765432",
     "supportWhatsapp": "+237698765432",
     "isOpen": true,
-    "publicUrl": "https://yourdomain.com/store/techsolutions",
+    "publicUrl": "https://yourdomain.com/shop/stores/techsolutions",
     "version": 6,
     "createdAt": "2024-01-15T10:30:00.000Z",
     "updatedAt": "2024-01-29T09:15:00.000Z"
@@ -346,7 +346,7 @@ Content-Type: application/json
     "name": "TechSolutions Premium",
     "slug": "techsolutions",
     "isOpen": true,
-    "publicUrl": "https://yourdomain.com/store/techsolutions",
+    "publicUrl": "https://yourdomain.com/shop/stores/techsolutions",
     "version": 7,
     ...
   },
@@ -365,7 +365,7 @@ Content-Type: application/json
     "name": "TechSolutions Premium",
     "slug": "techsolutions",
     "isOpen": false,
-    "publicUrl": "https://yourdomain.com/store/techsolutions",
+    "publicUrl": "https://yourdomain.com/shop/stores/techsolutions",
     "version": 7,
     ...
   },
@@ -487,12 +487,12 @@ publicUrl = `${STORE_PUBLIC_URL_BASE}/${encodeURIComponent(slug)}`
 
 **Configuration**:
 ```env
-STORE_PUBLIC_URL_BASE=https://yourdomain.com/store
+STORE_PUBLIC_URL_BASE=https://yourdomain.com/shop/stores
 ```
 
 **Example**:
 - Slug: `techsolutions`
-- Public URL: `https://yourdomain.com/store/techsolutions`
+- Public URL: `https://yourdomain.com/shop/stores/techsolutions`
 
 **Future enhancements**:
 - Custom domains (`https://store.techsolutions.com`)

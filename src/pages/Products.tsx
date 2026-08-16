@@ -7,8 +7,9 @@ import {
   Plus,
   MoreHorizontal,
   Edit,
-  Trash2,
   Eye,
+  Trash2,
+  Share2,
   Package,
   Image as ImageIcon,
   FileDigit,
@@ -66,6 +67,7 @@ import { getListCache, setListCache } from '@/lib/listCache';
 import { MobilePageHeader } from '@/components/layout/MobilePageHeader';
 import { MobileListFooter } from '@/components/layout/MobileListFooter';
 import { ConvertToAdvancedDialog } from '@/components/products/simple/ConvertToAdvancedDialog';
+import { ShareProductDialog } from '@/components/products/ShareProductDialog';
 import {
   fetchProducts as apiFetchProducts,
   setVectorisationEnabled,
@@ -250,6 +252,9 @@ export function Products() {
   const [actionsSheetProduct, setActionsSheetProduct] = useState<ProductListItem | null>(null);
   const [productToDelete, setProductToDelete] = useState<ProductListItem | null>(null);
   const [productToConvert, setProductToConvert] = useState<ProductListItem | null>(null);
+  // Just the id — the dialog fetches the detail it needs, since a list row does
+  // not carry the slug, description or price a chat message is built from.
+  const [productToShare, setProductToShare] = useState<string | null>(null);
   const [transitionState, setTransitionState] = useState<{
     product: ProductListItem;
     transition: StatusTransition;
@@ -634,6 +639,15 @@ export function Products() {
     );
   })();
 
+  const shareDialog = (
+    <ShareProductDialog
+      productId={productToShare}
+      onOpenChange={(open) => {
+        if (!open) setProductToShare(null);
+      }}
+    />
+  );
+
   const convertDialog = (
     <ConvertToAdvancedDialog
       open={!!productToConvert}
@@ -842,8 +856,13 @@ export function Products() {
                     />
                     <SheetActionButton
                       icon={<Eye className="w-5 h-5" />}
-                      label={t('products.actions.preview')}
-                      onClick={close}
+                      label={t('products.preview.action')}
+                      onClick={() => { close(); navigate(`/preview/product/${p.id}`); }}
+                    />
+                    <SheetActionButton
+                      icon={<Share2 className="w-5 h-5" />}
+                      label={t('products.share.action')}
+                      onClick={() => { close(); setProductToShare(p.id); }}
                     />
                     {p.mode === 'simple' && (
                       <SheetActionButton
@@ -909,6 +928,7 @@ export function Products() {
         {archiveDialog}
         {transitionDialog}
         {convertDialog}
+        {shareDialog}
       </div>
     );
   }
@@ -1021,6 +1041,8 @@ export function Products() {
                     requestStatusTransition(product, transition)
                   }
                   onConvertToAdvanced={() => setProductToConvert(product)}
+                  onPreview={() => navigate(`/preview/product/${product.id}`)}
+                  onShare={() => setProductToShare(product.id)}
                 />
               ))}
         </div>
@@ -1117,6 +1139,8 @@ export function Products() {
                               requestStatusTransition(product, transition)
                             }
                             onConvertToAdvanced={() => setProductToConvert(product)}
+                            onPreview={() => navigate(`/preview/product/${product.id}`)}
+                            onShare={() => setProductToShare(product.id)}
                           />
                         </td>
                       </tr>
@@ -1130,6 +1154,7 @@ export function Products() {
       {archiveDialog}
       {transitionDialog}
       {convertDialog}
+        {shareDialog}
 
       {/* Pagination */}
       {pagination && pagination.totalPages > 1 && (
@@ -1192,9 +1217,11 @@ interface ProductGridCardProps {
   selected: boolean;
   onToggleSelect: () => void;
   onEdit: () => void;
+  onPreview: () => void;
   onVectorisationAction: (action: 'enable' | 'disable' | 'retry') => void;
   onStatusTransition: (transition: StatusTransition) => void;
   onConvertToAdvanced: () => void;
+  onShare: () => void;
 }
 
 function ProductGridCard({
@@ -1202,9 +1229,11 @@ function ProductGridCard({
   selected,
   onToggleSelect,
   onEdit,
+  onPreview,
   onVectorisationAction,
   onStatusTransition,
   onConvertToAdvanced,
+  onShare,
 }: ProductGridCardProps) {
   const { t } = useTranslation();
   return (
@@ -1251,9 +1280,11 @@ function ProductGridCard({
             <ProductActionsMenu
               product={product}
               onEdit={onEdit}
+              onPreview={onPreview}
               onVectorisationAction={onVectorisationAction}
               onStatusTransition={onStatusTransition}
               onConvertToAdvanced={onConvertToAdvanced}
+              onShare={onShare}
             />
           </div>
           <div className="mt-2 flex items-center gap-1.5 flex-wrap">
@@ -1280,17 +1311,21 @@ function ProductGridCard({
 interface ProductActionsMenuProps {
   product: ProductListItem;
   onEdit: () => void;
+  onPreview: () => void;
   onVectorisationAction: (action: 'enable' | 'disable' | 'retry') => void;
   onStatusTransition: (transition: StatusTransition) => void;
   onConvertToAdvanced: () => void;
+  onShare: () => void;
 }
 
 function ProductActionsMenu({
   product,
   onEdit,
+  onPreview,
   onVectorisationAction,
   onStatusTransition,
   onConvertToAdvanced,
+  onShare,
 }: ProductActionsMenuProps) {
   const { t } = useTranslation();
   const editLocked = product.vectorisationStatus === 'pending';
@@ -1320,9 +1355,13 @@ function ProductActionsMenu({
           <Edit className="w-4 h-4 mr-2" />
           {editLocked ? t('products.ai.editLocked') : t('common.actions.edit')}
         </DropdownMenuItem>
-        <DropdownMenuItem>
+        <DropdownMenuItem onClick={onPreview}>
           <Eye className="w-4 h-4 mr-2" />
-          {t('products.actions.preview')}
+          {t('products.preview.action')}
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={onShare}>
+          <Share2 className="w-4 h-4 mr-2" />
+          {t('products.share.action')}
         </DropdownMenuItem>
 
         {product.mode === 'simple' && (

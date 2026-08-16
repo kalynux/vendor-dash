@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -15,6 +15,9 @@ interface LinkDialogProps {
   onSubmit: (href: string, label: string) => void;
   onRemove?: () => void;
 }
+
+/** The footer's Save button reaches the body's form through this id. */
+const FORM_ID = 'rt-link-form';
 
 /**
  * Turn what a vendor types into a URL we are willing to store.
@@ -33,6 +36,76 @@ function normalizeHref(input: string): string {
   return `https://${value}`;
 }
 
+/**
+ * The fields, in their own component on purpose.
+ *
+ * Radix unmounts a closed dialog's content, so this remounts on every open and
+ * its `useState` initialisers re-seed from the current selection for free. The
+ * alternative — keeping the state in the parent and resetting it from an effect
+ * — is a synchronous `setState` in an effect, which cascades a render and which
+ * `react-hooks/set-state-in-effect` rightly rejects.
+ */
+function LinkForm({
+  initialLabel,
+  initialHref,
+  onSubmit,
+}: {
+  initialLabel: string;
+  initialHref: string;
+  onSubmit: (href: string, label: string) => void;
+}) {
+  const { t } = useTranslation();
+  const [label, setLabel] = useState(initialLabel);
+  const [href, setHref] = useState(initialHref);
+  const [touched, setTouched] = useState(false);
+
+  const normalized = normalizeHref(href);
+  const valid = isAllowedHref(normalized);
+
+  return (
+    <form
+      id={FORM_ID}
+      className="space-y-4"
+      onSubmit={(event) => {
+        event.preventDefault();
+        setTouched(true);
+        if (valid) onSubmit(normalized, label);
+      }}
+    >
+      <div className="space-y-1.5">
+        <Label htmlFor="rt-link-label">{t('products.editor.link.label')}</Label>
+        <Input
+          id="rt-link-label"
+          value={label}
+          onChange={(e) => setLabel(e.target.value)}
+          placeholder={t('products.editor.link.labelPlaceholder')}
+        />
+        {/* The single most surprising thing about this feature, said once, in
+            the one place a vendor is about to be affected by it. */}
+        <p className="text-xs text-muted-foreground">{t('products.editor.link.labelHint')}</p>
+      </div>
+
+      <div className="space-y-1.5">
+        <Label htmlFor="rt-link-href">{t('products.editor.link.url')}</Label>
+        <Input
+          id="rt-link-href"
+          value={href}
+          inputMode="url"
+          autoCapitalize="off"
+          autoCorrect="off"
+          spellCheck={false}
+          onChange={(e) => setHref(e.target.value)}
+          placeholder="wimall.cm/guide"
+          aria-invalid={touched && !valid}
+        />
+        {touched && !valid && (
+          <p className="text-xs text-destructive">{t('products.editor.link.invalid')}</p>
+        )}
+      </div>
+    </form>
+  );
+}
+
 export function LinkDialog({
   open,
   onOpenChange,
@@ -42,28 +115,6 @@ export function LinkDialog({
   onRemove,
 }: LinkDialogProps) {
   const { t } = useTranslation();
-  const [label, setLabel] = useState(initialLabel);
-  const [href, setHref] = useState(initialHref);
-  const [touched, setTouched] = useState(false);
-
-  // Re-seed each time it opens: the selection is different every time, and a
-  // dialog that remembers the last product's URL is a foot-gun.
-  useEffect(() => {
-    if (!open) return;
-    setLabel(initialLabel);
-    setHref(initialHref);
-    setTouched(false);
-  }, [open, initialLabel, initialHref]);
-
-  const normalized = normalizeHref(href);
-  const valid = isAllowedHref(normalized);
-
-  const submit = () => {
-    setTouched(true);
-    if (!valid) return;
-    onSubmit(normalized, label);
-    onOpenChange(false);
-  };
 
   return (
     <ResponsiveModal
@@ -91,50 +142,22 @@ export function LinkDialog({
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             {t('common.actions.cancel')}
           </Button>
-          <Button type="button" onClick={submit}>
+          {/* `form=` lets a button outside the form submit it — which is what
+              keeps the fields' state inside the remounting child. */}
+          <Button type="submit" form={FORM_ID}>
             {t('common.actions.save')}
           </Button>
         </>
       }
     >
-      <div className="space-y-4">
-        <div className="space-y-1.5">
-          <Label htmlFor="rt-link-label">{t('products.editor.link.label')}</Label>
-          <Input
-            id="rt-link-label"
-            value={label}
-            onChange={(e) => setLabel(e.target.value)}
-            placeholder={t('products.editor.link.labelPlaceholder')}
-          />
-          {/* The single most surprising thing about this feature, said once, in
-              the one place a vendor is about to be affected by it. */}
-          <p className="text-xs text-muted-foreground">{t('products.editor.link.labelHint')}</p>
-        </div>
-
-        <div className="space-y-1.5">
-          <Label htmlFor="rt-link-href">{t('products.editor.link.url')}</Label>
-          <Input
-            id="rt-link-href"
-            value={href}
-            inputMode="url"
-            autoCapitalize="off"
-            autoCorrect="off"
-            spellCheck={false}
-            onChange={(e) => setHref(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                submit();
-              }
-            }}
-            placeholder="wimall.cm/guide"
-            aria-invalid={touched && !valid}
-          />
-          {touched && !valid && (
-            <p className="text-xs text-destructive">{t('products.editor.link.invalid')}</p>
-          )}
-        </div>
-      </div>
+      <LinkForm
+        initialLabel={initialLabel}
+        initialHref={initialHref}
+        onSubmit={(href, label) => {
+          onSubmit(href, label);
+          onOpenChange(false);
+        }}
+      />
     </ResponsiveModal>
   );
 }

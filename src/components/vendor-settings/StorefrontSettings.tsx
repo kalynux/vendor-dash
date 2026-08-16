@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useState, type ComponentProps, type ReactNode } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Loader2,
   Image as ImageIcon,
   X,
+  Eye,
   ExternalLink,
   Lock,
   Store as StoreIcon,
@@ -31,6 +33,7 @@ import { useTranslation, useFormatters, type TranslationKey } from '@/i18n';
 import { ApiError } from '@/types/api';
 import type { ApiFile, FileRef } from '@/types/file.types';
 import type { StoreUpdatePayload, VendorStore } from '@/types/store.types';
+import { storePath, storefrontUrl } from '@/lib/storefront/urls';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -158,6 +161,7 @@ function validateForm(form: FormState): FieldErrors {
 export function StorefrontSettings() {
   const { t } = useTranslation();
   const fmt = useFormatters();
+  const navigate = useNavigate();
   const { store, isLoading, fetchStore, applyStore } = useStoreStore();
 
   const [form, setForm] = useState<FormState | null>(null);
@@ -281,7 +285,7 @@ export function StorefrontSettings() {
   const handleCopyUrl = useCallback(async () => {
     if (!store) return;
     try {
-      await navigator.clipboard.writeText(store.publicUrl);
+      await navigator.clipboard.writeText(storefrontUrl(storePath(store.slug)));
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
@@ -306,6 +310,9 @@ export function StorefrontSettings() {
   }
 
   const previewName = form.name.trim() || store.name;
+  // Not `store.publicUrl`: the backend bakes that against its own configured
+  // base, which points at the production storefront. See lib/storefront/urls.
+  const publicStoreUrl = storefrontUrl(storePath(store.slug));
 
   return (
     <div className="space-y-6">
@@ -412,13 +419,13 @@ export function StorefrontSettings() {
                 <StatusBadge isOpen={store.isOpen} label={t(store.isOpen ? 'settings.storefront.status.open' : 'settings.storefront.status.closed')} />
               </div>
               <a
-                href={store.publicUrl}
+                href={publicStoreUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex max-w-full items-center gap-1 truncate text-sm text-muted-foreground hover:text-primary hover:underline"
               >
                 <Globe className="w-3.5 h-3.5 shrink-0" />
-                <span className="truncate">{store.publicUrl}</span>
+                <span className="truncate">{publicStoreUrl}</span>
               </a>
             </div>
 
@@ -427,8 +434,21 @@ export function StorefrontSettings() {
                 {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
                 {t(copied ? 'common.actions.copied' : 'common.actions.copyLink')}
               </Button>
+              {/* The preview renders the real storefront page, so it stays
+                  truthful when the storefront team changes it — unlike the hero
+                  above, which is an approximation built from the form. */}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                onClick={() => navigate('/preview/store')}
+              >
+                <Eye className="w-3.5 h-3.5" />
+                {t('settings.storefront.preview.action')}
+              </Button>
               <Button asChild size="sm" className="gap-1.5">
-                <a href={store.publicUrl} target="_blank" rel="noopener noreferrer">
+                <a href={publicStoreUrl} target="_blank" rel="noopener noreferrer">
                   <ExternalLink className="w-3.5 h-3.5" />
                   {t('settings.storefront.viewStore')}
                 </a>
@@ -583,12 +603,12 @@ export function StorefrontSettings() {
           >
               <DetailRow icon={Globe} label={t('settings.storefront.details.publicUrl')}>
                 <a
-                  href={store.publicUrl}
+                  href={publicStoreUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="break-all text-sm text-primary hover:underline"
                 >
-                  {store.publicUrl}
+                  {publicStoreUrl}
                 </a>
               </DetailRow>
               <Separator />

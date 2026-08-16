@@ -67,7 +67,15 @@ function selectionInside(root: HTMLElement | null): boolean {
 }
 
 export type UseRichTextEditor = {
-  ref: React.RefObject<HTMLDivElement | null>;
+  /**
+   * A callback ref, not a ref object.
+   *
+   * Handing the component a `RefObject` would mean reading `editor.ref` during
+   * render, which is exactly what the `react-hooks/refs` rule forbids — a ref is
+   * not a rendering input. A callback is an ordinary function, so the editable
+   * element is still captured with nothing observed during render.
+   */
+  attachRef: (node: HTMLDivElement | null) => void;
   marks: ActiveMarks;
   /** Text currently selected, used to prefill the link dialog's label. */
   selectedText: string;
@@ -91,6 +99,9 @@ export function useRichTextEditor(
   disabled?: boolean,
 ): UseRichTextEditor {
   const ref = useRef<HTMLDivElement | null>(null);
+  const attachRef = useCallback((node: HTMLDivElement | null) => {
+    ref.current = node;
+  }, []);
   const [marks, setMarks] = useState<ActiveMarks>(NO_MARKS);
   const [selectedText, setSelectedText] = useState('');
   const [activeLink, setActiveLink] = useState<{ href: string; text: string } | null>(null);
@@ -239,7 +250,7 @@ export function useRichTextEditor(
 
   return useMemo(
     () => ({
-      ref,
+      attachRef,
       marks,
       selectedText,
       activeLink,
@@ -255,6 +266,7 @@ export function useRichTextEditor(
       focus,
     }),
     [
+      attachRef,
       marks,
       selectedText,
       activeLink,
