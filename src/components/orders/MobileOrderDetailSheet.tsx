@@ -55,6 +55,7 @@ import { getNextStatuses, STATUS_ACTION_KEYS, ORDER_STATUS_KEYS, canDispatchOrde
 import { ApiError } from '@/types/api';
 import { toast } from 'sonner';
 import { formatPhoneInternational } from '@/lib/phone';
+import { useProductImages } from '@/hooks/use-product-images';
 import { useTranslation, useFormatters, Trans, type TranslationKey } from '@/i18n';
 import type { Order, Entitlement, OrderTimelineEvent, VendorSettableStatus } from '@/types';
 
@@ -154,6 +155,10 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
       setOrder(initialOrder);
     }
   }, [open, initialOrder]);
+
+  // Order items ship without a thumbnail — resolve one per product from the catalog.
+  // Called before the early return below so the hook order stays stable.
+  const productImages = useProductImages(order?.items.map((item) => item.productId) ?? []);
 
   if (!order) return null;
 
@@ -534,11 +539,17 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                 {/* ── Items ── */}
                 {activeTab === 'items' && (
                   <div>
-                    {order.items.map((item) => (
+                    {order.items.map((item) => {
+                      const image = item.image ?? productImages[item.productId];
+                      return (
                       <div key={item.id} className="border-b px-4 py-3 space-y-2">
                         <div className="flex items-center gap-3">
-                          {item.image && (
-                            <img src={item.image} alt={item.name} crossOrigin="use-credentials" className="w-14 h-14 rounded-lg object-cover flex-shrink-0" />
+                          {image ? (
+                            <img src={image} alt={item.name} crossOrigin="use-credentials" className="w-14 h-14 rounded-lg object-cover flex-shrink-0" />
+                          ) : (
+                            <div className="w-14 h-14 rounded-lg bg-primary/10 text-primary flex items-center justify-center flex-shrink-0 font-bold">
+                              {item.name.charAt(0)}
+                            </div>
                           )}
                           <div className="flex-1 min-w-0">
                             <p className="font-medium text-sm truncate">{item.name}</p>
@@ -588,7 +599,8 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                           </div>
                         )}
                       </div>
-                    ))}
+                      );
+                    })}
                     <div className="h-4" />
                   </div>
                 )}

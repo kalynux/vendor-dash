@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Loader2, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -9,6 +9,7 @@ import {
   PreviewUnavailable,
   StorefrontFrame,
   useDefaultPreviewDevice,
+  usePreviewBack,
   type PreviewDevice,
 } from '@/components/preview';
 import { useStoreStore } from '@/store';
@@ -41,10 +42,7 @@ export function StorePreview() {
     [store?.slug, locale],
   );
 
-  const goBack = useCallback(() => {
-    if (window.history.length > 1) navigate(-1);
-    else navigate('/dashboard/account/store');
-  }, [navigate]);
+  const goBack = usePreviewBack('/dashboard/account/store');
 
   if (isLoading && !store) {
     return (

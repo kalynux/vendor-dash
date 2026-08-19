@@ -20,6 +20,7 @@ import { ChatRichTextEditor } from '@/components/rich-text';
 import { useTranslation, useMessage, useFormatters } from '@/i18n';
 import { EMPTY_DOC, toPlainText, type RichDoc } from '@/lib/richtext';
 import { PRODUCT_IMAGE_LIMIT } from '@/components/products/media.constants';
+import { minCeilingFor } from '@/components/products/bargain';
 import {
   simpleProductSchema,
   type SimpleProductFormValues,
@@ -161,6 +162,10 @@ export function SimpleProductForm({
   // show the message as it will actually go out — title, price, description.
   const { currency } = useFormatters();
   const previewPrice = typeof price === 'number' && price > 0 ? currency(price) : null;
+
+  /** The negotiation floor this price implies — `null` until there is a price. */
+  const minCeiling =
+    typeof price === 'number' && price > 0 ? minCeilingFor(price) : null;
 
   /** Keeps `description` a derived projection of the document. See StepBasicInfo. */
   function onDescriptionChange(doc: RichDoc) {
@@ -624,7 +629,7 @@ export function SimpleProductForm({
               <Input
                 id="bargainMaxPrice"
                 type="number"
-                min={0}
+                min={minCeiling ?? 0}
                 step="any"
                 inputMode="decimal"
                 placeholder={t('products.fields.bargainOptional')}
@@ -632,9 +637,23 @@ export function SimpleProductForm({
                 className="sm:max-w-[220px]"
                 {...register('bargainMaxPrice')}
                 aria-invalid={!!errors.bargainMaxPrice}
+                aria-describedby="bargainMaxPrice-hint"
               />
-              {errors.bargainMaxPrice && (
-                <p className="text-xs text-destructive">{m(errors.bargainMaxPrice.message)}</p>
+              {/* The floor moves with the price, so it is spelled out here rather
+                  than only in the error — guessing the number is the whole
+                  difficulty. Nothing to say until a price has been entered. */}
+              {(errors.bargainMaxPrice || minCeiling !== null) && (
+                <p
+                  id="bargainMaxPrice-hint"
+                  className={cn(
+                    'text-xs',
+                    errors.bargainMaxPrice ? 'text-destructive' : 'text-muted-foreground',
+                  )}
+                >
+                  {errors.bargainMaxPrice
+                    ? m(errors.bargainMaxPrice.message)
+                    : t('products.bargain.ceilingMin', { min: currency(minCeiling as number) })}
+                </p>
               )}
             </div>
           </div>

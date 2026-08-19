@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { basicInfoSchema } from './product.schemas';
-import { bargainPatch } from '@/components/products/bargain';
+import { bargainPatch, isCeilingValid } from '@/components/products/bargain';
 import { PRODUCT_IMAGE_LIMIT } from '@/components/products/media.constants';
 import { descriptionCreateWire, descriptionUpdateWire, hydrateDoc } from '@/lib/richtext';
 import type { TranslationKey } from '@/i18n';
@@ -99,21 +99,21 @@ export const simpleProductSchema = basicInfoSchema.extend({
   width: optionalNonNegative('products.validation.widthMin'),
   height: optionalNonNegative('products.validation.heightMin'),
 }).superRefine((values, ctx) => {
-  // Pre-empts 422 CATALOG_VARIANT_BARGAIN_RANGE_INVALID. Equality is legal —
-  // "bargainable, no headroom yet". A per-field `.refine` cannot see `price`,
-  // hence the object-level rule.
+  // The ceiling has to clear the price by `CEILING_MIN_MARGIN_PERCENT` — see
+  // `minCeilingFor`. A per-field `.refine` cannot see `price`, hence the
+  // object-level rule.
   //
   // This one check also covers the backend's price auto-sync trap: after
   // `toFormValues`, the initial `bargainMaxPrice` IS the stored ceiling, so
-  // RAISING the price past it trips exactly the same rule. That is why the
+  // RAISING the price into it trips exactly the same rule. That is why the
   // message is worded neutrally rather than "lower the ceiling".
   //
   // Blocks rather than silently widening the window: quietly raising a ceiling
   // is a money decision made on the vendor's behalf.
-  if (values.bargainMaxPrice !== undefined && values.bargainMaxPrice < values.price) {
+  if (!isCeilingValid(values.bargainMaxPrice, values.price)) {
     ctx.addIssue({
       code: 'custom',
-      message: 'products.validation.bargainMaxBelowPrice',
+      message: 'products.validation.bargainMaxBelowFloor',
       path: ['bargainMaxPrice'],
     });
   }
@@ -178,6 +178,14 @@ export function toCreatePayload(
     isInfiniteStock: values.isInfiniteStock,
     fileIds: values.fileIds,
     publish,
+    // Free delivery is ON for every new product, overriding the endpoint's
+    // `false` default. It is not a promotion: the platform never bills delivery
+    // to the customer at checkout, so the vendor carries the agency fee either
+    // way, and the only thing `false` changes is that the fee gets folded into
+    // the price instead. Starting there would quietly make every new listing
+    // look more expensive than it is. The switch on the edit page is where a
+    // vendor opts out, with the consequence spelled out next to it.
+    freeDelivery: true,
     // `pickupLocation` is deliberately absent: omitting it lets the backend
     // derive it, and auto-derivation never fails the call — it just declines
     // and reports why in meta.activation.pickupReason.

@@ -68,6 +68,7 @@ import { MobilePageHeader } from '@/components/layout/MobilePageHeader';
 import { MobileListFooter } from '@/components/layout/MobileListFooter';
 import { ConvertToAdvancedDialog } from '@/components/products/simple/ConvertToAdvancedDialog';
 import { ShareProductDialog } from '@/components/products/ShareProductDialog';
+import { useOpenPreview } from '@/components/preview';
 import {
   fetchProducts as apiFetchProducts,
   setVectorisationEnabled,
@@ -231,6 +232,7 @@ export function Products() {
   } = useProductStore();
   const { navigate: legacyNavigate } = useRouter();
   const navigate = useNavigate();
+  const openPreview = useOpenPreview();
   const isMobile = useIsMobile();
 
   // Desktop: has the first fetch settled yet? Seeded true when the store already
@@ -857,7 +859,7 @@ export function Products() {
                     <SheetActionButton
                       icon={<Eye className="w-5 h-5" />}
                       label={t('products.preview.action')}
-                      onClick={() => { close(); navigate(`/preview/product/${p.id}`); }}
+                      onClick={() => { close(); openPreview(`/preview/product/${p.id}`); }}
                     />
                     <SheetActionButton
                       icon={<Share2 className="w-5 h-5" />}
@@ -1041,7 +1043,7 @@ export function Products() {
                     requestStatusTransition(product, transition)
                   }
                   onConvertToAdvanced={() => setProductToConvert(product)}
-                  onPreview={() => navigate(`/preview/product/${product.id}`)}
+                  onPreview={() => openPreview(`/preview/product/${product.id}`)}
                   onShare={() => setProductToShare(product.id)}
                 />
               ))}
@@ -1092,7 +1094,7 @@ export function Products() {
                         onClick={() => handleEdit(product)}
                         className="border-b hover:bg-muted/50 transition-colors"
                       >
-                        <td className="p-4">
+                        <td className="p-4" onClick={(e) => e.stopPropagation()}>
                           <Checkbox
                             checked={selectedProducts.includes(product.id)}
                             onCheckedChange={() => toggleProductSelection(product.id)}
@@ -1139,7 +1141,7 @@ export function Products() {
                               requestStatusTransition(product, transition)
                             }
                             onConvertToAdvanced={() => setProductToConvert(product)}
-                            onPreview={() => navigate(`/preview/product/${product.id}`)}
+                            onPreview={() => openPreview(`/preview/product/${product.id}`)}
                             onShare={() => setProductToShare(product.id)}
                           />
                         </td>
@@ -1256,7 +1258,7 @@ function ProductGridCard({
               )}
             </div>
           )}
-          <div className="absolute top-3 left-3 z-10">
+          <div className="absolute top-3 left-3 z-10" onClick={(e) => e.stopPropagation()}>
             <Checkbox
               checked={selected}
               onCheckedChange={onToggleSelect}
@@ -1341,80 +1343,93 @@ function ProductActionsMenu({
   const archiveTransition = transitions.find((t) => t.intent === 'archive');
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-8 w-8">
-          <MoreHorizontal className="w-4 h-4" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuItem
-          onClick={editLocked ? undefined : onEdit}
-          disabled={editLocked}
-        >
-          <Edit className="w-4 h-4 mr-2" />
-          {editLocked ? t('products.ai.editLocked') : t('common.actions.edit')}
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={onPreview}>
-          <Eye className="w-4 h-4 mr-2" />
-          {t('products.preview.action')}
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={onShare}>
-          <Share2 className="w-4 h-4 mr-2" />
-          {t('products.share.action')}
-        </DropdownMenuItem>
-
-        {product.mode === 'simple' && (
-          <DropdownMenuItem onClick={onConvertToAdvanced}>
-            <Wand2 className="w-4 h-4 mr-2" />
-            {t('products.actions.convertToAdvanced')}
-          </DropdownMenuItem>
-        )}
-
-        {nonArchiveTransitions.map((transition) => {
-          const meta = STATUS_TRANSITION_META[transition.intent];
-          const Icon = meta.Icon;
-          return (
-            <DropdownMenuItem
-              key={transition.intent}
-              onClick={() => onStatusTransition(transition)}
-            >
-              <Icon className="w-4 h-4 mr-2" />
-              {t(transition.labelKey)}
-            </DropdownMenuItem>
-          );
-        })}
-
-        {showEnable && (
-          <DropdownMenuItem onClick={() => onVectorisationAction('enable')}>
-            <Sparkles className="w-4 h-4 mr-2" />
-            {t('products.ai.enable')}
-          </DropdownMenuItem>
-        )}
-        {showRetry && (
-          <DropdownMenuItem onClick={() => onVectorisationAction('retry')}>
-            <RotateCw className="w-4 h-4 mr-2" />
-            {t('products.ai.retry')}
-          </DropdownMenuItem>
-        )}
-        {showDisable && (
-          <DropdownMenuItem onClick={() => onVectorisationAction('disable')}>
-            <XCircle className="w-4 h-4 mr-2" />
-            {t('products.ai.disable')}
-          </DropdownMenuItem>
-        )}
-
-        {archiveTransition && (
+    /**
+     * The click trap is load-bearing, not defensive.
+     *
+     * This menu renders inside a table row and a grid card that each navigate to
+     * the editor on click. Radix portals the menu out of the DOM, but React
+     * still bubbles its events up the *component* tree — so "Preview" navigated
+     * to the preview route and was immediately overwritten by the row's own
+     * navigation to the editor, and "Share" opened its dialog on a page that was
+     * already unmounting. Stopping here covers the trigger too, which otherwise
+     * opened the editor behind the menu.
+     */
+    <div onClick={(e) => e.stopPropagation()}>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="icon" className="h-8 w-8">
+            <MoreHorizontal className="w-4 h-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
           <DropdownMenuItem
-            onClick={() => onStatusTransition(archiveTransition)}
-            className="text-destructive"
+            onClick={editLocked ? undefined : onEdit}
+            disabled={editLocked}
           >
-            <Trash2 className="w-4 h-4 mr-2" />
-            {t(archiveTransition.labelKey)}
+            <Edit className="w-4 h-4 mr-2" />
+            {editLocked ? t('products.ai.editLocked') : t('common.actions.edit')}
           </DropdownMenuItem>
-        )}
-      </DropdownMenuContent>
-    </DropdownMenu>
+          <DropdownMenuItem onClick={onPreview}>
+            <Eye className="w-4 h-4 mr-2" />
+            {t('products.preview.action')}
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={onShare}>
+            <Share2 className="w-4 h-4 mr-2" />
+            {t('products.share.action')}
+          </DropdownMenuItem>
+
+          {product.mode === 'simple' && (
+            <DropdownMenuItem onClick={onConvertToAdvanced}>
+              <Wand2 className="w-4 h-4 mr-2" />
+              {t('products.actions.convertToAdvanced')}
+            </DropdownMenuItem>
+          )}
+
+          {nonArchiveTransitions.map((transition) => {
+            const meta = STATUS_TRANSITION_META[transition.intent];
+            const Icon = meta.Icon;
+            return (
+              <DropdownMenuItem
+                key={transition.intent}
+                onClick={() => onStatusTransition(transition)}
+              >
+                <Icon className="w-4 h-4 mr-2" />
+                {t(transition.labelKey)}
+              </DropdownMenuItem>
+            );
+          })}
+
+          {showEnable && (
+            <DropdownMenuItem onClick={() => onVectorisationAction('enable')}>
+              <Sparkles className="w-4 h-4 mr-2" />
+              {t('products.ai.enable')}
+            </DropdownMenuItem>
+          )}
+          {showRetry && (
+            <DropdownMenuItem onClick={() => onVectorisationAction('retry')}>
+              <RotateCw className="w-4 h-4 mr-2" />
+              {t('products.ai.retry')}
+            </DropdownMenuItem>
+          )}
+          {showDisable && (
+            <DropdownMenuItem onClick={() => onVectorisationAction('disable')}>
+              <XCircle className="w-4 h-4 mr-2" />
+              {t('products.ai.disable')}
+            </DropdownMenuItem>
+          )}
+
+          {archiveTransition && (
+            <DropdownMenuItem
+              onClick={() => onStatusTransition(archiveTransition)}
+              className="text-destructive"
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              {t(archiveTransition.labelKey)}
+            </DropdownMenuItem>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
   );
 }
 

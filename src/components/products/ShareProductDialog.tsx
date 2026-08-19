@@ -1,14 +1,15 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { Copy, MessageCircle, Send } from 'lucide-react';
+import { Check, Copy, Link2, Share2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ResponsiveModal } from '@/components/services/ResponsiveModal';
-import { ChatPreview } from '@/components/rich-text';
+import { ChatPreview, CHANNEL_BRAND, CHANNEL_ORDER } from '@/components/rich-text';
 import { fetchProductById, fetchVariants } from '@/services/products.service';
 import { useStoreStore } from '@/store';
-import { useApiError, useFormatters, useTranslation } from '@/i18n';
+import { useApiError, useFormatters, useTranslation, type TranslationKey } from '@/i18n';
+import { cn } from '@/lib/utils';
 import {
   buildProductShareMessage,
   hydrateDoc,
@@ -31,14 +32,31 @@ type Loaded = {
 };
 
 /**
- * Share a product into a chat.
+ * Per-channel captions.
+ *
+ * The marks and the brand plates themselves live in
+ * `components/rich-text/channels`, shared with the preview panel's channel
+ * switch — so the green a vendor taps to preview a message is the green they
+ * tap to send it.
+ */
+const CHANNEL_LABEL: Record<ShareChannel, TranslationKey> = {
+  whatsapp: 'products.share.whatsapp',
+  telegram: 'products.share.telegram',
+};
+
+/**
+ * Share a product.
  *
  * The description editor's whole premise is that the message a customer
  * receives is what matters, and until this existed there was no way for a vendor
- * to actually send one — the product list's "Preview" item had no handler at
- * all. This closes that loop: the same formatters that drive the in-editor
- * preview produce the message, so what the vendor approved while writing is
- * literally the string that leaves the app.
+ * to actually send one. This closes that loop: the same formatters that drive
+ * the in-editor preview produce the message, so what the vendor approved while
+ * writing is literally the string that leaves the app.
+ *
+ * Three ways out, because vendors do not all live in the same app: the two chat
+ * channels the platform formats for, the device's own share sheet for
+ * everything else (Instagram, SMS, e-mail, AirDrop — none of which this could
+ * enumerate), and the bare link to paste wherever.
  *
  * The detail is fetched on open rather than taken from the list row, because
  * `ProductListItem` deliberately carries only what the grid renders — no slug,
@@ -62,12 +80,21 @@ export function ShareProductDialog({ productId, onOpenChange }: ShareProductDial
    */
   const [entry, setEntry] = useState<{ id: string; data?: Loaded; error?: string } | null>(null);
   const [channel, setChannel] = useState<ShareChannel>('whatsapp');
+  const [linkCopied, setLinkCopied] = useState(false);
 
   const current = entry && entry.id === productId ? entry : null;
   const data = current?.data ?? null;
   const error = current?.error ?? null;
 
   const storeSlug = store?.slug ?? null;
+
+  /**
+   * Read once, not per render: `navigator.share` is a static capability, and
+   * holding it in state keeps the button from appearing under the vendor's
+   * finger mid-interaction. Absent on desktop Firefox, where the two copy
+   * actions are the whole answer.
+   */
+  const [canShareNatively] = useState(() => typeof navigator !== 'undefined' && !!navigator.share);
 
   useEffect(() => {
     if (!productId) return;
@@ -125,10 +152,53 @@ export function ShareProductDialog({ productId, onOpenChange }: ShareProductDial
     onOpenChange(false);
   };
 
-  const copy = async () => {
+  /**
+   * The device's own share sheet.
+   *
+   * The link rides in `url` rather than inside `text` because that is the field
+   * receiving apps unfurl into a preview card — a URL buried in the body arrives
+   * as bare characters. The body is the Telegram (plain) build for the same
+   * reason it is plain there: the sheet hands `text` over verbatim, so WhatsApp's
+   * `*bold*` markers would land as literal asterisks in half the targets.
+   *
+   * `AbortError` is what the sheet throws when the vendor dismisses it, which is
+   * a choice rather than a failure and gets no toast.
+   */
+  const shareNatively = useCallback(async () => {
+    if (!data) return;
+    try {
+      await navigator.share({
+        title: data.title,
+        text: buildProductShareMessage(data, 'telegram'),
+        ...(data.url ? { url: data.url } : {}),
+      });
+      onOpenChange(false);
+    } catch (err) {
+      if ((err as DOMException | undefined)?.name === 'AbortError') return;
+      toast.error(t('products.share.shareFailed'));
+    }
+  }, [data, onOpenChange, t]);
+
+  const copyMessage = async () => {
     if (!message) return;
-    await navigator.clipboard.writeText(message);
-    toast.success(t('products.share.copied'));
+    try {
+      await navigator.clipboard.writeText(message);
+      toast.success(t('products.share.copied'));
+    } catch {
+      toast.error(t('common.toast.copyFailed'));
+    }
+  };
+
+  const copyLink = async () => {
+    if (!data?.url) return;
+    try {
+      await navigator.clipboard.writeText(data.url);
+      setLinkCopied(true);
+      window.setTimeout(() => setLinkCopied(false), 2000);
+      toast.success(t('common.toast.linkCopied'));
+    } catch {
+      toast.error(t('common.toast.copyFailed'));
+    }
   };
 
   return (
@@ -137,20 +207,40 @@ export function ShareProductDialog({ productId, onOpenChange }: ShareProductDial
       onOpenChange={onOpenChange}
       title={t('products.share.title')}
       description={t('products.share.description')}
-      desktopClassName="sm:max-w-lg"
+      desktopClassName="sm:max-w-md"
+      /* The sheet grows to its content instead of claiming 92% of the screen —
+         this is a preview and four buttons, and a half-empty full-height sheet
+         was most of what made the mobile popup look broken. */
+      mobileClassName="h-auto max-h-[92dvh]"
+      /* Side by side at every width: both labels are two words, so the default
+         stacked-on-mobile footer spent a whole row on nothing. */
+      footerClassName="flex-row justify-end"
       footer={
         <>
-          <Button type="button" variant="outline" onClick={copy} disabled={!data} className="sm:mr-auto">
-            <Copy className="mr-2 size-4" />
-            {t('products.share.copy')}
+          <Button
+            type="button"
+            variant="outline"
+            onClick={copyLink}
+            disabled={!data?.url}
+            title={data && !data.url ? t('products.share.noStoreUrl') : undefined}
+            className="min-w-0 flex-1 sm:flex-none"
+          >
+            {linkCopied ? (
+              <Check className="mr-2 size-4 shrink-0 text-emerald-600" />
+            ) : (
+              <Link2 className="mr-2 size-4 shrink-0" />
+            )}
+            <span className="truncate">{t('common.actions.copyLink')}</span>
           </Button>
-          <Button type="button" variant="outline" onClick={() => openChannel('telegram')} disabled={!data}>
-            <Send className="mr-2 size-4" />
-            {t('products.share.telegram')}
-          </Button>
-          <Button type="button" onClick={() => openChannel('whatsapp')} disabled={!data}>
-            <MessageCircle className="mr-2 size-4" />
-            {t('products.share.whatsapp')}
+          <Button
+            type="button"
+            variant="outline"
+            onClick={copyMessage}
+            disabled={!data}
+            className="min-w-0 flex-1 sm:flex-none"
+          >
+            <Copy className="mr-2 size-4 shrink-0" />
+            <span className="truncate">{t('products.share.copy')}</span>
           </Button>
         </>
       }
@@ -160,15 +250,13 @@ export function ShareProductDialog({ productId, onOpenChange }: ShareProductDial
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       ) : !data ? (
-        <div className="space-y-2">
+        <div className="space-y-3">
           <Skeleton className="h-6 w-2/3" />
           <Skeleton className="h-28 w-full" />
+          <Skeleton className="h-11 w-32" />
         </div>
       ) : (
-        <div className="space-y-3">
-          {!data.url && (
-            <p className="text-xs text-muted-foreground">{t('products.share.noStoreUrl')}</p>
-          )}
+        <div className="space-y-4">
           {/* `telegramFormat="plain"` because this dialog sends through
               `t.me/share/url`, which renders its text verbatim — the marks are
               genuinely lost on that route, and the preview says so. */}
@@ -183,6 +271,56 @@ export function ShareProductDialog({ productId, onOpenChange }: ShareProductDial
           {channel === 'telegram' && (
             <p className="text-xs text-muted-foreground">{t('products.share.telegramPlainNote')}</p>
           )}
+          {!data.url && (
+            <p className="text-xs text-muted-foreground">{t('products.share.noStoreUrl')}</p>
+          )}
+
+          <div className="space-y-2">
+            {/* One caption for the row. Naming each button as well is the text
+                the mark already carries — and on a 360px sheet it is the text
+                that pushed the buttons out of the dialog. */}
+            <p className="text-xs font-medium text-muted-foreground">
+              {t('products.share.sendVia')}
+            </p>
+            <div className="flex flex-wrap items-center gap-3">
+              {CHANNEL_ORDER.map((target) => {
+                const { Mark, plate } = CHANNEL_BRAND[target];
+                return (
+                  <button
+                    key={target}
+                    type="button"
+                    onClick={() => openChannel(target)}
+                    title={t(CHANNEL_LABEL[target])}
+                    aria-label={t(CHANNEL_LABEL[target])}
+                    className={cn(
+                      'flex size-11 shrink-0 items-center justify-center rounded-full text-white',
+                      'transition-colors focus-visible:outline-none focus-visible:ring-2',
+                      'focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+                      plate,
+                    )}
+                  >
+                    <Mark className="size-6" />
+                  </button>
+                );
+              })}
+              {canShareNatively && (
+                <button
+                  type="button"
+                  onClick={() => void shareNatively()}
+                  title={t('products.share.moreApps')}
+                  aria-label={t('products.share.moreApps')}
+                  className={cn(
+                    'flex size-11 shrink-0 items-center justify-center rounded-full',
+                    'bg-muted text-foreground transition-colors hover:bg-accent',
+                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                    'focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+                  )}
+                >
+                  <Share2 className="size-5" />
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </ResponsiveModal>

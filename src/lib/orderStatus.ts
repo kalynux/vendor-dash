@@ -63,6 +63,29 @@ const DISPATCH_TERMINAL_STATUSES: OrderStatus[] = ['cancelled', 'delivered', 're
  */
 const COD_DISPATCHABLE_PAYMENT_STATUSES: PaymentStatus[] = ['AWAITING_PAYMENT', 'partially_paid', 'paid'];
 
+/**
+ * Whether any of the order's shipments is still waiting to reach its agency.
+ *
+ * Dispatch only advances shipments in `pending` — once every one is `assigned`
+ * or further along, `POST /orders/:id/dispatch` is an accepted no-op, so the
+ * action must stop being offered rather than sit at the top of an order that is
+ * already with its agency. Reassigning an item can put a fresh `pending`
+ * shipment back on the order, which correctly brings the action back.
+ *
+ * Returns `true` when no delivery info is loaded at all: the orders *list*
+ * response carries none, and bulk dispatch there must stay available.
+ */
+function hasPendingShipment(order: Order): boolean {
+  if (order.deliveries?.length) {
+    return order.deliveries.some((d) => d.deliveryStatus === 'pending');
+  }
+  const withDelivery = order.items.filter((item) => item.delivery);
+  if (withDelivery.length > 0) {
+    return withDelivery.some((item) => item.delivery!.deliveryStatus === 'pending');
+  }
+  return true;
+}
+
 /** Whether a single order can be dispatched to its delivery agency right now. */
 export function canDispatchOrder(order: Order): boolean {
   const paymentOk = order.paymentMethod === 'cash_on_delivery'
@@ -72,7 +95,8 @@ export function canDispatchOrder(order: Order): boolean {
     order.orderType === 'physical' &&
     paymentOk &&
     !isOrderFrozen(order) &&
-    !DISPATCH_TERMINAL_STATUSES.includes(order.status)
+    !DISPATCH_TERMINAL_STATUSES.includes(order.status) &&
+    hasPendingShipment(order)
   );
 }
 

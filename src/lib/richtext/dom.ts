@@ -101,9 +101,44 @@ function marksFromElement(el: HTMLElement): Partial<Marks> {
   return out;
 }
 
-/** Collect the inline content of one block-level container. */
+const BLOCK_TAGS = new Set(['p', 'div', 'ul', 'ol', 'li', 'blockquote', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6']);
+
+/** The same set as a selector, for asking "is there block structure below here?". */
+const BLOCK_SELECTOR = Array.from(BLOCK_TAGS).join(',');
+
+function tagOf(node: Node): string {
+  return node.nodeType === Node.ELEMENT_NODE ? (node as HTMLElement).tagName.toLowerCase() : '';
+}
+
+function isListTag(tag: string): boolean {
+  return tag === 'ul' || tag === 'ol';
+}
+
+/**
+ * Whether an element wraps block-level structure rather than being one block.
+ *
+ * This is the question that decides between descending into an element and
+ * flattening it, and getting it wrong is not cosmetic — see `walkBlocks`.
+ */
+function containsBlock(el: HTMLElement): boolean {
+  return el.querySelector(BLOCK_SELECTOR) !== null;
+}
+
+/**
+ * Collect the inline content of one block-level container.
+ *
+ * Any block-level element that reaches this function is one the caller decided
+ * to flatten — a heading, a `<p>` nested inside a list item, a stray `<div>`. It
+ * opens a line break rather than being concatenated, because two paragraphs
+ * flattened into `firstsecond` is a sentence the vendor never wrote.
+ */
 function collectInline(root: Node): InlineNode[] {
   const out: InlineNode[] = [];
+
+  const endsWithNewline = (): boolean => {
+    const prev = out[out.length - 1];
+    return !prev || prev.text.endsWith('\n');
+  };
 
   const walk = (node: Node, marks: Marks, href: string | null): void => {
     if (node.nodeType === Node.TEXT_NODE) {
@@ -126,6 +161,10 @@ function collectInline(root: Node): InlineNode[] {
       return;
     }
 
+    if (BLOCK_TAGS.has(tag) && !endsWithNewline()) {
+      out.push({ type: 'text', text: '\n', ...marks });
+    }
+
     let nextHref = href;
     if (tag === 'a') {
       const candidate = el.getAttribute('href') ?? '';
@@ -143,53 +182,110 @@ function collectInline(root: Node): InlineNode[] {
   return out;
 }
 
-const BLOCK_TAGS = new Set(['p', 'div', 'ul', 'ol', 'li', 'blockquote', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6']);
+/**
+ * Read a `<ul>`/`<ol>` into list items, appending to `items`.
+ *
+ * Nested lists are *promoted* to entries of the same list rather than being
+ * folded into their parent item's text. The document model has no nesting —
+ * neither messenger renders an indent — so the real choice is between one bullet
+ * per line and several lines run together into one, and only the first is
+ * readable.
+ */
+function collectListItems(list: HTMLElement, items: InlineNode[][]): void {
+  list.childNodes.forEach((child) => {
+    if (child.nodeType !== Node.ELEMENT_NODE) return; // whitespace between items
+    const el = child as HTMLElement;
+    const tag = tagOf(el);
+
+    // A list that lost its `<li>` — what outdenting a nested list leaves behind.
+    if (isListTag(tag)) {
+      collectListItems(el, items);
+      return;
+    }
+    if (tag !== 'li') return;
+
+    // Split the item into its own inline content and any list nested inside it,
+    // so the nested entries become entries here instead of being swallowed.
+    const holder = el.ownerDocument.createElement('div');
+    const nested: HTMLElement[] = [];
+    el.childNodes.forEach((node) => {
+      if (isListTag(tagOf(node))) {
+        nested.push(node as HTMLElement);
+        return;
+      }
+      holder.appendChild(node.cloneNode(true));
+    });
+
+    const own = collectInline(holder);
+    if (own.length) items.push(own);
+    nested.forEach((n) => collectListItems(n, items));
+  });
+}
 
 /**
- * Serialise the editor surface into a canonical document.
+ * Walk one container, appending the blocks it holds.
  *
- * Loose inline content at the root — which is what a browser leaves behind after
- * "select all, delete, type" — is gathered into an implicit paragraph rather
- * than discarded. Headings and blockquotes that survive a paste are flattened to
+ * Recursive, and that is the whole point. Chrome's `insertUnorderedList` does
+ * not replace the paragraph it was invoked on — it puts the list *inside* it and
+ * leaves `<p><ul><li>…</li><li>…</li></ul></p>` behind. A walk that only
+ * recognised lists among the root's own children read that `<p>` as a single
+ * paragraph and flattened it, so every bullet a vendor typed arrived as one
+ * run-together line in the message. A block that itself contains blocks is
+ * therefore a *container*, at any depth, and only a block whose content is
+ * purely inline becomes a paragraph.
+ *
+ * Loose inline content — which is what a browser leaves behind after "select
+ * all, delete, type" — is gathered into an implicit paragraph rather than
+ * discarded. Headings and blockquotes that survive a paste are flattened to
  * paragraphs, because the document model has no such blocks and no chat client
  * would render them anyway.
  */
-export function htmlToDoc(root: HTMLElement): RichDoc {
-  const blocks: Block[] = [];
+function walkBlocks(container: HTMLElement, blocks: Block[]): void {
   let loose: ChildNode[] = [];
 
   const flushLoose = () => {
     if (loose.length === 0) return;
-    const holder = root.ownerDocument.createElement('div');
+    const holder = container.ownerDocument.createElement('div');
     loose.forEach((n) => holder.appendChild(n.cloneNode(true)));
     const text = collectInline(holder);
     if (text.length) blocks.push({ type: 'paragraph', text });
     loose = [];
   };
 
-  root.childNodes.forEach((child) => {
-    const isBlock =
-      child.nodeType === Node.ELEMENT_NODE &&
-      BLOCK_TAGS.has((child as HTMLElement).tagName.toLowerCase());
-
-    if (!isBlock) {
+  container.childNodes.forEach((child) => {
+    if (child.nodeType !== Node.ELEMENT_NODE) {
       loose.push(child);
       return;
     }
 
-    flushLoose();
     const el = child as HTMLElement;
-    const tag = el.tagName.toLowerCase();
+    const tag = tagOf(el);
 
-    if (tag === 'ul' || tag === 'ol') {
+    // An inline element belongs to the paragraph being gathered — unless it is
+    // hiding block structure, which a paste or a browser quirk can produce.
+    if (!BLOCK_TAGS.has(tag)) {
+      if (!containsBlock(el)) {
+        loose.push(child);
+        return;
+      }
+      flushLoose();
+      walkBlocks(el, blocks);
+      return;
+    }
+
+    flushLoose();
+
+    if (isListTag(tag)) {
       const items: InlineNode[][] = [];
-      el.querySelectorAll(':scope > li').forEach((li) => {
-        const item = collectInline(li);
-        if (item.length) items.push(item);
-      });
+      collectListItems(el, items);
       if (items.length) {
         blocks.push(tag === 'ol' ? { type: 'list', ordered: true, items } : { type: 'list', items });
       }
+      return;
+    }
+
+    if (containsBlock(el)) {
+      walkBlocks(el, blocks);
       return;
     }
 
@@ -198,5 +294,11 @@ export function htmlToDoc(root: HTMLElement): RichDoc {
   });
 
   flushLoose();
+}
+
+/** Serialise the editor surface into a canonical document. */
+export function htmlToDoc(root: HTMLElement): RichDoc {
+  const blocks: Block[] = [];
+  walkBlocks(root, blocks);
   return normalizeDoc({ version: RICH_DOC_VERSION, blocks });
 }

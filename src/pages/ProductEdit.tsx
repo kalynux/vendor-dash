@@ -7,6 +7,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { PageBackButton } from '@/components/layout/PageBackButton';
+import { useOpenPreview } from '@/components/preview';
 import { ShareProductDialog } from '@/components/products/ShareProductDialog';
 import { ProductStepIndicator } from '@/components/products/ProductStepIndicator';
 import { StepTypeSelect } from '@/components/products/steps/StepTypeSelect';
@@ -176,6 +177,7 @@ export function ProductEdit() {
   const apiError = useApiError();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const openPreview = useOpenPreview();
   const [state, dispatch] = useReducer(wizardReducer, INITIAL_STATE);
   // Safety net for the race where a product is converted (or was already simple)
   // in another tab: the variant/option writes 409 and we offer the escape hatch
@@ -929,6 +931,7 @@ export function ProductEdit() {
       <div className="px-4 sm:px-0">
         <PageBackButton
           fallbackPath="/dashboard/products"
+          alwaysFallback
           label={t('products.wizard.backToProducts')}
           className="mb-1"
         />
@@ -951,7 +954,7 @@ export function ProductEdit() {
                 variant="outline"
                 size="sm"
                 className="shrink-0 gap-1.5"
-                onClick={() => navigate(`/preview/product/${state.productId}`)}
+                onClick={() => openPreview(`/preview/product/${state.productId}`)}
               >
                 <Eye className="w-4 h-4" />
                 <span className="hidden sm:inline">{t('products.preview.action')}</span>

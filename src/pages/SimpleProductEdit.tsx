@@ -16,6 +16,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { PageBackButton } from '@/components/layout/PageBackButton';
+import { useOpenPreview } from '@/components/preview';
 import { AgencySelector } from '@/components/products/review/AgencySelector';
 import {
   SimpleProductForm,
@@ -56,6 +57,7 @@ import type { StockRequestDto } from '@/types/stock-requests.types';
 export function SimpleProductEdit() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const openPreview = useOpenPreview();
 
   const { t } = useTranslation();
   const m = useMessage();
@@ -411,6 +413,7 @@ export function SimpleProductEdit() {
       <div className="max-w-3xl mx-auto space-y-4">
         <PageBackButton
           fallbackPath="/dashboard/products"
+          alwaysFallback
           label={t('products.wizard.backToProducts')}
         />
         <Alert variant="destructive">
@@ -441,6 +444,7 @@ export function SimpleProductEdit() {
         <div className="min-w-0">
           <PageBackButton
             fallbackPath="/dashboard/products"
+            alwaysFallback
             label={t('products.wizard.backToProducts')}
             className="mb-1"
           />
@@ -462,7 +466,7 @@ export function SimpleProductEdit() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => navigate(`/preview/product/${product.id}`)}>
+            <DropdownMenuItem onClick={() => openPreview(`/preview/product/${product.id}`)}>
               <Eye className="w-4 h-4 mr-2" />
               {t('products.preview.action')}
             </DropdownMenuItem>

@@ -231,7 +231,32 @@ export function ProductUpload() {
           seoTitle: values.seoTitle || undefined,
           seoDescription: values.seoDescription || undefined,
         });
-        advance({ serverProduct: product, productId: product.id });
+
+        // Free delivery is ON for every new physical product. `POST /products`
+        // takes no `delivery` block, so the default has to be written straight
+        // after the create — it cannot ride along.
+        //
+        // Not a promotion: the platform never bills delivery to the customer at
+        // checkout, so the vendor carries the agency fee either way, and `false`
+        // only means the fee gets folded into the price instead. Starting there
+        // would quietly make every new listing look more expensive than it is.
+        //
+        // Deliberately non-blocking — a draft that exists with the wrong default
+        // is recoverable from the review step's switch; a wizard that refuses to
+        // advance because a default could not be written is not.
+        let created = product;
+        if (state.productType === 'physical') {
+          try {
+            const { data } = await updateProduct(product.id, {
+              delivery: { freeDelivery: true },
+            });
+            created = data;
+          } catch {
+            // Left at the backend default; the review step shows the real value.
+          }
+        }
+
+        advance({ serverProduct: created, productId: created.id });
       } catch (err: unknown) {
         const msg = apiError.resolve(err, { fallbackKey: 'products.errors.saveFailed' });
         dispatch({ type: 'SET_STEP_ERROR', error: msg });

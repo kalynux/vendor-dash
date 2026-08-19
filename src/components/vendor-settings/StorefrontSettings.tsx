@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState, type ComponentProps, type ReactNode } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   Loader2,
   Image as ImageIcon,
@@ -34,6 +33,7 @@ import { ApiError } from '@/types/api';
 import type { ApiFile, FileRef } from '@/types/file.types';
 import type { StoreUpdatePayload, VendorStore } from '@/types/store.types';
 import { storePath, storefrontUrl } from '@/lib/storefront/urls';
+import { useOpenPreview } from '@/components/preview';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -161,7 +161,7 @@ function validateForm(form: FormState): FieldErrors {
 export function StorefrontSettings() {
   const { t } = useTranslation();
   const fmt = useFormatters();
-  const navigate = useNavigate();
+  const openPreview = useOpenPreview();
   const { store, isLoading, fetchStore, applyStore } = useStoreStore();
 
   const [form, setForm] = useState<FormState | null>(null);
@@ -442,7 +442,7 @@ export function StorefrontSettings() {
                 variant="outline"
                 size="sm"
                 className="gap-1.5"
-                onClick={() => navigate('/preview/store')}
+                onClick={() => openPreview('/preview/store')}
               >
                 <Eye className="w-3.5 h-3.5" />
                 {t('settings.storefront.preview.action')}

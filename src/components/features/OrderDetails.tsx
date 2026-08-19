@@ -50,6 +50,7 @@ import { ReassignAgencyPopover } from '@/components/orders/ReassignAgencyPopover
 import { ApiError } from '@/types/api';
 import { toast } from 'sonner';
 import { formatPhoneInternational } from '@/lib/phone';
+import { useProductImages } from '@/hooks/use-product-images';
 import { useTranslation, useFormatters, Trans } from '@/i18n';
 import type { Order, Entitlement, OrderTimelineEvent, VendorSettableStatus } from '@/types';
 import { getNextStatuses, STATUS_ACTION_KEYS, ORDER_STATUS_KEYS, canDispatchOrder } from '@/lib/orderStatus';
@@ -105,6 +106,9 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
   } | null>(null);
   const [actionReason, setActionReason] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
+
+  // Order items ship without a thumbnail — resolve one per product from the catalog.
+  const productImages = useProductImages(currentOrder.items.map((item) => item.productId));
 
   const isPhysical = currentOrder.orderType === 'physical';
   const isDigital = currentOrder.orderType === 'digital';
@@ -380,13 +384,13 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
         <TabsContent value="details" className="space-y-4 mt-4 flex-1 overflow-y-auto min-h-0 pr-2">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch">
             {/* Customer */}
-            <Card className="h-full flex flex-col">
-              <CardHeader>
+            <Card className="h-full gap-3">
+              <CardHeader className="px-4 pt-4">
                 <CardTitle className="text-sm font-medium flex items-center gap-2">
                   <User className="w-4 h-4 text-muted-foreground" /> {t('orders.detail.customer.title')}
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4 flex-1 flex flex-col justify-between">
+              <CardContent className="px-4 pb-4 space-y-3">
                 <div className="flex items-center gap-3">
                   <img
                     src={currentOrder.customer.avatar || `https://i.pravatar.cc/150?u=${currentOrder.customer.id}`}
@@ -404,7 +408,7 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
                     )}
                   </div>
                 </div>
-                <div className="pt-3 border-t grid grid-cols-2 gap-4">
+                <div className="pt-3 border-t grid grid-cols-2 gap-3">
                   <div>
                     <p className="text-base font-bold">{currentOrder.customer.orderCount}</p>
                     <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">{t('orders.detail.customer.orderCount')}</p>
@@ -419,13 +423,13 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
 
             {/* Shipping / Delivery method */}
             {isDigital ? (
-              <Card className="h-full flex flex-col">
-                <CardHeader>
+              <Card className="h-full gap-3">
+                <CardHeader className="px-4 pt-4">
                   <CardTitle className="text-sm font-medium flex items-center gap-2">
                     <Download className="w-4 h-4 text-muted-foreground" /> {t('orders.detail.shipping.deliveryMethodTitle')}
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="flex-1 flex flex-col justify-center">
+                <CardContent className="px-4 pb-4">
                   <div className="flex items-start gap-3 p-3 rounded-lg bg-violet-50/70 border border-violet-100/80">
                     <div className="w-8 h-8 rounded-full bg-violet-100 flex items-center justify-center flex-shrink-0 text-violet-700">
                       <Download className="w-4 h-4" />
@@ -440,13 +444,13 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
                 </CardContent>
               </Card>
             ) : (
-              <Card className="h-full flex flex-col">
-                <CardHeader>
+              <Card className="h-full gap-3">
+                <CardHeader className="px-4 pt-4">
                   <CardTitle className="text-sm font-medium flex items-center gap-2">
                     <MapPin className="w-4 h-4 text-muted-foreground" /> {t('orders.detail.shipping.addressTitle')}
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="flex-1 flex flex-col justify-start">
+                <CardContent className="px-4 pb-4">
                   {currentOrder.customer.defaultAddress ? (
                     <div className="space-y-1 text-xs leading-relaxed text-muted-foreground">
                       <p className="font-semibold text-foreground text-sm">
@@ -472,8 +476,8 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
 
           {/* Shipments (physical, multi-agency) */}
           {isPhysical && currentOrder.deliveries && currentOrder.deliveries.length > 0 && (
-            <Card>
-              <CardHeader className="pb-3">
+            <Card className="gap-3">
+              <CardHeader className="px-4 pt-4">
                 <CardTitle className="text-sm font-medium flex items-center gap-2">
                   <Truck className="w-4 h-4 text-muted-foreground" />
                   {currentOrder.deliveries.length > 1
@@ -481,11 +485,11 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
                     : t('orders.detail.shipping.shipmentsTitle')}
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3">
+              <CardContent className="px-4 pb-4 space-y-3">
                 {currentOrder.deliveries.map((shipment, i) => (
                   <div
                     key={shipment.shipmentId ?? i}
-                    className={i > 0 ? 'pt-3 border-t grid grid-cols-2 gap-4 text-xs' : 'grid grid-cols-2 gap-4 text-xs'}
+                    className={i > 0 ? 'pt-3 border-t grid grid-cols-2 gap-3 text-xs' : 'grid grid-cols-2 gap-3 text-xs'}
                   >
                     <div>
                       <p className="text-muted-foreground text-[10px] uppercase tracking-wider font-semibold mb-1">{t('orders.detail.shipping.agency')}</p>
@@ -515,13 +519,13 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
           )}
 
           {/* Order Summary */}
-          <Card>
-            <CardHeader className="pb-3">
+          <Card className="gap-3">
+            <CardHeader className="px-4 pt-4">
               <CardTitle className="text-sm font-medium flex items-center gap-2">
                 <Package className="w-4 h-4 text-muted-foreground" /> {t('orders.detail.summary.title')}
               </CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-4 pb-4">
               <div className="space-y-2 text-xs">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">{t('orders.detail.summary.subtotal')}</span>
@@ -555,14 +559,16 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
         {/* ── Items tab ── */}
         <TabsContent value="items" className="mt-4 flex-1 overflow-y-auto min-h-0 pr-2">
           <div className="space-y-3">
-            {currentOrder.items.map((item) => (
+            {currentOrder.items.map((item) => {
+              const image = item.image ?? productImages[item.productId];
+              return (
               <Card key={item.id} className="hover:shadow-sm transition-shadow">
                 <CardContent className="p-4 space-y-3">
                   <div className="flex items-center justify-between gap-4">
                     {/* Product Details (Left) */}
                     <div className="flex items-center gap-4 min-w-0">
-                      {item.image ? (
-                        <img src={item.image} alt={item.name} crossOrigin="use-credentials" className="w-14 h-14 rounded-lg object-cover flex-shrink-0 border" />
+                      {image ? (
+                        <img src={image} alt={item.name} crossOrigin="use-credentials" className="w-14 h-14 rounded-lg object-cover flex-shrink-0 border" />
                       ) : (
                         <div className="w-14 h-14 rounded-lg bg-primary/10 text-primary flex items-center justify-center flex-shrink-0 font-bold border">
                           {item.name.charAt(0)}
@@ -627,7 +633,8 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
                   )}
                 </CardContent>
               </Card>
-            ))}
+              );
+            })}
           </div>
         </TabsContent>
 
@@ -696,13 +703,13 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
 
           {/* Delivery Timeline (physical, multi-agency shipment history) */}
           {isPhysical && currentOrder.deliveryTimeline && currentOrder.deliveryTimeline.length > 0 && (
-            <Card>
-              <CardHeader className="pb-3">
+            <Card className="gap-3">
+              <CardHeader className="px-4 pt-4">
                 <CardTitle className="text-sm font-medium flex items-center gap-2">
                   <Truck className="w-4 h-4 text-muted-foreground" /> {t('orders.detail.shipping.deliveryTimeline')}
                 </CardTitle>
               </CardHeader>
-              <CardContent className="p-6 pt-0">
+              <CardContent className="px-4 pb-4">
                 <div className="space-y-2">
                   {currentOrder.deliveryTimeline.map((entry, index) => {
                     const isLast = index === currentOrder.deliveryTimeline!.length - 1;
@@ -736,14 +743,14 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
 
         {/* ── Payment tab ── */}
         <TabsContent value="payment" className="space-y-4 mt-4 flex-1 overflow-y-auto min-h-0 pr-2">
-          <Card>
-            <CardHeader>
+          <Card className="gap-3">
+            <CardHeader className="px-4 pt-4">
               <CardTitle className="text-sm font-medium flex items-center gap-2">
                 <CreditCard className="w-4 h-4" /> {t('orders.detail.payment.title')}
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4 text-sm">
+            <CardContent className="px-4 pb-4 space-y-4">
+              <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
                 <div>
                   <p className="text-muted-foreground mb-1">{t('orders.detail.payment.status')}</p>
                   <PaymentStatusBadge status={currentOrder.paymentStatus} />

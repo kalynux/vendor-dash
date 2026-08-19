@@ -10,11 +10,13 @@ import { cn } from '@/lib/utils';
 import { validateActivation } from '@/components/products/schemas/product.schemas';
 import {
   collectCeilingEdits,
+  minCeilingFor,
   seedCeilings,
   validateCeilings,
   variantLabel,
   type BargainCeilingEdit,
 } from '@/components/products/bargain';
+import { VariantThumb } from '@/components/products/VariantThumb';
 import { AgencySelector } from '@/components/products/review/AgencySelector';
 import { useFormatters, useMessage, useTranslation, type TranslationKey } from '@/i18n';
 import type { WizardState, VendorAgencyListItemDto, ApiPickupLocation } from '@/types/product.types';
@@ -51,6 +53,9 @@ export function StepReview({
   const variants = serverData.serverVariants ?? [];
   const isDigital = product?.type === 'digital';
   const isPhysical = product?.type === 'physical';
+  // List rows carry `fileIds`, detail responses carry resolved `files` — only the
+  // latter can stand in for a variant with no picture of its own.
+  const productImages = product && 'files' in product ? product.files : undefined;
 
   const [defaultAgency, setDefaultAgency] =
     useState<VendorAgencyListItemDto | null>(null);
@@ -341,34 +346,41 @@ export function StepReview({
           <div className="space-y-3">
             {bargainVariants.map((v) => {
               const rowError = ceilingErrors[v.id];
+              const minCeiling = minCeilingFor(v.price);
               return (
                 <div
                   key={v.id}
                   className="grid grid-cols-1 gap-2 border-t border-border pt-3 first:border-t-0 first:pt-0 sm:grid-cols-[1fr_auto] sm:items-start"
                 >
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium truncate">{variantLabel(v)}</p>
-                    <div className="mt-0.5 flex flex-wrap items-center gap-2">
-                      <span className="font-mono text-xs text-muted-foreground">{v.sku}</span>
-                      <span className="text-xs tabular-nums text-muted-foreground">
-                        {fmt.currency(v.price)}
-                      </span>
-                      {/* A stored window shows regardless; `bargainable` only decides
-                          whether it reads as live or dimmed. Never struck through —
-                          this is a ceiling, not a "was" price. */}
-                      {v.bargain && (
-                        <Badge
-                          variant="outline"
-                          className={cn('text-[10px] font-normal', !v.bargainable && 'opacity-60')}
-                        >
-                          {t('products.bargain.badge', { max: fmt.currency(v.bargain.maxPrice) })}
-                        </Badge>
-                      )}
-                      {v.bargain && !v.bargainable && (
-                        <span className="text-[10px] text-muted-foreground">
-                          {t('products.bargain.inertHint')}
+                  {/* The variant's own first image, so a vendor pricing a
+                      forty-row matrix recognises the row instead of decoding
+                      "Rouge / XL" against a SKU. */}
+                  <div className="flex min-w-0 items-start gap-3">
+                    <VariantThumb files={v.files} fallback={productImages} />
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">{variantLabel(v)}</p>
+                      <div className="mt-0.5 flex flex-wrap items-center gap-2">
+                        <span className="font-mono text-xs text-muted-foreground">{v.sku}</span>
+                        <span className="text-xs tabular-nums text-muted-foreground">
+                          {fmt.currency(v.price)}
                         </span>
-                      )}
+                        {/* A stored window shows regardless; `bargainable` only decides
+                            whether it reads as live or dimmed. Never struck through —
+                            this is a ceiling, not a "was" price. */}
+                        {v.bargain && (
+                          <Badge
+                            variant="outline"
+                            className={cn('text-[10px] font-normal', !v.bargainable && 'opacity-60')}
+                          >
+                            {t('products.bargain.badge', { max: fmt.currency(v.bargain.maxPrice) })}
+                          </Badge>
+                        )}
+                        {v.bargain && !v.bargainable && (
+                          <span className="text-[10px] text-muted-foreground">
+                            {t('products.bargain.inertHint')}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
 
@@ -379,7 +391,7 @@ export function StepReview({
                     <Input
                       id={`bargain-${v.id}`}
                       type="number"
-                      min={v.price}
+                      min={minCeiling}
                       step="any"
                       inputMode="decimal"
                       value={ceilings[v.id] ?? ''}
@@ -389,11 +401,23 @@ export function StepReview({
                         setCeilings((prev) => ({ ...prev, [v.id]: e.target.value }))
                       }
                       aria-invalid={!!rowError}
+                      aria-describedby={`bargain-${v.id}-hint`}
                       className={cn('h-9 text-sm', rowError && 'border-destructive')}
                     />
-                    {rowError && (
-                      <p className="mt-1 text-xs text-destructive">{t(rowError)}</p>
-                    )}
+                    {/* The floor is spelled out per row rather than only in the
+                        error, because the number depends on this variant's price
+                        and guessing it is the whole difficulty. */}
+                    <p
+                      id={`bargain-${v.id}-hint`}
+                      className={cn(
+                        'mt-1 text-xs',
+                        rowError ? 'text-destructive' : 'text-muted-foreground',
+                      )}
+                    >
+                      {rowError
+                        ? t(rowError)
+                        : t('products.bargain.ceilingMin', { min: fmt.currency(minCeiling) })}
+                    </p>
                   </div>
                 </div>
               );

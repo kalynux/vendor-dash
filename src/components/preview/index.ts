@@ -8,3 +8,8 @@ export {
   type PreviewDevice,
 } from './StorefrontFrame';
 export { useDefaultPreviewDevice } from './useDefaultPreviewDevice';
+export {
+  useOpenPreview,
+  usePreviewBack,
+  type PreviewOriginState,
+} from './origin';

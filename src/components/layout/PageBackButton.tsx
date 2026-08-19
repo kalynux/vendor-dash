@@ -6,6 +6,16 @@ import { cn } from '@/lib/utils';
 interface PageBackButtonProps {
   /** Where to go when there's no in-app history to pop back to. */
   fallbackPath: string;
+  /**
+   * Always go to `fallbackPath` instead of popping history.
+   *
+   * For pages that link *out* to a page which links back here — the editors and
+   * the storefront preview do exactly that — popping is a trap: it returns the
+   * vendor to the preview they just came from instead of to the list, and the
+   * two bounce off each other. Where the parent is unambiguous (and the label
+   * already names it), going there directly is both correct and predictable.
+   */
+  alwaysFallback?: boolean;
   label?: string;
   className?: string;
 }
@@ -17,13 +27,14 @@ interface PageBackButtonProps {
  */
 export function PageBackButton({
   fallbackPath,
+  alwaysFallback = false,
   label = 'Back',
   className,
 }: PageBackButtonProps) {
   const navigate = useNavigate();
 
   const handleClick = () => {
-    if (window.history.length > 1) {
+    if (!alwaysFallback && window.history.length > 1) {
       navigate(-1);
     } else {
       navigate(fallbackPath);

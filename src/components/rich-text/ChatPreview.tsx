@@ -1,7 +1,12 @@
-import { Fragment, useMemo } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { Check, CheckCheck } from 'lucide-react';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { useTranslation } from '@/i18n';
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from '@/components/ui/accordion';
+import { useTranslation, type TranslationKey } from '@/i18n';
 import { cn } from '@/lib/utils';
 import {
   buildProductShareMessage,
@@ -10,6 +15,7 @@ import {
   toTelegramHtml,
   type RichDoc,
 } from '@/lib/richtext';
+import { CHANNEL_BRAND, CHANNEL_ORDER } from './channels';
 import { parseTelegramPreview, parseWhatsAppPreview, type PreviewNode } from './preview';
 
 interface ChatPreviewProps {
@@ -32,7 +38,19 @@ interface ChatPreviewProps {
    * one place it is used to decide whether to press send.
    */
   telegramFormat?: 'html' | 'plain';
-  onChannelChange?: (channel: 'whatsapp' | 'telegram') => void;
+  onChannelChange?: (channel: Channel) => void;
+  /**
+   * Fold the bubble away behind a header the vendor can open.
+   *
+   * On by default nowhere: a dialog whose entire purpose is the preview should
+   * not hide it. It is the *editor* that needs this — toolbar, writing area,
+   * counter and a chat bubble stacked together made the description field taller
+   * than a phone screen, so the message a vendor is composing scrolled out of
+   * view while they typed it.
+   */
+  collapsible?: boolean;
+  /** Only meaningful with `collapsible`. */
+  defaultOpen?: boolean;
   className?: string;
 }
 
@@ -65,6 +83,11 @@ const SKINS = {
 } as const;
 
 type Channel = keyof typeof SKINS;
+
+const CHANNEL_LABEL: Record<Channel, TranslationKey> = {
+  whatsapp: 'products.editor.preview.whatsapp',
+  telegram: 'products.editor.preview.telegram',
+};
 
 function Rendered({ nodes, linkClass }: { nodes: PreviewNode[]; linkClass: string }) {
   return (
@@ -131,11 +154,56 @@ function Bubble({ channel, nodes }: { channel: Channel; nodes: PreviewNode[] }) 
 }
 
 /**
+ * The channel switch.
+ *
+ * Two plates, each in its own platform's colour, rather than a neutral tab strip:
+ * the vendor is choosing between *WhatsApp* and *Telegram*, not between "tab 1"
+ * and "tab 2", and the colour is what makes that legible at a glance on a phone.
+ * The one not being previewed is dimmed rather than greyed out, so both stay
+ * recognisable while only one reads as selected.
+ */
+function ChannelSwitch({
+  value,
+  onPick,
+}: {
+  value: Channel;
+  onPick: (channel: Channel) => void;
+}) {
+  const { t } = useTranslation();
+
+  return (
+    <div className="flex shrink-0 items-center gap-1">
+      {CHANNEL_ORDER.map((id) => {
+        const { Mark, plate } = CHANNEL_BRAND[id];
+        const active = value === id;
+        return (
+          <button
+            key={id}
+            type="button"
+            aria-pressed={active}
+            onClick={() => onPick(id)}
+            className={cn(
+              'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold leading-none text-white',
+              'transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-offset-background',
+              plate,
+              active ? 'shadow-sm' : 'opacity-40 hover:opacity-75',
+            )}
+          >
+            <Mark className="size-3" />
+            {t(CHANNEL_LABEL[id])}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
  * Live preview of the outgoing message, per channel.
  *
- * Both tabs are rendered from the *formatted wire string*, not from the
+ * Both channels are rendered from the *formatted wire string*, not from the
  * document — see `preview.ts`. The two therefore disagree wherever the platforms
- * genuinely disagree, which is the whole reason this is a tabbed preview instead
+ * genuinely disagree, which is the whole reason this is a channel switch instead
  * of one styled box.
  */
 export function ChatPreview({
@@ -145,9 +213,13 @@ export function ChatPreview({
   url,
   telegramFormat = 'html',
   onChannelChange,
+  collapsible = false,
+  defaultOpen = false,
   className,
 }: ChatPreviewProps) {
   const { t } = useTranslation();
+  const [channel, setChannel] = useState<Channel>('whatsapp');
+  const [open, setOpen] = useState(defaultOpen);
 
   const nodes = useMemo(() => {
     if (isEmptyDoc(doc) && !title?.trim() && !price) {
@@ -175,33 +247,53 @@ export function ChatPreview({
     return { wa, tg: parseTelegramPreview(parts.join('\n\n')) };
   }, [doc, title, price, url, telegramFormat, t]);
 
-  return (
-    <div className={cn('overflow-hidden rounded-lg border border-border', className)}>
-      <Tabs
-        defaultValue="whatsapp"
-        onValueChange={(value) => onChannelChange?.(value as Channel)}
-      >
-        <div className="flex items-center justify-between gap-2 border-b border-border bg-muted/40 px-2 py-1.5">
+  /** Picking a platform is a request to see it, so it also opens the panel. */
+  function pick(next: Channel) {
+    setChannel(next);
+    onChannelChange?.(next);
+    setOpen(true);
+  }
+
+  const bubble = <Bubble channel={channel} nodes={channel === 'whatsapp' ? nodes.wa : nodes.tg} />;
+
+  if (!collapsible) {
+    return (
+      <div className={cn('overflow-hidden rounded-lg border border-border', className)}>
+        <div className="flex items-center gap-2 border-b border-border bg-muted/40 px-2 py-1.5">
           <span className="pl-1 text-xs font-medium text-muted-foreground">
             {t('products.editor.preview.label')}
           </span>
-          <TabsList className="h-7">
-            <TabsTrigger value="whatsapp" className="h-6 px-2.5 text-xs">
-              {t('products.editor.preview.whatsapp')}
-            </TabsTrigger>
-            <TabsTrigger value="telegram" className="h-6 px-2.5 text-xs">
-              {t('products.editor.preview.telegram')}
-            </TabsTrigger>
-          </TabsList>
+          <div className="ml-auto">
+            <ChannelSwitch value={channel} onPick={pick} />
+          </div>
         </div>
+        {bubble}
+      </div>
+    );
+  }
 
-        <TabsContent value="whatsapp" className="mt-0">
-          <Bubble channel="whatsapp" nodes={nodes.wa} />
-        </TabsContent>
-        <TabsContent value="telegram" className="mt-0">
-          <Bubble channel="telegram" nodes={nodes.tg} />
-        </TabsContent>
-      </Tabs>
+  return (
+    <div className={cn('overflow-hidden rounded-lg border border-border', className)}>
+      <Accordion
+        type="single"
+        collapsible
+        value={open ? 'preview' : ''}
+        onValueChange={(next) => setOpen(next === 'preview')}
+      >
+        <AccordionItem value="preview" className="border-b-0">
+          <div className="flex items-center gap-2 bg-muted/40 px-2 py-1.5">
+            <AccordionTrigger className="flex-none items-center gap-1.5 py-1 pl-1 text-xs font-medium text-muted-foreground hover:no-underline [&>svg]:translate-y-0">
+              {t('products.editor.preview.label')}
+            </AccordionTrigger>
+            <div className="ml-auto">
+              <ChannelSwitch value={channel} onPick={pick} />
+            </div>
+          </div>
+          <AccordionContent className="p-0 pb-0">
+            <div className="border-t border-border">{bubble}</div>
+          </AccordionContent>
+        </AccordionItem>
+      </Accordion>
     </div>
   );
 }

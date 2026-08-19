@@ -154,13 +154,24 @@ export const products = {
     },
 
     share: {
-        action: 'Share to chat',
+        action: 'Share',
         title: 'Share this product',
-        description: 'Pick a channel — the message opens ready to send.',
+        description: 'Send the ready-made message to a chat, or copy the link.',
+        /**
+         * The channel buttons are icon-only — a WhatsApp-green circle needs no
+         * caption to be recognised. These stay full sentences because they are
+         * the accessible name and the tooltip, where the verb still helps.
+         */
         whatsapp: 'Share on WhatsApp',
         telegram: 'Share on Telegram',
+        /** Labels the icon row once, so no icon has to carry its own caption. */
+        sendVia: 'Send via',
+        /** The device's own share sheet — every other app it can share to. */
+        moreApps: 'More apps',
         copy: 'Copy message',
         copied: 'Message copied.',
+        /** The OS sheet refused — dismissing it is an AbortError and is silent. */
+        shareFailed: 'Could not open the share sheet.',
         // Telegram's share link renders its text verbatim, so bold and italic
         // do not survive that route. Said plainly rather than hidden.
         telegramPlainNote:
@@ -170,7 +181,7 @@ export const products = {
 
     /** The customer preview — the real storefront page, embedded. */
     preview: {
-        action: 'Preview as customer',
+        action: 'Preview',
         subtitle: 'What a customer sees',
         linkUnavailable: 'Available once the product is published',
         unavailable: {
@@ -315,6 +326,8 @@ export const products = {
             'Buyers can make an offer between the price and the ceiling you set here. Leave a row blank to switch negotiation off for it.',
         ceilingLabel: 'Negotiable up to',
         ceilingPlaceholder: 'No negotiation',
+        /** The floor this variant's price implies, shown under the input. */
+        ceilingMin: 'Minimum {{min}} — at least 20% above the price',
         badge: 'Negotiable up to {{max}}',
         inertHint: 'Saved, but only active while AI discovery is on.',
         clearHint: 'Clear a field to remove that variant’s negotiation window.',
@@ -619,7 +632,14 @@ export const products = {
         usingDefaultAgency: 'The system will use your default agency — {{name}}.',
         freeDelivery: 'Free delivery',
         freeDeliveryHint:
-            'Advertise this product as free delivery. Does not change agency resolution or fee calculation.',
+            'On by default. You cover the agency fee and the customer pays nothing extra at checkout.',
+        /** Shown the moment the switch goes off — the fee moves into the price, not onto the customer. */
+        freeDeliveryOffNotice:
+            'Delivery is never billed to the customer, so we will add the agency fee to the price of every variant of this product automatically.',
+        freeDeliveryExplainerLabel: 'Why turning free delivery off raises my prices',
+        freeDeliveryExplainerTitle: 'The customer never pays delivery separately',
+        freeDeliveryExplainerBody:
+            'Wi-Mall does not charge delivery at checkout — the vendor always covers the agency fee. “Free delivery” is therefore the normal case, not a discount you fund. If you would rather the customer carry that cost, the only way to do it is to raise each variant’s price by the agency fee, which is exactly what we do when this is off. Your listed prices go up, and your product reads as more expensive next to identical listings that leave it on.',
         pickupLabel: 'Pickup location',
         pickupDescription:
             'Where the delivery agency collects this product from. Required to publish.',
@@ -811,7 +831,8 @@ export const products = {
          * Worded neutrally on purpose: the vendor can land here either by lowering
          * the ceiling or by raising the price past a stored one.
          */
-        bargainMaxBelowPrice: 'The negotiation ceiling has to be at least the price',
+        bargainMaxBelowFloor:
+            'The negotiation ceiling has to be at least 20% above the price',
         stockNumber: 'Stock must be a number',
         stockInteger: 'Stock must be a whole number',
         stockMin: 'Stock cannot be negative',

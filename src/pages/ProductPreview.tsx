@@ -12,6 +12,7 @@ import {
   ProductStatusMenu,
   StorefrontFrame,
   useDefaultPreviewDevice,
+  usePreviewBack,
   type PreviewDevice,
 } from '@/components/preview';
 import { fetchProductById } from '@/services/products.service';
@@ -136,12 +137,9 @@ export function ProductPreview() {
     void load();
   }, [load]);
 
-  const goBack = useCallback(() => {
-    // `-1` would bounce a vendor who deep-linked or landed here from a
-    // notification straight back out of the dashboard.
-    if (window.history.length > 1) navigate(-1);
-    else navigate('/dashboard/products');
-  }, [navigate]);
+  // Back to whichever surface opened this preview — either editor, the products
+  // list, or the products list for a vendor who deep-linked straight in.
+  const goBack = usePreviewBack('/dashboard/products');
 
   const edit = useCallback(() => {
     if (!product) return;

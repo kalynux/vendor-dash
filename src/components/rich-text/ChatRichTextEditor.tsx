@@ -159,7 +159,13 @@ export function ChatRichTextEditor({
         </div>
       </div>
 
-      <ChatPreview doc={value} title={previewTitle} price={previewPrice} />
+      {/* Collapsed by default. The preview is the point of this field, but a
+          toolbar, a writing area, a counter and a chat bubble stacked together
+          are taller than a phone screen — so leaving it open pushed the text
+          being written off the top while the vendor typed. Folded away it stays
+          one tap from the thing it explains, and either brand button opens it
+          straight onto that platform. */}
+      <ChatPreview doc={value} title={previewTitle} price={previewPrice} collapsible />
 
       <LinkDialog
         open={linkOpen}

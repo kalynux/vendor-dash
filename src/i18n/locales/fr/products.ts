@@ -159,13 +159,16 @@ export const products = {
     },
 
     share: {
-        action: 'Partager dans un chat',
+        action: 'Partager',
         title: 'Partager ce produit',
-        description: 'Choisissez un canal — le message s’ouvre prêt à envoyer.',
+        description: 'Envoyez le message tout prêt dans un chat, ou copiez le lien.',
         whatsapp: 'Partager sur WhatsApp',
         telegram: 'Partager sur Telegram',
+        sendVia: 'Envoyer via',
+        moreApps: 'Autres applications',
         copy: 'Copier le message',
         copied: 'Message copié.',
+        shareFailed: 'Impossible d’ouvrir le partage.',
         telegramPlainNote:
             'L’écran de partage Telegram envoie du texte brut : le gras et l’italique ne sont pas conservés. Vos listes, sauts de ligne et émojis le sont.',
         noStoreUrl:
@@ -173,7 +176,7 @@ export const products = {
     },
 
     preview: {
-        action: 'Aperçu client',
+        action: 'Aperçu',
         subtitle: 'Ce que voit un client',
         linkUnavailable: 'Disponible une fois le produit publié',
         unavailable: {
@@ -309,6 +312,8 @@ export const products = {
             'Les acheteurs peuvent proposer un montant entre le prix et le plafond que vous fixez ici. Laissez une ligne vide pour désactiver la négociation.',
         ceilingLabel: 'Négociable jusqu’à',
         ceilingPlaceholder: 'Pas de négociation',
+        /** The floor this variant's price implies, shown under the input. */
+        ceilingMin: 'Minimum {{min}} — au moins 20 % au-dessus du prix',
         badge: 'Négociable jusqu’à {{max}}',
         inertHint: 'Enregistré, mais actif uniquement si la découverte par IA est activée.',
         clearHint: 'Videz un champ pour retirer la négociation sur cette variante.',
@@ -608,7 +613,15 @@ export const products = {
         usingDefaultAgency: 'Le système utilisera votre agence par défaut — {{name}}.',
         freeDelivery: 'Livraison offerte',
         freeDeliveryHint:
-            'Annoncer ce produit en livraison offerte. Ne modifie ni la résolution d’agence ni le calcul des frais.',
+            'Activée par défaut. Vous prenez en charge les frais de l’agence et le client ne paie rien de plus à la commande.',
+        /** Shown the moment the switch goes off — the fee moves into the price, not onto the customer. */
+        freeDeliveryOffNotice:
+            'La livraison n’est jamais facturée au client : nous ajouterons donc automatiquement les frais de l’agence au prix de chaque variante de ce produit.',
+        freeDeliveryExplainerLabel:
+            'Pourquoi désactiver la livraison offerte augmente mes prix',
+        freeDeliveryExplainerTitle: 'Le client ne paie jamais la livraison séparément',
+        freeDeliveryExplainerBody:
+            'Wi-Mall ne facture pas la livraison à la commande — c’est toujours le vendeur qui prend en charge les frais de l’agence. La « livraison offerte » est donc la situation normale, et non une remise que vous financez. Si vous préférez que le client supporte ce coût, la seule façon de le faire est d’augmenter le prix de chaque variante du montant des frais d’agence, et c’est exactement ce que nous faisons lorsque cette option est désactivée. Vos prix affichés augmentent, et votre produit paraît plus cher que des annonces identiques qui la laissent activée.',
         pickupLabel: 'Point de retrait',
         pickupDescription:
             'Là où l’agence de livraison récupère ce produit. Obligatoire pour publier.',
@@ -790,7 +803,8 @@ export const products = {
         compareAtMin: 'Le prix barré doit être supérieur ou égal à 0',
         bargainMin: 'Le plafond de négociation doit être supérieur ou égal à 0',
         bargainMaxNumber: 'Saisissez un plafond de négociation valide',
-        bargainMaxBelowPrice: 'Le plafond de négociation doit être au moins égal au prix',
+        bargainMaxBelowFloor:
+            'Le plafond de négociation doit dépasser le prix d’au moins 20 %',
         stockNumber: 'Le stock doit être un nombre',
         stockInteger: 'Le stock doit être un nombre entier',
         stockMin: 'Le stock ne peut pas être négatif',

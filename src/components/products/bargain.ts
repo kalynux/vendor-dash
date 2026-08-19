@@ -57,18 +57,43 @@ export function bargainBody(maxPrice: number | null): { bargain: BargainWrite | 
 }
 
 /**
- * `maxPrice` must be >= the price. Equality is legal and means "bargainable, no
- * headroom yet". An absent ceiling is valid — it just means no window.
+ * How much headroom a negotiation window has to leave above the selling price.
  *
- * Checking this client-side pre-empts 422 CATALOG_VARIANT_BARGAIN_RANGE_INVALID,
- * which the backend also raises for a bare `price` edit that would rise above a
- * stored ceiling — so the same rule covers both directions.
+ * A Wi-Mall policy number, not a backend constraint — the API only refuses
+ * `maxPrice < price` (422 CATALOG_VARIANT_BARGAIN_RANGE_INVALID). We ask for
+ * more because a ceiling a few hundred francs above the price is not a
+ * negotiation: the buyer's first counter-offer lands on it, and the vendor has
+ * advertised a haggle they never actually get to have.
  */
-export function isCeilingValid(maxPrice: number | undefined, price: number): boolean {
-  return maxPrice === undefined || (Number.isFinite(maxPrice) && maxPrice >= price);
+export const CEILING_MIN_MARGIN_PERCENT = 20;
+
+/**
+ * The lowest ceiling a given price allows.
+ *
+ * Integer arithmetic (`× 120 / 100`, never `× 1.2`) because `1.2` has no exact
+ * binary representation, and a rule that rejects the very number the vendor was
+ * told to type is worse than having no rule. Rounded up, so the result can never
+ * undershoot the margin.
+ */
+export function minCeilingFor(price: number): number {
+  if (!Number.isFinite(price)) return 0;
+  return Math.ceil((price * (100 + CEILING_MIN_MARGIN_PERCENT)) / 100);
 }
 
-export const CEILING_BELOW_PRICE: TranslationKey = 'products.validation.bargainMaxBelowPrice';
+/**
+ * `maxPrice` must clear `minCeilingFor(price)`. An absent ceiling is valid — it
+ * just means no window.
+ *
+ * Checking this client-side also pre-empts 422
+ * CATALOG_VARIANT_BARGAIN_RANGE_INVALID, which the backend raises for a bare
+ * `price` edit that would rise above a stored ceiling — so the same rule covers
+ * both directions, and raising a price now has to keep the same headroom.
+ */
+export function isCeilingValid(maxPrice: number | undefined, price: number): boolean {
+  return maxPrice === undefined || (Number.isFinite(maxPrice) && maxPrice >= minCeilingFor(price));
+}
+
+export const CEILING_BELOW_FLOOR: TranslationKey = 'products.validation.bargainMaxBelowFloor';
 export const CEILING_NOT_A_NUMBER: TranslationKey = 'products.validation.bargainMaxNumber';
 
 /** How a variant is named in a panel row or a per-variant failure message. */
@@ -107,7 +132,7 @@ export function validateCeilings(
     if (raw === '') continue; // empty = no window, always valid
     const parsed = Number(raw);
     if (!Number.isFinite(parsed)) errors[v.id] = CEILING_NOT_A_NUMBER;
-    else if (!isCeilingValid(parsed, v.price)) errors[v.id] = CEILING_BELOW_PRICE;
+    else if (!isCeilingValid(parsed, v.price)) errors[v.id] = CEILING_BELOW_FLOOR;
   }
   return errors;
 }

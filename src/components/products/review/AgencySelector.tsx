@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
+import { InfoHint } from '@/components/ui/info-hint';
 import { fetchAgencyLocations, fetchDefaultDeliveryAgency } from '@/services/agencies.service';
 import { getActiveConnectedAgencies, getAgencyConnectionErrorMessage } from '@/services/agency-connections.service';
 import { getDeliveryErrorMessage } from '@/services/products.service';
@@ -586,19 +587,47 @@ export function AgencySelector({
 
       <div className="flex items-start gap-3 pt-3 border-t border-border">
         <Gift className="w-5 h-5 text-muted-foreground mt-0.5 shrink-0" />
-        <div className="flex-1 min-w-0 flex items-center justify-between gap-3">
-          <div>
-            <p className="font-medium text-sm">{t('products.delivery.freeDelivery')}</p>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              {t('products.delivery.freeDeliveryHint')}
-            </p>
+        <div className="flex-1 min-w-0 space-y-2.5">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="font-medium text-sm">{t('products.delivery.freeDelivery')}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {t('products.delivery.freeDeliveryHint')}
+              </p>
+            </div>
+            <Switch
+              checked={freeDelivery}
+              onCheckedChange={handleFreeDeliveryToggle}
+              disabled={isSaving || !productId}
+              aria-label={t('products.delivery.freeDelivery')}
+            />
           </div>
-          <Switch
-            checked={freeDelivery}
-            onCheckedChange={handleFreeDeliveryToggle}
-            disabled={isSaving || !productId}
-            aria-label={t('products.delivery.freeDelivery')}
-          />
+
+          {/* Turning this off does not move the fee onto the customer — nothing on
+              the platform can, because delivery is never billed at checkout. It
+              moves the fee into the *price*, which is a decision about how this
+              product will look next to competing listings, so it is stated the
+              moment the switch flips rather than discovered later. */}
+          {!freeDelivery && (
+            <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-2 text-xs text-amber-700 dark:text-amber-400">
+              <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+              <p className="min-w-0">
+                {t('products.delivery.freeDeliveryOffNotice')}
+                <InfoHint
+                  label={t('products.delivery.freeDeliveryExplainerLabel')}
+                  align="start"
+                  className="ml-1 inline-flex translate-y-[3px] text-amber-700/80 hover:text-amber-800 dark:text-amber-400/80 dark:hover:text-amber-300"
+                >
+                  <span className="block space-y-2">
+                    <span className="block font-medium text-foreground">
+                      {t('products.delivery.freeDeliveryExplainerTitle')}
+                    </span>
+                    <span className="block">{t('products.delivery.freeDeliveryExplainerBody')}</span>
+                  </span>
+                </InfoHint>
+              </p>
+            </div>
+          )}
         </div>
       </div>
     </div>
