@@ -6,3 +6,8 @@
 /src/scripts
 /build_output.txt
 /ticket_types.txt
+
+# Env profiles live in env/ (see env/README.md). The committed ones are
+# .env.development / .env.production / .env.mobile / .env.example; every
+# *.local override is personal and secret-bearing.
+/env/*.local

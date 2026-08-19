@@ -6,7 +6,11 @@ import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist']),
+  // `android` alongside `dist`: every `cap sync` copies the built web bundle,
+  // Capacitor's native-bridge.js and Gradle's intermediates in there. Without
+  // this ignore the lint count moves on every sync, which destroys the only
+  // thing that command is for (CAPACITOR-PLAN.md → P2.1).
+  globalIgnores(['dist', 'android']),
   {
     files: ['**/*.{ts,tsx}'],
     extends: [

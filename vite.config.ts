@@ -6,6 +6,10 @@ import { inspectAttr } from 'kimi-plugin-inspect-react'
 // https://vite.dev/config/
 export default defineConfig({
   base: './',
+  // Load env files (.env, .env.development, .env.mobile, *.local, …) from the
+  // ./env folder instead of the project root, so the four profiles sit together
+  // and the mobile one is discoverable. See env/README.md (P2.8).
+  envDir: path.resolve(__dirname, "env"),
   plugins: [inspectAttr(), react()],
   resolve: {
     alias: {
