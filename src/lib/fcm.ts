@@ -6,6 +6,17 @@
 // Push is a best-effort COMPANION to in-app notifications, never the source of
 // truth. If env vars are missing or the browser is unsupported, every function
 // degrades to a no-op so the dashboard keeps working with push inert.
+//
+// ── Native (CAPACITOR-PLAN.md → P2.6) ────────────────────────────────────────
+//
+// Everything in this file is WEB push, and it is switched off inside a Capacitor
+// shell. The reason is a false positive: `'serviceWorker' in navigator` is TRUE
+// in an Android WebView, so without an explicit `isNative` guard this module
+// registers a service worker that can never receive a message and then reports a
+// broken-looking push state to the settings screen. Native push is a different
+// transport entirely (FCM via `@capacitor/push-notifications`, configured by
+// android/app/google-services.json) and arrives in P4.1, behind the same call
+// sites — which is what the paragraph above has always anticipated.
 
 import { initializeApp, type FirebaseApp } from 'firebase/app';
 import {
@@ -17,6 +28,7 @@ import {
   type Messaging,
 } from 'firebase/messaging';
 import type { NotificationType, NotificationAggregateType } from '@/types/notifications.types';
+import { isNative } from '@/platform/env';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY as string | undefined,
@@ -56,6 +68,13 @@ let supportedCache: boolean | null = null;
 
 /** Whether the browser can do FCM web push at all (and we have config). */
 export async function isPushSupported(): Promise<boolean> {
+  // `isNative` leads the condition deliberately, and the reasoning stays here so
+  // nobody simplifies it back out: the two checks after it BOTH give the wrong
+  // answer in a WebView. `'serviceWorker' in navigator` is true (and useless),
+  // while `'Notification' in window` is false — which on its own would report
+  // "unsupported" on the one platform push is actually for. Neither is a usable
+  // signal here; the platform is. P4.1 replaces this with the native provider.
+  if (isNative) return false;
   if (!isPushConfigured()) return false;
   if (typeof window === 'undefined' || !('serviceWorker' in navigator) || !('Notification' in window)) {
     return false;
@@ -78,6 +97,10 @@ async function getMessagingInstance(): Promise<Messaging | null> {
 }
 
 async function ensureServiceWorker(): Promise<ServiceWorkerRegistration | undefined> {
+  // Guarded independently of isPushSupported(): showSystemNotification() reaches
+  // this directly, so relying on the caller would still leave one path that
+  // registers a dead worker inside the shell.
+  if (isNative) return undefined;
   if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return undefined;
   if (!swRegistration) {
     swRegistration = await navigator.serviceWorker.register(SW_URL);

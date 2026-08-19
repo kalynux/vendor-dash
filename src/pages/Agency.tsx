@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, Navigate, useNavigate } from 'react-router-dom';
-import { Loader2, Building2, ShieldCheck, MapPin } from 'lucide-react';
+// Referenced only by the commented-out `currentDefault` panel below; restore
+// this import alongside it.
+// import { Loader2, Building2, ShieldCheck, MapPin } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { useOnboarding } from '@/onboarding/store/onboarding.store';
@@ -13,8 +15,9 @@ import { SubPageHeader } from '@/components/layout/SubPageHeader';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent } from '@/components/ui/tabs';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { fileRefUrl } from '@/services/files.service';
-import { formatAgencyLocality } from '@/lib/agencyAddress';
+// Both referenced only by the commented-out `currentDefault` panel below.
+// import { fileRefUrl } from '@/services/files.service';
+// import { formatAgencyLocality } from '@/lib/agencyAddress';
 import { cn } from '@/lib/utils';
 import { type DeliveryAgency } from '@/types/api';
 import { useTranslation, type TranslationKey } from '@/i18n';
@@ -50,8 +53,11 @@ export function Agency() {
     const roleEntity = session?.role_entity;
     const currentId = roleEntity?.default_delivery_agency_id ?? null;
 
-    const [current, setCurrent] = useState<DeliveryAgency | null>(null);
-    const [loadingCurrent, setLoadingCurrent] = useState(true);
+    // The read bindings are dropped, not the state: the only consumer is the
+    // commented-out `currentDefault` panel below. Restore them as
+    // `[current, setCurrent]` / `[loadingCurrent, setLoadingCurrent]` with it.
+    const [, setCurrent] = useState<DeliveryAgency | null>(null);
+    const [, setLoadingCurrent] = useState(true);
     const [settingDefaultAgencyId, setSettingDefaultAgencyId] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     // Bumped after any successful connection mutation so the "current default"

@@ -10,6 +10,7 @@
 import type { DeepPartial } from '../../types';
 import type { Messages } from '../../catalogs';
 
+import auth from './auth';
 import common from './common';
 import errors from './errors';
 import nav from './nav';
@@ -32,6 +33,7 @@ import account from './account';
 import agency from './agency';
 
 export const fr: DeepPartial<Messages> = {
+    auth,
     common,
     errors,
     nav,

@@ -3,7 +3,7 @@
 // Flat file model (no folders). Attachment status comes from the `usage` object
 // on GET /files/:id — never from `usageCount`.
 
-import { api, BASE_URL, errorFromBody } from './api';
+import { api, authorizeXhr, BASE_URL, errorFromBody, refreshForXhr } from './api';
 import { ApiError } from '@/types/api';
 import { tStatic } from '@/i18n';
 import type {
@@ -243,8 +243,16 @@ function errorFromXhr(xhr: XMLHttpRequest, files: File[]): ApiError {
   return err;
 }
 
-/** Low-level XHR upload to a single route. Reports bytes loaded for aggregation. */
-function xhrUpload(
+/**
+ * One XHR attempt at a single route. Reports bytes loaded for aggregation.
+ *
+ * XHR rather than `fetch` because `upload.onprogress` is the only way to get
+ * real byte progress, and the media UI reports it. That puts this outside
+ * `api.ts`'s request path, so the active transport's credentials have to be
+ * applied by hand — `authorizeXhr` is the sanctioned seam for that, and it must
+ * run after `open()` or `setRequestHeader` throws.
+ */
+function xhrAttempt(
   url: string,
   fieldName: string,
   files: File[],
@@ -256,7 +264,6 @@ function xhrUpload(
 
     const xhr = new XMLHttpRequest();
     xhr.open('POST', url);
-    xhr.withCredentials = true;
 
     xhr.upload.onprogress = (event) => {
       if (event.lengthComputable && onBytes) onBytes(event.loaded);
@@ -279,8 +286,43 @@ function xhrUpload(
       reject(new ApiError(0, 'NETWORK_ERROR', 'Network error during upload. Please try again.'));
     xhr.onabort = () => reject(new ApiError(0, 'ABORTED', 'Upload cancelled.'));
 
-    xhr.send(fd);
+    // `authorizeXhr` is async (the bearer store may have to be read), so the
+    // send is chained off it rather than sitting after it.
+    authorizeXhr(xhr).then(
+      () => xhr.send(fd),
+      (err) => reject(err),
+    );
   });
+}
+
+/**
+ * Low-level XHR upload, with one refresh-and-retry on a 401.
+ *
+ * A large upload over a slow connection can outlive a 15-minute access token, so
+ * this is a real case and not a theoretical one — and it is newly reachable on
+ * the bearer transport, which has no silent server-side refresh to fall back on.
+ * `refreshForXhr` shares `api.ts`'s single-flight lock, so an upload and a page
+ * load racing the same dead token perform one refresh between them.
+ */
+async function xhrUpload(
+  url: string,
+  fieldName: string,
+  files: File[],
+  onBytes?: (loaded: number) => void,
+): Promise<ApiFile[]> {
+  try {
+    return await xhrAttempt(url, fieldName, files, onBytes);
+  } catch (err) {
+    if (!(err instanceof ApiError) || err.status !== 401) throw err;
+    // `refreshForXhr` returns false once the session is genuinely over, having
+    // already dispatched the logout — rethrowing the original 401 is then the
+    // honest answer, and the app is on its way to the login screen anyway.
+    if (!(await refreshForXhr())) throw err;
+    // Progress restarts from zero for the retry. The aggregator reads the latest
+    // value per request rather than accumulating, so the bar rewinds rather than
+    // overcounting — the correct direction of the two.
+    return xhrAttempt(url, fieldName, files, onBytes);
+  }
 }
 
 /**

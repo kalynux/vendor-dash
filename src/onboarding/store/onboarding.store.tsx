@@ -8,7 +8,7 @@ import {
 } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { OnboardingContext } from '@/onboarding/store/onboarding.context';
-import { authService } from '@/services/auth.service';
+import { authService, type LoginPayload, type RegisterPayload } from '@/services/auth.service';
 import { onboardingService } from '@/services/onboarding.service';
 import { deleteCurrentToken } from '@/lib/fcm';
 import { unregisterDevice } from '@/services/devices.service';
@@ -89,6 +89,25 @@ export interface OnboardingState {
 
     /** Initialize: fetch auth-me/vendor. Call once on app mount via OnboardingGuard. */
     initialize: () => Promise<void>;
+
+    /**
+     * Sign in and adopt the resulting session.
+     *
+     * Exists so the login screen does not have to reach past the provider and
+     * then ask it to re-initialize — which would race `initCalled` and, on the
+     * bearer transport, spend a second `auth-me` round trip for a session the
+     * login response already carried in full. Throws `ApiError` on failure; the
+     * screen renders it.
+     */
+    signIn: (payload: LoginPayload) => Promise<AuthMeVendorResponse>;
+
+    /**
+     * Register a vendor account and adopt the resulting session.
+     *
+     * The response lands on `onboarding_step === 1`, so the caller navigates
+     * into the existing onboarding flow rather than anywhere new.
+     */
+    signUp: (payload: RegisterPayload) => Promise<AuthMeVendorResponse>;
 
     /** Submit Step 1 — country, timezone, payout_details array. */
     submitBasicSetup: (payload: BasicSetupPayload) => Promise<void>;
@@ -181,6 +200,16 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
 
         setIsInitializing(true);
         try {
+            // Ask the transport whether a session is even possible before
+            // spending a round trip on it. On cookie this is always true —
+            // httpOnly cookies are invisible to script, so the server is the
+            // only one who knows. On bearer we know for free, and skipping the
+            // call is the difference between the login screen appearing at once
+            // on a cold launch and appearing after a network timeout.
+            if (!(await authService.canAttemptSession())) {
+                setSession(null);
+                return;
+            }
             const data = await authService.getAuthMeVendor();
             setSession(data);
             setViewingStep(data.role_entity.onboarding_step);
@@ -199,6 +228,38 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
             setIsInitializing(false);
         }
     }, []);
+
+    /**
+     * Adopt a session that login/register just returned.
+     *
+     * `initCalled` is set so a later `initialize()` — the guard calls it on
+     * mount — does not immediately re-fetch a session we already hold, and is
+     * reset by logout so the next sign-in re-initializes cleanly.
+     */
+    const adoptSession = useCallback((data: AuthMeVendorResponse) => {
+        setSession(data);
+        setViewingStep(data.role_entity.onboarding_step);
+        setError(null);
+        initCalled.current = true;
+    }, []);
+
+    const signIn = useCallback(
+        async (payload: LoginPayload) => {
+            const data = await authService.login(payload);
+            adoptSession(data);
+            return data;
+        },
+        [adoptSession],
+    );
+
+    const signUp = useCallback(
+        async (payload: RegisterPayload) => {
+            const data = await authService.register(payload);
+            adoptSession(data);
+            return data;
+        },
+        [adoptSession],
+    );
 
     const saveDraft = useCallback(
         (step: 1 | 2 | 3 | 4, values: Step1FormValues | Step2FormValues | Step3FormValues | Step4FormValues) => {
@@ -456,6 +517,8 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
                 saveDraft,
                 jumpToStep,
                 initialize,
+                signIn,
+                signUp,
                 submitBasicSetup,
                 submitDeliveryLinking,
                 submitBranding,

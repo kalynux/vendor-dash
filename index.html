@@ -3,7 +3,14 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#047857" />
+    <!-- The app's own --background tokens, light and dark, NOT the brand green
+         (#047857) that used to be the single value here. That green is the
+         *primary*, not the ground, so a green bar handing off to a white app was
+         a visible seam. These two also drive the native splash background
+         (capacitor.config.ts) and the status/gesture bars in P3.3 — three
+         surfaces, one pair of colours (CAPACITOR-PLAN.md → P2.9). -->
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0b1413" />
     <title>Wi-Vendor · Wi-Mall</title>
     <!-- Tab icon. The 32px cut is trimmed to the artwork's bounds so the mark
          still reads at favicon size; the Apple one keeps the source's safe-area
@@ -11,12 +18,6 @@
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap"
-      rel="stylesheet"
-    />
     <script>
       // Paint the stored theme before first paint, otherwise a dark-mode vendor
       // gets a white flash until React mounts. Mirrors StoreProvider's logic.

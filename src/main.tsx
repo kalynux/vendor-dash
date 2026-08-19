@@ -5,6 +5,7 @@ import './index.css'
 import App from './App.tsx'
 import { StoreProvider } from '@/store'
 import { I18nProvider } from '@/i18n'
+import { hideSplashWhenPainted } from '@/platform/shell/splash'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -20,3 +21,8 @@ createRoot(document.getElementById('root')!).render(
     </BrowserRouter>
   </StrictMode>,
 )
+
+// Native only — a no-op in a browser, so the web build is untouched. Must come
+// after render() so there is a commit for the second rAF to land behind
+// (CAPACITOR-PLAN.md → P2.9).
+hideSplashWhenPainted()

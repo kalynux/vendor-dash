@@ -9,6 +9,7 @@
  * site gets the new keys with autocomplete immediately.
  */
 
+import auth from './auth';
 import common from './common';
 import errors from './errors';
 import nav from './nav';
@@ -31,6 +32,7 @@ import account from './account';
 import agency from './agency';
 
 export const en = {
+    auth,
     common,
     errors,
     nav,

@@ -181,10 +181,38 @@ export interface VendorRoleEntity {
 
 // ─── Auth Responses ───────────────────────────────────────────────────────────
 
+/**
+ * The token pair returned by the **mobile** auth namespace (`/auth/mobile/*`),
+ * and by nothing else.
+ *
+ * The cookie namespaces (`/auth/*`, `/auth/browser/*`) deliver the same JWTs in
+ * `Set-Cookie` and never put them in a body, so this key is absent there. Same
+ * claims, same lifetimes, same revocation rule — only the delivery differs.
+ * See api-doc/auth/README.md → "two delivery modes, one session model".
+ */
+export interface AuthTokens {
+  accessToken: string;
+  refreshToken: string;
+  /** Seconds. Turned into an absolute instant at receipt — see platform/auth/tokens.ts. */
+  accessExpiresIn: number;
+  /** Seconds. Informational; the sliding window is kept by refreshing, not by reading this. */
+  refreshExpiresIn: number;
+}
+
 export interface AuthMeVendorResponse {
   user: ApiUser;
   role: 'vendor';
   role_entity: VendorRoleEntity;
+  /**
+   * Present only when the response came from `/auth/mobile/auth-me/:role`. The
+   * bearer transport stores it; the cookie transport never sees it.
+   */
+  tokens?: AuthTokens;
+}
+
+/** `POST /auth/mobile/refresh` — a fresh pair and nothing else. */
+export interface AuthRefreshResponse {
+  tokens: AuthTokens;
 }
 
 // ─── Vendor Policies ──────────────────────────────────────────────────────────
