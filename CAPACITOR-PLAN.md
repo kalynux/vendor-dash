@@ -942,12 +942,33 @@ the payload's `url` only when `aggregateType` is absent.
 `launchMode="singleTask"` (already in the template) is what makes them arrive as
 `appUrlOpen` on the running instance rather than stacking a second copy of the app.
 
-⚠ **The App Link half cannot work yet.** `autoVerify` only takes effect once
-`https://vendor.wi-mall.com/.well-known/assetlinks.json` names this package and its
-signing-certificate fingerprint — which does not exist until Phase 7 mints the release
-key. Until then Android silently declines to verify and those links keep opening the
-browser. Nothing breaks; the app just does not claim them. The `wivendor://` scheme needs
-no server-side proof and works today, including
+⚠ ~~**The App Link half cannot work yet.**~~ **Claimed as of 20 Aug 2026.**
+`public/.well-known/assetlinks.json` names `com.wi_mall.vendor` against the **debug**
+signing certificate, and the manifest carries an `autoVerify` filter for
+`https://vendor.wi-mall.com/dashboard*`. Vite copies `public/` verbatim into `dist/`, so the
+file is served at the site root by the ordinary deploy — mirroring what agency-dash already
+does for `agency.wi-mall.com`.
+
+Four things about it that are easy to get wrong:
+
+- ⚠ **Only `/dashboard` is claimed, not the whole host.** Marketing pages and storefront
+  preview targets should keep opening in a browser. An app that swallows every link to its
+  own domain is the reason people turn the feature off.
+- ⚠ **The fingerprint is the shared Android debug keystore**, so a locally installed debug
+  build verifies and **a Play Store build will not** — Play re-signs every upload with the
+  App Signing key. Before the first release, add that fingerprint (Play Console → Setup →
+  App signing → SHA-256) as a second entry in the same array, keeping the debug one.
+- ⚠ **Android fetches the file at INSTALL time.** A build installed before it is deployed
+  stays unverified until reinstall, or until
+  `adb shell pm verify-app-links --re-verify com.wi_mall.vendor`. Deploy first, install
+  second. It must be `application/json` over HTTPS with **no redirect** — a 301 to `www.`
+  fails verification.
+- Check with `adb shell pm get-app-links com.wi_mall.vendor`, or Google's own
+  `digitalassetlinks.googleapis.com/v1/statements:list` validator, which is what Android
+  actually consults.
+
+Unverified, these links simply keep opening the browser; nothing breaks. The `wivendor://`
+scheme needs no server-side proof and works regardless, including
 `adb shell am start -d "wivendor://orders?view=<id>"`.
 
 **A deep link that lands signed-out survives**, and this composes for free: it navigates
@@ -1339,8 +1360,15 @@ Windows, so this is a separately-scheduled track, not a same-sprint afterthought
 # Phase 7 — Release
 
 - Signing keys; Play Console listing; privacy declarations
-- `.well-known/assetlinks.json` on `vendor.wi-mall.com`, which is what finally activates
-  P4.2's App Link half
+- ⚠ **Add the Play App Signing SHA-256 to `public/.well-known/assetlinks.json`.** The file
+  exists and is deployed, but it names only the shared Android **debug** certificate. Play
+  re-signs every upload with its own key, so the moment the app ships through the store its
+  certificate is one that file has never heard of — verification fails **silently** and every
+  App Link goes back to opening a browser. The value is in Play Console → *Setup → App
+  signing → App signing key certificate → SHA-256*; add it as a second entry in the same
+  array and keep the debug one, or local testing breaks instead.
+  Confirm afterwards with `adb shell pm get-app-links com.wi_mall.vendor`.
+  *(As of 20 Aug 2026 there is no Play Console app yet, which is why this is still open.)*
 - **Permission justification strings** for both stores. Camera, photos, location and
   notifications each need a reason string that matches what the app actually does —
   write these from the real call sites, not from a template
@@ -1357,11 +1385,11 @@ Windows, so this is a separately-scheduled track, not a same-sprint afterthought
 | Ticket | Owner | Blocks |
 |---|---|---|
 | Add `https://vendor.wi-mall.internal` and `capacitor://vendor.wi-mall.internal` to `ALLOWED_ORIGINS` on **wi-mall**, per environment | Backend | **Phase 2, all device testing** |
-| `android/app/google-services.json` from the **messaging** Firebase project | Ops | Phase 4 push |
+| ~~`android/app/google-services.json` from the **messaging** Firebase project~~ **Landed 20 Aug 2026.** Project `bingoo-22222`, sender `741831724264` — the same pair `VITE_FIREBASE_*` already uses for web push, which is what proves it is the messaging project and not the storage one. The file carries all three Android clients (agency, vendor, agent); the Gradle plugin selects `com.wi_mall.vendor` by `applicationId` | Ops | ~~Phase 4 push~~ done |
 | ~~Confirm the FCM `data` payload carries `aggregateType` + `aggregateId` (not only `url`)~~ **Confirmed in the source, P4.2.** `vendor-notification-event-handler.service.ts` → `deliverPush()` sends `{ type, aggregateType, aggregateId, path, url }` on every vendor push | — | closed |
 | Refresh vendor-dash's `api-doc/` snapshot — it predates the mobile namespace | Us | nothing, but it will mislead the next person |
 | ~~Decide the Google Calendar OAuth story on bearer (P3.5)~~ **Done — P3.5a.** Now an ops task: set `GOOGLE_OAUTH_APP_SCHEMES=wivendor` per environment | Ops | Calendar on device |
-| `.well-known/assetlinks.json` on `vendor.wi-mall.com`, once the release key exists | Ops | App Links |
+| ~~`.well-known/assetlinks.json` on `vendor.wi-mall.com`~~ **Written 20 Aug 2026** (`public/.well-known/`, debug fingerprint). Remaining ops work: **deploy it**, then **add the Play App Signing SHA-256** before the first store release — without it App Links silently do not verify for store builds | Ops | App Links on a *store* build |
 | APNs key on the messaging Firebase project | Ops | Phase 6 |
 
 **The first row is the hard one.** Everything client-side can be built and an APK can

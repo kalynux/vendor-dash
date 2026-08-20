@@ -33,18 +33,43 @@
 
               Unlike an App Link this needs no server-side proof, so it works
               today: `adb shell am start -d "wivendor://services/calendar"`.
-              The App Link filter for https://vendor.wi-mall.com is deliberately
-              NOT here yet — `autoVerify` only takes effect once
-              /.well-known/assetlinks.json names this package and its signing
-              fingerprint, which does not exist until Phase 7 mints the release
-              key. Declared early, Android silently declines to verify and the
-              links keep opening the browser, which looks like a bug in this file.
             -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="wivendor" />
+            </intent-filter>
+
+            <!--
+              App Links (CAPACITOR-PLAN.md → P4.2). Claims the real dashboard
+              URLs, so a link in an email or a WhatsApp message opens the app
+              rather than a browser tab the vendor then has to sign in to.
+
+              Only `/dashboard` is claimed, not the whole host. The marketing
+              pages, the storefront preview targets and anything else on
+              vendor.wi-mall.com should keep opening in a browser — an app that
+              swallows every link to its own domain is the reason people turn
+              this feature off.
+
+              ⚠ `autoVerify` is a REQUEST, not a guarantee. Android fetches
+              https://vendor.wi-mall.com/.well-known/assetlinks.json at install
+              time and only honours the filter if that file names this package
+              AND the fingerprint of the certificate the installed build was
+              signed with. `public/.well-known/assetlinks.json` in this repo
+              carries the debug fingerprint, so a locally installed debug build
+              verifies once the file is deployed. ⚠ A Play Store build will NOT,
+              until the Play App Signing fingerprint is added to that file —
+              see its README. Unverified, these links simply keep opening the
+              browser; nothing breaks.
+            -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https"
+                      android:host="vendor.wi-mall.com"
+                      android:pathPrefix="/dashboard" />
             </intent-filter>
         </activity>
 
