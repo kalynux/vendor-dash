@@ -3,6 +3,8 @@ import { Search, Loader2, MapPin, LocateFixed, X } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { searchAddresses, reverseGeocode } from '@/services/geo.service';
+import { getCurrentPosition } from '@/platform/geolocation';
+import { canOpenAppSettings, openAppSettings } from '@/platform/permissions';
 import { useTranslation, useApiError } from '@/i18n';
 import type { GeoAddress, GeoAddressCandidate } from '@/types/geo.types';
 import { Input } from '@/components/ui/input';
@@ -112,35 +114,61 @@ export function AddressSearch({
     [onSelect, query],
   );
 
-  const useMyLocation = useCallback(() => {
-    if (!('geolocation' in navigator)) {
-      toast.error(t('common.address.geolocationUnavailable'));
-      return;
-    }
+  /**
+   * Fill the address from where the vendor is standing.
+   *
+   * ⚠ `navigator.geolocation` is not used directly any more (CAPACITOR-PLAN.md
+   * → P4.4). It exists in an Android WebView but is bound to the *app's* runtime
+   * permission, and a WebView cannot raise an Android runtime prompt on the
+   * app's behalf — so without the grant it fails with `PERMISSION_DENIED`
+   * instantly and the vendor has no way to act on the toast.
+   * `@/platform/geolocation` prompts properly and answers in five states, which
+   * is the point: the four failures need four different things said about them,
+   * and only one of them is worth offering a settings screen for.
+   */
+  const fillFromCurrentLocation = useCallback(async () => {
     setLocating(true);
-    navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        try {
-          const candidate = await reverseGeocode(pos.coords.latitude, pos.coords.longitude);
-          if (candidate) {
-            onSelect(candidate, candidate.formatted_address);
-            toast.success(t('common.address.filledFromLocation'));
-          } else {
-            toast.error(t('common.address.resolveFailed'));
-          }
-        } catch (err) {
-          apiError.toast(err, { fallbackKey: 'common.address.resolveFailed' });
-        } finally {
-          setLocating(false);
+    try {
+      const fix = await getCurrentPosition();
+
+      if (fix.status !== 'granted') {
+        if (fix.status === 'blocked') {
+          // The OS will not prompt again; a retry button here would silently do
+          // nothing, so the only honest offer is the settings screen.
+          toast.error(t('common.address.permissionBlocked'), {
+            action: canOpenAppSettings
+              ? {
+                  label: t('common.address.openSettings'),
+                  onClick: () => void openAppSettings(),
+                }
+              : undefined,
+          });
+        } else if (fix.status === 'denied') {
+          toast.error(t('common.address.permissionDenied'));
+        } else if (fix.status === 'unavailable') {
+          toast.error(t('common.address.geolocationUnavailable'));
+        } else {
+          // Permission was fine and the fix itself failed — indoors, hardware
+          // off, timed out. Previously indistinguishable from a refusal, which
+          // sent people to a settings screen that would not have helped.
+          toast.error(t('common.address.locationFixFailed'));
         }
-      },
-      () => {
-        toast.error(t('common.address.permissionDenied'));
-        setLocating(false);
-      },
-      { timeout: 10000 },
-    );
-  }, [onSelect]);
+        return;
+      }
+
+      const candidate = await reverseGeocode(fix.latitude, fix.longitude);
+      if (candidate) {
+        onSelect(candidate, candidate.formatted_address);
+        toast.success(t('common.address.filledFromLocation'));
+      } else {
+        toast.error(t('common.address.resolveFailed'));
+      }
+    } catch (err) {
+      apiError.toast(err, { fallbackKey: 'common.address.resolveFailed' });
+    } finally {
+      setLocating(false);
+    }
+  }, [onSelect, t, apiError]);
 
   return (
     <div ref={containerRef} className={cn('relative space-y-2', className)}>
@@ -172,7 +200,7 @@ export function AddressSearch({
           type="button"
           variant="outline"
           size="sm"
-          onClick={useMyLocation}
+          onClick={() => void fillFromCurrentLocation()}
           disabled={locating}
           className="h-10 gap-1.5 flex-shrink-0"
           title={t('common.address.useMyLocation')}

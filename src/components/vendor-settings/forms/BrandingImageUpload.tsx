@@ -5,6 +5,8 @@ import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import { uploadMediaWithProgress } from '@/services/files.service';
 import { getUploadErrorMessage } from '@/lib/uploadErrors';
+import { UploadSourceSheet } from '@/components/common/UploadSourceSheet';
+import { nativeMediaAvailable } from '@/platform/media';
 import { useTranslation } from '@/i18n';
 import type { ApiFile } from '@/types/file.types';
 
@@ -34,14 +36,16 @@ export function BrandingImageUpload({
     const [localPreview, setLocalPreview] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const inputRef = useRef<HTMLInputElement>(null);
+    // Native only — nothing on the web ever opens it (CAPACITOR-PLAN.md → P4.3).
+    const [sourceOpen, setSourceOpen] = useState(false);
 
     const displayUrl = localPreview ?? previewUrl;
     const hasImage = !!fileId && !!displayUrl;
 
-    const handleFile = useCallback(
-        async (e: React.ChangeEvent<HTMLInputElement>) => {
-            const file = e.target.files?.[0];
-            e.target.value = '';
+    /** One image, whatever the source: the hidden input, the camera, or the library. */
+    const handleFiles = useCallback(
+        async (files: File[]) => {
+            const file = files[0];
             if (!file) return;
             setError(null);
             setUploading(true);
@@ -60,6 +64,23 @@ export function BrandingImageUpload({
         },
         [onChange],
     );
+
+    const handleInputChange = useCallback(
+        (e: React.ChangeEvent<HTMLInputElement>) => {
+            const file = e.target.files?.[0];
+            e.target.value = '';
+            if (file) void handleFiles([file]);
+        },
+        [handleFiles],
+    );
+
+    // On a device the Change/Upload button opens the source sheet (camera /
+    // library / files); on the web it is the same click on the same hidden
+    // input it always was.
+    const requestUpload = useCallback(() => {
+        if (nativeMediaAvailable) setSourceOpen(true);
+        else inputRef.current?.click();
+    }, []);
 
     const handleRemove = useCallback(() => {
         setLocalPreview(null);
@@ -88,14 +109,24 @@ export function BrandingImageUpload({
                         type="file"
                         accept="image/*"
                         className="hidden"
-                        onChange={handleFile}
+                        onChange={handleInputChange}
+                    />
+                    <UploadSourceSheet
+                        open={sourceOpen}
+                        onOpenChange={setSourceOpen}
+                        onPicked={handleFiles}
+                        onBrowseFiles={() => inputRef.current?.click()}
+                        // A logo or a cover is one image, and never a video —
+                        // the slot holds exactly one file id.
+                        multiple={false}
+                        allowVideo={false}
                     />
                     <Button
                         type="button"
                         variant="outline"
                         size="sm"
                         disabled={uploading}
-                        onClick={() => inputRef.current?.click()}
+                        onClick={requestUpload}
                         className="h-8 gap-1.5 text-xs"
                     >
                         {uploading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />}

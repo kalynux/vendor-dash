@@ -6,6 +6,18 @@ import App from './App.tsx'
 import { StoreProvider } from '@/store'
 import { I18nProvider } from '@/i18n'
 import { hideSplashWhenPainted } from '@/platform/shell/splash'
+import { initStatusBar } from '@/platform/shell/statusBar'
+import { initKeyboard } from '@/platform/shell/keyboard'
+import { installExternalLinkInterceptor } from '@/platform/browser'
+
+// Native shell behaviour (CAPACITOR-PLAN.md → Phase 3). All three are no-ops
+// off native, and all three run BEFORE render: the system bars should already
+// match the theme in the first painted frame, the keyboard listeners should
+// exist before a screen can focus a field, and a link should never be able to
+// navigate the WebView away — not even one clicked during the first second.
+initStatusBar()
+initKeyboard()
+installExternalLinkInterceptor()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

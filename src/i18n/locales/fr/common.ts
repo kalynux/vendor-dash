@@ -68,6 +68,11 @@ export const common = {
         change: 'Modifier',
     },
 
+    files: {
+        downloadFailed:
+            'Impossible de télécharger ce fichier. Vérifiez votre connexion et réessayez.',
+    },
+
     labels: {
         name: 'Nom',
         email: 'E-mail',
@@ -278,6 +283,9 @@ export const common = {
         filledFromLocation: 'Adresse renseignée depuis votre position',
         resolveFailed: 'Impossible de convertir votre position en adresse.',
         permissionDenied: 'Autorisation de localisation refusée.',
+        permissionBlocked: 'La localisation est désactivée pour cette application. Autorisez-la dans les réglages de votre appareil.',
+        openSettings: 'Ouvrir les réglages',
+        locationFixFailed: 'Impossible d’obtenir votre position. Placez-vous dans une zone mieux couverte et réessayez.',
         searchUnavailable: 'La recherche d’adresse est indisponible pour le moment.',
         pinnedAt: 'Position fixée à {{lat}}, {{lng}}',
         clearPinned: 'Supprimer l’emplacement fixé',

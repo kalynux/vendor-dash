@@ -75,6 +75,16 @@ export const common = {
         change: 'Change',
     },
 
+    /**
+     * Getting a file out of the app (CAPACITOR-PLAN.md → P4.6). Only the failure
+     * is spoken: on the web the browser's own download UI is the confirmation,
+     * and on a device the share sheet is — announcing success on top of either
+     * would be the app talking over the platform.
+     */
+    files: {
+        downloadFailed: 'Could not download that file. Check your connection and try again.',
+    },
+
     labels: {
         name: 'Name',
         email: 'Email',
@@ -297,6 +307,15 @@ export const common = {
         filledFromLocation: 'Address filled from your location',
         resolveFailed: 'Could not resolve your location to an address.',
         permissionDenied: 'Location permission denied.',
+        /**
+         * Refused for good, mobile app only (CAPACITOR-PLAN.md → P4.4). The OS
+         * will not prompt again, so a retry button would silently do nothing —
+         * the toast offers the settings screen instead.
+         */
+        permissionBlocked: 'Location is turned off for this app. Allow it in your device settings.',
+        openSettings: 'Open settings',
+        /** Permission was fine and the fix itself failed — indoors, GPS off, timed out. */
+        locationFixFailed: 'Could not get your location. Move somewhere with a clearer signal and try again.',
         searchUnavailable: 'Address search is unavailable right now.',
         /** Under the picked place, so the vendor can sanity-check the coordinates. */
         pinnedAt: 'Pinned at {{lat}}, {{lng}}',

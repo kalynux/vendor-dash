@@ -33,6 +33,7 @@ import { ApiError } from '@/types/api';
 import type { ApiFile, FileRef } from '@/types/file.types';
 import type { StoreUpdatePayload, VendorStore } from '@/types/store.types';
 import { storePath, storefrontUrl } from '@/lib/storefront/urls';
+import { copyText } from '@/platform/clipboard';
 import { useOpenPreview } from '@/components/preview';
 
 import { Button } from '@/components/ui/button';
@@ -282,13 +283,15 @@ export function StorefrontSettings() {
     [picker, set],
   );
 
+  // Through the platform layer (CAPACITOR-PLAN.md → P4.5) — `navigator.clipboard`
+  // is unreliable inside a WebView, and `copyText` reports whether the copy
+  // actually happened so "Copied" is never claimed falsely.
   const handleCopyUrl = useCallback(async () => {
     if (!store) return;
-    try {
-      await navigator.clipboard.writeText(storefrontUrl(storePath(store.slug)));
+    if (await copyText(storefrontUrl(storePath(store.slug)))) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    } catch {
+    } else {
       toast.error(t('settings.storefront.copyUrlFailed'));
     }
   }, [store, t]);

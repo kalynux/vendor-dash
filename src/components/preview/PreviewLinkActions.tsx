@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
 import { Check, Copy, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { copyText } from '@/platform/clipboard';
 import { useTranslation } from '@/i18n';
 
 /**
@@ -26,13 +27,17 @@ export function PreviewLinkActions({
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
 
+  // Through the platform layer, not `navigator.clipboard` directly: that API is
+  // gated on a secure context and a user gesture and is unreliable inside a
+  // WebView, where `@capacitor/clipboard` goes to `ClipboardManager` instead.
+  // It reports whether the copy happened, so "Copied" is only ever claimed when
+  // it is true (CAPACITOR-PLAN.md → P4.5).
   const copy = useCallback(async () => {
     if (!url) return;
-    try {
-      await navigator.clipboard.writeText(url);
+    if (await copyText(url)) {
       setCopied(true);
       window.setTimeout(() => setCopied(false), 2000);
-    } catch {
+    } else {
       toast.error(t('common.preview.copyFailed'));
     }
   }, [url, t]);

@@ -11,6 +11,7 @@ import { SubPageHeader } from '@/components/layout/SubPageHeader';
 import { useIsMobile } from '@/hooks/use-mobile';
 import type { CalendarStatus } from '@/types/services.types';
 import { useTranslation, type TranslationKey } from '@/i18n';
+import { closeExternal } from '@/platform/browser';
 
 type ServicesTab = 'services' | 'bookings' | 'calendar';
 
@@ -40,7 +41,11 @@ const TAB_SUBTITLE_KEYS: Record<ServicesTab, TranslationKey> = {
 };
 
 // Friendly messages for the OAuth landing `reason` codes (calendar.md).
+// `state_mismatch` is no longer emitted — the callback stopped cross-checking a
+// cookie session against the signed state — but the mapping is kept so an older
+// deployment still produces a sentence rather than a code.
 const OAUTH_REASON_KEYS: Record<string, TranslationKey> = {
+  access_denied: 'services.calendarPanel.oauth.access_denied',
   missing_code: 'services.calendarPanel.oauth.missing_code',
   missing_state: 'services.calendarPanel.oauth.missing_state',
   state_mismatch: 'services.calendarPanel.oauth.state_mismatch',
@@ -68,16 +73,30 @@ export function Services() {
   }, [location.state, reactNavigate]);
 
   // Handle the Google OAuth redirect landing (?calendar=connected|error&reason=…).
+  //
+  // Keyed on the param rather than run once on mount. On the web this page is
+  // freshly mounted by the redirect, so the two were equivalent — but a native
+  // deep-link return navigates an ALREADY-MOUNTED Services page (the vendor
+  // started the flow from this very tab), and a mount-only effect would never
+  // see it: no toast, no refetch, and a calendar that looks unconnected until
+  // the page is reloaded. Stripping the params below drives the value back to
+  // null, so the re-run bails on the guard instead of looping.
+  const calendarResult = searchParams.get('calendar');
   useEffect(() => {
-    const calendar = searchParams.get('calendar');
-    if (!calendar) return;
-    if (calendar === 'connected') {
+    if (!calendarResult) return;
+    if (calendarResult === 'connected') {
       toast.success(t('services.calendarPanel.connectedToast'));
-    } else if (calendar === 'error') {
+    } else if (calendarResult === 'error') {
       const reason = searchParams.get('reason') ?? '';
       toast.error(t(OAUTH_REASON_KEYS[reason] ?? 'services.calendarPanel.connectFailed'));
     }
     setCalendarRefreshKey((k) => k + 1);
+    // Dismiss the system browser tab the OAuth flow ran in. On native this route
+    // was reached by a `wivendor://` redirect out of that tab, which is still on
+    // screen behind the app — left open, pressing back returns the vendor to a
+    // consent screen they have already consented to. A no-op on the web and when
+    // nothing is open (CAPACITOR-PLAN.md → P3.5).
+    void closeExternal();
     // Strip the params and land on the Calendar tab so a refresh doesn't re-toast.
     const next = new URLSearchParams(searchParams);
     next.delete('calendar');
@@ -85,7 +104,7 @@ export function Services() {
     setSearchParams(next, { replace: true });
     reactNavigate('/dashboard/services/calendar', { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [calendarResult]);
 
   // Deep-link from a notification (`/dashboard/services/appointments?view=<id>`):
   // hand the booking id to BookingsPanel to auto-open, then strip the param so a

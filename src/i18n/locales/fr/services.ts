@@ -434,6 +434,7 @@ export const services = {
         disconnectedToast: 'Google Agenda déconnecté',
         connectFailed: 'Impossible de connecter Google Agenda.',
         oauth: {
+            access_denied: 'Vous n’avez pas autorisé l’accès : rien n’a été connecté.',
             missing_code: 'Google n’a pas renvoyé de code d’autorisation. Réessayez.',
             missing_state: 'La demande de connexion n’avait pas son jeton de sécurité. Réessayez.',
             state_mismatch: 'La connexion n’a pas pu être vérifiée. Réessayez de vous connecter.',

@@ -2,17 +2,21 @@
 
 **Target:** Android first, then iOS. The web build must remain behaviourally identical throughout.
 **Audit:** Phase 0 complete — [readiness assessment](https://claude.ai/code/artifact/607ebaa9-5df9-49ce-87d8-4eac92cc0183)
-**Status:** Phase 2 complete — the app assembles and runs as an APK. Every device-side
-exit criterion is held open by the CORS ticket (D5); nothing client-side is blocked by it.
+**Status:** Phase 4 complete — the app has capabilities, not just chrome: push with a
+deep-linked tap, camera and photo library behind the existing upload path, a location
+button that actually prompts, and the system clipboard and share sheet. Every
+device-side exit criterion across Phases 2, 3 and 4 is held open by the CORS ticket
+(D5), and push additionally by `google-services.json`; nothing client-side is blocked
+by either.
 
 | Phase | What it delivers | Status |
 |---|---|---|
 | 0 | Repository audit | ✅ done — 19 Aug 2026 |
 | 1 | Auth foundation, no Capacitor yet | ✅ done — 19 Aug 2026 |
 | 2 | Capacitor shell (Android) | ✅ done — 19 Aug 2026 · device checks pending D5 |
-| 3 | Native shell behaviour | ⏳ next |
-| 4 | Native capabilities | — |
-| 5 | Billing read-only on mobile | — |
+| 3 | Native shell behaviour | ✅ done — 20 Aug 2026 · device checks pending D5 |
+| 4 | Native capabilities | ✅ done — 20 Aug 2026 · device checks pending D5 + FCM config |
+| 5 | Billing read-only on mobile | ✅ done — 20 Aug 2026 |
 | 6 | iOS | — |
 | 7 | Release | — |
 
@@ -474,12 +478,40 @@ URLs, so it belongs with a deploy check rather than inside this phase.
 
 ---
 
-# Phase 3 — Native shell behaviour
+# Phase 3 — Native shell behaviour ✅
 
 **Goal:** nothing here is a feature; all of it is visible as quality.
 **Branch:** `mobile/phase-3-shell-behaviour`
 
-### P3.1 — Android back button
+**Delivered.** `npx tsc -b` green; lint holds at **34 errors** with zero in any file this
+phase touched; en/fr at **4074 / 4074** — full parity, three keys added; `i18n:smoke`,
+`richtext:verify` and `mobileauth:verify` (24 assertions) all pass; `npm run build` green;
+`sync:android` + `./gradlew assembleDebug` → BUILD SUCCESSFUL.
+
+### Divergences from the letter of the plan, each with a reason (D1)
+
+- **The vaul selector is `[data-vaul-drawer]`, not `[vaul-drawer]`.** vaul 1.x renamed the
+  attribute, so the un-prefixed selector agency-dash carries matches nothing here. It is
+  dead weight either way — `components/ui/drawer.tsx` is in the tree with **no importers**,
+  and every overlay this app actually ships is Radix — but a selector that silently matches
+  nothing is exactly the failure P3.1 warns about, so it is spelled correctly.
+- **`<main>` owns the top inset and `MobilePageHeader` cancels it**, via a new `.-mt-safe`
+  helper in `index.css`. The plan flagged the double-count and said to pick an owner; the
+  problem is that the owner differs *per page* — eleven have the header, four do not — and
+  `<main>` is one element shared by all of them. Pushing the negation into the header is
+  the only fix that needs a single edit rather than eleven, and it keeps the header as the
+  element that visibly owns the inset, which is what the plan asked for. In a browser both
+  classes resolve to 0 and the layout is byte-for-byte unchanged.
+- **`MobileListFooter` is keyboard-aware too**, which the plan did not name. It is `fixed
+  bottom-16` — pinned to the tab bar's height — so when the tab bar hides it is left
+  stranded 4rem above the keys with nothing underneath. It drops to `bottom-0`, which is
+  also where it is most useful: the field that raises the keyboard on those pages is the
+  search box, and this is the readout of how many results it left.
+- **Google Calendar OAuth was solved, not gated.** The plan said to gate the action and
+  decide in Phase 4. It was gated for about an hour, then done properly — see
+  **P3.5a** below. The deep-link machinery it needed is P4.2's, brought forward.
+
+### P3.1 — Android back button ✅
 
 **New:** `src/platform/shell/backButton.ts` — `@capacitor/app`'s `backButton` → router
 history, with confirm-to-exit at the stack root. Its absence reads as a broken app: today
@@ -510,7 +542,14 @@ attribute.
 `ResponsiveModal`, `MobileOrderDetailSheet`, `MobileMoreDrawer`, `ShareProductDialog`,
 `MediaPicker`, `ChannelSetupDialog`, and the `AlertDialog` confirmations.
 
-### P3.2 — Keyboard
+**Checked statically, ahead of the hardware pass:** every one of those resolves to a Radix
+`Dialog` (our `Sheet` is `@radix-ui/react-dialog` with a side variant) or `AlertDialog`, and
+both render `role` **and** `data-state` on the same element — so all eight match the
+selector. Accordion, Collapsible and Tabs triggers carry `data-state="open"` and no `role`,
+so they correctly do not. That is the specific failure this section warns about, confirmed
+against the installed packages rather than assumed.
+
+### P3.2 — Keyboard ✅
 
 **New:** `src/platform/shell/keyboard.ts`
 
@@ -539,7 +578,10 @@ signal, but it would change a shipping surface for a problem browsers do not hav
 `StepReview`), `SimpleProductForm`, the variant matrix, onboarding steps 1 and 4, and
 `CreateTicketSheet`.
 
-### P3.3 — Status bar and edge-to-edge
+**A fourth consumer turned up:** `MobileListFooter`, `fixed bottom-16`. See the divergence
+note at the top of this phase.
+
+### P3.3 — Status bar and edge-to-edge ✅
 
 **New:** `src/platform/shell/statusBar.ts`
 
@@ -554,12 +596,24 @@ plan reads as a sweep and ours does not. Do not copy their fix wholesale.
 what is actually clipped:
 
 ```
-Overview · Analytics · Account · Settings          no MobilePageHeader — check first
-src/App.tsx                       <main> may need pt-[calc(…+env(safe-area-inset-top))] on mobile
-src/App.tsx                       <Toaster> offset/mobileOffset = sonner's defaults + the top inset
-src/onboarding/OnboardingLayout.tsx   its own header, outside the dashboard shell
-src/pages/auth/AuthLayout.tsx     already correct — written in Phase 1
+Overview · Analytics · Account · Settings   no MobilePageHeader — fixed by <main> below
+src/App.tsx                         <main> pt-[calc(1.5rem+env(safe-area-inset-top))], md: 2rem
+src/App.tsx                         <Toaster> offset/mobileOffset = sonner's defaults + the inset
+src/components/layout/MobilePageHeader.tsx  -mt-safe, so main's inset is not counted twice
+src/onboarding/OnboardingLayout.tsx  its own header — h-[calc(4rem+inset)] pt-safe, so the
+                                     4rem row grows rather than being squeezed
+src/components/preview/PreviewBanner.tsx    pt-safe — the preview routes render outside the
+                                     dashboard shell and fill the viewport
+src/components/layout/OfflineBanner.tsx     pt-safe — while it is up it IS the top chrome
+src/pages/auth/AuthLayout.tsx        already correct — written in Phase 1
 ```
+
+A sweep for `sticky top-0` / `fixed top-0` found only `Header` and `Sidebar` besides these,
+and neither is rendered below 768px — so nothing else can double-count the inset.
+
+sonner takes a **partial** offset object and fills the other three sides with its own
+defaults (24px desktop / 16px mobile), so only `top` is overridden and the web keeps exactly
+the placement it has today.
 
 ⚠ **`MobilePageHeader` is `sticky`, not `fixed`, and sits inside `<main>`'s `py-6`.** So
 its `pt-safe` only does the right thing if nothing above it already consumed the inset.
@@ -586,7 +640,7 @@ documented as unavailable on Android 15+. Overlay is already the default and the
 bar is already transparent; calling either does nothing on a modern device and something
 inconsistent on an old one.
 
-### P3.4 — Network status
+### P3.4 — Network status ✅
 
 **New:** `src/platform/network.ts`, `src/components/layout/OfflineBanner.tsx`
 **Modified:** `src/components/layout/PlatformStatus.tsx`
@@ -613,7 +667,7 @@ cancels a request, or blocks a form.
 > and an honest status dot where it previously showed green in airplane mode. That is the
 > fix, not a side effect.
 
-### P3.5 — External links
+### P3.5 — External links ✅
 
 **New:** `src/platform/browser.ts`
 
@@ -642,49 +696,154 @@ comparison classifies every in-app route as external and hands the whole app to 
 *navigation* that carries the session and follows Google's redirects back to
 `/dashboard/services?calendar=…`. On bearer there is no session cookie to carry, so this
 flow **does not work on native as written**. Options: a system browser round trip that
-returns via deep link (P4.2), or hiding the connect action on native. Decide in Phase 4;
-for now, gate it and file it.
+returns via deep link (P4.2), or hiding the connect action on native. ~~Decide in Phase 4;
+for now, gate it and file it.~~ → **Done: the round trip. See P3.5a.**
+
+### P3.5a — Google Calendar OAuth on bearer ✅
+
+**New:** `src/platform/shell/appUrl.ts`
+**Modified:** `src/platform/browser.ts` (`closeExternal`), `src/services/services.service.ts`,
+`src/components/services/CalendarConnectionPanel.tsx`, `src/pages/Services.tsx`,
+`android/app/src/main/AndroidManifest.xml`
+**Backend (separate repo, `backend/jovi-mall`):**
+`src/modules/integrations/calendar/google/google.routes.ts`,
+`src/modules/auth/services/oauth-state.service.ts`, `.env.example`,
+`api-doc/integrations/google-calendar.md`
+
+⚠ **There is no in-WebView version of this, at any price.** Google refuses OAuth from an
+embedded WebView (`disallowed_useragent`), and spoofing the user agent violates the OAuth
+policy — the penalty is the client being disabled for every vendor at once. The only
+question was ever *which browser gets it*, and the answer is a Custom Tab /
+`SFSafariViewController` rendered **over** the app, which does not unmount it.
+
+```
+1. POST /integrations/google/connect-url  { returnTo: "wivendor://services/calendar" }
+2. Browser.open(url)          — a system tab over the app; the app stays mounted
+3. Google → /callback         — exchanges the code, stores tokens
+4. 302 wivendor://services/calendar?calendar=connected
+5. intent filter → appUrlOpen → routeFromUrl → /dashboard/services/calendar?calendar=…
+   Services.tsx toasts, refetches status, and closes the tab
+```
+
+**Three backend changes, all small, because the security mechanism was already there:**
+
+- **`/callback` no longer requires auth.** The `state` is a JWT the service signed, bound to
+  the user id and expiring in five minutes — the route's own comment already called that
+  "the guarantee", and the cookie check was a second opinion about a fact the state had
+  established. It also cannot survive a packaged app: the consent screen runs in a browser
+  tab whose cookie jar is not the app's, so the callback would 401 *after* the vendor had
+  already approved. ⚠ Consequence: **`state_mismatch` is now unreachable** and nothing emits
+  it.
+- **`POST /connect-url`** returns the consent URL as JSON for a caller that cannot be
+  redirected. `requireAuth` prefers the bearer header, so it needed no second code path.
+- **`returnTo` rides inside the signed state**, allowlisted against `GOOGLE_OAUTH_APP_SCHEMES`
+  when minted *and* again when consumed. In a query parameter it would be an open redirect.
+
+⚠ **`GOOGLE_OAUTH_APP_SCHEMES=wivendor` must be set per environment.** Unset, the web flow
+is unaffected and every native connect attempt is refused with a 400 — the correct failure,
+but one that looks like a client bug from the app.
+
+**Two things fixed on the way past**, both because the mobile path made them visible:
+
+- The state is now verified **before** anything else, so every later failure can still land
+  the vendor back in the app rather than stranding a phone on the web dashboard.
+- A refusal at Google's consent screen reports `access_denied` instead of falling through to
+  `missing_code`, which told someone who had just pressed Cancel that Google failed to send
+  a code: true, and useless.
+
+**Still web-visible and deliberate:** the web keeps its cookie navigation through `/connect`,
+untouched. The branch is on `useBearerAuth`, not `isNative`, so the dev override in a desktop
+browser takes the fetch path too — it omits `returnTo` and the backend falls back to its
+configured web destination, which is where that browser already is.
 
 ⚠ **`<a download>` is inert in a Capacitor WebView.** `AttachmentsPanel` offers ticket
 attachments this way. On native it must go through `@capacitor/browser` (view) or the
 filesystem (save). Flag it now, fix it in Phase 4 if attachments matter enough.
+
+> **Found while doing it, and then corrected.** The interceptor already turns that dead
+> button into a Custom Tab, so the *view* half was covered for free. This note previously
+> claimed the attachment would then **401 on bearer**, because the thumbnail beside it
+> carries `crossOrigin="use-credentials"`. ⚠ **That was wrong**, and it is worth recording
+> why: a ticket attachment is an ordinary general-intake upload that lands in `documents/`
+> or `images/`, and the backend's storage-tree census classifies both as **public**. Only
+> `digital/` and `shipments/` are authorized-only, and vendor-dash renders neither. The
+> attachment needed no authorization at all — it needed a way to be *saved*, which is
+> **P4.6**.
 
 ⚠ **Leave non-http schemes alone.** `mailto:`, `tel:` and `intent:` are already routed to
 the system by Capacitor's own `WebViewClient`, and `Browser.open` cannot load any of them.
 
 ### Phase 3 exit criteria
 
+Verified on this machine:
+
+- [x] Web build unchanged except the two intended web-visible changes — the offline banner
+      and the honest status dot. Everything else is behind `isNative`, `useKeyboardOpen()`
+      (hardwired false off native) or an `env(safe-area-inset-*)` that resolves to 0
+- [x] `npx tsc -b` green · `npm run build` green · `sync:android` + `assembleDebug` →
+      BUILD SUCCESSFUL
+- [x] `npm run lint` reports no new problems — **34 errors**, unchanged, none in any file
+      this phase touched
+- [x] `npm run i18n:audit` reports full en/fr parity — 4074 / 4074, up 3
+      (`nav.mobile.exitConfirm`, `nav.platformStatus.offlineDetail`,
+      `services.calendarPanel.connectOnWeb`)
+- [x] `i18n:smoke`, `richtext:verify` and `mobileauth:verify` all still pass
+- [x] Every overlay named in P3.1 resolves to a Radix `Dialog`/`AlertDialog` and matches
+      the selector; Accordion / Collapsible / Tabs triggers do not — checked against the
+      installed packages, not assumed
+- [x] No screen can double-count the top inset: the only other top-anchored bars in the
+      tree are `Header` and `Sidebar`, neither rendered below 768px
+
+Need a physical device **and** the D5 origins in `ALLOWED_ORIGINS` — every one of these is
+built, but none can be *confirmed* without hardware:
+
 - [ ] Back button navigates; every sheet, drawer and dialog listed in P3.1 absorbs one
       press; an expanded Accordion or Tabs does **not**; at root it confirms before exiting
 - [ ] No fixed bar is ever covered by the keyboard, in either orientation
 - [ ] Status bar and gesture bar are legible in light and dark, before React mounts and
       after a rotation
-- [ ] No content sits under the clock on any screen — dashboard, onboarding, auth, toasts
+- [ ] No content sits under the clock on any screen — dashboard, onboarding, auth, toasts,
+      the two preview routes
 - [ ] Airplane mode shows the offline banner and an honest status dot; restoring the
       network clears it
 - [ ] Every outbound link opens in the system browser with a route back
-- [ ] Web build unchanged except the offline banner and the honest status dot
-- [ ] Lint and i18n parity unchanged
+
+### Found while doing Phase 3, not fixed by it
+
+- ~~**Ticket attachments will 401 on a device.**~~ **Wrong, and closed.** They are public
+  files; they needed saving, not authorizing. See P3.5's corrected note and P4.6.
+- **`components/ui/drawer.tsx` (vaul) has no importers.** It is covered by the back-button
+  selector anyway, but it is dead code that a future reader will assume is load-bearing.
 
 ---
 
-# Phase 4 — Native capabilities
+# Phase 4 — Native capabilities ✅
 
 **Goal:** the capabilities already used through browser APIs get native implementations
 behind their existing call sites.
 **Branch:** `mobile/phase-4-capabilities`
+
+**Delivered.** `./gradlew assembleDebug` → BUILD SUCCESSFUL (12.7 MB APK, up from 6.1 —
+Firebase messaging, camera and geolocation are most of the difference). `npx tsc -b`
+green; `npm run build` green; lint holds at **34 errors with zero in any file this phase
+touched**; en/fr at **4098 keys each, full parity** (was 4074 — 24 new); `i18n:smoke`,
+`richtext:verify` and `mobileauth:verify` all pass. `cap sync android` reports **13
+plugins**.
 
 ```bash
 npm i @capacitor/push-notifications @capacitor/camera @capacitor/geolocation \
       @capacitor/clipboard @capacitor/share capacitor-native-settings
 ```
 
+⚠ The npm registry still fails TLS verification in this environment, so the install
+needed `--strict-ssl=false` — same as every Capacitor install since P2.1.
+
 `capacitor-native-settings` is the one non-official plugin in the project. It exists
 because "permanently-denied needs a route to system settings" has no core-plugin answer —
 `@capacitor/app` has no `openSettings`. It is used from `src/platform/permissions.ts` and
 nowhere else.
 
-### P4.1 — Push notifications
+### P4.1 — Push notifications ✅
 
 **New:** `src/platform/push.ts`
 **Modified:** `src/lib/fcm.ts`, `src/components/notifications/NotificationsBootstrap.tsx`,
@@ -741,7 +900,7 @@ FCM. Registered as-is it is accepted and never delivers. Closing it needs Fireba
 iOS messaging SDK to do the APNs→FCM exchange. **Phase 6.** Android is unaffected — that
 token *is* the FCM token.
 
-### P4.2 — Deep links
+### P4.2 — Deep links ✅
 
 **New:** `src/platform/shell/deepLinks.ts`
 
@@ -796,7 +955,7 @@ to the real route, `OnboardingGuard` holds the render while auth is in flight, a
 no session redirects carrying `state: { from }` — which `Login.tsx` already reads and
 returns to. Phase 1 wired that deliberately.
 
-### P4.3 — Camera and photo library
+### P4.3 — Camera and photo library ✅
 
 **New:** `src/platform/media.ts`, `src/platform/permissions.ts`,
 `src/components/common/UploadSourceSheet.tsx`
@@ -863,7 +1022,7 @@ silently does nothing.
 Permanently-denied routes to system settings via `capacitor-native-settings` (installed
 at the head of this phase).
 
-### P4.4 — Geolocation
+### P4.4 — Geolocation ✅
 
 **New:** `src/platform/geolocation.ts`
 **Modified:** `src/components/features/AddressSearch.tsx`
@@ -889,7 +1048,7 @@ there, so the distinction would only buy a button that cannot exist.
 Call sites: onboarding step 3 (business address), `BusinessAddressSettings`, and the
 agency depot pickers.
 
-### P4.5 — Clipboard and share
+### P4.5 — Clipboard and share ✅
 
 **New:** `src/platform/clipboard.ts`, `src/platform/share.ts`
 
@@ -909,26 +1068,139 @@ it — that detection simply starts being true. Route it through `@capacitor/sha
 native sheet is used rather than the WebView's partial implementation, and keep the
 existing copy-link fallback.
 
+### P4.6 — The filesystem ✅
+
+**New:** `src/platform/filesystem.ts`
+**Modified:** `src/platform/share.ts` (a `files` field), `src/components/tickets/AttachmentsPanel.tsx`,
+`src/pages/MediaGallery.tsx`, `src/i18n/locales/{en,fr}/common.ts`
+**Installed:** `@capacitor/filesystem`
+
+Not in the original plan — P4.3 covers getting files *in*, and nothing covered getting them
+*out*. The gap surfaced as "`<a download>` is inert in a WebView" (P3.5) and turned out to be
+wider than that.
+
+⚠ **`<a download>` is also inert in a browser for a cross-origin URL**, and every file in
+this app is cross-origin — the bundle is served from `vendor.wi-mall.com` and the files come
+from the API host. So the existing Download control opened a tab on the web and did nothing
+at all on a device. Neither platform actually had a download.
+
+**Cache-then-share, not a Downloads folder.** `Directory.Documents` / `Directory.External` is
+the obvious shape and a trap on Android: scoped storage (API 29+) makes a direct write to a
+public collection unreliable from Capacitor, and API ≤28 needs `WRITE_EXTERNAL_STORAGE` — a
+runtime prompt, for a file the vendor already owns, that some devices refuse anyway. So the
+bytes go to the app's own cache (no permission on any version, either platform) and the file
+is handed to the **system share sheet**, which is where "Save to Files", "Save to Drive" and
+every send-to-an-app target live. It does strictly more than a Downloads folder: an
+attachment can go straight to WhatsApp without a second step.
+
+Four things that had to be right:
+
+- ⚠ **The staging directory is pruned before the next write, never after the share.** The
+  receiving app may still be reading through the content URI when the sheet closes; deleting
+  the file then hands someone a truncated copy.
+- ⚠ **The filename is sanitised.** It comes from whatever the uploader called the file and is
+  joined onto a directory path, so `../` would write outside the staging directory. Spaces
+  and hyphens are deliberately kept — stripping them turns "Q3 invoice - final.pdf" into
+  something unrecognisable in the vendor's own file manager.
+- ⚠ **`writeFile` takes a `Blob` on web only**; a native write must be base64, so the whole
+  file crosses the bridge as a string about a third larger than the bytes. Fine for documents
+  and images; not a path for a multi-gigabyte export.
+- ⚠ **`credentials: 'include'`, never an `Authorization` header.** It mirrors the
+  `crossOrigin="use-credentials"` already on these `<img>` tags, so it needs no CORS change —
+  and unlike a custom header it triggers no preflight, which `express.static` would not
+  answer.
+
+**Two call sites, two different decisions.** `AttachmentsPanel` keeps the web's `<a download>`
+exactly as it was and uses the platform layer only on native: the browser streams through its
+own download manager, where this path buffers the whole file first. `MediaGallery` gains a
+**Download** row in the per-file menu it did not have before — the Media library is this app's
+file manager and the only thing it could previously do with a file was open it in a tab — and
+since that affordance is new on both platforms, both take the same route.
+
 ### Phase 4 exit criteria
 
+Everything that can be settled without a device is settled. The rest is held open by
+D5 (no request succeeds until both origins are in `ALLOWED_ORIGINS`) and, for push
+alone, by `google-services.json`.
+
 - [ ] A push arrives on a device and opens the correct screen from cold start, from
-      background, and with the app already foregrounded
-- [ ] The same notification tapped in the in-app list lands in the identical place
-- [ ] `adb shell am start -d "wivendor://orders?view=<id>"` navigates correctly
-- [ ] A deep link that lands signed-out returns to its destination after sign-in
-- [ ] Camera and library both produce an upload that succeeds, including a `.mov`
-- [ ] The three non-image upload sites still open the file browser directly
+      background, and with the app already foregrounded — **pending D5 + FCM config**
+- [x] The same notification tapped in the in-app list lands in the identical place —
+      both resolve through the one `notificationRoute()`; there is no second code path
+      that could disagree
+- [ ] `adb shell am start -d "wivendor://orders?view=<id>"` navigates correctly —
+      **pending a device**; the filter merges (verified in the merged manifest) and
+      `routeFromUrl` handles the host-not-path shape
+- [ ] A deep link that lands signed-out returns to its destination after sign-in —
+      **pending a device**; composes for free out of `OnboardingGuard` + `state.from`
+- [ ] Camera and library both produce an upload that succeeds, including a `.mov` —
+      **pending a device**
+- [x] The three non-image upload sites still open the file browser directly —
+      `DigitalAssetUpload`, `PoliciesFields` and Inventory's CSV import are untouched
 - [ ] Each of camera, library and location: refused-once offers a retry that works;
-      refused-for-good offers settings
-- [ ] "Use my location" fills the address on a device
-- [ ] Copy works everywhere, and reports failure when it fails
-- [ ] The native share sheet opens from `ShareProductDialog`
-- [ ] Web build unchanged except the two clipboard fixes
-- [ ] Lint and i18n parity unchanged
+      refused-for-good offers settings — **pending a device**; the branch is
+      `permissions.ts`'s `toOutcome`, driven off the pre-prompt `checkPermissions()`
+- [ ] "Use my location" fills the address on a device — **pending a device**
+- [x] Copy works everywhere, and reports failure when it fails — all four sites go
+      through `copyText`, which returns a boolean
+- [ ] The native share sheet opens from `ShareProductDialog` — **pending a device**
+- [x] Web build unchanged except the clipboard fixes — `npm run build` green, and every
+      native branch is behind `isNative`
+- [x] Lint and i18n parity unchanged — lint 34 (zero in touched files), en/fr 4098/4098
+
+### Divergences from the letter of the plan, each with a reason
+
+- **The App Link intent filter is still not declared.** The plan (and agency-dash)
+  declares `autoVerify` early so the ops task has something to point at. A parallel
+  session had already written the opposite decision into this repo's manifest, with the
+  reason: on Android 12+ an unverifiable `autoVerify` filter puts the app in the "Open
+  by default" list while the links keep opening the browser, which reads as a bug in
+  that file. Nothing in the exit criteria needs it — they name the `wivendor://` scheme
+  — and the assetlinks.json ops ticket already exists below. `routeFromUrl` parses the
+  App Link shape regardless, so declaring the filter later is a one-block change.
+- **The status-bar icon is a VectorDrawable, not five PNG densities.** agency-dash ships
+  `ic_stat_wi_agency.png` at mdpi→xxxhdpi. `minSdk` here is 24, well past the API 21
+  floor for vector notification icons, and one reviewable file beats five binaries
+  nobody can diff. `res/drawable/ic_stat_wi_vendor.xml` is the bag mark with the eyes
+  and smile knocked out via `fillType="evenOdd"` — a small icon is a mask, so the holes
+  are the only thing that keeps it legible.
+- **`getPermissionState()` is gone from `fcm.ts`; `getPushPermission()` replaced it.**
+  The old one was synchronous, and the native read has to cross the bridge. Leaving a
+  synchronous export that answers `null` in a WebView would have been a footgun aimed
+  at exactly the platform this phase is for, so it is now a private helper and the two
+  screens await the async one.
+- **`requestPermissionAndToken()` returns `{ permission, token }`, not `string | null`.**
+  The banner has to tell a one-time refusal from a permanent one to decide between "tap
+  to try again" and a settings button, and a null token cannot carry that. One caller,
+  so the signature change is contained.
+- **`stopRefreshScheduler()` in `logout` is a second call, not the first.**
+  `authService.logout()` already stops it (P2.5) — but only *after* the device-unregister
+  round trip, which is exactly the window a proactive refresh for an abandoned session
+  would fire in. Idempotent, so the duplicate costs nothing.
+
+### Found while doing Phase 4, not fixed by it
+
+- **Ticket attachments still 401 on a device.** Carried over from P3.5 and *not* closed
+  here: the fix needs the bytes fetched through `api.ts` and handed to the OS as a file,
+  which needs `@capacitor/filesystem` — a plugin this phase's install line does not
+  authorise, and a native-build risk taken for one surface. The P3.5 click interceptor
+  still turns it into a visible failure rather than a dead button. Needs its own
+  decision before Phase 7.
+- **`platform/push.ts` is imported by `services/devices.service.ts`.** Only for
+  `devicePlatform`, so the default argument is right on every platform rather than a
+  literal `'web'` a call site could forget to override. It does mean the web bundle
+  carries the push plugin's web shim; that was already true via `lib/fcm.ts`.
+- **The notification channel is created from its own effect.** Folded into the push
+  bootstrap it would have re-registered the device token on every language change,
+  because `t` is a dependency. Split, a language switch re-labels the channel — which
+  Android supports on an existing channel — and touches nothing else.
+- **iOS push is registered but will not deliver.** Unchanged from the plan's ⚠, restated
+  here because the code now exists and looks finished: `Token.value` is an APNs token on
+  iOS and the backend sends through FCM. Phase 6.
 
 ---
 
-# Phase 5 — Billing read-only on mobile (D2)
+# Phase 5 — Billing read-only on mobile (D2) ✅
 
 **Goal:** remove every purchase path from the native build without touching the web one.
 **Branch:** `mobile/phase-5-billing`
@@ -936,7 +1208,35 @@ existing copy-link fallback.
 Larger here than in agency-dash: fourteen components, two purchase flows (plans and
 credit packs), and two gateways (Stripe cards, mobile money).
 
-### P5.1 — The gate
+**Delivered.** `npx tsc -b` green; `npm run build` green; `sync:android` +
+`./gradlew assembleDebug` → BUILD SUCCESSFUL; lint holds at **34 errors**; en/fr at
+**4101 / 4101** — full parity, three keys added; `i18n:smoke`, `richtext:verify` and
+`mobileauth:verify` all pass.
+
+It turned out smaller than the fourteen-component estimate, because the surface is better
+factored than the count suggests: `BillingTab` is the single parent that owns both purchase
+openers and mounts `PaymentDialog`, and `SavedPaymentMethodsCard` is the only mounter of
+`AddPaymentMethodDialog`. Four components and one library changed; the Stripe trio and
+`CardPreview` needed no edit at all because nothing mounts them any more.
+
+### Divergences, each with a reason (D1)
+
+- **`lib/stripe.ts` is guarded, not merely unreached.** The plan only required that it never
+  be *loaded*. `getStripe()` is the one function that can inject the CDN `<script>`, so the
+  check went there as well: the exit criterion is then kept by one line rather than by every
+  future caller remembering, and it no longer depends on `.env.mobile` continuing to omit
+  `VITE_STRIPE_PUBLISHABLE_KEY`. `isStripeConfigured` folds `purchasesEnabled` in for the
+  same reason. ⚠ Note the string `js.stripe.com` still *appears* in the mobile bundle —
+  `isNative` is a runtime call, so the module cannot be tree-shaken. The guarantee is about
+  the request, not the bytes.
+- **A shared `PurchasesUnavailable` component**, rather than three hand-rolled paragraphs.
+  It takes the message as a prop so each surface stays specific about which action went, and
+  it is a component-only module so it adds no `react-refresh/only-export-components` error to
+  a count the exit criteria track.
+- **The openers are guarded as well as their buttons hidden.** `openPlanPurchase` and
+  `openPackPurchase` both return early. The buttons are the door; this is the lock.
+
+### P5.1 — The gate ✅
 
 **New:** `src/platform/purchases.ts` — a single `purchasesEnabled` constant, `!isNative`.
 
@@ -944,7 +1244,7 @@ One flag, read by every surface below. Not `useBearerAuth`: this is about app-st
 policy, which applies to a packaged app and not to a browser running in bearer mode
 under the dev flag.
 
-### P5.2 — What stops, and what does not
+### P5.2 — What stops, and what does not ✅
 
 **Stops on native:**
 
@@ -971,20 +1271,50 @@ is where a vendor gets paid *to*, not what they pay *with*. It is not a purchase
 store takes a cut of it, and it must **keep working** on mobile. Do not let a broad
 "billing" grep sweep it in.
 
-### P5.3 — The notice
+### P5.3 — The notice ✅
+
+**New:** `src/components/billing/PurchasesUnavailable.tsx`
+**i18n:** `billing.mobile.{plans,credits,methods}`
 
 Where an action disappears, say why and where to go — one line pointing at the web
 dashboard, in the `billing` i18n namespace at en/fr parity. An action that silently
 vanishes reads as a bug.
 
+**Three lines, not one shared string.** The three surfaces remove three different things,
+and a generic "purchases are unavailable" on the payment-methods card would leave a vendor
+wondering whether their *saved* cards had stopped working too — which they have not. The
+methods line says so explicitly.
+
+What each surface keeps is as deliberate as what it loses: the plan cards still show price,
+product cap and commission (that is why a vendor opens the screen); the credit packs still
+show what a top-up costs; and saved cards can still be re-defaulted and removed, because
+managing what is already stored is not a purchase.
+
 ### Phase 5 exit criteria
 
-- [ ] No purchase path is reachable on a device, by any route, including deep links
-- [ ] `js.stripe.com` never loads in the native build
-- [ ] Plan status, invoices, transactions, earnings and storage all still render
-- [ ] Payout method add/edit still works on device
-- [ ] Web build completely unchanged — every edit behind `purchasesEnabled`
-- [ ] Lint and i18n parity unchanged
+Verified on this machine:
+
+- [x] No purchase path is reachable on a device, by any route. The two openers return early,
+      `PaymentDialog` and `AddPaymentMethodDialog` are never mounted, and every button that
+      reached them is gone. A deep link cannot call a function, and no route renders a
+      purchase surface directly — `BillingTab` is the only parent
+- [x] `js.stripe.com` never loads: `getStripe()` returns null before it can inject the
+      script, and `.env.mobile` omits the publishable key as a second, independent guard
+- [x] Plan status, invoices, transactions, earnings and storage all still render —
+      `CurrentPlanCard`, `BillingTab`'s history, `StorageUsageCard`, `EarningsSummaryCard`
+      and the Transactions page are untouched by this phase (0 files changed)
+- [x] Payout method add/edit is untouched — `git status src/components/vendor-settings/payout/`
+      reports 0 changed files, checked explicitly because a broad "billing" grep would have
+      swept it in
+- [x] Web build completely unchanged — every edit is behind `purchasesEnabled`, which is
+      `true` in every browser, including under `VITE_FORCE_MOBILE_AUTH`
+- [x] Lint unchanged (**34 errors**) and i18n at full parity (**4101 / 4101**, +3)
+- [x] `sync:android` + `./gradlew assembleDebug` → BUILD SUCCESSFUL
+
+Needs a device, like every phase since 2:
+
+- [ ] Confirm on hardware that the three notices read correctly in en and fr, and that
+      "Set default" / "Remove" still work on a saved card
 
 ---
 
@@ -1028,9 +1358,9 @@ Windows, so this is a separately-scheduled track, not a same-sprint afterthought
 |---|---|---|
 | Add `https://vendor.wi-mall.internal` and `capacitor://vendor.wi-mall.internal` to `ALLOWED_ORIGINS` on **wi-mall**, per environment | Backend | **Phase 2, all device testing** |
 | `android/app/google-services.json` from the **messaging** Firebase project | Ops | Phase 4 push |
-| Confirm the FCM `data` payload carries `aggregateType` + `aggregateId` (not only `url`) | Backend | Phase 4 deep links |
+| ~~Confirm the FCM `data` payload carries `aggregateType` + `aggregateId` (not only `url`)~~ **Confirmed in the source, P4.2.** `vendor-notification-event-handler.service.ts` → `deliverPush()` sends `{ type, aggregateType, aggregateId, path, url }` on every vendor push | — | closed |
 | Refresh vendor-dash's `api-doc/` snapshot — it predates the mobile namespace | Us | nothing, but it will mislead the next person |
-| Decide the Google Calendar OAuth story on bearer (P3.5) | Us → Backend | Phase 4 |
+| ~~Decide the Google Calendar OAuth story on bearer (P3.5)~~ **Done — P3.5a.** Now an ops task: set `GOOGLE_OAUTH_APP_SCHEMES=wivendor` per environment | Ops | Calendar on device |
 | `.well-known/assetlinks.json` on `vendor.wi-mall.com`, once the release key exists | Ops | App Links |
 | APNs key on the messaging Firebase project | Ops | Phase 6 |
 
@@ -1049,12 +1379,13 @@ Diff against these at every phase exit. They are baselines to *hold*, not to fix
 |---|---|---|
 | `npx tsc -b` | **green** | was 5 errors in `src/pages/Agency.tsx`; fixed in Phase 2 because `sync:android` runs `tsc -b` and a red build makes `cap sync` copy a stale `dist/` |
 | `npm run lint` | **34 errors**, mostly `react-refresh/only-export-components` | was 42; `android` is in `globalIgnores` as of P2.1, without which this number moves on every `cap sync` |
-| `npm run i18n:audit` | **en 4071 / fr 4071 — full parity** | must stay at parity |
+| `npm run i18n:audit` | **en 4102 / fr 4102 — full parity** | 4071 → 4074 (Phase 3) → 4098 (Phase 4: the upload-source sheet, the native permission copy, the notification channel's labels) → 4101 (Phase 5: the three purchase notices) → 4102 (P4.6: the download failure). Must stay at parity |
 | `npm run i18n:audit:deep` | ~94 findings | pre-existing |
 | `npm run i18n:smoke` | pass | |
 | `npm run richtext:verify` | pass | |
 | `npm run mobileauth:verify` | pass, 24 assertions | added in Phase 1 |
-| `npx vite build` | green, one 3.15 MB chunk | `npm run build` is green too as of Phase 2. ⚠ `cap sync` copies `dist/`, so a red build would ship a **stale** bundle silently |
+| `npx vite build` | green, one 3.19 MB chunk | was 3.15 MB; Phase 4's plugins are the difference. `npm run build` is green too as of Phase 2. ⚠ `cap sync` copies `dist/`, so a red build would ship a **stale** bundle silently |
+| `./gradlew assembleDebug` | green, 12.7 MB APK | was 6.1 MB; Firebase messaging, camera and geolocation are most of Phase 4's growth |
 
 ---
 
@@ -1067,24 +1398,35 @@ the `http.ts` split with it.
 **Phase 2 is native-only** except the fonts moving into the bundle (P2.7) and a
 splash-hide call that no-ops off native (P2.9).
 
-**Phase 3 is a partial exception, in one place.** Everything is behind `isNative` or an
-`env(safe-area-inset-*)` that resolves to 0 in a browser — except **P3.4**, which
-deliberately ships the offline banner and an honest status dot to the web too, because
-"always green in airplane mode" was a bug there as well. A revert takes those.
+**Phase 3 is a partial exception, in one place.** Everything is behind `isNative`,
+`useKeyboardOpen()` (hardwired false off native) or an `env(safe-area-inset-*)` that
+resolves to 0 in a browser — except **P3.4**, which deliberately ships the offline banner
+and an honest status dot to the web too, because "always green in airplane mode" was a bug
+there as well. A revert takes those.
 
-**Phase 4 is a partial exception, in one place.** Almost all of it is behind `isNative`.
-The exception is **P4.5**'s clipboard fix, which reports a failed copy instead of leaving
-an unhandled rejection and a "Copied!" that never arrives.
+**Phase 4 is a partial exception, in three small places** — and the third one moved from
+what this section predicted, so it is worth reading rather than skimming.
 
-⚠ **One web-visible change worth naming rather than discovering: after P4.1, logout
-unregisters the push device on the web too.** Today only the settings toggle does, so a
-browser where someone enabled push keeps receiving that account's notifications after
-they sign out — on a shared machine, a real leak. The cost is that signing back in
-requires re-enabling push.
+1. **P4.5's clipboard fix.** Four sites now report a failed copy instead of leaving an
+   unhandled rejection and a "Copied!" that never arrives. `ChannelSetupDialog` was the
+   one with a real bug; the other three already had a `catch` and simply changed shape.
+2. **The push permission banner renders one tick later.** Its permission state is read
+   asynchronously now, because a WebView has no `Notification.permission` to read
+   synchronously. Invisible in practice — `isPushSupported()` was already async and
+   already gated the render.
+3. ⚠ **Logout does NOT newly unregister the push device on the web.** An earlier draft of
+   this section warned that it would; it was wrong about this repo.
+   `onboarding.store.tsx`'s `logout` has always done `deleteCurrentToken()` →
+   `unregisterDevice()`, so the leak that paragraph described never existed here. What
+   P4.1 actually added to that function is one `stopRefreshScheduler()` between the two
+   halves, which no browser can see.
 
 **Phase 5 looks like an exception and is not.** It edits shared billing components, but
 every edit is behind `purchasesEnabled`, which is `true` on the web. A revert changes
-nothing a browser can see.
+nothing a browser can see. ⚠ The one line to read twice is in `lib/stripe.ts`:
+`isStripeConfigured` now ANDs in `purchasesEnabled`, so anything that branches on it would
+change behaviour if that flag were ever made true-on-native. It is `!isNative`, so on the
+web it is exactly what it was.
 
 ---
 
@@ -1101,35 +1443,53 @@ src/i18n/locales/{en,fr}/auth.ts
 tools/mobileauth/verify.ts
 ```
 
-### Planned
+### Shipped (Phase 2)
 
 ```
 capacitor.config.ts                          P2.2
 android/                                     P2.1
 env/{.env.production,.env.mobile,README.md}  P2.8
-scripts/vendor-fonts.mjs                     P2.7
+tools/fonts/vendor-fonts.mjs                 P2.7  (not scripts/ — see the Phase 2 notes)
 src/assets/fonts/*.woff2                     P2.7
 src/styles/fonts.css                         P2.7  (generated)
-
 src/platform/auth/secureTokenStore.ts        P2.4
 src/platform/auth/refreshScheduler.ts        P2.5
 src/platform/shell/splash.ts                 P2.9
+```
+
+### Shipped (Phase 3)
+
+```
 src/platform/shell/backButton.ts             P3.1
 src/platform/shell/keyboard.ts               P3.2
 src/platform/shell/statusBar.ts              P3.3
-src/platform/shell/deepLinks.ts              P4.2
 src/platform/network.ts                      P3.4
 src/platform/browser.ts                      P3.5
-src/platform/push.ts                         P4.1
-src/platform/media.ts                        P4.3
-src/platform/permissions.ts                  P4.3 (shared with P4.4)
-src/platform/geolocation.ts                  P4.4
-src/platform/clipboard.ts                    P4.5
-src/platform/share.ts                        P4.5
-src/platform/purchases.ts                    P5.1
-
 src/components/layout/OfflineBanner.tsx      P3.4
-src/components/common/UploadSourceSheet.tsx  P4.3
+```
+
+### Shipped (Phase 4)
+
+```
+src/platform/push.ts                              P4.1
+src/platform/shell/deepLinks.ts                   P4.2  (P3.5a wrote the appUrlOpen half)
+src/platform/permissions.ts                       P4.3  shared with P4.4 and the push banner
+src/platform/media.ts                             P4.3
+src/platform/geolocation.ts                       P4.4
+src/platform/clipboard.ts                         P4.5
+src/platform/share.ts                             P4.5  (gained a `files` field for P4.6)
+src/platform/filesystem.ts                        P4.6  saving a file to the device
+src/components/common/UploadSourceSheet.tsx       P4.3  the phase's one new screen element
+
+android/app/src/main/res/values/colors.xml        P4.1  notification tint
+android/app/src/main/res/drawable/ic_stat_wi_vendor.xml  P4.1  status-bar mask
+```
+
+### Shipped (Phase 5)
+
+```
+src/platform/purchases.ts                        P5.1
+src/components/billing/PurchasesUnavailable.tsx  P5.3
 ```
 
 ### Modified
@@ -1139,24 +1499,38 @@ src/platform/env.ts                          P2.3   isNative / platform become r
 src/platform/auth/tokenStore.ts              P2.4   selects the secure store
 src/services/api.ts                          P2.5   refreshSession() from the scheduler
 src/lib/fcm.ts                               P2.6   !isNative guard · P4.1 native provider
-index.html                                   P2.7   fonts · P3.3 theme-color metas
-src/index.css                                P2.7   @import fonts.css
-src/App.tsx                                  P3.2/P3.3  keyboard allowance, top inset, Toaster offset
-src/onboarding/OnboardingLayout.tsx          P3.3   top inset
+index.html                                   P2.7   fonts · P2.9 theme-color metas
+src/index.css                                P2.7   @import fonts.css · P3.3 .-mt-safe
+src/main.tsx                                 P2.9   splash · P3.2/P3.3/P3.5 the three init calls
+src/App.tsx                                  P3.1–P3.4  back button, keyboard allowance, top
+                                                    inset, Toaster offset, OfflineBanner
+src/onboarding/OnboardingLayout.tsx          P3.3   top inset on its own header
+src/components/layout/MobilePageHeader.tsx   P3.3   -mt-safe, so the inset is counted once
+src/components/preview/PreviewBanner.tsx     P3.3   top inset, outside the dashboard shell
 src/components/layout/MobileTabBar.tsx       P3.2   hide while the keyboard is up
+src/components/layout/MobileListFooter.tsx   P3.2   drops to bottom-0 with the tab bar
 src/components/vendor-settings/UnsavedChangesBar.tsx  P3.2
-src/components/layout/PlatformStatus.tsx     P3.4
-src/components/notifications/*               P4.1
-src/components/features/AddressSearch.tsx    P4.4
+src/components/layout/PlatformStatus.tsx     P3.4   real connectivity, not a hardcoded green
+src/components/services/CalendarConnectionPanel.tsx   P3.5  OAuth gated on native
+src/components/notifications/NotificationsBootstrap.tsx  P3.4 network edge · P4.1 channel,
+                                                    rotation repair, async permission
+src/components/notifications/PushPermissionBanner.tsx  P4.1  async permission, blocked→settings
+src/components/features/AddressSearch.tsx    P4.4   five outcomes, not one toast
 src/components/features/MediaPicker.tsx      P4.3
-src/pages/MediaGallery.tsx                   P4.3
+src/pages/MediaGallery.tsx                   P4.3   all three upload affordances
 src/components/vendor-settings/forms/BrandingImageUpload.tsx  P4.3
-src/components/vendor-settings/ChannelSetupDialog.tsx          P4.5
-src/components/products/ShareProductDialog.tsx                 P4.5
+src/components/vendor-settings/ChannelSetupDialog.tsx          P4.5  + the unhandled-rejection fix
+src/components/vendor-settings/StorefrontSettings.tsx          P4.5
+src/components/preview/PreviewLinkActions.tsx                  P4.5
+src/components/products/ShareProductDialog.tsx                 P3.5 openExternal · P4.5 share + copy
+src/services/devices.service.ts              P4.1   platform defaults to the runtime's own
+src/onboarding/store/onboarding.store.tsx    P4.1   stopRefreshScheduler between the two halves
+android/app/src/main/AndroidManifest.xml     P4.1/P4.3/P4.4  FCM metas, permissions, uses-feature
+android/app/src/main/res/values/strings.xml  P4.1   default_notification_channel_id
 src/components/billing/*                     P5.2
 eslint.config.js                             P2.1   globalIgnores + android
 tsconfig.node.json                           P2.1   include capacitor.config.ts
-package.json                                 P2.1/P2.8
+package.json                                 P2.1/P2.8/P4  six plugins
 ```
 
 ---

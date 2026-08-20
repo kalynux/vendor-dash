@@ -4,4 +4,16 @@
     <string name="title_activity_main">Wi-Vendor</string>
     <string name="package_name">com.wi_mall.vendor</string>
     <string name="custom_url_scheme">com.wi_mall.vendor</string>
+
+    <!--
+        The Android notification channel every vendor push lands in
+        (CAPACITOR-PLAN.md → P4.1).
+
+        ⚠ A THREE-WAY contract, and the id is the whole of it: the backend names
+        this string on every send (`ANDROID_CHANNELS.DEFAULT` in the wi-mall
+        API), src/platform/push.ts creates the channel under it at runtime, and
+        AndroidManifest.xml names it as the fallback. Change it in one place only
+        and notifications quietly land in a channel the vendor never agreed to.
+    -->
+    <string name="default_notification_channel_id">jovi_default</string>
 </resources>

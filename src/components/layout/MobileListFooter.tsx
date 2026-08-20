@@ -1,5 +1,6 @@
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { cn } from '@/lib/utils';
+import { useKeyboardOpen } from '@/platform/shell/keyboard';
 
 interface MobileListFooterProps {
   /** Number of items currently loaded/visible. */
@@ -18,6 +19,14 @@ interface MobileListFooterProps {
 /**
  * Sticky mobile footer that reports list progress, e.g.
  * "Showing 1–20 of 247 orders". Sits just above the MobileTabBar (h-16).
+ *
+ * While the on-screen keyboard is up the tab bar hides itself
+ * (CAPACITOR-PLAN.md → P3.2), so `bottom-16` would leave this stranded 4rem
+ * above the keys with nothing underneath it. It drops to the bottom of the
+ * resized viewport instead — which is where the vendor wants it anyway, since
+ * the surface that raises a keyboard on these pages is the search field and this
+ * is the readout of how many results it left. `useKeyboardOpen()` is hardwired
+ * to false on the web, so the browser build is unchanged.
  */
 export function MobileListFooter({
   shown,
@@ -26,12 +35,14 @@ export function MobileListFooter({
   className,
 }: MobileListFooterProps) {
   const { t } = useTranslation();
+  const keyboardOpen = useKeyboardOpen();
   if (total <= 0) return null;
   const upper = Math.min(shown, total);
   return (
     <div
       className={cn(
-        'fixed bottom-16 left-0 right-0 z-40 border-t bg-background/90 px-4 py-2 text-center text-xs text-muted-foreground backdrop-blur-sm',
+        'fixed left-0 right-0 z-40 border-t bg-background/90 px-4 py-2 text-center text-xs text-muted-foreground backdrop-blur-sm',
+        keyboardOpen ? 'bottom-0' : 'bottom-16',
         className,
       )}
     >

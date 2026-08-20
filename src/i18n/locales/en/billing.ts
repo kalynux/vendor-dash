@@ -39,6 +39,24 @@ export const billing = {
         pendingStartsOn: 'Starts when your current plan ends on {{date}}.',
     },
 
+    /**
+     * Shown only in the packaged app, where purchases are disabled
+     * (CAPACITOR-PLAN.md → D2, P5.3). Each line names the action that went and
+     * where it went to — an action that just disappears reads as a bug.
+     *
+     * Deliberately NOT collapsed into one shared string: the three surfaces
+     * remove three different things, and "purchases are unavailable" on the
+     * payment-methods card would leave a vendor wondering whether their saved
+     * cards had stopped working too.
+     */
+    mobile: {
+        plans: 'Plan changes aren’t available in the app. Open your dashboard in a web browser to upgrade.',
+        credits: 'Top-ups aren’t available in the app. Open your dashboard in a web browser to buy credits.',
+        methods:
+            'Adding a card isn’t available in the app. Open your dashboard in a web browser to add one — ' +
+            'your saved methods still work here.',
+    },
+
     plans: {
         title: 'Plans',
         info:

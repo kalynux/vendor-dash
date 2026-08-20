@@ -456,8 +456,17 @@ export const services = {
         connectFailed: 'Could not connect Google Calendar.',
         /** `reason` codes on the OAuth error redirect (calendar.md). */
         oauth: {
+            /**
+             * The vendor pressed Cancel on Google's consent screen. Not an
+             * error, and it must not read like one — before the backend
+             * reported this separately it fell through to `missing_code`, which
+             * told someone who had just declined that Google failed to send a
+             * code: true, and useless.
+             */
+            access_denied: 'You didn’t approve access, so nothing was connected.',
             missing_code: 'Google did not return an authorization code. Please try again.',
             missing_state: 'The connection request was missing its security token. Please try again.',
+            /** No longer emitted — the callback has no second identity to disagree with. */
             state_mismatch: 'The connection could not be verified. Please try connecting again.',
             invalid_state: 'The connection link expired. Please try connecting again.',
             connection_failed: 'We could not complete the connection with Google. Please try again.',

@@ -108,6 +108,17 @@ export const notifications = {
             blockedToast:
                 'Le push est bloqué. Activez les notifications pour ce site dans les réglages de votre navigateur.',
             enableFailed: 'Impossible d’activer le push sur cet appareil.',
+
+            blockedNative:
+                'Les notifications sont désactivées pour cette application — touchez pour réessayer, ou autorisez-les dans les réglages de votre appareil.',
+            blockedNativeToast:
+                'Les notifications sont désactivées pour cette application. Autorisez-les dans les réglages de votre appareil.',
+            deniedNativeToast: 'Le push reste désactivé tant que vous n’autorisez pas les notifications.',
+            openSettings: 'Ouvrir les réglages',
+
+            channelName: 'Activité de la boutique',
+            channelDescription:
+                'Commandes, réservations, paiements et alertes de stock pour votre boutique.',
         },
 
         delivery: {

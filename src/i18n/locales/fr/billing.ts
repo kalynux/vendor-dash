@@ -37,6 +37,19 @@ export const billing = {
         pendingStartsOn: 'Démarre à la fin de votre formule actuelle, le {{date}}.',
     },
 
+    mobile: {
+        plans:
+            'Le changement de forfait n’est pas disponible dans l’application. Ouvrez votre tableau ' +
+            'de bord dans un navigateur web pour changer de forfait.',
+        credits:
+            'Les recharges ne sont pas disponibles dans l’application. Ouvrez votre tableau de bord ' +
+            'dans un navigateur web pour acheter des crédits.',
+        methods:
+            'L’ajout d’une carte n’est pas disponible dans l’application. Ouvrez votre tableau de bord ' +
+            'dans un navigateur web pour en ajouter une — vos moyens de paiement enregistrés ' +
+            'fonctionnent toujours ici.',
+    },
+
     plans: {
         title: 'Formules',
         info:

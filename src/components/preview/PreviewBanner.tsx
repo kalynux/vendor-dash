@@ -56,7 +56,10 @@ export function PreviewBanner({
   const { t } = useTranslation();
 
   return (
-    <header className="shrink-0 border-b bg-background">
+    // `pt-safe`: the preview pages render outside the dashboard shell and fill
+    // the viewport (`h-[100dvh]`), so this bar is what sits under the status bar
+    // on a device. Inert in a browser (CAPACITOR-PLAN.md → P3.3).
+    <header className="shrink-0 border-b bg-background pt-safe">
       <div className="flex items-center gap-2 px-3 py-2 sm:gap-3 sm:px-4 sm:py-2.5">
         <Button
           type="button"

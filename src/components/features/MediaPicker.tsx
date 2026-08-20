@@ -57,6 +57,8 @@ type Translate = (key: TranslationKey, params?: Record<string, string | number>)
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useApiError, useFormatters, useTranslation, type TranslationKey } from '@/i18n';
 import { getUploadErrorMessage } from '@/lib/uploadErrors';
+import { UploadSourceSheet } from '@/components/common/UploadSourceSheet';
+import { nativeMediaAvailable } from '@/platform/media';
 import {
   listFiles,
   uploadMediaWithProgress,
@@ -254,6 +256,8 @@ export function MediaPicker({
   const [uploadPercent, setUploadPercent] = useState(0);
   const [dragActive, setDragActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Native only — nothing on the web ever opens it (CAPACITOR-PLAN.md → P4.3).
+  const [sourceOpen, setSourceOpen] = useState(false);
 
   // ─── Query assembly ──────────────────────────────────────────────────────────
 
@@ -359,6 +363,14 @@ export function MediaPicker({
     if (e.dataTransfer.files?.length) handleUpload(e.dataTransfer.files);
   };
 
+  // On a device the Upload button opens the source sheet (camera / library /
+  // files) instead of going straight to the system file chooser; on the web it
+  // is the same click on the same hidden input it always was (P4.3).
+  const requestUpload = () => {
+    if (nativeMediaAvailable) setSourceOpen(true);
+    else fileInputRef.current?.click();
+  };
+
   // ─── Selection ─────────────────────────────────────────────────────────────
 
   const selectedIds = Object.keys(selected);
@@ -420,6 +432,18 @@ export function MediaPicker({
         className="hidden"
         onChange={(e) => e.target.files && handleUpload(e.target.files)}
       />
+      <UploadSourceSheet
+        open={sourceOpen}
+        onOpenChange={setSourceOpen}
+        onPicked={handleUpload}
+        onBrowseFiles={() => fileInputRef.current?.click()}
+        multiple
+        // The same ceiling `validateMediaSelection` enforces, applied at the
+        // point of selection so the vendor is stopped by the picker rather than
+        // by an error after choosing twelve photos.
+        limit={MAX_FILES_PER_UPLOAD}
+        allowVideo
+      />
       <SearchFilterBar
         value={searchInput}
         onChange={setSearchInput}
@@ -431,7 +455,7 @@ export function MediaPicker({
           <>
             <Button
               variant="outline"
-              onClick={() => fileInputRef.current?.click()}
+              onClick={requestUpload}
               disabled={uploading}
               className="h-11 shrink-0 gap-2 rounded-xl"
             >

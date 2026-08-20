@@ -139,7 +139,12 @@ export function OnboardingLayout({ children, ctaSlot, stepKey }: OnboardingLayou
     return (
         <div className="min-h-screen bg-background flex flex-col">
             {/* ── Header ── */}
-            <header className="h-16 border-b bg-card flex items-center justify-between px-4 md:px-8 flex-shrink-0">
+            {/* This layout lives outside the dashboard shell, so nothing above
+                it pads for the status bar. On a device the header is the first
+                thing under the clock, so it carries the inset itself — and its
+                height grows by the same amount rather than the 4rem row being
+                squeezed into it. `env(...)` is 0 in a browser (P3.3). */}
+            <header className="h-[calc(4rem+env(safe-area-inset-top))] pt-safe border-b bg-card flex items-center justify-between px-4 md:px-8 flex-shrink-0">
                 <div className="flex items-center gap-3">
                     {/* Back button */}
                     {showBack && (

@@ -2,6 +2,8 @@ import { Loader2, Save } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { useTranslation } from '@/i18n';
+import { cn } from '@/lib/utils';
+import { useKeyboardOpen } from '@/platform/shell/keyboard';
 
 interface UnsavedChangesBarProps {
     /** Show the bar (typically `dirty || saving`). */
@@ -25,6 +27,12 @@ interface UnsavedChangesBarProps {
  * On mobile it has to clear the tab bar (4rem) *and* the FAB that pops 1.5rem
  * above it, hence the offset; it also stretches to the full width there so the
  * label truncates instead of the buttons being clipped off the pill.
+ *
+ * While the on-screen keyboard is up that whole allowance is wrong: the tab bar
+ * hides itself (CAPACITOR-PLAN.md → P3.2), so the pill would float in mid-screen
+ * over nothing. The offset collapses with it, which also puts Save directly
+ * above the keyboard — on a settings form the field being edited is the reason
+ * the bar appeared at all. `useKeyboardOpen()` is hardwired to false on the web.
  */
 export function UnsavedChangesBar({
     visible,
@@ -35,11 +43,18 @@ export function UnsavedChangesBar({
     saveDisabled,
 }: UnsavedChangesBarProps) {
     const { t } = useTranslation();
+    const keyboardOpen = useKeyboardOpen();
 
     if (!visible) return null;
 
     return (
-        <div className="pointer-events-none fixed inset-x-0 bottom-[calc(5.75rem+env(safe-area-inset-bottom))] z-50 flex justify-center px-3 md:bottom-6 md:px-4">
+        <div
+            className={cn(
+                'pointer-events-none fixed inset-x-0 z-50 flex justify-center px-3 md:px-4',
+                keyboardOpen ? 'bottom-4' : 'bottom-[calc(5.75rem+env(safe-area-inset-bottom))]',
+                'md:bottom-6',
+            )}
+        >
             <div className="pointer-events-auto flex w-full max-w-sm items-center gap-2 rounded-full border bg-background/95 py-1.5 pl-3.5 pr-1.5 shadow-lg backdrop-blur animate-fade-in md:w-auto md:max-w-none md:gap-3 md:pl-4">
                 <span className="relative flex h-2 w-2 shrink-0">
                     <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-500 opacity-60" />

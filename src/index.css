@@ -157,6 +157,15 @@
 .h-safe-bottom {
   height: env(safe-area-inset-bottom);
 }
+/* Cancels an ancestor's `padding-top: env(safe-area-inset-top)` so the element
+   sits flush against the top of the viewport again. Paired with `.pt-safe` on
+   the same element it *moves* the inset from the ancestor onto this element
+   rather than adding a second one — which is exactly what `MobilePageHeader`
+   needs, since `<main>` now pads for the status bar on behalf of the pages that
+   have no header of their own (CAPACITOR-PLAN.md → P3.3). */
+.-mt-safe {
+  margin-top: calc(env(safe-area-inset-top) * -1);
+}
 /* Existing markup already references this class name on the mobile tab bar. */
 .safe-area-inset-bottom {
   padding-bottom: env(safe-area-inset-bottom);

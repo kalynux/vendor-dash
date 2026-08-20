@@ -26,6 +26,24 @@ export const media = {
             videoTooLarge: '« {{name}} » dépasse la limite de 70 Mo pour les vidéos.',
             videoFormat: '« {{name}} » n’est pas une vidéo prise en charge (utilisez MP4, MOV ou WebM).',
         },
+
+        source: {
+            title: 'Ajouter un fichier',
+            description: 'Choisissez la provenance de ce fichier.',
+            camera: 'Prendre une photo',
+            cameraHint: 'Utiliser l’appareil photo maintenant',
+            gallery: 'Photothèque',
+            galleryHint: 'Choisir parmi vos photos et vidéos',
+            files: 'Parcourir les fichiers',
+            filesHint: 'Documents et tout le reste',
+            openSettings: 'Ouvrir les réglages',
+            deniedCamera: 'L’accès à l’appareil photo est nécessaire pour prendre une photo.',
+            deniedGallery: 'L’accès aux photos est nécessaire pour choisir dans votre photothèque.',
+            blockedCamera: 'L’accès à l’appareil photo est désactivé. Autorisez-le dans les réglages de votre appareil.',
+            blockedGallery: 'L’accès aux photos est désactivé. Autorisez-le dans les réglages de votre appareil.',
+            noCamera: 'Cet appareil ne dispose d’aucun appareil photo.',
+            failed: 'Impossible d’ouvrir. Veuillez réessayer.',
+        },
     },
 
     library: {

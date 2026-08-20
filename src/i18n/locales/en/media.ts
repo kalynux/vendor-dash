@@ -30,6 +30,30 @@ export const media = {
             videoTooLarge: '“{{name}}” exceeds the 70 MB video limit.',
             videoFormat: '“{{name}}” is not a supported video (use MP4, MOV or WebM).',
         },
+
+        /**
+         * The upload-source sheet, shown only inside the mobile app
+         * (CAPACITOR-PLAN.md → P4.3). A browser has one answer to "where is the
+         * file" and opens it directly; a phone has three, and the one people
+         * reach for most is the camera.
+         */
+        source: {
+            title: 'Add a file',
+            description: 'Choose where this file comes from.',
+            camera: 'Take a photo',
+            cameraHint: 'Use the camera right now',
+            gallery: 'Photo library',
+            galleryHint: 'Pick from your photos and videos',
+            files: 'Browse files',
+            filesHint: 'Documents and everything else',
+            openSettings: 'Open settings',
+            deniedCamera: 'Camera access is needed to take a photo.',
+            deniedGallery: 'Photo access is needed to pick from your library.',
+            blockedCamera: 'Camera access is turned off. Allow it in your device settings.',
+            blockedGallery: 'Photo access is turned off. Allow it in your device settings.',
+            noCamera: 'This device has no camera available.',
+            failed: 'Could not open that. Please try again.',
+        },
     },
 
     /** Desktop page title/description; the mobile header uses the short form. */

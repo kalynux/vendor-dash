@@ -117,6 +117,29 @@ export const notifications = {
             blockedToast:
                 'Push is blocked. Enable notifications for this site in your browser settings.',
             enableFailed: 'Could not enable push on this device.',
+
+            /**
+             * Mobile app only (CAPACITOR-PLAN.md → P4.1). "Your browser
+             * settings" names a place that does not exist on a phone, and the
+             * two refusals differ there: Android will still prompt after a
+             * one-time "no", but never after a permanent one.
+             */
+            blockedNative:
+                'Notifications are turned off for this app — tap to try again, or allow them in your device settings.',
+            blockedNativeToast:
+                'Notifications are turned off for this app. Allow them in your device settings.',
+            deniedNativeToast: 'Push stays off until you allow notifications.',
+            openSettings: 'Open settings',
+
+            /**
+             * The Android notification channel's name and description, shown in
+             * the system settings where the vendor tunes or mutes us. Created at
+             * runtime by `platform/push.ts`; Android updates these two on a
+             * channel that already exists, so switching language re-labels it.
+             */
+            channelName: 'Store activity',
+            channelDescription:
+                'Orders, bookings, payments and stock alerts for your store.',
         },
 
         /** The "where do notifications land" card. */

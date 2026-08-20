@@ -106,12 +106,22 @@ export const nav = {
     mobile: {
         more: 'More',
         quickActions: 'Quick actions',
+        /**
+         * The Android hardware back button asks once before it quits, at the
+         * root of the stack (CAPACITOR-PLAN.md → P3.1). Never shown on the web.
+         */
+        exitConfirm: 'Press back again to exit',
     },
 
     platformStatus: {
         online: 'All systems operational',
         degraded: 'Degraded performance',
         offline: 'Offline',
+        /**
+         * The second half of the offline banner, shown from `sm` up. The label
+         * alone states a fact; this says what it means for the vendor.
+         */
+        offlineDetail: 'Some actions won’t work until the connection returns.',
     },
 
     login: {

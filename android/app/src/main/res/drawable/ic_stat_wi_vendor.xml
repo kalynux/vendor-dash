@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    The status-bar mark for a push notification (CAPACITOR-PLAN.md → P4.1).
+
+    ⚠ A notification small icon is a MASK. Android keeps only the alpha channel
+    and paints every opaque pixel with the tint, so colour here is meaningless
+    and anything solid becomes a featureless blob. That is exactly what happens
+    if this file is missing and the SDK falls back to `android:icon` — the
+    launcher mark is a filled bag.
+
+    So this is the Wi-Mall bag reduced to a silhouette with the face knocked out
+    of it: `android:fillType="evenOdd"` turns the two eyes and the smile into
+    real holes rather than overpainted shapes, which is the only thing that keeps
+    the mark readable at 24dp in a status bar.
+
+    A VectorDrawable rather than the five PNG densities agency-dash ships: minSdk
+    here is 24, well past the API 21 floor for vector notification icons, and one
+    reviewable file beats five binaries nobody can diff.
+
+    The shape is inset to roughly 22 of the 24dp viewport — Android crops a
+    status-bar icon to its own bounds, and a mark that fills the canvas edge to
+    edge loses its outline to the crop.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M5.6,1.8 L18.4,1.8 L22.2,5.6 L22.2,22.2 L15,22.2 L12,18.8 L9,22.2 L1.8,22.2 L1.8,5.6 Z M7.05,9.2 a1.15,1.15 0 1,0 2.3,0 a1.15,1.15 0 1,0 -2.3,0 Z M14.65,9.2 a1.15,1.15 0 1,0 2.3,0 a1.15,1.15 0 1,0 -2.3,0 Z M7.6,12.4 C7.6,15.8 9.6,17.4 12,17.4 C14.4,17.4 16.4,15.8 16.4,12.4 L15,12.4 C15,15 13.7,16.1 12,16.1 C10.3,16.1 9,15 9,12.4 Z" />
+
+</vector>

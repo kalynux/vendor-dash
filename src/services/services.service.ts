@@ -74,13 +74,41 @@ export async function disconnectCalendar(): Promise<void> {
 }
 
 /**
- * Full browser-navigation URL that starts the Google OAuth flow. This MUST be
- * used as `window.location.href = …` (not fetch) so it carries the session
- * cookie and can follow Google's redirects. The backend redirects back to
- * `/dashboard/services?calendar=connected|error&reason=…` afterwards.
+ * Full browser-navigation URL that starts the Google OAuth flow, for the **cookie**
+ * transport. MUST be used as `window.location.href = …` (not fetch) so it carries
+ * the session cookie and can follow Google's redirects. The backend redirects
+ * back to `GOOGLE_OAUTH_FRONTEND_REDIRECT_URL?calendar=connected|error&reason=…`
+ * afterwards.
+ *
+ * Not usable on bearer — there is no cookie for `/connect` to read. Use
+ * {@link fetchCalendarConnectUrl} there.
  */
 export function getCalendarConnectUrl(): string {
   return `${BASE_URL}/integrations/google/connect`;
+}
+
+/**
+ * The same Google consent URL, fetched as JSON rather than navigated to
+ * (`POST /integrations/google/connect-url`, google-calendar.md).
+ *
+ * This is the bearer-transport half of the flow. Two things force it:
+ * `/connect` reads a session cookie the app does not have, and ⚠ **Google
+ * refuses OAuth inside an embedded WebView** (`disallowed_useragent`) — so the
+ * consent screen has to be opened in a system browser tab over the app, which
+ * means we need the URL rather than a redirect.
+ *
+ * `returnTo` is a `wivendor://` URL the OS hands back to the app when Google is
+ * done; the backend allowlists it before minting the state and seals it inside
+ * the signed state, so it cannot be edited in transit. Omit it and the backend
+ * falls back to its configured web destination — which is the right answer for
+ * the dev override, where the "app" is a desktop browser.
+ */
+export async function fetchCalendarConnectUrl(returnTo?: string): Promise<string> {
+  const res = await api.post<{ success: boolean; data: { url: string } }>(
+    '/integrations/google/connect-url',
+    returnTo ? { returnTo } : {},
+  );
+  return res.data.url;
 }
 
 // ─── Service products (product endpoints, type: "service") ──────────────────────

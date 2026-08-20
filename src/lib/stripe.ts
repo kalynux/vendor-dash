@@ -1,3 +1,5 @@
+import { purchasesEnabled } from '@/platform/purchases';
+
 // ─── Stripe.js loader ────────────────────────────────────────────────────────
 // Loads Stripe's hosted script (https://js.stripe.com/v3) on demand and returns a
 // configured Stripe instance. We use the hosted script directly (rather than the
@@ -103,8 +105,20 @@ declare global {
 const PUBLISHABLE_KEY = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY as string | undefined;
 const STRIPE_JS_URL = 'https://js.stripe.com/v3';
 
-/** Whether Stripe card payments are configured (publishable key present). */
-export const isStripeConfigured = Boolean(PUBLISHABLE_KEY);
+/**
+ * Whether Stripe card payments are configured (publishable key present).
+ *
+ * Also false in a packaged app, whatever the environment says
+ * (CAPACITOR-PLAN.md → P5.2). Every mounting path is already behind
+ * `purchasesEnabled`, so this is the backstop rather than the mechanism — but it
+ * is the backstop that matters, because it is the single choke point through
+ * which `js.stripe.com` could ever be injected. ⚠ A packaged app should not be
+ * pulling executable code off a CDN at runtime at all: it is invisible to store
+ * review, it breaks offline, and it is exactly the pattern both stores' policies
+ * are written against. `.env.mobile` omits `VITE_STRIPE_PUBLISHABLE_KEY` for the
+ * same reason; this makes the guarantee independent of that file staying right.
+ */
+export const isStripeConfigured = Boolean(PUBLISHABLE_KEY) && purchasesEnabled;
 
 let scriptPromise: Promise<StripeConstructor> | null = null;
 
@@ -137,6 +151,11 @@ let stripeInstance: StripeInstance | null = null;
 
 /** Lazily load Stripe.js and return a configured instance (memoised). */
 export async function getStripe(): Promise<StripeInstance | null> {
+  // Guarded here and not only at the call sites: this is the one function that
+  // can cause the CDN script to be injected, so the promise "js.stripe.com never
+  // loads in the native build" is kept by one line rather than by every future
+  // caller remembering. Callers already treat null as "cards unavailable".
+  if (!purchasesEnabled) return null;
   if (!PUBLISHABLE_KEY) return null;
   if (stripeInstance) return stripeInstance;
   const Stripe = await loadScript();

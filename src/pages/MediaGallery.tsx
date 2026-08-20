@@ -103,6 +103,9 @@ import {
   kindFromMime,
   categoryFromKind,
 } from '@/services/files.service';
+import { UploadSourceSheet } from '@/components/common/UploadSourceSheet';
+import { nativeMediaAvailable } from '@/platform/media';
+import { downloadFile } from '@/platform/filesystem';
 import type {
   ApiFile,
   ApiFileDetail,
@@ -387,6 +390,8 @@ export function MediaGallery() {
   const isDesktop = useIsDesktop();
   const isMobile = useIsMobile();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Native only — nothing on the web ever opens it (CAPACITOR-PLAN.md → P4.3).
+  const [sourceOpen, setSourceOpen] = useState(false);
 
   const dCache = getListCache<MediaDesktopCache>(MEDIA_DESKTOP_KEY);
 
@@ -400,6 +405,8 @@ export function MediaGallery() {
 
   // Account-wide storage usage + plan limit, embedded in the file listing.
   const [storage, setStorage] = useState<StorageUsage | null>(null);
+  /** Which file is being fetched, so only its own menu row spins. */
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
   // Reference-based enrichment cache (the source of attachment truth)
   const [detailCache, setDetailCache] = useState<Record<string, ApiFileDetail>>(dCache?.detailCache ?? {});
@@ -609,6 +616,15 @@ export function MediaGallery() {
     if (e.dataTransfer.files?.length) handleFiles(e.dataTransfer.files);
   };
 
+  // On a device every Upload affordance on this page — the mobile header icon,
+  // the desktop button and the empty state — opens the source sheet (camera /
+  // library / files) instead of the system file chooser. On the web all three
+  // are the same click on the same hidden input they always were (P4.3).
+  const requestUpload = () => {
+    if (nativeMediaAvailable) setSourceOpen(true);
+    else fileInputRef.current?.click();
+  };
+
   // ─── Inspect / mutate ──────────────────────────────────────────────────────
 
   const openInspector = useCallback(
@@ -643,6 +659,36 @@ export function MediaGallery() {
       apiError.toast(err, { fallbackKey: 'media.errors.renameFailed' });
     }
   }, [isMobile, infinite, t, apiError]);
+
+  /**
+   * Save a library file to the device (CAPACITOR-PLAN.md → P4.6).
+   *
+   * The Media library is this app's file manager, and until now the only thing
+   * it could do with a file was open it in a tab. Unlike the ticket attachment
+   * button — which keeps the web's own `<a download>` because that path already
+   * worked there — this affordance is new on both platforms, so both take the
+   * same route through `platform/filesystem.ts`.
+   *
+   * `originalName` is what the vendor uploaded it as; a file whose name the API
+   * did not keep falls back to the storage key's basename rather than an opaque
+   * id, so the saved file is still recognisable.
+   */
+  const handleDownload = useCallback(
+    async (file: ApiFile) => {
+      setDownloadingId(file.id);
+      try {
+        const outcome = await downloadFile({
+          url: resolveFileUrl(file),
+          fileName: file.originalName ?? file.key.split('/').pop() ?? 'download',
+        });
+        // A dismissed share sheet is a decision, not a failure — say nothing.
+        if (outcome === 'failed') toast.error(t('common.files.downloadFailed'));
+      } finally {
+        setDownloadingId(null);
+      }
+    },
+    [t],
+  );
 
   const handleDelete = useCallback(
     async (id: string) => {
@@ -856,6 +902,18 @@ export function MediaGallery() {
           className="hidden"
           onChange={onInputChange}
         />
+        <UploadSourceSheet
+          open={sourceOpen}
+          onOpenChange={setSourceOpen}
+          onPicked={handleFiles}
+          onBrowseFiles={() => fileInputRef.current?.click()}
+          multiple
+          // The same ceiling `validateMediaSelection` enforces, applied at the
+          // point of selection so the vendor is stopped by the picker rather
+          // than by an error after choosing twelve photos.
+          limit={MAX_FILES_PER_UPLOAD}
+          allowVideo
+        />
 
         {/* Mobile sticky header */}
         {isMobile && (
@@ -864,7 +922,7 @@ export function MediaGallery() {
             actions={
               <button
                 type="button"
-                onClick={() => fileInputRef.current?.click()}
+                onClick={requestUpload}
                 disabled={uploading}
                 aria-label={t('media.library.upload')}
                 className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-accent transition-colors disabled:opacity-50"
@@ -883,7 +941,7 @@ export function MediaGallery() {
               <h1 className="text-2xl font-bold tracking-tight">{t('media.title')}</h1>
               <p className="text-muted-foreground">{t('media.library.description')}</p>
             </div>
-            <Button onClick={() => fileInputRef.current?.click()} disabled={uploading} className="gap-2">
+            <Button onClick={requestUpload} disabled={uploading} className="gap-2">
               {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
               {t('media.library.upload')}
             </Button>
@@ -932,7 +990,7 @@ export function MediaGallery() {
               <LibrarySkeleton viewMode={viewMode} />
             ) : visibleFiles.length === 0 ? (
               <EmptyState
-                onUpload={() => fileInputRef.current?.click()}
+                onUpload={requestUpload}
                 hasFilters={!!search || kind !== 'all' || provider !== 'all'}
                 onClear={() => {
                   setSearch('');
@@ -1019,6 +1077,17 @@ export function MediaGallery() {
                               <DropdownMenuItem onClick={(e) => { e.stopPropagation(); openInspector(file.id); }}>
                                 <Link2 className="mr-2 h-4 w-4" />
                                 {t('media.library.inspect')}
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                disabled={downloadingId === file.id}
+                                onClick={(e) => { e.stopPropagation(); void handleDownload(file); }}
+                              >
+                                {downloadingId === file.id ? (
+                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                ) : (
+                                  <FileDown className="mr-2 h-4 w-4" />
+                                )}
+                                {t('common.actions.download')}
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem

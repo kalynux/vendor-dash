@@ -4,8 +4,10 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { useTranslation, useFormatters } from '@/i18n';
+import { purchasesEnabled } from '@/platform/purchases';
 import type { PricingPlan, CurrentPlanData } from '@/types/billing.types';
 import { formatTerm, formatProductCap, planAccent } from './billing.constants';
+import { PurchasesUnavailable } from './PurchasesUnavailable';
 
 interface PlansCatalogProps {
   plans: PricingPlan[];
@@ -20,7 +22,8 @@ export function PlansCatalog({ plans, current, onBuy }: PlansCatalogProps) {
   const hasPending = !!current?.pending;
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="space-y-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {plans.map((plan) => {
         const isCurrent = plan.code === activeCode;
         const isFree = plan.price === 0;
@@ -71,7 +74,7 @@ export function PlansCatalog({ plans, current, onBuy }: PlansCatalogProps) {
                   <Button variant="outline" className="w-full" disabled>
                     {t('billing.plans.defaultTier')}
                   </Button>
-                ) : (
+                ) : purchasesEnabled ? (
                   <Button
                     className="w-full"
                     onClick={() => onBuy(plan)}
@@ -80,12 +83,20 @@ export function PlansCatalog({ plans, current, onBuy }: PlansCatalogProps) {
                   >
                     {hasPending ? t('billing.plans.queued') : t('billing.plans.choose')}
                   </Button>
-                )}
+                ) : null}
               </div>
             </CardContent>
           </Card>
         );
       })}
+      </div>
+
+      {/* Once, under the grid, rather than a dead button on each paid card: the
+          plans themselves are still worth reading on a phone — prices, caps and
+          commission are the reason a vendor opens this screen — and only the act
+          of buying moved (P5.2). A disabled "Choose" on every card would say the
+          app was broken rather than that the purchase lives elsewhere. */}
+      {!purchasesEnabled && <PurchasesUnavailable message={t('billing.mobile.plans')} />}
     </div>
   );
 }

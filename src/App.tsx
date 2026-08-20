@@ -35,8 +35,18 @@ import { Sidebar } from '@/components/layout/Sidebar';
 import { Header } from '@/components/layout/Header';
 import { MobileTabBar } from '@/components/layout/MobileTabBar';
 import { NotificationsBootstrap } from '@/components/notifications/NotificationsBootstrap';
+import { OfflineBanner } from '@/components/layout/OfflineBanner';
 import { useIsMobile, useIsTablet } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
+
+// Native shell behaviour (CAPACITOR-PLAN.md → Phase 3). Both are inert on the
+// web: `useKeyboardOpen` is hardwired to false there, and the back-button
+// listener is only ever registered on Android.
+import { useHardwareBackButton } from '@/platform/shell/backButton';
+import { useKeyboardOpen } from '@/platform/shell/keyboard';
+// Deep links (P4.2). Also inert on the web — the listeners are only ever
+// attached inside a native shell.
+import { useDeepLinks } from '@/platform/shell/deepLinks';
 
 // Onboarding system
 import { OnboardingProvider } from '@/onboarding/store/onboarding.store';
@@ -158,6 +168,8 @@ export const useRouter = () => useContext(LegacyRouterContext);
 function DashboardShell() {
   const { sidebarCollapsed } = useUI();
   const isMobile = useIsMobile();
+  // Always false on the web, so the browser build is unchanged (P3.2).
+  const keyboardOpen = useKeyboardOpen();
   const { fetchStore } = useStoreStore();
 
   useEffect(() => {
@@ -175,7 +187,24 @@ function DashboardShell() {
         )}
       >
         {!isMobile && <Header />}
-        <main className={cn('px-6 py-6 md:px-8 md:py-8', isMobile && 'pb-[calc(6rem_+_env(safe-area-inset-bottom))]')}>
+        <main
+          className={cn(
+            'px-6 pb-6 md:px-8 md:pb-8',
+            // The shell draws edge to edge on a device, so the status bar sits
+            // *over* the top of this column and the first 1.5rem of content
+            // would be under the clock (P3.3). The eleven pages that render a
+            // `MobilePageHeader` cancel this again from inside that component —
+            // it, not this, owns the visible inset, because it is the thing that
+            // touches the top of the viewport once the page is scrolled.
+            // `env(...)` is 0 in every browser, so the web is untouched.
+            'pt-[calc(1.5rem+env(safe-area-inset-top))] md:pt-[calc(2rem+env(safe-area-inset-top))]',
+            // Room for the tab bar, its safe-area inset and the FAB that pops
+            // above it — and none of it while the keyboard is up, because the
+            // tab bar hides itself then and the allowance would be dead space
+            // between the content and the keys (P3.2).
+            isMobile && !keyboardOpen && 'pb-[calc(6rem_+_env(safe-area-inset-bottom))]',
+          )}
+        >
           <div className="mx-auto w-full max-w-[1600px]">
           <Routes>
             <Route index element={<Overview />} />
@@ -233,6 +262,19 @@ function AppContent() {
 
   const toggleSidebar = useCallback(() => setSidebarCollapsed((p) => !p), []);
 
+  // Android's hardware back button: close an open sheet, else go back, else
+  // confirm before exiting. Has to be inside the Router, and is a no-op
+  // everywhere but Android (CAPACITOR-PLAN.md → P3.1).
+  useHardwareBackButton();
+
+  // URLs handed to the app from outside the WebView land on the screen they
+  // name — the Google Calendar OAuth return, and notification taps. Must be
+  // inside the Router; a no-op off native. The listeners themselves live at
+  // module scope in `deepLinks.ts`, because a cold-start notification tap
+  // replays before React has mounted; this hook only flushes what already
+  // arrived (CAPACITOR-PLAN.md → P4.2).
+  useDeepLinks();
+
   // Legacy router shim — maps old string routes to real URL navigation
   const legacyNavigate = useCallback(
     (route: LegacyRoute) => {
@@ -266,6 +308,11 @@ function AppContent() {
           {/* The theme class is applied to <html> by StoreProvider — it has to
               sit above <body>, which carries `bg-background`/`text-foreground`. */}
           <>
+            {/* Outside the routes on purpose: "you are offline" is as true on
+                the sign-in screen as it is on the dashboard, and that is the
+                screen where mistaking it for a rejected password costs the
+                most (P3.4). */}
+            <OfflineBanner />
             <OnboardingErrorBoundary>
               <OnboardingProvider>
                 {/* Applies the vendor's saved language once the session loads. */}
@@ -347,7 +394,17 @@ function AppContent() {
                 </Routes>
               </OnboardingProvider>
             </OnboardingErrorBoundary>
-            <Toaster richColors position="top-right" />
+            {/* The status bar is drawn over the app on a device, so sonner's
+                own 24px / 16px offset would put a toast under the clock. A
+                partial offset object keeps its defaults on the other three
+                sides, and `env(...)` is 0 in a browser — so the web keeps
+                exactly the placement it has today (P3.3). */}
+            <Toaster
+              richColors
+              position="top-right"
+              offset={{ top: 'calc(24px + env(safe-area-inset-top))' }}
+              mobileOffset={{ top: 'calc(16px + env(safe-area-inset-top))' }}
+            />
           </>
         </UIContext.Provider>
       </LegacyRouterContext.Provider>

@@ -25,6 +25,7 @@ import type {
   PaymentStatus,
 } from '@/types/billing.types';
 import type { StorageUsage } from '@/types/file.types';
+import { purchasesEnabled } from '@/platform/purchases';
 import { CurrentPlanCard } from './CurrentPlanCard';
 import { StorageUsageCard } from './StorageUsageCard';
 import { CreditWalletCard } from './CreditWalletCard';
@@ -175,7 +176,12 @@ export function BillingTab() {
     plansRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, []);
 
+  // Both openers are guarded as well as their buttons being hidden (P5.2). The
+  // buttons are the door; this is the lock — a future caller that reaches for
+  // one of these from somewhere new fails closed rather than opening a checkout
+  // the store has not been told about.
   function openPlanPurchase(plan: PricingPlan) {
+    if (!purchasesEnabled) return;
     setPayment({
       title: t('billing.plans.switchTo', { name: plan.name }),
       summary: t('billing.plans.planSummary', { name: plan.name }),
@@ -190,6 +196,7 @@ export function BillingTab() {
   }
 
   function openPackPurchase(pack: CreditPack) {
+    if (!purchasesEnabled) return;
     setPayment({
       title: t('billing.credits.buyTitle'),
       summary: t('billing.credits.packCredits', { credits: fmt.number(pack.credits) }),
@@ -254,7 +261,7 @@ export function BillingTab() {
         <BillingSettingsCard />
       </SettingsSections>
 
-      {payment && (
+      {purchasesEnabled && payment && (
         <PaymentDialog
           open={paymentOpen}
           onOpenChange={setPaymentOpen}

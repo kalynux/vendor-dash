@@ -12,6 +12,7 @@ import { authService, type LoginPayload, type RegisterPayload } from '@/services
 import { onboardingService } from '@/services/onboarding.service';
 import { deleteCurrentToken } from '@/lib/fcm';
 import { unregisterDevice } from '@/services/devices.service';
+import { stopRefreshScheduler } from '@/platform/auth/refreshScheduler';
 import { ApiError } from '@/types/api';
 import type {
     AuthMeVendorResponse,
@@ -460,14 +461,24 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     );
 
     const logout = useCallback(async () => {
-        // Stop pushing to this device before the session is torn down (best-effort:
-        // the backend self-heals stale tokens, so failures here are non-fatal).
+        // ⚠ The order here is load-bearing and must be preserved
+        // (CAPACITOR-PLAN.md → P4.1). `DELETE /vendor/devices` authenticates with
+        // the very credential `authService.logout()` destroys, so the token has
+        // to be collected and sent BEFORE the session ends — not after, and not
+        // in parallel. Best-effort either way: the backend self-heals stale
+        // tokens, so failures here are non-fatal.
         try {
             const token = await deleteCurrentToken();
             if (token) await unregisterDevice(token);
         } catch {
             // ignore — proceed with logout regardless
         }
+        // Between the two, deliberately. `authService.logout()` stops the
+        // scheduler as well (P2.5) — but only after the device-unregister round
+        // trip above has finished, and that is exactly the window in which a
+        // proactive refresh for a session the vendor has already left would
+        // fire. Idempotent, so the second call costs nothing.
+        stopRefreshScheduler();
         try {
             await authService.logout();
         } catch {

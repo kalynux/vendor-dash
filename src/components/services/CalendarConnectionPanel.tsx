@@ -25,7 +25,11 @@ import {
   fetchCalendarStatus,
   disconnectCalendar,
   getCalendarConnectUrl,
+  fetchCalendarConnectUrl,
 } from '@/services/services.service';
+import { isNative, useBearerAuth } from '@/platform/env';
+import { openExternal } from '@/platform/browser';
+import { appReturnUrl } from '@/platform/shell/appUrl';
 import type { CalendarStatus } from '@/types/services.types';
 
 interface CalendarConnectionPanelProps {
@@ -44,6 +48,7 @@ export function CalendarConnectionPanel({ refreshKey, onStatusChange }: Calendar
   const [error, setError] = useState<string | null>(null);
   const [disconnecting, setDisconnecting] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [connecting, setConnecting] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -64,11 +69,48 @@ export function CalendarConnectionPanel({ refreshKey, onStatusChange }: Calendar
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshKey]);
 
-  const handleConnect = () => {
-    // Browser navigation (not fetch) so the session cookie rides along and
-    // Google's redirects are followed.
-    window.location.href = getCalendarConnectUrl();
-  };
+  /**
+   * Start the Google OAuth round trip.
+   *
+   * ⚠ **The consent screen can never load in this app's own WebView.** Google
+   * refuses OAuth from an embedded WebView (`disallowed_useragent`), and
+   * spoofing the user agent to get around it breaks the OAuth policy — the
+   * penalty is the client being disabled for every vendor at once. So there is
+   * no "in-app" version of this; there is only which browser gets it.
+   *
+   * Three transports, two of which are the same code path:
+   *
+   *  - **Cookie (the web dashboard)** — a plain full-page navigation, exactly as
+   *    it has always been. The cookie rides along and the browser follows
+   *    Google's redirects itself.
+   *  - **Bearer on a device** — `/connect` has no cookie to read, so the URL is
+   *    *fetched* and handed to a system browser tab that renders over the app.
+   *    The app stays mounted underneath, and the redirect at the end comes back
+   *    through `shell/deepLinks.ts`, which closes the tab and routes here.
+   *  - **Bearer in a desktop browser** (`VITE_FORCE_MOBILE_AUTH`) — same fetch,
+   *    then an ordinary navigation. No `returnTo`: there is no OS to hand a
+   *    custom scheme to, so the backend falls back to its configured web
+   *    destination, which is where this browser already is.
+   */
+  const handleConnect = useCallback(async () => {
+    if (!useBearerAuth) {
+      window.location.href = getCalendarConnectUrl();
+      return;
+    }
+
+    setConnecting(true);
+    try {
+      const url = await fetchCalendarConnectUrl(
+        isNative ? appReturnUrl('services/calendar') : undefined,
+      );
+      if (isNative) await openExternal(url);
+      else window.location.href = url;
+    } catch (err) {
+      apiError.toast(err, { fallbackKey: 'services.calendarPanel.connectFailed' });
+    } finally {
+      setConnecting(false);
+    }
+  }, [apiError]);
 
   const handleDisconnect = async () => {
     setDisconnecting(true);
@@ -123,8 +165,13 @@ export function CalendarConnectionPanel({ refreshKey, onStatusChange }: Calendar
             </p>
           </div>
         </div>
-        <Button onClick={handleConnect} className="gap-2">
-          <CalendarCheck2 className="h-4 w-4" /> {t('services.calendarPanel.connect')}
+        <Button onClick={handleConnect} disabled={connecting} className="gap-2">
+          {connecting ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <CalendarCheck2 className="h-4 w-4" />
+          )}
+          {t('services.calendarPanel.connect')}
         </Button>
       </div>
     );
@@ -139,8 +186,13 @@ export function CalendarConnectionPanel({ refreshKey, onStatusChange }: Calendar
           <div className="space-y-2 text-sm">
             <p className="font-medium">{t('services.calendarPanel.reauthTitle')}</p>
             <p>{t('services.calendarPanel.reauthDescription')}</p>
-            <Button size="sm" onClick={handleConnect} className="gap-2">
-              <RefreshCw className="h-4 w-4" /> {t('services.calendarPanel.reconnect')}
+            <Button size="sm" onClick={handleConnect} disabled={connecting} className="gap-2">
+              {connecting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4" />
+              )}
+              {t('services.calendarPanel.reconnect')}
             </Button>
           </div>
         </div>

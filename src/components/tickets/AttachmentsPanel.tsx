@@ -11,6 +11,8 @@ import {
   MAX_ATTACHMENTS, ROLE_LABEL_KEYS,
 } from '@/components/tickets/ticket.constants';
 import { useApiError, useFormatters, useTranslation } from '@/i18n';
+import { isNative } from '@/platform/env';
+import { downloadFile } from '@/platform/filesystem';
 import type { ApiTicketAttachment, TicketActor, VisibilityInput } from '@/types/tickets.types';
 import type { ApiFile } from '@/types/file.types';
 
@@ -26,6 +28,28 @@ export function AttachmentsPanel({
   const [pickerOpen, setPickerOpen] = useState(false);
   const [visibility, setVisibility] = useState<VisibilityInput>('PUBLIC');
   const [viewerIds, setViewerIds] = useState<string[]>([]);
+  /** Which attachment is being fetched, so only its own button spins. */
+  const [savingId, setSavingId] = useState<string | null>(null);
+
+  /**
+   * Save an attachment to the device (CAPACITOR-PLAN.md → P4.6).
+   *
+   * ⚠ Native only, on purpose. The `<a download>` below is what the web has
+   * always used and it is left exactly as it was — the browser streams the file
+   * through its own download manager, where this path would buffer the whole
+   * thing in memory first. On a device that anchor does nothing at all, which is
+   * the gap being closed here.
+   */
+  const saveAttachment = async (att: ApiTicketAttachment) => {
+    setSavingId(att.id);
+    try {
+      const outcome = await downloadFile({ url: att.url, fileName: att.fileName });
+      // A dismissed share sheet is a decision, not a failure — say nothing.
+      if (outcome === 'failed') toast.error(t('common.files.downloadFailed'));
+    } finally {
+      setSavingId(null);
+    }
+  };
 
   useEffect(() => {
     let active = true;
@@ -109,16 +133,32 @@ export function AttachmentsPanel({
                     })}
                   </p>
                 </div>
-                <a
-                  href={att.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  download={att.fileName}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
-                  aria-label={t('tickets.detail.download', { name: att.fileName })}
-                >
-                  <Download className="h-4 w-4" />
-                </a>
+                {isNative ? (
+                  <button
+                    type="button"
+                    onClick={() => void saveAttachment(att)}
+                    disabled={savingId === att.id}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
+                    aria-label={t('tickets.detail.download', { name: att.fileName })}
+                  >
+                    {savingId === att.id ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Download className="h-4 w-4" />
+                    )}
+                  </button>
+                ) : (
+                  <a
+                    href={att.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    download={att.fileName}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+                    aria-label={t('tickets.detail.download', { name: att.fileName })}
+                  >
+                    <Download className="h-4 w-4" />
+                  </a>
+                )}
               </li>
             );
           })}

@@ -8,6 +8,7 @@ import { MobileMoreDrawer } from './MobileMoreDrawer';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { QUICK_ACTIONS, type QuickAction } from '@/config/quickActions';
 import { useTranslation, type TranslationKey } from '@/i18n';
+import { useKeyboardOpen } from '@/platform/shell/keyboard';
 
 type LegacyRoute = 'overview' | 'orders' | 'products' | 'product-upload' | 'customers'
   | 'analytics' | 'notifications' | 'settings' | 'media' | 'tickets'
@@ -53,6 +54,8 @@ export function MobileTabBar() {
   const { unreadCount } = useNotificationStore();
   const [moreOpen, setMoreOpen] = useState(false);
   const [quickActionsOpen, setQuickActionsOpen] = useState(false);
+  // Always false on the web, so the browser build is unchanged (P3.2).
+  const keyboardOpen = useKeyboardOpen();
 
   const handleQuickAction = (action: QuickAction) => {
     reactNavigate(
@@ -73,47 +76,55 @@ export function MobileTabBar() {
 
   return (
     <>
-      <nav className="fixed bottom-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-sm border-t shadow-[0_-4px_12px_rgba(0,0,0,0.05)] pb-safe">
-        <div className="flex items-center justify-around h-16 px-2">
-          {tabs.map((tab) => (
+      {/* Hidden while the on-screen keyboard is up. The bar is `fixed bottom-0`,
+          so a resized WebView re-pins it directly on top of the keyboard — a row
+          of navigation buttons wedged between the field being typed into and the
+          keys. The two overlays below stay mounted either way: unmounting them
+          with the bar would close an open sheet the moment a field inside it was
+          focused (CAPACITOR-PLAN.md → P3.2). */}
+      {!keyboardOpen && (
+        <nav className="fixed bottom-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-sm border-t shadow-[0_-4px_12px_rgba(0,0,0,0.05)] pb-safe">
+          <div className="flex items-center justify-around h-16 px-2">
+            {tabs.map((tab) => (
+              <TabButton
+                key={tab.route}
+                label={t(tab.labelKey)}
+                icon={tab.icon}
+                active={route === tab.route}
+                badge={tab.badge}
+                onClick={() => navigate(tab.route)}
+              />
+            ))}
+
+            {/* FAB */}
+            <button
+              onClick={() => setQuickActionsOpen(true)}
+              aria-label={t('nav.mobile.quickActions')}
+              className="-mt-6 w-14 h-14 rounded-full bg-gradient-to-br from-primary to-emerald-400 text-primary-foreground shadow-brand ring-4 ring-background flex items-center justify-center flex-shrink-0 transition-transform active:scale-95"
+            >
+              <Plus className="w-6 h-6" strokeWidth={2.5} />
+            </button>
+
+            {rightTabs.map((tab) => (
+              <TabButton
+                key={tab.route}
+                label={t(tab.labelKey)}
+                icon={tab.icon}
+                active={route === tab.route}
+                onClick={() => navigate(tab.route)}
+              />
+            ))}
+
             <TabButton
-              key={tab.route}
-              label={t(tab.labelKey)}
-              icon={tab.icon}
-              active={route === tab.route}
-              badge={tab.badge}
-              onClick={() => navigate(tab.route)}
+              label={t('nav.items.more')}
+              icon={Menu}
+              active={moreOpen}
+              badge={unreadCount > 0 ? unreadCount : undefined}
+              onClick={() => setMoreOpen(true)}
             />
-          ))}
-
-          {/* FAB */}
-          <button
-            onClick={() => setQuickActionsOpen(true)}
-            aria-label={t('nav.mobile.quickActions')}
-            className="-mt-6 w-14 h-14 rounded-full bg-gradient-to-br from-primary to-emerald-400 text-primary-foreground shadow-brand ring-4 ring-background flex items-center justify-center flex-shrink-0 transition-transform active:scale-95"
-          >
-            <Plus className="w-6 h-6" strokeWidth={2.5} />
-          </button>
-
-          {rightTabs.map((tab) => (
-            <TabButton
-              key={tab.route}
-              label={t(tab.labelKey)}
-              icon={tab.icon}
-              active={route === tab.route}
-              onClick={() => navigate(tab.route)}
-            />
-          ))}
-
-          <TabButton
-            label={t('nav.items.more')}
-            icon={Menu}
-            active={moreOpen}
-            badge={unreadCount > 0 ? unreadCount : undefined}
-            onClick={() => setMoreOpen(true)}
-          />
-        </div>
-      </nav>
+          </div>
+        </nav>
+      )}
 
       <MobileMoreDrawer open={moreOpen} onOpenChange={setMoreOpen} />
 

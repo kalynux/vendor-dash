@@ -95,12 +95,14 @@ export const nav = {
     mobile: {
         more: 'Plus',
         quickActions: 'Actions rapides',
+        exitConfirm: 'Appuyez à nouveau sur Retour pour quitter',
     },
 
     platformStatus: {
         online: 'Tous les systèmes sont opérationnels',
         degraded: 'Performances dégradées',
         offline: 'Hors ligne',
+        offlineDetail: 'Certaines actions ne fonctionneront pas tant que la connexion n’est pas rétablie.',
     },
 
     login: {

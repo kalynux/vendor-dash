@@ -10,6 +10,9 @@ import { fetchProductById, fetchVariants } from '@/services/products.service';
 import { useStoreStore } from '@/store';
 import { useApiError, useFormatters, useTranslation, type TranslationKey } from '@/i18n';
 import { cn } from '@/lib/utils';
+import { openExternal } from '@/platform/browser';
+import { copyText } from '@/platform/clipboard';
+import { shareAvailable, shareContent } from '@/platform/share';
 import {
   buildProductShareMessage,
   hydrateDoc,
@@ -89,12 +92,14 @@ export function ShareProductDialog({ productId, onOpenChange }: ShareProductDial
   const storeSlug = store?.slug ?? null;
 
   /**
-   * Read once, not per render: `navigator.share` is a static capability, and
-   * holding it in state keeps the button from appearing under the vendor's
+   * Read once, not per render: a share sheet is a static capability, and
+   * holding it in a constant keeps the button from appearing under the vendor's
    * finger mid-interaction. Absent on desktop Firefox, where the two copy
-   * actions are the whole answer.
+   * actions are the whole answer; always present inside the app shell, where
+   * `@capacitor/share` reaches the real system chooser rather than the WebView's
+   * partial `navigator.share` (CAPACITOR-PLAN.md → P4.5).
    */
-  const [canShareNatively] = useState(() => typeof navigator !== 'undefined' && !!navigator.share);
+  const canShareNatively = shareAvailable;
 
   useEffect(() => {
     if (!productId) return;
@@ -145,10 +150,15 @@ export function ShareProductDialog({ productId, onOpenChange }: ShareProductDial
   const openChannel = (target: ShareChannel) => {
     if (!data) return;
     const body = buildProductShareMessage(data, target);
-    // `noopener` on a share deep link is not optional — the opened tab is
-    // whatsapp.com or telegram.org, and handing it a live `window.opener` back
-    // into the dashboard is a needless one.
-    window.open(shareUrlFor(target, body, data.url), '_blank', 'noopener,noreferrer');
+    // Through the platform layer, not `window.open` directly: a Capacitor
+    // WebView has nowhere to put a second window, so `target="_blank"` there
+    // tends to do nothing at all and the share button just looks broken. On
+    // native this opens a Custom Tab / SFSafariViewController over the app; on
+    // the web it is still `window.open(…, 'noopener,noreferrer')` — and
+    // `noopener` is not optional there, since the opened tab is whatsapp.com or
+    // telegram.org and handing it a live `window.opener` back into the dashboard
+    // is a needless one (CAPACITOR-PLAN.md → P3.5).
+    void openExternal(shareUrlFor(target, body, data.url));
     onOpenChange(false);
   };
 
@@ -166,37 +176,31 @@ export function ShareProductDialog({ productId, onOpenChange }: ShareProductDial
    */
   const shareNatively = useCallback(async () => {
     if (!data) return;
-    try {
-      await navigator.share({
-        title: data.title,
-        text: buildProductShareMessage(data, 'telegram'),
-        ...(data.url ? { url: data.url } : {}),
-      });
-      onOpenChange(false);
-    } catch (err) {
-      if ((err as DOMException | undefined)?.name === 'AbortError') return;
-      toast.error(t('products.share.shareFailed'));
-    }
+    const outcome = await shareContent({
+      title: data.title,
+      text: buildProductShareMessage(data, 'telegram'),
+      ...(data.url ? { url: data.url } : {}),
+      dialogTitle: t('products.share.title'),
+    });
+    // Dismissing the sheet is a choice rather than a failure and gets no toast;
+    // `shareContent` tells the two apart across both platforms' spellings of it.
+    if (outcome === 'shared') onOpenChange(false);
+    else if (outcome === 'failed') toast.error(t('products.share.shareFailed'));
   }, [data, onOpenChange, t]);
 
   const copyMessage = async () => {
     if (!message) return;
-    try {
-      await navigator.clipboard.writeText(message);
-      toast.success(t('products.share.copied'));
-    } catch {
-      toast.error(t('common.toast.copyFailed'));
-    }
+    if (await copyText(message)) toast.success(t('products.share.copied'));
+    else toast.error(t('common.toast.copyFailed'));
   };
 
   const copyLink = async () => {
     if (!data?.url) return;
-    try {
-      await navigator.clipboard.writeText(data.url);
+    if (await copyText(data.url)) {
       setLinkCopied(true);
       window.setTimeout(() => setLinkCopied(false), 2000);
       toast.success(t('common.toast.linkCopied'));
-    } catch {
+    } else {
       toast.error(t('common.toast.copyFailed'));
     }
   };

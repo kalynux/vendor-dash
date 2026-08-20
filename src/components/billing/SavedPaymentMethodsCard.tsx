@@ -3,6 +3,8 @@ import { Plus, Trash2, Star, Loader2, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { SettingsSection } from '@/components/vendor-settings/SettingsSection';
 import { Button } from '@/components/ui/button';
+import { purchasesEnabled } from '@/platform/purchases';
+import { PurchasesUnavailable } from './PurchasesUnavailable';
 import { Badge } from '@/components/ui/badge';
 import {
   AlertDialog,
@@ -97,17 +99,26 @@ export function SavedPaymentMethodsCard() {
       title={t('billing.methods.title')}
       info={t('billing.methods.info', { max: MAX_METHODS })}
       action={
-        <Button
-          size="sm"
-          className="gap-1"
-          onClick={() => setAddOpen(true)}
-          disabled={atLimit}
-          title={atLimit ? t('billing.methods.atLimit', { max: MAX_METHODS }) : undefined}
-        >
-          <Plus className="h-4 w-4" /> {t('common.actions.add')}
-        </Button>
+        purchasesEnabled ? (
+          <Button
+            size="sm"
+            className="gap-1"
+            onClick={() => setAddOpen(true)}
+            disabled={atLimit}
+            title={atLimit ? t('billing.methods.atLimit', { max: MAX_METHODS }) : undefined}
+          >
+            <Plus className="h-4 w-4" /> {t('common.actions.add')}
+          </Button>
+        ) : undefined
       }
     >
+        {/* Read-only on a packaged app: saved cards are still listed, and
+            "Set default" and "Remove" still work — managing what is already
+            stored is not a purchase. Only adding one is, because it is the first
+            step of a checkout the store would want its cut of (P5.2). */}
+        {!purchasesEnabled && (
+          <PurchasesUnavailable className="mb-3" message={t('billing.mobile.methods')} />
+        )}
         {loading ? (
           <CardSkeleton lines={3} />
         ) : error ? (
@@ -174,17 +185,22 @@ export function SavedPaymentMethodsCard() {
           </ul>
         )}
 
-      <AddPaymentMethodDialog
-        open={addOpen}
-        onOpenChange={setAddOpen}
-        forceDefault={methods.length === 0}
-        onAdded={(created) => {
-          // A new default clears the previous one locally; first method is always default.
-          setMethods((prev) =>
-            created.is_default ? [created, ...prev.map((m) => ({ ...m, is_default: false }))] : [...prev, created],
-          );
-        }}
-      />
+      {/* Never mounted on a packaged app — this is what keeps `StripeCardField`,
+          `CardPreview` and `lib/stripe.ts` off the screen and out of the network
+          log entirely, rather than merely hiding the button that opens them. */}
+      {purchasesEnabled && (
+        <AddPaymentMethodDialog
+          open={addOpen}
+          onOpenChange={setAddOpen}
+          forceDefault={methods.length === 0}
+          onAdded={(created) => {
+            // A new default clears the previous one locally; first method is always default.
+            setMethods((prev) =>
+              created.is_default ? [created, ...prev.map((m) => ({ ...m, is_default: false }))] : [...prev, created],
+            );
+          }}
+        />
+      )}
 
       <AlertDialog open={!!deleteTarget} onOpenChange={(v) => !v && setDeleteTarget(null)}>
         <AlertDialogContent>

@@ -18,6 +18,7 @@ import {
 import { mapProfileError } from '@/components/vendor-settings/errors';
 import { ApiError } from '@/types/api';
 import type { SecondaryChannel } from '@/types/notifications.types';
+import { copyText } from '@/platform/clipboard';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -131,13 +132,24 @@ export function ChannelSetupDialog({
     }
   }, [onRefresh, t]);
 
-  const copyCommand = useCallback(() => {
+  /**
+   * ⚠ This had a latent bug on the web, fixed on the way past
+   * (CAPACITOR-PLAN.md → P4.5). The call was
+   * `navigator.clipboard.writeText(cmd).then(() => setCopied(true))` with no
+   * `catch`, so a refusal was an unhandled rejection and a "Copied!" that never
+   * arrived — on the one step whose whole purpose is the vendor pasting this
+   * command into WhatsApp. `copyText` reports whether it worked, and now so
+   * does the button.
+   */
+  const copyCommand = useCallback(async () => {
     if (!waCommand) return;
-    navigator.clipboard.writeText(waCommand).then(() => {
+    if (await copyText(waCommand)) {
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
-    });
-  }, [waCommand]);
+    } else {
+      toast.error(t('common.toast.copyFailed'));
+    }
+  }, [waCommand, t]);
 
   if (!channel) return null;
   const label = CHANNEL_LABELS[channel];
@@ -257,7 +269,7 @@ export function ChannelSetupDialog({
                 {waCommand && (
                   <li className="flex items-center gap-2">
                     <code className="flex-1 px-2.5 py-1.5 rounded bg-muted text-xs font-mono truncate">{waCommand}</code>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 flex-shrink-0" onClick={copyCommand} aria-label={t('notifications.settings.setup.copyCommand')}>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 flex-shrink-0" onClick={() => void copyCommand()} aria-label={t('notifications.settings.setup.copyCommand')}>
                       {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
                     </Button>
                   </li>

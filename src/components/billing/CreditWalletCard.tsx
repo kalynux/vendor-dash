@@ -3,7 +3,9 @@ import { SettingsSection } from '@/components/vendor-settings/SettingsSection';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useTranslation, useFormatters } from '@/i18n';
+import { purchasesEnabled } from '@/platform/purchases';
 import type { CreditPack } from '@/types/billing.types';
+import { PurchasesUnavailable } from './PurchasesUnavailable';
 
 interface CreditWalletCardProps {
   balance: number;
@@ -54,15 +56,23 @@ export function CreditWalletCard({ balance, packs, onBuyPack }: CreditWalletCard
                     {fmt.currency(pack.price, pack.currency)}
                   </p>
                 </div>
-                <Button size="sm" onClick={() => onBuyPack(pack)} className="gap-1">
-                  <Plus className="h-4 w-4" /> {t('billing.credits.buy')}
-                </Button>
+                {purchasesEnabled && (
+                  <Button size="sm" onClick={() => onBuyPack(pack)} className="gap-1">
+                    <Plus className="h-4 w-4" /> {t('billing.credits.buy')}
+                  </Button>
+                )}
               </div>
             ))}
             {packs.length === 0 && (
               <p className="text-sm text-muted-foreground">{t('billing.credits.noPacks')}</p>
             )}
           </div>
+          {/* The packs stay listed — what a top-up costs is information, and the
+              balance above is the reason a vendor looks here at all. Only the
+              buying moved (P5.2). */}
+          {!purchasesEnabled && packs.length > 0 && (
+            <PurchasesUnavailable className="mt-3" message={t('billing.mobile.credits')} />
+          )}
         </div>
     </SettingsSection>
   );
