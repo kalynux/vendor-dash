@@ -1,10 +1,10 @@
 /**
  * Backend error codes → vendor-facing messages.
  *
- * Source of truth for the code list: `api-doc/error-codes.ts`. Every code the
- * platform can emit has an entry here, so the dashboard never has to fall back
- * to `error.message` — which is English, written for developers, and sometimes
- * names internals a vendor should not see.
+ * Source of truth for the code list: `api-doc/error-codes.ts` (603 codes as of
+ * 2026-08-24). Every code this dashboard can receive has an entry here, so it
+ * never has to fall back to `error.message` — which is English, written for
+ * developers, and sometimes names internals a vendor should not see.
  *
  * House style for these messages:
  *  - say what happened in the vendor's terms, not the service's;
@@ -12,9 +12,19 @@
  *  - no error codes, ids, stack fragments or endpoint names in the text.
  *
  * Codes belonging to other roles (delivery agent, agency, admin, customer) are
- * translated too: a vendor can still trigger them indirectly — reassigning a
- * shipment, reading a booking — and an untranslated code would surface as the
- * raw string.
+ * translated too wherever a vendor can trigger them indirectly — reassigning a
+ * shipment, reading a booking — because an untranslated code would surface as
+ * the raw string.
+ *
+ * ⚠ **26 codes are deliberately absent**, and `npm run i18n:audit` reports them
+ * every run. They belong to surfaces this dashboard does not call at all and
+ * cannot reach even indirectly: the customer payment flow
+ * (`PAYMENT_*`, `NOTCHPAY_*`, `MYCOOLPAY_*` — this app never calls
+ * `/api/payments/*`), gateway webhooks, magic-link sign-in, the storefront cart
+ * and wishlist, agent trust scoring, and server-side upload-scanner
+ * configuration. Writing vendor-facing copy for an error a vendor cannot see
+ * would be inventing a screen. Anything unexpected still lands on the
+ * `category` fallback below, which is what that tier is for.
  */
 
 export const errors = {
@@ -950,6 +960,107 @@ export const errors = {
         REQUEST_MEDIA_TYPE_UNSUPPORTED: "That request couldn't be read. Please try again.",
         /** `{{seconds}}` comes from `Retry-After`; absent on an unusual gateway. */
         RATE_LIMIT_EXCEEDED: 'Too many requests. Please wait a moment and try again.',
+
+        // ── Session ───────────────────────────────────────────────────────────
+        /**
+         * The 90-day absolute cap. Terminal on BOTH credential paths — the
+         * refresh token is refused too — so this is a sign-in, not a retry.
+         */
+        AUTH_SESSION_CAP_REACHED: "It's been a while — please sign in again.",
+        AUTH_ACCOUNT_CLOSED: 'This account has been closed.',
+        AUTH_RESET_TOKEN_INVALID:
+            'That password reset link is no longer valid. Request a new one.',
+
+        // ── Messaging connections (/api/me/connections) ───────────────────────
+        // Every redeem failure SPENDS the code, the 409 included — it is consumed
+        // before the ownership check — so all of these say "get a new one" rather
+        // than "try again".
+        CONNECTION_CODE_INVALID:
+            "That code isn't valid. Send the command to the bot again for a new one.",
+        CONNECTION_CODE_EXPIRED:
+            'That code has expired. Send the command to the bot again for a new one.',
+        CONNECTION_CODE_ATTEMPTS_EXCEEDED:
+            'Too many attempts. Try again in a few minutes.',
+        CONNECTION_CODE_GENERATION_FAILED:
+            "We couldn't create a code just now. Please try again in a moment.",
+        /**
+         * Deliberately does not say WHICH account holds it — the backend sends
+         * only `details.channel`, and implying we can tell them would be a lie.
+         */
+        MESSAGING_IDENTITY_ALREADY_LINKED:
+            'That account is already linked to another Wi-Mall account. Get a new code and use a different one.',
+        MESSAGING_CONNECTION_NOT_FOUND: 'That channel is not connected.',
+        MESSAGING_IDENTITY_UNRESOLVED:
+            "We couldn't identify that messaging account. Please try connecting again.",
+        MESSAGING_DELIVERY_FAILED:
+            "We couldn't deliver that message. Please try again in a moment.",
+
+        // ── Product sharing ───────────────────────────────────────────────────
+        PRODUCT_SHARE_CHANNEL_NOT_CONNECTED:
+            'That channel is not linked to your account yet. Connect it, then try again.',
+        /**
+         * WhatsApp shuts the free-form window when a business has not heard from
+         * the user recently. Messaging the bot reopens it.
+         */
+        PRODUCT_SHARE_WINDOW_CLOSED:
+            "WhatsApp won't let us message you right now. Send our bot any message, then try again.",
+        /**
+         * A 502, whose `external_service` category has the backend replace the
+         * message and drop `details` in every environment — there is nothing in
+         * it to show, so this sentence is all a vendor can be given.
+         */
+        PRODUCT_SHARE_SEND_FAILED:
+            "We couldn't send that just now. Please try again in a moment.",
+
+        // ── Changing email or phone ───────────────────────────────────────────
+        CONTACT_CHANGE_SAME_IDENTIFIER: 'That is already your current one.',
+        /** Re-checked at confirm time — it can be claimed during the window. */
+        CONTACT_CHANGE_IDENTIFIER_TAKEN: 'Another account already uses that.',
+        CONTACT_CHANGE_NOT_PENDING: 'There is no change waiting to be confirmed.',
+        CONTACT_CHANGE_EXPIRED: 'That request has expired. Please start again.',
+        CONTACT_CHANGE_TOKEN_INVALID:
+            'That confirmation link is no longer valid. Please start again.',
+        /** There is no SMS code — the proof IS a linked WhatsApp connection. */
+        CONTACT_CHANGE_PHONE_UNPROVEN:
+            'Connect WhatsApp using the new number first, then confirm the change.',
+
+        // ── Account closure ───────────────────────────────────────────────────
+        // A vendor cannot close their account at all; `details.blockingRoles`
+        // names why. Support has to close the vendor side first.
+        ACCOUNT_CLOSURE_ROLE_NOT_ELIGIBLE:
+            'Your vendor account has to be closed by support before this account can be closed.',
+        ACCOUNT_CLOSURE_ORDERS_IN_FLIGHT:
+            'There are still orders in progress. They have to finish first.',
+
+        // ── Delivery reviews ──────────────────────────────────────────────────
+        REVIEW_NOT_FOUND: 'That review no longer exists.',
+        REVIEW_ALREADY_EXISTS: "You've already reviewed this delivery.",
+        REVIEW_NOT_ELIGIBLE: 'This delivery cannot be reviewed yet.',
+        REVIEW_SUBJECT_NOT_FOUND: "We couldn't find that delivery.",
+        REVIEW_SUBJECT_NOT_REVIEWABLE:
+            'This delivery has no assigned agent, so there is nobody to review.',
+        REVIEW_NOT_PENDING: 'That review has already been reviewed.',
+        REVIEW_ROLE_NOT_ALLOWED: "That isn't something you can review.",
+
+        // ── Storage invoices ──────────────────────────────────────────────────
+        STORAGE_INVOICE_NOT_FOUND: "We couldn't find that storage statement.",
+        STORAGE_INVOICE_NOT_OPEN: 'That storage statement is no longer open.',
+
+        // ── Inventory ─────────────────────────────────────────────────────────
+        INVENTORY_INSUFFICIENT_STOCK: 'There is not enough stock for that.',
+        INVENTORY_TRANSFER_SAME_LOCATION:
+            'Pick a different destination — that is where the stock already is.',
+        INVENTORY_DEPOT_CHANGE_HOLDS_STOCK:
+            'That depot still holds stock. Move it out before changing depots.',
+
+        // ── Uploads ───────────────────────────────────────────────────────────
+        /** The scanner fails CLOSED, so an outage refuses uploads rather than waving them through. */
+        UPLOAD_VIRUS_SCAN_UNAVAILABLE:
+            "We couldn't scan that file for viruses just now. Please try again in a moment.",
+
+        // ── Geo ───────────────────────────────────────────────────────────────
+        GEO_PROVIDER_RATE_LIMITED:
+            'Address lookup is busy right now. Please try again in a moment.',
 
         // ── Client-side codes raised by this app ──────────────────────────────
         REFRESH_FAILED: 'Your session has expired. Please sign in again.',

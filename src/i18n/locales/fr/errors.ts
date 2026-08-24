@@ -859,6 +859,73 @@ export const errors = {
         VALIDATION_ERROR: 'Certaines informations ne sont pas valides. Vérifiez les champs signalés.',
 
         // ── Codes émis par le tableau de bord ─────────────────────────────────
+        AUTH_SESSION_CAP_REACHED:
+            'Cela fait un moment — veuillez vous reconnecter.',
+        AUTH_ACCOUNT_CLOSED: 'Ce compte a été fermé.',
+        AUTH_RESET_TOKEN_INVALID:
+            'Ce lien de réinitialisation n’est plus valide. Demandez-en un nouveau.',
+
+        CONNECTION_CODE_INVALID:
+            'Ce code n’est pas valide. Renvoyez la commande au bot pour en obtenir un nouveau.',
+        CONNECTION_CODE_EXPIRED:
+            'Ce code a expiré. Renvoyez la commande au bot pour en obtenir un nouveau.',
+        CONNECTION_CODE_ATTEMPTS_EXCEEDED:
+            'Trop de tentatives. Réessayez dans quelques minutes.',
+        CONNECTION_CODE_GENERATION_FAILED:
+            'Nous n’avons pas pu créer de code pour l’instant. Réessayez dans un moment.',
+        MESSAGING_IDENTITY_ALREADY_LINKED:
+            'Ce compte est déjà lié à un autre compte Wi-Mall. Obtenez un nouveau code et utilisez-en un autre.',
+        MESSAGING_CONNECTION_NOT_FOUND: 'Ce canal n’est pas connecté.',
+        MESSAGING_IDENTITY_UNRESOLVED:
+            'Nous n’avons pas pu identifier ce compte de messagerie. Réessayez la connexion.',
+        MESSAGING_DELIVERY_FAILED:
+            'Nous n’avons pas pu délivrer ce message. Réessayez dans un moment.',
+
+        PRODUCT_SHARE_CHANNEL_NOT_CONNECTED:
+            'Ce canal n’est pas encore lié à votre compte. Connectez-le, puis réessayez.',
+        PRODUCT_SHARE_WINDOW_CLOSED:
+            'WhatsApp ne nous autorise pas à vous écrire pour le moment. Envoyez n’importe quel message à notre bot, puis réessayez.',
+        PRODUCT_SHARE_SEND_FAILED:
+            'Nous n’avons pas pu l’envoyer pour l’instant. Réessayez dans un moment.',
+
+        CONTACT_CHANGE_SAME_IDENTIFIER: 'C’est déjà votre valeur actuelle.',
+        CONTACT_CHANGE_IDENTIFIER_TAKEN: 'Un autre compte utilise déjà cette valeur.',
+        CONTACT_CHANGE_NOT_PENDING: 'Aucune modification n’est en attente de confirmation.',
+        CONTACT_CHANGE_EXPIRED: 'Cette demande a expiré. Veuillez recommencer.',
+        CONTACT_CHANGE_TOKEN_INVALID:
+            'Ce lien de confirmation n’est plus valide. Veuillez recommencer.',
+        CONTACT_CHANGE_PHONE_UNPROVEN:
+            'Connectez d’abord WhatsApp avec le nouveau numéro, puis confirmez la modification.',
+
+        ACCOUNT_CLOSURE_ROLE_NOT_ELIGIBLE:
+            'Votre compte vendeur doit être fermé par le support avant de pouvoir fermer ce compte.',
+        ACCOUNT_CLOSURE_ORDERS_IN_FLIGHT:
+            'Des commandes sont encore en cours. Elles doivent d’abord se terminer.',
+
+        REVIEW_NOT_FOUND: 'Cet avis n’existe plus.',
+        REVIEW_ALREADY_EXISTS: 'Vous avez déjà évalué cette livraison.',
+        REVIEW_NOT_ELIGIBLE: 'Cette livraison ne peut pas encore être évaluée.',
+        REVIEW_SUBJECT_NOT_FOUND: 'Nous n’avons pas trouvé cette livraison.',
+        REVIEW_SUBJECT_NOT_REVIEWABLE:
+            'Aucun agent n’est affecté à cette livraison : il n’y a personne à évaluer.',
+        REVIEW_NOT_PENDING: 'Cet avis a déjà été modéré.',
+        REVIEW_ROLE_NOT_ALLOWED: 'Ce n’est pas quelque chose que vous pouvez évaluer.',
+
+        STORAGE_INVOICE_NOT_FOUND: 'Nous n’avons pas trouvé ce relevé de stockage.',
+        STORAGE_INVOICE_NOT_OPEN: 'Ce relevé de stockage n’est plus ouvert.',
+
+        INVENTORY_INSUFFICIENT_STOCK: 'Le stock est insuffisant pour cette opération.',
+        INVENTORY_TRANSFER_SAME_LOCATION:
+            'Choisissez une autre destination — le stock s’y trouve déjà.',
+        INVENTORY_DEPOT_CHANGE_HOLDS_STOCK:
+            'Ce dépôt contient encore du stock. Sortez-le avant de changer de dépôt.',
+
+        UPLOAD_VIRUS_SCAN_UNAVAILABLE:
+            'Nous n’avons pas pu analyser ce fichier pour l’instant. Réessayez dans un moment.',
+
+        GEO_PROVIDER_RATE_LIMITED:
+            'La recherche d’adresse est saturée pour le moment. Réessayez dans un instant.',
+
         REFRESH_FAILED: 'Votre session a expiré. Veuillez vous reconnecter.',
         INIT_FAILED: "Nous n'avons pas pu charger votre session. Actualisez la page.",
         SUBMIT_FAILED: "Nous n'avons pas pu enregistrer cette étape. Réessayez.",
