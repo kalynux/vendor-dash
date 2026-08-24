@@ -270,6 +270,46 @@ export interface CompletionStatus {
   stepLabel: string;
 }
 
+/** One row of the onboarding step list. */
+export interface OnboardingStepInfo {
+  step: number;
+  label: string;
+  required: boolean;
+  status: 'completed' | 'current' | 'pending';
+}
+
+/**
+ * `GET /api/vendor/onboarding/status` — a strict superset of `CompletionStatus`.
+ *
+ * It reads the same underlying step, renames `onboardingStep → currentStep` and
+ * `stepLabel → currentStepLabel`, and adds `progressPercent`, `completedFields`,
+ * `steps[]` and `warnings[]`. `profile/completion-status` only saves a few bytes.
+ */
+export interface OnboardingStatus {
+  currentStep: VendorOnboardingStep;
+  currentStepLabel: string;
+  isComplete: boolean;
+  /**
+   * 🔴 Derived from the STEP NUMBER alone, not from field completeness:
+   * 1 → 0, 2 → 25, 3 → 50, 4 → 75, complete → 100. A vendor who has filled every
+   * field but sits on step 3 reads 50 %. Render it as "step 3 of 4", never as a
+   * completeness gauge.
+   */
+  progressPercent: number;
+  completedFields: string[];
+  /**
+   * ⚠ Only ever contains `country` and/or `payout_details`. `timezone` is never
+   * reported missing despite being required at step 1.
+   */
+  missingFields: string[];
+  steps: OnboardingStepInfo[];
+  /**
+   * 🔴 Plain sentences, not objects, and there is exactly ONE possible entry —
+   * the KYC-pending notice. Otherwise `[]`. Render as strings.
+   */
+  warnings: string[];
+}
+
 export interface OnboardingStepResponse {
   success: boolean;
   data: {

@@ -238,6 +238,40 @@ export async function deleteFile(id: string): Promise<void> {
 export const MAX_FILES_PER_UPLOAD = 10;
 export const VENDOR_MAX_BYTES = 500 * 1024 * 1024; // 500 MB
 
+/** Total bytes one request may carry, across all its files. */
+export const MAX_REQUEST_TOTAL_BYTES = 100 * 1024 * 1024; // 100 MB
+
+/**
+ * The policy engine's per-MIME ceilings — the limit a vendor actually hits.
+ *
+ * 🔴 **These bind long before the 500 MB role ceiling.** That ceiling is a coarse
+ * per-request gate in the controller; the policy engine then applies these, and a
+ * 12 MB photo is refused despite being 1/40th of the role allowance. Validating
+ * only against `VENDOR_MAX_BYTES` means every real refusal arrives from the
+ * server after a full upload.
+ *
+ * 🔴 **An unlisted MIME type is refused**, not defaulted — the validator raises
+ * `MIME_NOT_ALLOWED` when the type has no entry at all. So absence from this map
+ * means "rejected", which is why the check below treats it that way rather than
+ * waving the file through.
+ *
+ * Mirrors `getDefaultUploadConfig()` in the backend's
+ * `core/uploads/upload-config.ts`, read from source on 2026-08-24. It is the
+ * *default* config, so a deployment could in principle override it — the server
+ * stays the source of truth and its `violations[]` are still surfaced verbatim.
+ * This exists to catch the common case before spending the upload.
+ */
+export const PER_MIME_MAX_BYTES: Readonly<Record<string, number>> = {
+  'image/jpeg': 10 * 1024 * 1024,
+  'image/png': 10 * 1024 * 1024,
+  'image/webp': 10 * 1024 * 1024,
+  'image/gif': 5 * 1024 * 1024,
+  'application/pdf': 25 * 1024 * 1024,
+  'application/zip': 50 * 1024 * 1024,
+  'audio/mpeg': 10 * 1024 * 1024,
+  'audio/wav': 25 * 1024 * 1024,
+};
+
 // Dedicated video route constraints. Only these formats are accepted; the server
 // re-validates by sniffing the bytes, so this is a UX guard, not the source of truth.
 export const VIDEO_MIME_TYPES = ['video/mp4', 'video/quicktime', 'video/webm'] as const;
@@ -274,6 +308,35 @@ export function validateMediaSelection(files: File[]): string | null {
 
   const tooBig = others.find((f) => f.size > VENDOR_MAX_BYTES);
   if (tooBig) return tStatic('media.upload.validation.fileTooLarge', { name: tooBig.name });
+
+  // The per-MIME ceiling, which binds far earlier than the role one above and is
+  // what a vendor actually runs into. Only applied when the browser gave us a
+  // type: an empty `File.type` is common for some extensions, and guessing would
+  // reject a file the server would have accepted.
+  for (const f of others) {
+    if (!f.type) continue;
+    const cap = PER_MIME_MAX_BYTES[f.type];
+    if (cap === undefined) {
+      // Absence means "no policy entry", which the server treats as
+      // MIME_NOT_ALLOWED rather than as unlimited.
+      return tStatic('media.upload.validation.typeNotAllowed', { name: f.name });
+    }
+    if (f.size > cap) {
+      return tStatic('media.upload.validation.overTypeLimit', {
+        name: f.name,
+        max: Math.round(cap / (1024 * 1024)),
+      });
+    }
+  }
+
+  // One request carries at most 100 MB in total, independently of any per-file
+  // rule — ten 15 MB PDFs each pass their own cap and the batch still fails.
+  const totalBytes = others.reduce((sum, f) => sum + f.size, 0);
+  if (totalBytes > MAX_REQUEST_TOTAL_BYTES) {
+    return tStatic('media.upload.validation.batchTooLarge', {
+      max: Math.round(MAX_REQUEST_TOTAL_BYTES / (1024 * 1024)),
+    });
+  }
 
   const bigVideo = videos.find((f) => f.size > VIDEO_MAX_BYTES);
   if (bigVideo) return tStatic('media.upload.validation.videoTooLarge', { name: bigVideo.name });

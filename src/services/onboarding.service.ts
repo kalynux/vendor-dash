@@ -1,6 +1,7 @@
 import { api } from './api';
 import type {
     CompletionStatus,
+    OnboardingStatus,
     DeliveryAgency,
     AgencyListMeta,
     BasicSetupPayload,
@@ -24,6 +25,28 @@ export const onboardingService = {
     getCompletionStatus(): Promise<{ success: boolean; data: CompletionStatus }> {
         return api.get<{ success: boolean; data: CompletionStatus }>(
             '/vendor/profile/completion-status',
+        );
+    },
+
+    /**
+     * The richer onboarding status — a strict superset of `getCompletionStatus`.
+     *
+     * Same underlying step, plus the full step list with per-step state, the
+     * fields already completed, and `warnings[]`. That last one carries the only
+     * warning the backend produces: KYC verification pending, which tells a
+     * vendor their account has limited functionality until an admin verifies it.
+     * Nothing else surfaces that.
+     *
+     * 🔴 `progressPercent` is derived from the step number alone, so render it as
+     * "step N of 4" rather than as a completeness gauge — a vendor who has filled
+     * everything but sits on step 3 reads 50 %.
+     *
+     * Read-only, like `getCompletionStatus`: routing stays driven by
+     * auth-me/vendor → `role_entity.onboarding_step`.
+     */
+    getOnboardingStatus(): Promise<{ success: boolean; data: OnboardingStatus }> {
+        return api.get<{ success: boolean; data: OnboardingStatus }>(
+            '/vendor/onboarding/status',
         );
     },
 

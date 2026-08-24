@@ -104,7 +104,22 @@ export interface ApiDigitalConfig {
   isActive: boolean;
 }
 
-// Per-variant digital asset summary (raw download URL is never exposed here).
+/**
+ * Per-variant digital asset summary.
+ *
+ * 🔴 **A vendor cannot preview or download their own digital asset. There is no
+ * endpoint.** This is not a `FileDetail` with a null `url` — it never becomes one,
+ * and has no `url` field to branch on at all.
+ *
+ * The only byte-serving route is `GET /api/digital/download/:token`, and that
+ * token is minted by a customer-only endpoint that resolves an entitlement by
+ * customer id. A vendor holds no entitlement. `GET /api/files/:id` returns the
+ * file record — metadata, not bytes.
+ *
+ * So: render `originalName`, `mimeType` and `size`. **Do not build a preview or
+ * download button** — there is nothing behind it.
+ * See api-doc/files/private-files.md.
+ */
 export interface ApiDigitalAsset {
   id: string;
   originalName: string;

@@ -14,7 +14,7 @@ export const media = {
     upload: {
         title: 'Envoyer des fichiers',
         dropzone: 'Glissez vos fichiers ici, ou cliquez pour parcourir',
-        limits: 'Jusqu’à {{maxFiles}} fichiers (500 Mo chacun) ou 3 vidéos (70 Mo chacune)',
+        limits: 'Jusqu’à {{maxFiles}} fichiers (images 10 Mo, PDF 25 Mo) ou 3 vidéos (70 Mo chacune)',
         uploading: 'Envoi de {{done}} sur {{total}}…',
         completed: plural({ one: '{{count}} fichier envoyé', other: '{{count}} fichiers envoyés' }),
         failed: plural({ one: '{{count}} fichier en échec', other: '{{count}} fichiers en échec' }),
@@ -25,6 +25,9 @@ export const media = {
             fileTooLarge: '« {{name}} » dépasse la limite de 500 Mo.',
             videoTooLarge: '« {{name}} » dépasse la limite de 70 Mo pour les vidéos.',
             videoFormat: '« {{name}} » n’est pas une vidéo prise en charge (utilisez MP4, MOV ou WebM).',
+            overTypeLimit: '« {{name}} » dépasse la limite de {{max}} Mo pour ce type de fichier.',
+            typeNotAllowed: '« {{name}} » n’est pas un type de fichier accepté.',
+            batchTooLarge: 'Cette sélection dépasse le total de {{max}} Mo par envoi. Envoyez-la en plusieurs fois.',
         },
 
         source: {

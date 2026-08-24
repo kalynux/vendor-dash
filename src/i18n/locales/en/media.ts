@@ -14,7 +14,10 @@ export const media = {
     upload: {
         title: 'Upload files',
         dropzone: 'Drag files here, or click to browse',
-        limits: 'Up to {{maxFiles}} files (500 MB each) or 3 videos (70 MB each)',
+        // Names the limit vendors actually hit. The 500 MB role ceiling is real
+        // but never binds — the upload policy caps images at 10 MB and PDFs at
+        // 25 MB, so advertising 500 MB set up a refusal on the first big photo.
+        limits: 'Up to {{maxFiles}} files (images 10 MB, PDFs 25 MB) or 3 videos (70 MB each)',
         uploading: 'Uploading {{done}} of {{total}}…',
         completed: plural({ one: '{{count}} file uploaded', other: '{{count}} files uploaded' }),
         failed: plural({ one: '{{count}} file failed', other: '{{count}} files failed' }),
@@ -29,6 +32,11 @@ export const media = {
             fileTooLarge: '“{{name}}” exceeds the 500 MB limit.',
             videoTooLarge: '“{{name}}” exceeds the 70 MB video limit.',
             videoFormat: '“{{name}}” is not a supported video (use MP4, MOV or WebM).',
+            // The per-type ceiling from the upload policy — this is the one
+            // vendors actually hit, long before the 500 MB role limit above.
+            overTypeLimit: '“{{name}}” is over the {{max}} MB limit for that file type.',
+            typeNotAllowed: '“{{name}}” is not a file type we accept.',
+            batchTooLarge: 'That selection is over the {{max}} MB total for one upload. Send it in smaller batches.',
         },
 
         /**
