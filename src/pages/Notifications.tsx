@@ -51,8 +51,11 @@ export function Notifications() {
     fetchNotifications({ page: 1, limit: 50 });
   }, [fetchNotifications]);
 
-  // Neither read state nor text has a server-side filter worth a round trip here
-  // (the whole feed is already loaded in one page), so both narrow client-side.
+  // Both narrow client-side. The store's fetch already merges the read and
+  // unread halves — the endpoint has no "both" value for `isRead`, so it takes
+  // two calls — which means this filter has the whole page to work on. Before
+  // that merge existed the "Read" option was permanently empty: an
+  // unparameterised list call returns unread only.
   const query = searchQuery.trim().toLowerCase();
   const visibleNotifications = useMemo(
     () =>

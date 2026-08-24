@@ -57,6 +57,8 @@ export const products = {
         unpublish: 'Dépublier',
         archive: 'Archiver',
         archiveSelected: 'Archiver la sélection',
+        publishSelected: 'Publier la sélection',
+        unpublishSelected: 'Dépublier la sélection',
         restore: 'Restaurer',
         importCsv: 'Importer un CSV',
         exportCsv: 'Exporter en CSV',
@@ -80,11 +82,18 @@ export const products = {
             one: 'Archiver {{count}} produit ?',
             other: 'Archiver {{count}} produits ?',
         }),
-        partial:
-            '{{success}} produit(s) archivé(s) sur {{total}} — {{failed}} ignoré(s) (seuls les produits en brouillon ou actifs peuvent être archivés).',
+        partial: '{{success}} sur {{total}} traité(s) — {{failed}} ignoré(s).',
         done: plural({
             one: '{{count}} produit archivé.',
             other: '{{count}} produits archivés.',
+        }),
+        published: plural({
+            one: '{{count}} produit publié.',
+            other: '{{count}} produits publiés.',
+        }),
+        unpublished: plural({
+            one: '{{count}} produit remis en brouillon.',
+            other: '{{count}} produits remis en brouillon.',
         }),
     },
 
@@ -909,6 +918,7 @@ export const products = {
         archiveFailed: "Nous n'avons pas pu archiver ce produit. Réessayez.",
         deleteFailed: "Nous n'avons pas pu retirer ce produit. Réessayez.",
         bulkArchiveFailed: 'Impossible d’archiver les produits.',
+        bulkStatusFailed: 'Impossible de modifier le statut de ces produits.',
         validateFailed: 'Impossible de valider le produit.',
         statusChangeFailed: 'Impossible de changer le statut du produit.',
         notFound: 'Ce produit n’existe plus.',

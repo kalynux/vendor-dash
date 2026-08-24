@@ -23,6 +23,8 @@ import {
   Pencil,
   ArchiveRestore,
   TriangleAlert,
+  Globe,
+  EyeOff,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -77,12 +79,17 @@ import {
   runActivationPreflight,
   getAllowedStatusTransitions,
   bulkArchiveProducts,
+  bulkUpdateProductStatus,
   ACTIVATION_ERROR_KEYS,
   type StatusTransition,
   type StatusTransitionIntent,
 } from '@/services/products.service';
 import { ApiError } from '@/types/api';
-import type { ProductListItem, ApiVectorisationStatus } from '@/types/product.types';
+import type {
+  ProductListItem,
+  ApiVectorisationStatus,
+  BulkArchiveResult,
+} from '@/types/product.types';
 import { cn } from '@/lib/utils';
 import { Trans, useApiError, useTranslation, type TranslationKey } from '@/i18n';
 
@@ -378,32 +385,82 @@ export function Products() {
   // Bulk archive through the backend bulk endpoint — it archives draft/active
   // products and skips the rest (suspended/pending_review/archived), reporting
   // counts instead of failing per-item 422s.
-  const [isBulkArchiving, setIsBulkArchiving] = useState(false);
-  const handleBulkArchive = useCallback(async () => {
-    if (isBulkArchiving || selectedProducts.length === 0) return;
-    if (!confirm(t('products.bulk.confirm', { count: selectedProducts.length }))) return;
-    setIsBulkArchiving(true);
-    try {
-      const result = await bulkArchiveProducts(selectedProducts);
-      if (result.failed > 0) {
-        toast.warning(
-          t('products.bulk.partial', {
-            success: result.success,
-            total: result.total,
-            failed: result.failed,
-          }),
-        );
-      } else {
-        toast.success(t('products.bulk.done', { count: result.success }));
+  /**
+   * Which bulk action is in flight, so the whole bar disables together rather
+   * than letting a second action race the first over the same selection.
+   */
+  const [bulkBusy, setBulkBusy] = useState<'archive' | 'active' | 'draft' | null>(null);
+  const isBulkArchiving = bulkBusy === 'archive';
+
+  /**
+   * Report a bulk outcome.
+   *
+   * `failed` is the count; `errors[]` is "details where available" and is NOT the
+   * same length. Only the `active` path explains every failure — which is also
+   * the path where the explanation matters most, because "why won't these
+   * publish" is answered by the activation gate and nothing else surfaces it. The
+   * first few reasons go in the toast; the rest stay in the count.
+   */
+  const reportBulk = useCallback(
+    (result: BulkArchiveResult, doneKey: TranslationKey) => {
+      if (result.failed === 0) {
+        toast.success(t(doneKey, { count: result.success }));
+        return;
       }
+      const detail = result.errors.slice(0, 3).map((e) => e.reason).join(' · ');
+      toast.warning(
+        t('products.bulk.partial', {
+          success: result.success,
+          total: result.total,
+          failed: result.failed,
+        }),
+        detail ? { description: detail } : undefined,
+      );
+    },
+    [t],
+  );
+
+  const handleBulkArchive = useCallback(async () => {
+    if (bulkBusy || selectedProducts.length === 0) return;
+    if (!confirm(t('products.bulk.confirm', { count: selectedProducts.length }))) return;
+    setBulkBusy('archive');
+    try {
+      reportBulk(await bulkArchiveProducts(selectedProducts), 'products.bulk.done');
       clearSelection();
       reloadList();
     } catch (err: unknown) {
       toast.error(apiError.resolve(err, { fallbackKey: 'products.errors.bulkArchiveFailed' }));
     } finally {
-      setIsBulkArchiving(false);
+      setBulkBusy(null);
     }
-  }, [isBulkArchiving, selectedProducts, clearSelection, reloadList, t, apiError]);
+  }, [bulkBusy, selectedProducts, clearSelection, reloadList, reportBulk, t, apiError]);
+
+  /**
+   * Bulk publish / unpublish through POST /vendor/products/bulk/status.
+   *
+   * Publishing runs the full activation gate per product, so a partial result is
+   * the normal outcome on a mixed selection rather than an error — a draft
+   * missing a price or an agency simply stays a draft and says why.
+   */
+  const handleBulkStatus = useCallback(
+    async (status: 'active' | 'draft') => {
+      if (bulkBusy || selectedProducts.length === 0) return;
+      setBulkBusy(status);
+      try {
+        reportBulk(
+          await bulkUpdateProductStatus(selectedProducts, status),
+          status === 'active' ? 'products.bulk.published' : 'products.bulk.unpublished',
+        );
+        clearSelection();
+        reloadList();
+      } catch (err: unknown) {
+        toast.error(apiError.resolve(err, { fallbackKey: 'products.errors.bulkStatusFailed' }));
+      } finally {
+        setBulkBusy(null);
+      }
+    },
+    [bulkBusy, selectedProducts, clearSelection, reloadList, reportBulk, apiError],
+  );
 
   const requestStatusTransition = useCallback(
     async (product: ProductListItem, transition: StatusTransition) => {
@@ -986,10 +1043,38 @@ export function Products() {
           </span>
           <div className="flex-1" />
           <Button
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            disabled={bulkBusy !== null}
+            onClick={() => void handleBulkStatus('active')}
+          >
+            {bulkBusy === 'active' ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Globe className="w-4 h-4" />
+            )}
+            {t('products.actions.publishSelected')}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            disabled={bulkBusy !== null}
+            onClick={() => void handleBulkStatus('draft')}
+          >
+            {bulkBusy === 'draft' ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <EyeOff className="w-4 h-4" />
+            )}
+            {t('products.actions.unpublishSelected')}
+          </Button>
+          <Button
             variant="destructive"
             size="sm"
             className="gap-2"
-            disabled={isBulkArchiving}
+            disabled={bulkBusy !== null}
             onClick={handleBulkArchive}
           >
             {isBulkArchiving ? (

@@ -707,17 +707,43 @@ export interface ArchiveResponse {
 }
 
 /** Aggregated result of POST /vendor/products/bulk/archive (partial success). */
+/**
+ * One explained failure from a bulk operation.
+ *
+ * ⚠ `reason` is the backend AppError's **message**, not its code, so it can only
+ * be displayed — there is nothing to branch on. It also arrives in the backend's
+ * language rather than the vendor's.
+ */
+export interface BulkRowError {
+  productId: string;
+  reason: string;
+}
+
 export interface BulkArchiveResult {
-  /** Number of products archived. */
+  /** Number of products whose status changed. */
   success: number;
-  /** Number skipped — only draft/active products can be archived. */
+  /** Number skipped, for any reason. */
   failed: number;
   total: number;
+  /**
+   * 🔴 **`errors.length` does not equal `failed`.** Coverage differs per path:
+   *
+   *   bulk/archive              → only vectorisation-pending rows are explained.
+   *                               Wrong status, bad id, foreign product: counted
+   *                               in `failed`, invisible here.
+   *   bulk/status draft|archived → same.
+   *   bulk/status **active**     → EVERY failure gets a row.
+   *
+   * So `failed` is the count to show and this is "details where available" —
+   * never "what went wrong". Omitted by the backend when empty; normalised to
+   * `[]` here.
+   */
+  errors: BulkRowError[];
 }
 
 export interface BulkArchiveResponse {
   success: boolean;
-  data: BulkArchiveResult;
+  data: Omit<BulkArchiveResult, 'errors'> & { errors?: BulkRowError[] };
   message?: string;
 }
 

@@ -19,7 +19,7 @@ import {
   type DashboardMetrics,
 } from '@/services/analytics.service';
 import {
-  fetchNotifications as apiFetchNotifications,
+  fetchNotificationFeed as apiFetchNotificationFeed,
   markNotificationRead as apiMarkNotificationRead,
   markAllNotificationsRead as apiMarkAllNotificationsRead,
 } from '@/services/notifications.service';
@@ -334,7 +334,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const fetchNotifications = useCallback(async (params?: NotificationListParams) => {
     setNotificationsLoading(true);
     try {
-      const res = await apiFetchNotifications(params);
+      const res = await apiFetchNotificationFeed(params);
       setNotifications(res.data);
       setUnreadCount(res.unreadCount);
     } catch (err) {
@@ -350,10 +350,28 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   const markAsRead = useCallback(async (id: string) => {
     let wasUnread = false;
+    /**
+     * ⚠ `PATCH /:id/read` is NOT idempotent in `readAt` — calling it on an
+     * already-read row re-stamps the timestamp to now. So a row we can see is
+     * already read gets no round trip.
+     *
+     * Note which way this is written: it records "definitely already read",
+     * not "was unread". A `useState` updater is not guaranteed to run
+     * synchronously, so if it has not run by the time the flag is read, this
+     * stays `false` and the request goes out — the old behaviour, one
+     * unnecessary write. Testing `wasUnread` instead would fail the other way
+     * and silently drop the request, leaving the row unread on the server while
+     * the UI showed it read.
+     */
+    let knownRead = false;
     setNotifications(prev => prev.map(n => {
-      if (n.id === id && !n.isRead) wasUnread = true;
+      if (n.id === id) {
+        if (n.isRead) knownRead = true;
+        else wasUnread = true;
+      }
       return n.id === id ? { ...n, isRead: true } : n;
     }));
+    if (knownRead) return;
     if (wasUnread) setUnreadCount(c => Math.max(0, c - 1));
     try {
       await apiMarkNotificationRead(id);

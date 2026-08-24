@@ -118,22 +118,65 @@ export async function archiveProduct(id: string): Promise<void> {
 }
 
 /**
- * Bulk archive via POST /vendor/products/bulk/archive (max 50 ids per request —
- * larger selections are chunked). The backend only archives draft/active
- * products; anything else is skipped and counted in `failed`.
+ * Both bulk routes cap at 50 ids — more is a `400 VALIDATION_ERROR` — so larger
+ * selections are chunked and the per-chunk results summed.
+ *
+ * ⚠ Neither route is behind the vectorisation-lock middleware that guards the
+ * single-product writes. They filter pending products out per row instead and
+ * report them in `errors[]`, so a bulk call never 409s as a whole.
+ *
+ * ⚠ `productIds` entries are NOT ObjectId-validated by the schema. A garbage
+ * string passes Zod and is dropped silently inside the query, surfacing only as
+ * a higher `failed` count.
  */
-export async function bulkArchiveProducts(productIds: string[]): Promise<BulkArchiveResult> {
-  const CHUNK_SIZE = 50;
-  const totals: BulkArchiveResult = { success: 0, failed: 0, total: 0 };
-  for (let i = 0; i < productIds.length; i += CHUNK_SIZE) {
-    const res = await api.post<BulkArchiveResponse>('/vendor/products/bulk/archive', {
-      productIds: productIds.slice(i, i + CHUNK_SIZE),
+const BULK_CHUNK_SIZE = 50;
+
+async function runBulk(
+  path: string,
+  productIds: string[],
+  extra: Record<string, unknown> = {},
+): Promise<BulkArchiveResult> {
+  const totals: BulkArchiveResult = { success: 0, failed: 0, total: 0, errors: [] };
+  for (let i = 0; i < productIds.length; i += BULK_CHUNK_SIZE) {
+    const res = await api.post<BulkArchiveResponse>(path, {
+      ...extra,
+      productIds: productIds.slice(i, i + BULK_CHUNK_SIZE),
     });
     totals.success += res.data.success;
     totals.failed += res.data.failed;
     totals.total += res.data.total;
+    // Omitted rather than empty when nothing failed.
+    if (res.data.errors?.length) totals.errors.push(...res.data.errors);
   }
   return totals;
+}
+
+/**
+ * Bulk archive via POST /vendor/products/bulk/archive. The backend only archives
+ * draft/active products; anything else is skipped and counted in `failed`.
+ *
+ * On this path only vectorisation-pending rows get an `errors[]` entry — a wrong
+ * status, a bad id or another vendor's product is invisible beyond the count.
+ */
+export async function bulkArchiveProducts(productIds: string[]): Promise<BulkArchiveResult> {
+  return runBulk('/vendor/products/bulk/archive', productIds);
+}
+
+/**
+ * Bulk status change via POST /vendor/products/bulk/status.
+ *
+ * `active` is the interesting target: it runs the full activation gate per
+ * product, and it is the ONE path where every failure gets an `errors[]` row with
+ * a human `reason` — which is the only explanation a vendor gets for why a
+ * product would not publish. Surface it.
+ *
+ * `draft` and `archived` explain only vectorisation-pending rows, like archive.
+ */
+export async function bulkUpdateProductStatus(
+  productIds: string[],
+  status: Extract<ApiProductStatus, 'active' | 'draft' | 'archived'>,
+): Promise<BulkArchiveResult> {
+  return runBulk('/vendor/products/bulk/status', productIds, { status });
 }
 
 export async function duplicateProduct(id: string): Promise<ApiProduct> {

@@ -57,6 +57,8 @@ export const products = {
         unpublish: 'Unpublish',
         archive: 'Archive',
         archiveSelected: 'Archive selected',
+        publishSelected: 'Publish selected',
+        unpublishSelected: 'Unpublish selected',
         restore: 'Restore',
         importCsv: 'Import CSV',
         exportCsv: 'Export CSV',
@@ -76,9 +78,22 @@ export const products = {
             one: 'Archive {{count}} product?',
             other: 'Archive {{count}} products?',
         }),
-        partial:
-            'Archived {{success}} of {{total}} — {{failed}} skipped (only draft or active products can be archived).',
+        /**
+         * Shared by archive, publish and unpublish, so it names no reason: the
+         * three paths skip rows for different causes, and the backend explains
+         * every one of them only when publishing. The specifics ride in the
+         * toast's description, from `errors[]`, where they exist.
+         */
+        partial: '{{success}} of {{total}} done — {{failed}} skipped.',
         done: plural({ one: '{{count}} product archived.', other: '{{count}} products archived.' }),
+        published: plural({
+            one: '{{count}} product published.',
+            other: '{{count}} products published.',
+        }),
+        unpublished: plural({
+            one: '{{count}} product moved to draft.',
+            other: '{{count}} products moved to draft.',
+        }),
     },
 
     /** The chat-native description editor and its WhatsApp / Telegram preview. */
@@ -960,6 +975,7 @@ export const products = {
         archiveFailed: "We couldn't archive this product. Please try again.",
         deleteFailed: "We couldn't remove this product. Please try again.",
         bulkArchiveFailed: 'Could not archive products.',
+        bulkStatusFailed: 'Could not change those products’ status.',
         validateFailed: 'Could not validate product.',
         statusChangeFailed: 'Could not change product status.',
         notFound: 'This product no longer exists.',
