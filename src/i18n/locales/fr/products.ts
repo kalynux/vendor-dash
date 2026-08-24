@@ -151,6 +151,8 @@ export const products = {
             linkLabel: 'WhatsApp affiche l’adresse complète à la place du texte de votre lien.',
             longList:
                 'Les longues listes se lisent mal dans un chat. Gardez plutôt les {{max}} premiers éléments.',
+            tooManyBlocks:
+                'Trop de paragraphes et de listes pour enregistrer — la limite est de {{max}}. Fusionnez-en quelques-uns.',
         },
 
         errors: {

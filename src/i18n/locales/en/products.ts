@@ -146,6 +146,8 @@ export const products = {
                 'Your text contains * _ or ~, which WhatsApp reads as formatting — that emphasis will not show there.',
             linkLabel: 'WhatsApp shows the full web address instead of your link text.',
             longList: 'Long lists are hard to scan in a chat. Consider keeping the top {{max}}.',
+            tooManyBlocks:
+                'Too many paragraphs and lists to save — {{max}} is the limit. Merge some together.',
         },
 
         errors: {

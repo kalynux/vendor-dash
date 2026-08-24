@@ -224,8 +224,8 @@ export function ProductUpload() {
           type: state.productType,
           title: values.title,
           category: values.category,
-          // Emits `description` (the plain projection) plus `descriptionRich`
-          // once the backend accepts it — see RICH_DESCRIPTION_WIRE_ENABLED.
+          // Emits `description` (the plain projection) alongside
+          // `descriptionRich` — see RICH_DESCRIPTION_WIRE_ENABLED.
           ...descriptionCreateWire(values.descriptionRich),
           tags: values.tags,
           seoTitle: values.seoTitle || undefined,

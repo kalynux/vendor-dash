@@ -1,7 +1,12 @@
 import type { TranslationKey } from '@/i18n';
 import { docCharCount } from './doc';
 import { CHAT_LIMITS, DESCRIPTION_BUDGET } from './limits';
-import { INLINE_MARKS, type InlineNode, type RichDoc } from './types';
+import {
+  INLINE_MARKS,
+  MAX_RICH_DOC_BLOCKS,
+  type InlineNode,
+  type RichDoc,
+} from './types';
 
 /**
  * Content guidance for the editor footer.
@@ -13,9 +18,11 @@ import { INLINE_MARKS, type InlineNode, type RichDoc } from './types';
  * switch tabs, and the whole failure mode being guarded against here is a vendor
  * who checks the Telegram tab and assumes WhatsApp matches.
  *
- * Nothing here blocks a save. A description that WhatsApp renders imperfectly is
- * still a valid description, and a vendor who has decided to keep an asterisk in
- * their product name is not wrong.
+ * Nothing here blocks a save, and only one notice is about something that WILL
+ * be refused: the 200-block cap, which the backend enforces on every product
+ * write. Everything else is advisory — a description that WhatsApp renders
+ * imperfectly is still a valid description, and a vendor who has decided to keep
+ * an asterisk in their product name is not wrong.
  */
 
 export type LintSeverity = 'info' | 'warn';
@@ -88,6 +95,17 @@ function longestList(doc: RichDoc): number {
 export function lintDoc(doc: RichDoc): LintNotice[] {
   const notices: LintNotice[] = [];
   const length = docCharCount(doc);
+
+  // First, because it is the only notice here about a HARD rejection rather than
+  // a formatting nicety: the backend caps a description at 200 blocks and fails
+  // the whole product save past it. Everything below is advisory.
+  if (doc.blocks.length > MAX_RICH_DOC_BLOCKS) {
+    notices.push({
+      key: 'products.editor.lint.tooManyBlocks',
+      severity: 'warn',
+      params: { max: MAX_RICH_DOC_BLOCKS },
+    });
+  }
 
   if (length > DESCRIPTION_BUDGET) {
     notices.push({

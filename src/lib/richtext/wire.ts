@@ -4,29 +4,36 @@ import type { RichDoc } from './types';
 /**
  * Whether `descriptionRich` may be attached to product write payloads.
  *
- * **Flip this to `true` the day the backend ships the field** (see
- * `docs_requirement.md`) — and nothing else needs to change.
+ * **The backend has shipped it, and this is now `true`.**
  *
- * It exists because the two families of product endpoints disagree about unknown
- * fields, and one of them disagrees expensively:
+ * It existed because the two families of product endpoints disagreed about
+ * unknown fields, and one of them disagreed expensively:
  *
  * - `POST /vendor/products` and `PATCH /vendor/products/:id` validate against
  *   schemas that are not top-level `.strict()`, so an unknown `descriptionRich`
- *   is silently stripped. Harmless.
+ *   was silently stripped. Harmless.
  * - `POST /vendor/products/simple` and `PATCH /vendor/products/:id/simple`
- *   validate against `.strict()` schemas
- *   (`simple-product.validator.ts:77` and `:117`). An unknown key there is not
- *   ignored — it is a `400 VALIDATION_ERROR` that rejects the **entire** save.
+ *   validate against `.strict()` schemas. An unknown key there is not ignored —
+ *   it is a `400 VALIDATION_ERROR` that rejects the **entire** save.
  *
- * Sending it optimistically would therefore break the quick-add editor outright
- * while appearing to work in the advanced wizard, which is the worst possible
- * split. One constant, checked by every payload builder, keeps the two in step.
+ * Sending it optimistically would therefore have broken the quick-add editor
+ * outright while appearing to work in the advanced wizard, which is the worst
+ * possible split. One constant, checked by every payload builder, kept the two
+ * in step until the asymmetry was gone.
  *
- * While this is `false` the editor is fully functional and the plain-text
- * projection still persists in `description` — reopening a product recovers its
- * paragraphs, lists, emoji and URLs, but not its bold/italic runs.
+ * That asymmetry no longer exists. `descriptionRich` is a declared key on all
+ * four write schemas through one shared fragment — verified in backend source on
+ * 2026-08-24: `catalog/validators/rich-description.validator.ts` exports it, and
+ * `simple-product.validator.ts` declares it at lines 51 and 97, inside the two
+ * schemas that close with `.strict()` at 83 and 125.
+ *
+ * The constant is kept rather than inlined because the three-valued contract
+ * below is what the field means, and the comments explaining it have to live
+ * next to the code that implements it.
+ *
+ * See api-doc/vendor/product-description-rich.md.
  */
-export const RICH_DESCRIPTION_WIRE_ENABLED = false;
+export const RICH_DESCRIPTION_WIRE_ENABLED = true;
 
 /**
  * The pair of values a product write sends for a description.

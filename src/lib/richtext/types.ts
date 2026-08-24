@@ -97,3 +97,13 @@ export const EMPTY_DOC: RichDoc = { version: RICH_DOC_VERSION, blocks: [] };
 
 /** The only URL schemes a description may link to. */
 export const ALLOWED_LINK_SCHEMES = ['https:', 'http:', 'mailto:', 'tel:'] as const;
+
+/**
+ * The most blocks a description may contain.
+ *
+ * Mirrors `MAX_RICH_DOC_BLOCKS` in the backend's `core/richtext/types.ts`. Unlike
+ * every other budget in this folder this one is a **hard server-side rejection**,
+ * not editorial guidance: a document over the cap fails validation and takes the
+ * whole product save with it. Worth catching before the vendor presses save.
+ */
+export const MAX_RICH_DOC_BLOCKS = 200;

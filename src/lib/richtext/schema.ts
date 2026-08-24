@@ -1,5 +1,10 @@
 import { z } from 'zod';
-import { ALLOWED_LINK_SCHEMES, RICH_DOC_VERSION, type RichDoc } from './types';
+import {
+  ALLOWED_LINK_SCHEMES,
+  MAX_RICH_DOC_BLOCKS,
+  RICH_DOC_VERSION,
+  type RichDoc,
+} from './types';
 
 /**
  * Runtime validation for a `RichDoc`.
@@ -70,7 +75,10 @@ export const blockSchema = z.discriminatedUnion('type', [paragraphSchema, listSc
 
 export const richDocSchema = z.object({
   version: z.literal(RICH_DOC_VERSION),
-  blocks: z.array(blockSchema),
+  // Capped to match the backend, which rejects a longer document outright.
+  // Nothing stored can exceed this — the backend enforces it on every write — so
+  // the cap never costs a valid document on the way in.
+  blocks: z.array(blockSchema).max(MAX_RICH_DOC_BLOCKS),
 });
 
 /**
