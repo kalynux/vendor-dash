@@ -28,9 +28,10 @@ import {
 } from '@/services/notifications.service';
 import { PushPermissionBanner } from '@/components/notifications/PushPermissionBanner';
 import {
-  disconnectTelegram,
-  unlinkWhatsapp,
-} from '@/services/notification-channels.service';
+  asMessagingChannel,
+  disconnectChannel,
+  listConnections,
+} from '@/services/connections.service';
 import { ChannelSetupDialog } from '@/components/vendor-settings/ChannelSetupDialog';
 import { UnsavedChangesBar } from '@/components/vendor-settings/UnsavedChangesBar';
 import { mapProfileError } from '@/components/vendor-settings/errors';
@@ -43,6 +44,7 @@ import type {
   SecondaryChannel,
   PreferredLanguage,
 } from '@/types/notifications.types';
+import type { MessagingChannel, MessagingConnection } from '@/types/connections.types';
 
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -113,6 +115,12 @@ type EventMeta = {
   labelKey: TranslationKey;
   descriptionKey: TranslationKey;
   Icon: LucideIcon;
+  /**
+   * Returned by GET and honoured at send time, but absent from the update
+   * schema — sending it is silently stripped, so the switch would report a
+   * successful save and change nothing. Rendered disabled instead.
+   */
+  readOnly?: boolean;
 };
 
 const EVENTS: EventMeta[] = [
@@ -130,8 +138,11 @@ const EVENTS: EventMeta[] = [
   { key: 'connectionUpdated', labelKey: 'notifications.settings.events.connectionUpdated', descriptionKey: 'notifications.settings.events.connectionUpdatedHint', Icon: Handshake },
   { key: 'payoutUpdates', labelKey: 'notifications.settings.events.payoutUpdates', descriptionKey: 'notifications.settings.events.payoutUpdatesHint', Icon: Wallet },
   { key: 'shipmentRejected', labelKey: 'notifications.settings.events.shipmentRejected', descriptionKey: 'notifications.settings.events.shipmentRejectedHint', Icon: PackageX },
-  { key: 'planUpdates', labelKey: 'notifications.settings.events.planUpdates', descriptionKey: 'notifications.settings.events.planUpdatesHint', Icon: CalendarClock },
+  { key: 'planUpdates', labelKey: 'notifications.settings.events.planUpdates', descriptionKey: 'notifications.settings.events.planUpdatesHint', Icon: CalendarClock, readOnly: true },
 ];
+
+/** The events a PATCH can actually change — everything except `planUpdates`. */
+const WRITABLE_EVENTS = EVENTS.filter((e) => !e.readOnly);
 
 const LANGUAGES: { value: PreferredLanguage; label: string }[] = [
   { value: 'en', label: 'English' },
@@ -184,6 +195,29 @@ export function NotificationSettings() {
   // Channel setup / management
   const [setupChannel, setSetupChannel] = useState<SecondaryChannel | null>(null);
   const [unlinking, setUnlinking] = useState<SecondaryChannel | null>(null);
+  /**
+   * The messaging connections behind `telegramVerified` / `whatsappVerified`.
+   *
+   * The preference flags say *whether* a channel is linked; this says *what* it is
+   * linked to — the masked identity to show on a connected row, and the bot handle
+   * and deep link the setup dialog needs for one that isn't. Failing to load it
+   * must not break the page, so it degrades to an empty list.
+   */
+  const [connections, setConnections] = useState<MessagingConnection[]>([]);
+
+  const connectionFor = useCallback(
+    (channel: MessagingChannel) => connections.find((c) => c.channel === channel),
+    [connections],
+  );
+
+  const loadConnections = useCallback(async () => {
+    try {
+      setConnections(await listConnections());
+    } catch {
+      // Non-fatal: the *Verified flags still drive every gate on this screen.
+      setConnections([]);
+    }
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -191,6 +225,7 @@ export function NotificationSettings() {
     try {
       const data = await fetchNotificationPreferences();
       setPrefs(data);
+      void loadConnections();
       const ch = deriveChannel(data);
       setChannel(ch);
       setSavedChannel(ch);
@@ -206,7 +241,7 @@ export function NotificationSettings() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [loadConnections]);
 
   useEffect(() => {
     load();
@@ -220,9 +255,12 @@ export function NotificationSettings() {
     setSavedLanguage(lang);
   }, [roleEntity?.preferred_language]);
 
+  // Only the writable events count. Including `planUpdates` would let the bar
+  // appear for a change the backend strips, so Save would succeed and the row
+  // would spring back.
   const eventsDirty = useMemo(() => {
     if (!prefs || !events) return false;
-    return EVENTS.some((e) => events[e.key] !== prefs.preferences[e.key]);
+    return WRITABLE_EVENTS.some((e) => events[e.key] !== prefs.preferences[e.key]);
   }, [events, prefs]);
 
   const channelDirty = channel !== savedChannel;
@@ -238,25 +276,34 @@ export function NotificationSettings() {
     setChannel((cur) => (cur === next ? 'in-app' : next));
   }, []);
 
-  /** Re-fetch preferences; return whether `ch` is now verified (for the dialog). */
+  /**
+   * Re-fetch preferences; return whether `ch` is now verified (for the dialog).
+   *
+   * Connections are re-read alongside, because a successful link flips the
+   * matching `*Verified` flag AND changes what the row should say about itself.
+   */
   const refreshForChannel = useCallback(
     async (ch: SecondaryChannel): Promise<boolean> => {
       const data = await fetchNotificationPreferences();
       setPrefs(data);
       setSavedChannel(deriveChannel(data));
+      void loadConnections();
       return isVerified(data, ch);
     },
-    [],
+    [loadConnections],
   );
 
   const handleUnlink = useCallback(
     async (ch: SecondaryChannel) => {
+      const messaging = asMessagingChannel(ch);
+      // Email has no connection to remove — it is verified, not linked.
+      if (!messaging) return;
       setUnlinking(ch);
       try {
-        if (ch === 'telegram') await disconnectTelegram();
-        else if (ch === 'whatsapp') await unlinkWhatsapp();
+        await disconnectChannel(messaging);
         const data = await fetchNotificationPreferences();
         setPrefs(data);
+        void loadConnections();
         const derived = deriveChannel(data);
         setSavedChannel(derived);
         // If the unlinked channel was the active selection, fall back to in-app.
@@ -272,7 +319,7 @@ export function NotificationSettings() {
         setUnlinking(null);
       }
     },
-    [t, m],
+    [t, m, loadConnections],
   );
 
   // Roll every editable field back to the last server snapshot.
@@ -295,7 +342,14 @@ export function NotificationSettings() {
                 whatsappEnabled: channel === 'whatsapp',
               }
             : {}),
-          ...(eventsDirty ? { preferences: events } : {}),
+          // `planUpdates` is stripped server-side, so send only what can land.
+          ...(eventsDirty
+            ? {
+                preferences: Object.fromEntries(
+                  WRITABLE_EVENTS.map((e) => [e.key, events[e.key]]),
+                ) as Partial<NotificationEventPreferences>,
+              }
+            : {}),
         });
         setPrefs(updated);
         const ch = deriveChannel(updated);
@@ -394,6 +448,9 @@ export function NotificationSettings() {
               const verified = prefs[c.verifyKey];
               const selected = channel === c.value;
               const busy = unlinking === c.value;
+              const messaging = asMessagingChannel(c.value);
+              const connection = messaging ? connectionFor(messaging) : undefined;
+              const identityHint = connection?.identityHint ?? null;
               return (
                 <div
                   key={c.value}
@@ -468,13 +525,19 @@ export function NotificationSettings() {
                       fight the icon and the indicator for horizontal space. */}
                   <div className="mt-2.5 flex items-center justify-between gap-3 sm:pl-12">
                     <p className="min-w-0 flex-1 truncate text-sm text-muted-foreground">
+                      {/* A linked messaging channel shows what it is linked TO.
+                          `identityHint` is null for a Telegram account with no
+                          @handle — a normal state for a connected channel, not
+                          missing data — so fall through to the generic copy. */}
                       {c.value === 'email' && verified && roleEntity?.email
                         ? roleEntity.email
-                        : !verified
-                          ? t('notifications.settings.delivery.connectToUse')
-                          : selected
-                            ? t('notifications.settings.delivery.alsoGoHere')
-                            : t('notifications.settings.delivery.tapUse')}
+                        : verified && identityHint
+                          ? identityHint
+                          : !verified
+                            ? t('notifications.settings.delivery.connectToUse')
+                            : selected
+                              ? t('notifications.settings.delivery.alsoGoHere')
+                              : t('notifications.settings.delivery.tapUse')}
                     </p>
 
                     {!verified ? (
@@ -542,6 +605,9 @@ export function NotificationSettings() {
                   className="shrink-0"
                   checked={events[e.key]}
                   onCheckedChange={() => toggleEvent(e.key)}
+                  // The update schema has no key for this one, so a toggle would
+                  // report a save and change nothing.
+                  disabled={e.readOnly}
                   aria-label={t(e.labelKey)}
                 />
               </div>
@@ -561,6 +627,11 @@ export function NotificationSettings() {
         channel={setupChannel}
         verified={setupChannel ? isVerified(prefs, setupChannel) : false}
         vendorEmail={roleEntity?.email}
+        instructions={
+          setupChannel && asMessagingChannel(setupChannel)
+            ? connectionFor(asMessagingChannel(setupChannel)!)?.howToConnect
+            : undefined
+        }
         onRefresh={() => (setupChannel ? refreshForChannel(setupChannel) : Promise.resolve(false))}
         onClose={() => setSetupChannel(null)}
       />

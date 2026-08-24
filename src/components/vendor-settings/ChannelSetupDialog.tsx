@@ -1,26 +1,17 @@
 import { useCallback, useEffect, useState } from 'react';
-import {
-  Loader2,
-  ExternalLink,
-  RefreshCw,
-  CheckCircle2,
-  Mail,
-  Copy,
-  Check,
-} from 'lucide-react';
+import { Loader2, ExternalLink, RefreshCw, CheckCircle2, Mail } from 'lucide-react';
 import { toast } from 'sonner';
 
-import {
-  sendEmailVerification,
-  requestTelegramLink,
-  requestWhatsappVerification,
-} from '@/services/notification-channels.service';
+import { sendEmailVerification } from '@/services/notification-channels.service';
+import { redeemConnectionCode } from '@/services/connections.service';
 import { mapProfileError } from '@/components/vendor-settings/errors';
 import { ApiError } from '@/types/api';
 import type { SecondaryChannel } from '@/types/notifications.types';
-import { copyText } from '@/platform/clipboard';
+import type { ConnectionInstructions } from '@/types/connections.types';
 
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
   Dialog,
   DialogContent,
@@ -29,12 +20,27 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
-import { Trans, useFormatters, useMessage, useTranslation } from '@/i18n';
+import { Trans, useMessage, useTranslation, type TranslationKey } from '@/i18n';
 
 const CHANNEL_LABELS: Record<SecondaryChannel, string> = {
   email: 'Email',
   telegram: 'Telegram',
   whatsapp: 'WhatsApp',
+};
+
+/**
+ * What to tell the vendor when a redeem fails.
+ *
+ * Every one of these means "get a new code" rather than "try that again" — a code
+ * is consumed atomically BEFORE the ownership check, so even a 409 has already
+ * spent it. Copy that says "try again" sends the vendor into a second, more
+ * confusing failure (`CONNECTION_CODE_INVALID` on a code the bot already burned).
+ */
+const REDEEM_ERROR_KEYS: Record<string, TranslationKey> = {
+  CONNECTION_CODE_INVALID: 'notifications.settings.setup.codeInvalid',
+  CONNECTION_CODE_EXPIRED: 'notifications.settings.setup.codeExpired',
+  CONNECTION_CODE_ATTEMPTS_EXCEEDED: 'notifications.settings.setup.codeAttemptsExceeded',
+  MESSAGING_IDENTITY_ALREADY_LINKED: 'notifications.settings.setup.identityAlreadyLinked',
 };
 
 type Phase = 'initiating' | 'ready' | 'verified';
@@ -44,59 +50,54 @@ interface ChannelSetupDialogProps {
   /** Whether `channel` is already verified (controls the success view). */
   verified: boolean;
   vendorEmail?: string | null;
+  /**
+   * Bot handle + deep link for an unlinked messaging channel, straight from
+   * `GET /api/me/connections`. Absent for email, and absent once linked.
+   */
+  instructions?: ConnectionInstructions;
   /** Re-fetch preferences; resolves to whether THIS channel is now verified. */
   onRefresh: () => Promise<boolean>;
   onClose: () => void;
 }
 
 /**
- * Drives the "Connect" (link/verify) flow for a secondary channel.
- * Step 1 (request link/code) is auto-initiated on open; the vendor completes
- * Step 2 outside the app, then refreshes to detect verification.
+ * Drives the "Connect" flow for a secondary notification channel.
+ *
+ * 🔴 Telegram and WhatsApp run the INVERTED handshake. The platform used to mint
+ * a token the vendor carried to the bot; the bot now mints a 6-character code the
+ * vendor carries back here. There is no deep-link-and-wait step and **nothing to
+ * poll** — the platform is entirely passive while the vendor talks to the bot, so
+ * this is an input box, not a spinner. See api-doc/connections/README.md.
+ *
+ * Email is unchanged: it still sends a link and the vendor comes back to re-check.
  */
 export function ChannelSetupDialog({
   channel,
   verified,
   vendorEmail,
+  instructions,
   onRefresh,
   onClose,
 }: ChannelSetupDialogProps) {
   const { t } = useTranslation();
   const m = useMessage();
-  const fmt = useFormatters();
   const [phase, setPhase] = useState<Phase>('initiating');
   const [error, setError] = useState<string | null>(null);
-  const [actionUrl, setActionUrl] = useState<string | null>(null);
-  const [expiresAt, setExpiresAt] = useState<string | null>(null);
-  const [waCommand, setWaCommand] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [code, setCode] = useState('');
+  const [redeeming, setRedeeming] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
-  const initiate = useCallback(async (ch: SecondaryChannel) => {
+  const isMessaging = channel === 'telegram' || channel === 'whatsapp';
+
+  const initiateEmail = useCallback(async () => {
     setPhase('initiating');
     setError(null);
-    setActionUrl(null);
-    setExpiresAt(null);
-    setWaCommand(null);
     try {
-      if (ch === 'email') {
-        await sendEmailVerification();
-      } else if (ch === 'telegram') {
-        const res = await requestTelegramLink();
-        setActionUrl(res.bot_url);
-        setExpiresAt(res.expires_at);
-      } else {
-        const res = await requestWhatsappVerification();
-        setActionUrl(res.wa_link);
-        setWaCommand(res.command);
-      }
+      await sendEmailVerification();
       setPhase('ready');
     } catch (err) {
       // "Already verified" isn't a failure — the vendor is done.
-      if (
-        err instanceof ApiError &&
-        (err.code === 'AUTH_EMAIL_ALREADY_VERIFIED' || err.code === 'AUTH_WA_ALREADY_VERIFIED')
-      ) {
+      if (err instanceof ApiError && err.code === 'AUTH_EMAIL_ALREADY_VERIFIED') {
         setPhase('verified');
         return;
       }
@@ -105,15 +106,52 @@ export function ChannelSetupDialog({
     }
   }, []);
 
-  // Auto-start Step 1 when the dialog opens for a channel.
+  // Open the dialog into the right state. Only email has a step to kick off; the
+  // messaging channels are ready immediately, because the instructions they need
+  // arrived with the connections list.
   useEffect(() => {
     if (!channel) return;
+    setCode('');
+    setError(null);
     if (verified) {
       setPhase('verified');
       return;
     }
-    initiate(channel);
-  }, [channel, verified, initiate]);
+    if (channel === 'email') {
+      void initiateEmail();
+      return;
+    }
+    setPhase('ready');
+  }, [channel, verified, initiateEmail]);
+
+  const handleRedeem = useCallback(async () => {
+    if (!isMessaging || !code.trim()) return;
+    setRedeeming(true);
+    setError(null);
+    try {
+      // 🔴 Send exactly what was typed. The server strips whitespace and dashes,
+      // uppercases, and maps O→0 / I→1 / L→1; its schema is loose (6–32 chars)
+      // precisely so `a7k9p-2` reaches that normaliser intact. Normalising here
+      // gets it subtly wrong and rejects codes that would have worked.
+      await redeemConnectionCode(code);
+      await onRefresh();
+      setPhase('verified');
+    } catch (err) {
+      if (err instanceof ApiError) {
+        const key = REDEEM_ERROR_KEYS[err.code];
+        if (key) {
+          setError(key);
+          // Every redeem failure spends the code, so clear the field — leaving it
+          // populated invites a retry that cannot succeed.
+          setCode('');
+          return;
+        }
+      }
+      setError(mapProfileError(err));
+    } finally {
+      setRedeeming(false);
+    }
+  }, [isMessaging, code, onRefresh]);
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -131,25 +169,6 @@ export function ChannelSetupDialog({
       setRefreshing(false);
     }
   }, [onRefresh, t]);
-
-  /**
-   * ⚠ This had a latent bug on the web, fixed on the way past
-   * (CAPACITOR-PLAN.md → P4.5). The call was
-   * `navigator.clipboard.writeText(cmd).then(() => setCopied(true))` with no
-   * `catch`, so a refusal was an unhandled rejection and a "Copied!" that never
-   * arrived — on the one step whose whole purpose is the vendor pasting this
-   * command into WhatsApp. `copyText` reports whether it worked, and now so
-   * does the button.
-   */
-  const copyCommand = useCallback(async () => {
-    if (!waCommand) return;
-    if (await copyText(waCommand)) {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } else {
-      toast.error(t('common.toast.copyFailed'));
-    }
-  }, [waCommand, t]);
 
   if (!channel) return null;
   const label = CHANNEL_LABELS[channel];
@@ -194,7 +213,7 @@ export function ChannelSetupDialog({
             {channel === 'email' && (
               <ol className="space-y-3 text-sm">
                 <li className="flex gap-3">
-                  <span className="flex-shrink-0 w-5 h-5 rounded-full bg-primary/10 text-primary text-xs font-semibold flex items-center justify-center">1</span>
+                  <StepNumber n={1} />
                   <span>
                     <Trans
                       i18nKey="notifications.settings.setup.emailStep1"
@@ -206,77 +225,89 @@ export function ChannelSetupDialog({
                   </span>
                 </li>
                 <li className="flex gap-3">
-                  <span className="flex-shrink-0 w-5 h-5 rounded-full bg-primary/10 text-primary text-xs font-semibold flex items-center justify-center">2</span>
+                  <StepNumber n={2} />
                   <span>{t('notifications.settings.setup.emailStep2')}</span>
                 </li>
                 <li>
-                  <Button variant="outline" size="sm" className="gap-2" onClick={() => initiate('email')}>
+                  <Button variant="outline" size="sm" className="gap-2" onClick={() => void initiateEmail()}>
                     <Mail className="w-4 h-4" /> {t('notifications.settings.setup.resendEmail')}
                   </Button>
                 </li>
               </ol>
             )}
 
-            {channel === 'telegram' && (
+            {isMessaging && (
               <ol className="space-y-3 text-sm">
                 <li className="flex gap-3">
-                  <span className="flex-shrink-0 w-5 h-5 rounded-full bg-primary/10 text-primary text-xs font-semibold flex items-center justify-center">1</span>
+                  <StepNumber n={1} />
                   <span>
-                    <Trans
-                      i18nKey="notifications.settings.setup.telegramStep1"
-                      components={[<span className="font-medium text-foreground" />]}
-                    />
+                    {/* `botHandle` is null when the deployment hasn't configured
+                        one. The flow still works — the vendor just has to find the
+                        bot themselves — so this never gates the instructions. */}
+                    {instructions?.botHandle
+                      ? t('notifications.settings.setup.botStep1', {
+                          command: instructions.command,
+                          bot: instructions.botHandle,
+                        })
+                      : t('notifications.settings.setup.botStep1NoHandle', {
+                          command: instructions?.command ?? '/connect',
+                          channel: label,
+                        })}
                   </span>
                 </li>
-                {actionUrl && (
+                {instructions?.deepLink && (
                   <li>
                     <Button asChild variant="outline" size="sm" className="gap-2">
-                      <a href={actionUrl} target="_blank" rel="noopener noreferrer">
-                        <ExternalLink className="w-4 h-4" /> {t('notifications.settings.setup.openTelegram')}
-                      </a>
-                    </Button>
-                    {expiresAt && (
-                      <p className="text-xs text-muted-foreground mt-1.5">
-                        {t('notifications.settings.setup.linkExpires', {
-                          time: fmt.time(expiresAt),
-                        })}
-                      </p>
-                    )}
-                  </li>
-                )}
-                <li className="flex gap-3">
-                  <span className="flex-shrink-0 w-5 h-5 rounded-full bg-primary/10 text-primary text-xs font-semibold flex items-center justify-center">2</span>
-                  <span>{t('notifications.settings.setup.telegramStep2')}</span>
-                </li>
-              </ol>
-            )}
-
-            {channel === 'whatsapp' && (
-              <ol className="space-y-3 text-sm">
-                <li className="flex gap-3">
-                  <span className="flex-shrink-0 w-5 h-5 rounded-full bg-primary/10 text-primary text-xs font-semibold flex items-center justify-center">1</span>
-                  <span>{t('notifications.settings.setup.whatsappStep1')}</span>
-                </li>
-                {actionUrl && (
-                  <li>
-                    <Button asChild variant="outline" size="sm" className="gap-2">
-                      <a href={actionUrl} target="_blank" rel="noopener noreferrer">
-                        <ExternalLink className="w-4 h-4" /> {t('notifications.settings.setup.openWhatsapp')}
+                      <a href={instructions.deepLink} target="_blank" rel="noopener noreferrer">
+                        <ExternalLink className="w-4 h-4" />
+                        {t(channel === 'telegram'
+                          ? 'notifications.settings.setup.openTelegram'
+                          : 'notifications.settings.setup.openWhatsapp')}
                       </a>
                     </Button>
                   </li>
                 )}
-                {waCommand && (
-                  <li className="flex items-center gap-2">
-                    <code className="flex-1 px-2.5 py-1.5 rounded bg-muted text-xs font-mono truncate">{waCommand}</code>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 flex-shrink-0" onClick={() => void copyCommand()} aria-label={t('notifications.settings.setup.copyCommand')}>
-                      {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
-                    </Button>
-                  </li>
-                )}
                 <li className="flex gap-3">
-                  <span className="flex-shrink-0 w-5 h-5 rounded-full bg-primary/10 text-primary text-xs font-semibold flex items-center justify-center">2</span>
-                  <span>{t('notifications.settings.setup.whatsappStep2')}</span>
+                  <StepNumber n={2} />
+                  <span>{t('notifications.settings.setup.botStep2')}</span>
+                </li>
+                <li className="space-y-1.5 pl-8">
+                  <Label htmlFor="connection-code">
+                    {t('notifications.settings.setup.codeLabel')}
+                  </Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      id="connection-code"
+                      value={code}
+                      onChange={(e) => setCode(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          void handleRedeem();
+                        }
+                      }}
+                      // Uppercased VISUALLY only — the raw value is what gets sent.
+                      // The server maps the confusable characters itself, so O, I
+                      // and L are deliberately not filtered out of the input.
+                      className="font-mono uppercase tracking-[0.2em] placeholder:tracking-normal placeholder:normal-case"
+                      placeholder={t('notifications.settings.setup.codePlaceholder')}
+                      autoComplete="off"
+                      autoCapitalize="characters"
+                      spellCheck={false}
+                      disabled={redeeming}
+                    />
+                    <Button
+                      className="shrink-0 gap-2"
+                      onClick={() => void handleRedeem()}
+                      disabled={redeeming || code.trim().length === 0}
+                    >
+                      {redeeming && <Loader2 className="w-4 h-4 animate-spin" />}
+                      {t('notifications.settings.setup.connectAction')}
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {t('notifications.settings.setup.codeHint')}
+                  </p>
                 </li>
               </ol>
             )}
@@ -289,14 +320,26 @@ export function ChannelSetupDialog({
           ) : (
             <>
               <Button variant="outline" onClick={onClose}>{t('common.actions.cancel')}</Button>
-              <Button onClick={handleRefresh} disabled={refreshing || phase === 'initiating'} className="gap-2">
-                {refreshing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                {t('notifications.settings.setup.checkAgain')}
-              </Button>
+              {/* Only email has anything to re-check. There is nothing to poll on
+                  the messaging channels — the code in the field IS the signal. */}
+              {channel === 'email' && (
+                <Button onClick={handleRefresh} disabled={refreshing || phase === 'initiating'} className="gap-2">
+                  {refreshing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                  {t('notifications.settings.setup.checkAgain')}
+                </Button>
+              )}
             </>
           )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function StepNumber({ n }: { n: number }) {
+  return (
+    <span className="flex-shrink-0 w-5 h-5 rounded-full bg-primary/10 text-primary text-xs font-semibold flex items-center justify-center">
+      {n}
+    </span>
   );
 }

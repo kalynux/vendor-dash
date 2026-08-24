@@ -190,14 +190,22 @@ export const notifications = {
             emailStep2:
                 'Ouvrez l’e-mail et cliquez sur le lien pour vérifier, puis actualisez ci-dessous.',
             resendEmail: 'Renvoyer l’e-mail',
-            telegramStep1: 'Ouvrez notre bot Telegram et appuyez sur <0>Start</0>.',
             openTelegram: 'Ouvrir Telegram',
-            linkExpires: 'Le lien expire à {{time}}.',
-            telegramStep2: 'Une fois que le bot confirme, actualisez ci-dessous.',
-            whatsappStep1: 'Ouvrez WhatsApp et envoyez la commande pré-remplie à notre bot.',
             openWhatsapp: 'Ouvrir WhatsApp',
-            copyCommand: 'Copier la commande',
-            whatsappStep2: 'Après la réponse du bot, actualisez ci-dessous.',
+            botStep1: 'Envoyez {{command}} à {{bot}}.',
+            botStep1NoHandle: 'Envoyez {{command}} à notre bot {{channel}}.',
+            botStep2: 'Le bot répond avec un code de 6 caractères. Saisissez-le ici.',
+            codeLabel: 'Code envoyé par le bot',
+            codePlaceholder: 'ex. A7K9P2',
+            codeHint: 'Les codes durent 10 minutes et ne servent qu’une fois.',
+            connectAction: 'Connecter',
+            codeInvalid:
+                'Ce code n’est pas valide. Renvoyez la commande pour en obtenir un nouveau.',
+            codeExpired:
+                'Ce code a expiré. Renvoyez la commande pour en obtenir un nouveau.',
+            codeAttemptsExceeded: 'Trop de tentatives. Réessayez dans quelques minutes.',
+            identityAlreadyLinked:
+                'Ce compte est déjà lié à un autre compte Wi-Mall. Obtenez un nouveau code et utilisez-en un autre.',
             checkAgain: 'C’est fait — vérifier',
             notVerifiedYet:
                 'Pas encore vérifié — terminez les étapes, puis vérifiez à nouveau.',
