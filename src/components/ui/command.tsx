@@ -3,6 +3,7 @@ import { Command as CommandPrimitive } from "cmdk"
 import { SearchIcon } from "lucide-react"
 
 import { cn } from "@/lib/utils"
+import { mobileSheetItem } from "@/components/ui/mobile-sheet.styles"
 import {
   Dialog,
   DialogContent,
@@ -65,13 +66,14 @@ function CommandInput({
   return (
     <div
       data-slot="command-input-wrapper"
-      className="flex h-9 items-center gap-2 border-b px-3"
+      className={cn("flex h-9 items-center gap-2 border-b px-3", "max-md:h-12 max-md:px-4")}
     >
       <SearchIcon className="size-4 shrink-0 opacity-50" />
       <CommandPrimitive.Input
         data-slot="command-input"
         className={cn(
           "placeholder:text-muted-foreground flex h-10 w-full rounded-md bg-transparent py-3 text-sm outline-hidden disabled:cursor-not-allowed disabled:opacity-50",
+          "max-md:h-12 max-md:text-base",
           className
         )}
         {...props}
@@ -89,6 +91,9 @@ function CommandList({
       data-slot="command-list"
       className={cn(
         "max-h-[300px] scroll-py-1 overflow-x-hidden overflow-y-auto",
+        // In a bottom sheet the list IS the sheet — a 300px cap would leave it
+        // floating in the middle of a tall panel.
+        "max-md:max-h-[calc(75dvh-8rem)]",
         className
       )}
       {...props}
@@ -146,6 +151,7 @@ function CommandItem({
       data-slot="command-item"
       className={cn(
         "data-[selected=true]:bg-accent data-[selected=true]:text-accent-foreground [&_svg:not([class*='text-'])]:text-muted-foreground relative flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-hidden select-none data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        mobileSheetItem,
         className
       )}
       {...props}

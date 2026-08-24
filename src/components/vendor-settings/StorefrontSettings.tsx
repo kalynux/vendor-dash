@@ -330,7 +330,6 @@ export function StorefrontSettings() {
               <img
                 src={form.banner.url}
                 alt={t('settings.storefront.bannerAlt')}
-                crossOrigin="use-credentials"
                 className="h-full w-full object-cover"
               />
               {/* Change / remove controls — shown only once a banner is set */}
@@ -382,7 +381,6 @@ export function StorefrontSettings() {
                     <img
                       src={form.logo.url}
                       alt={t('settings.storefront.logoAlt')}
-                      crossOrigin="use-credentials"
                       className="h-full w-full object-cover"
                     />
                   </div>

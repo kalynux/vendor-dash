@@ -395,7 +395,6 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
                   <img
                     src={currentOrder.customer.avatar || `https://i.pravatar.cc/150?u=${currentOrder.customer.id}`}
                     alt={currentOrder.customer.name}
-                    crossOrigin="use-credentials"
                     className="w-10 h-10 rounded-full object-cover"
                   />
                   <div>
@@ -568,7 +567,7 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
                     {/* Product Details (Left) */}
                     <div className="flex items-center gap-4 min-w-0">
                       {image ? (
-                        <img src={image} alt={item.name} crossOrigin="use-credentials" className="w-14 h-14 rounded-lg object-cover flex-shrink-0 border" />
+                        <img src={image} alt={item.name} className="w-14 h-14 rounded-lg object-cover flex-shrink-0 border" />
                       ) : (
                         <div className="w-14 h-14 rounded-lg bg-primary/10 text-primary flex items-center justify-center flex-shrink-0 font-bold border">
                           {item.name.charAt(0)}

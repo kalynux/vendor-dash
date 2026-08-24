@@ -7,12 +7,13 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ShareProductDialog } from '@/components/products/ShareProductDialog';
 import {
   PreviewBanner,
-  PreviewLinkActions,
   PreviewUnavailable,
-  ProductStatusMenu,
   StorefrontFrame,
   useDefaultPreviewDevice,
   usePreviewBack,
+  usePreviewLinkActions,
+  useProductStatusActions,
+  type PreviewAction,
   type PreviewDevice,
 } from '@/components/preview';
 import { fetchProductById } from '@/services/products.service';
@@ -150,6 +151,24 @@ export function ProductPreview() {
     );
   }, [navigate, product]);
 
+  // Both are hooks, so they run before the early returns below — with nothing
+  // loaded they produce a link nobody can press and an empty transition list,
+  // neither of which is ever rendered.
+  const linkActions = usePreviewLinkActions({
+    url: publicUrl,
+    unavailableReason: t('products.preview.linkUnavailable'),
+  });
+
+  const status = useProductStatusActions({
+    productId: product?.id ?? '',
+    productTitle: product?.title ?? '',
+    status: product?.status ?? 'draft',
+    // Publishing is why a vendor opens a preview of something unpublished, so
+    // it is the one transition that gets a button of its own.
+    primaryIntent: product?.status === 'active' ? undefined : 'activate',
+    onChanged: refresh,
+  });
+
   if (loading && !product) {
     return (
       <div className="flex h-[100dvh] items-center justify-center">
@@ -173,6 +192,26 @@ export function ProductPreview() {
 
   const unavailable = UNAVAILABLE[product.status];
 
+  // Most important first — that is the order the menu shows them in, and the bar
+  // re-sorts the handful it renders as buttons.
+  const actions: PreviewAction[] = [
+    {
+      id: 'edit',
+      icon: Pencil,
+      label: t('common.actions.edit'),
+      onClick: edit,
+      emphasis: 'outline',
+    },
+    ...status.actions,
+    ...linkActions,
+    {
+      id: 'share',
+      icon: Share2,
+      label: t('products.share.action'),
+      onClick: () => setShareOpen(true),
+    },
+  ];
+
   return (
     <div className="flex h-[100dvh] flex-col bg-background">
       <PreviewBanner
@@ -188,42 +227,7 @@ export function ProductPreview() {
         onDeviceChange={setDevice}
         onBack={goBack}
         onRefresh={refresh}
-        actions={
-          <>
-            <PreviewLinkActions
-              url={publicUrl}
-              unavailableReason={t('products.preview.linkUnavailable')}
-            />
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="size-9 shrink-0"
-              onClick={() => setShareOpen(true)}
-              title={t('products.share.action')}
-              aria-label={t('products.share.action')}
-            >
-              <Share2 className="size-4" />
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="shrink-0 gap-1.5"
-              onClick={edit}
-            >
-              <Pencil className="size-4" />
-              <span className="hidden sm:inline">{t('common.actions.edit')}</span>
-            </Button>
-            <ProductStatusMenu
-              productId={product.id}
-              productTitle={product.title}
-              status={product.status}
-              primaryIntent={product.status === 'active' ? undefined : 'activate'}
-              onChanged={refresh}
-            />
-          </>
-        }
+        actions={actions}
       />
 
       <div className="min-h-0 flex-1">
@@ -241,6 +245,10 @@ export function ProductPreview() {
         productId={shareOpen ? product.id : null}
         onOpenChange={(open) => setShareOpen(open)}
       />
+
+      {/* The confirmation behind the status actions above. It belongs to the
+          hook that owns those transitions; the page only gives it a home. */}
+      {status.dialog}
     </div>
   );
 }

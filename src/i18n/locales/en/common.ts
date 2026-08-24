@@ -9,6 +9,16 @@ import { plural } from '../../types';
  * English word often needs different translations in different contexts.
  */
 export const common = {
+    /**
+     * The pre-sign-in language picker (`LanguageSwitcher`). The language *names*
+     * are never translated — they come from the locale registry in their own
+     * language, because "Français" is what a French speaker scans a list for and
+     * "French" is not.
+     */
+    language: {
+        change: 'Change language',
+    },
+
     actions: {
         save: 'Save',
         saving: 'Saving…',

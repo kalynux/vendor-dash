@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Package, ImageIcon, Clock, CalendarRange, CheckSquare } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
-import { PageBackButton } from '@/components/layout/PageBackButton';
+import { EditorPageShell } from '@/components/layout/EditorPageShell';
 import { ProductStepIndicator } from '@/components/products/ProductStepIndicator';
 import { StepServiceBasics } from '@/components/services/wizard/StepServiceBasics';
 import { StepServiceImages } from '@/components/services/wizard/StepServiceImages';
@@ -370,20 +370,13 @@ export function ServiceUpload() {
   }
 
   return (
-    <div className="space-y-4 sm:space-y-6 animate-fade-in max-w-3xl mx-auto -mx-6 sm:mx-auto">
-      <div className="px-4 sm:px-0">
-        <PageBackButton
-          fallbackPath="/dashboard/services"
-          label={t('services.wizard.backToServices')}
-          className="mb-1"
-        />
-        <h1 className="text-xl sm:text-2xl font-bold">{t('services.wizard.createTitle')}</h1>
-        <p className="text-muted-foreground text-xs sm:text-sm mt-1">
-          {t('services.wizard.createSubtitle')}
-        </p>
-      </div>
-
-      <Card className="rounded-none border-x-0 sm:rounded-xl sm:border">
+    <EditorPageShell
+      title={t('services.wizard.createTitle')}
+      description={t('services.wizard.createSubtitle')}
+      backTo="/dashboard/services"
+      backLabel={t('services.wizard.backToServices')}
+    >
+      <Card className="rounded-none border-x-0 md:rounded-xl md:border">
         <CardContent className="p-3 sm:p-4">
           <ProductStepIndicator
             steps={STEPS}
@@ -398,9 +391,9 @@ export function ServiceUpload() {
         </CardContent>
       </Card>
 
-      <Card className="rounded-none border-x-0 sm:rounded-xl sm:border">
+      <Card className="rounded-none border-x-0 md:rounded-xl md:border">
         <CardContent className="p-4 sm:p-6">{renderStep()}</CardContent>
       </Card>
-    </div>
+    </EditorPageShell>
   );
 }

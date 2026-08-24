@@ -15,9 +15,16 @@ export const auth = {
     login: {
         title: 'Bon retour',
         subtitle: 'Connectez-vous pour gérer votre boutique, vos commandes et vos paiements.',
-        identifierLabel: 'Téléphone ou e-mail',
-        identifierPlaceholder: 'vous@exemple.com',
-        identifierHint: 'Utilisez le numéro de téléphone ou l’e-mail de votre inscription.',
+        /** The two ways in — labels for the tab strip above the identifier. */
+        tabs: {
+            phone: 'Téléphone',
+            email: 'E-mail',
+        },
+        phoneLabel: 'Numéro de téléphone',
+        phoneHint: 'Le numéro utilisé lors de votre inscription.',
+        emailLabel: 'Adresse e-mail',
+        emailPlaceholder: 'vous@exemple.com',
+        emailHint: 'L’e-mail utilisé lors de votre inscription.',
         passwordLabel: 'Mot de passe',
         passwordPlaceholder: 'Votre mot de passe',
         submit: 'Se connecter',
@@ -80,9 +87,48 @@ export const auth = {
         requestNew: 'Demander un nouveau lien',
     },
 
+    /**
+     * Connexion par empreinte / visage. Uniquement en natif.
+     *
+     * `{{method}}` reprend toujours le nom que l’appareil donne lui-même à ce
+     * qu’il va afficher (`method.*`), pour que notre formulation et l’en-tête de
+     * la boîte de dialogue système concordent.
+     */
+    biometric: {
+        method: {
+            generic: 'la biométrie',
+            touchId: 'Touch ID',
+            faceId: 'Face ID',
+            fingerprint: 'votre empreinte',
+            face: 'la reconnaissance faciale',
+            iris: 'la reconnaissance de l’iris',
+        },
+
+        signInWith: 'Se connecter avec {{method}}',
+        asAccount: 'en tant que {{identifier}}',
+        orDivider: 'ou',
+
+        promptTitle: 'Wi-Vendor',
+        unlockReason: 'Confirmez {{method}} pour vous connecter.',
+        enableReason: 'Confirmez {{method}} pour activer la connexion rapide.',
+
+        optInLabel: 'La prochaine fois, se connecter avec {{method}}',
+        optInHint:
+            'Vos identifiants sont conservés dans le stockage sécurisé de ce téléphone et ne sont transmis à l’application qu’une fois votre identité confirmée par le téléphone.',
+
+        enabled: 'Vous pouvez désormais vous connecter avec {{method}}.',
+        enableFailed:
+            'Impossible d’activer cette option. Vous pourrez réessayer à la prochaine connexion.',
+        noLongerAvailable:
+            'Ce téléphone n’a plus d’empreinte ni de visage enregistré : la connexion rapide a été désactivée.',
+        rejected:
+            'Votre mot de passe a changé depuis la configuration. Connectez-vous une fois avec votre mot de passe, puis réactivez l’option.',
+    },
+
     validation: {
         identifierRequired: 'Saisissez votre numéro de téléphone ou votre e-mail.',
         identifierInvalid: 'Saisissez un numéro de téléphone ou une adresse e-mail valide.',
+        emailRequired: 'Saisissez votre adresse e-mail.',
         passwordRequired: 'Saisissez votre mot de passe.',
         passwordTooShort: 'Utilisez au moins 8 caractères.',
         confirmMismatch: 'Les deux mots de passe ne correspondent pas.',

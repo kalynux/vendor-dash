@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 
 import { AppLogo } from '@/components/layout/AppLogo';
-import { useTranslation } from '@/i18n';
+import { LanguageSwitcher, useTranslation } from '@/i18n';
 import { cn } from '@/lib/utils';
 
 /**
@@ -17,6 +17,16 @@ import { cn } from '@/lib/utils';
  * The safe-area padding matters on a device: without it the card sits under the
  * notch on a phone and under the home indicator on the way back up. Off native
  * `env(safe-area-inset-*)` resolves to 0, so the web build is unchanged.
+ *
+ * ⚠ **The card is centred with `my-auto`, never `justify-center`.** They look
+ * identical right up until the content is taller than the viewport — which the
+ * six-field registration form is on any phone — and then they differ in the way
+ * that matters: `justify-center` overflows a flex container *equally at both
+ * ends*, so the top of the form is pushed above the container's own padding, out
+ * from under the safe-area inset and behind the status bar, where no amount of
+ * scrolling can reach it. Auto margins only consume *positive* free space, so
+ * the card centres when it fits and falls back to the padding edge when it does
+ * not. This is the fix for the sign-up header colliding with the clock.
  */
 export function AuthLayout({
   title,
@@ -36,11 +46,26 @@ export function AuthLayout({
     <div
       className={cn(
         'min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-background dark:to-muted/30',
-        'flex flex-col items-center justify-center',
-        'px-4 pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-[calc(1.5rem+env(safe-area-inset-top))]',
+        // No `justify-center` — see the note above. The card centres itself.
+        'flex flex-col items-center',
+        'px-4 pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-[calc(0.75rem+env(safe-area-inset-top))]',
       )}
     >
-      <div className="w-full max-w-sm space-y-6">
+      {/*
+        Top right, above everything else on the screen, and on all four auth
+        screens because they share this shell.
+
+        This is the first thing a vendor sees after installing the app, and if
+        they do not read English it is the only control on the screen they can
+        act on — so it is deliberately *not* tucked into the card with the form
+        it exists to make readable. Aligned to the card's own right edge rather
+        than the viewport's, so it reads as part of the same column on a tablet.
+      */}
+      <div className="flex w-full max-w-sm justify-end">
+        <LanguageSwitcher className="-mr-2" />
+      </div>
+
+      <div className="my-auto w-full max-w-sm space-y-6 pt-2">
         <div className="flex flex-col items-center gap-3 text-center">
           <Link to="/login" aria-label={t('auth.brand.name')}>
             <AppLogo alt="" className="size-14" />

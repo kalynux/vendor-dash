@@ -1,21 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
-import { AlertCircle, Eye, MoreHorizontal, Sparkles, Wand2, Copy } from 'lucide-react';
+import { AlertCircle, Eye, Sparkles, Wand2, Copy } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+import { EditorPageShell } from '@/components/layout/EditorPageShell';
 import { PageBackButton } from '@/components/layout/PageBackButton';
+import { STATUS_INTENT_ICON } from '@/components/products/statusIntentIcons';
 import { useOpenPreview } from '@/components/preview';
 import { AgencySelector } from '@/components/products/review/AgencySelector';
 import {
@@ -439,61 +434,50 @@ export function SimpleProductEdit() {
   }
 
   return (
-    <div className="space-y-4 sm:space-y-6 animate-fade-in max-w-3xl mx-auto -mx-6 sm:mx-auto">
-      <div className="px-4 sm:px-0 flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <PageBackButton
-            fallbackPath="/dashboard/products"
-            alwaysFallback
-            label={t('products.wizard.backToProducts')}
-            className="mb-1"
-          />
-          <div className="flex items-center gap-2 flex-wrap">
-            <h1 className="text-xl sm:text-2xl font-bold">{t('products.wizard.editTitle')}</h1>
-            <Badge variant="outline" className="text-[10px]">
-              {t('products.wizard.quickBadge')}
-            </Badge>
-          </div>
-          <p className="text-muted-foreground text-xs sm:text-sm mt-1 truncate">
-            {product.title}
-          </p>
-        </div>
-
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="icon" className="shrink-0">
-              <MoreHorizontal className="w-4 h-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => openPreview(`/preview/product/${product.id}`)}>
-              <Eye className="w-4 h-4 mr-2" />
-              {t('products.preview.action')}
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setConvertOpen(true)}>
-              <Wand2 className="w-4 h-4 mr-2" />
-              {t('products.actions.convertToAdvancedEditor')}
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => void handleDuplicate()}>
-              <Copy className="w-4 h-4 mr-2" />
-              {t('common.actions.duplicate')}
-            </DropdownMenuItem>
-            {statusTransitions.length > 0 && <DropdownMenuSeparator />}
-            {statusTransitions.map((transition) => (
-              <DropdownMenuItem
-                key={transition.intent}
-                variant={transition.destructive ? 'destructive' : undefined}
-                onClick={() => void handleStatusTransition(transition.target)}
-              >
-                {t(transition.labelKey)}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
+    <EditorPageShell
+      title={t('products.wizard.editTitle')}
+      description={product.title}
+      titleExtra={
+        <Badge variant="outline" className="text-[10px]">
+          {t('products.wizard.quickBadge')}
+        </Badge>
+      }
+      backTo="/dashboard/products"
+      backLabel={t('products.wizard.backToProducts')}
+      alwaysFallback
+      // None marked `inline`, so they stay in one menu on a wide screen exactly
+      // as they were — and become a bottom sheet on a handset.
+      actions={[
+        {
+          id: 'preview',
+          icon: Eye,
+          label: t('products.preview.action'),
+          onClick: () => openPreview(`/preview/product/${product.id}`),
+        },
+        {
+          id: 'convert',
+          icon: Wand2,
+          label: t('products.actions.convertToAdvancedEditor'),
+          onClick: () => setConvertOpen(true),
+        },
+        {
+          id: 'duplicate',
+          icon: Copy,
+          label: t('common.actions.duplicate'),
+          onClick: () => void handleDuplicate(),
+        },
+        ...statusTransitions.map((transition) => ({
+          id: `status-${transition.intent}`,
+          icon: STATUS_INTENT_ICON[transition.intent],
+          label: t(transition.labelKey),
+          onClick: () => void handleStatusTransition(transition.target),
+          destructive: transition.destructive,
+        })),
+      ]}
+    >
 
       {isLockedForVectorisation && (
-        <div className="px-4 sm:px-0">
+        <div className="px-4 md:px-0">
           <Alert>
             <AlertCircle className="w-4 h-4" />
             <AlertDescription>
@@ -504,7 +488,7 @@ export function SimpleProductEdit() {
       )}
 
       {isReadOnlyStatus && (
-        <div className="px-4 sm:px-0">
+        <div className="px-4 md:px-0">
           <Alert>
             <AlertCircle className="w-4 h-4" />
             <AlertDescription>
@@ -517,7 +501,7 @@ export function SimpleProductEdit() {
       )}
 
       {productStatus === 'suspended' && (
-        <div className="px-4 sm:px-0">
+        <div className="px-4 md:px-0">
           <Alert>
             <AlertCircle className="w-4 h-4" />
             <AlertDescription>
@@ -528,7 +512,7 @@ export function SimpleProductEdit() {
       )}
 
       {activation && !activation.published && (
-        <div className="px-4 sm:px-0">
+        <div className="px-4 md:px-0">
           <ActivationBlockersPanel
             activation={activation}
             message={activationMessage}
@@ -541,7 +525,7 @@ export function SimpleProductEdit() {
         </div>
       )}
 
-      <Card className="rounded-none border-x-0 sm:rounded-xl sm:border">
+      <Card className="rounded-none border-x-0 md:rounded-xl md:border">
         <CardContent className="p-4 sm:p-6">
           <div className={isLocked ? 'pointer-events-none opacity-60' : ''}>
             <SimpleProductForm
@@ -617,7 +601,7 @@ export function SimpleProductEdit() {
           navigate(`/dashboard/product-edit/${converted.id}`, { replace: true })
         }
       />
-    </div>
+    </EditorPageShell>
   );
 }
 

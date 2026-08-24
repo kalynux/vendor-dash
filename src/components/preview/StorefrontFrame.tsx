@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { useTranslation } from '@/i18n';
 
 /**
@@ -79,8 +80,17 @@ export function StorefrontFrame({ src, device, reloadToken = 0, className }: Sto
     return () => window.clearTimeout(timer);
   }, [loaded, frameKey]);
 
+  const isMobile = useIsMobile();
   const width = DEVICE_WIDTHS[device];
-  const framed = width !== null;
+
+  // ⚠ The bezel is only ever *correct* when the viewport is wider than the frame
+  // it is drawing. On a phone it never is: a 390px frame in a ~390px viewport is
+  // the viewport, so the padding, the border and the rounded corners are pure
+  // loss — they shrink the preview below the size it is previewing and put a
+  // picture of a phone on a phone. Below `md` the frame is edge to edge, which
+  // is also the only honest rendering: what the vendor sees is then exactly the
+  // width a customer's browser would give the page.
+  const framed = width !== null && !isMobile;
 
   return (
     <div
@@ -92,10 +102,8 @@ export function StorefrontFrame({ src, device, reloadToken = 0, className }: Sto
     >
       <div
         className={cn(
-          'relative h-full bg-background',
-          framed
-            ? 'w-full overflow-hidden rounded-2xl border shadow-lg'
-            : 'w-full',
+          'relative h-full w-full bg-background',
+          framed && 'overflow-hidden rounded-2xl border shadow-lg',
         )}
         // A max-width rather than a width: on a phone, a 390px frame inside a
         // ~360px viewport would overflow and force the page to scroll sideways.

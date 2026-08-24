@@ -414,7 +414,6 @@ export function DigitalFormatCard({
               <img
                 src={imageSrc}
                 alt={t('products.digital.previewImageAlt')}
-                crossOrigin="use-credentials"
                 className="h-full w-full object-cover"
               />
             </div>

@@ -82,6 +82,17 @@ export const account = {
             number: 'Au moins un chiffre',
             special: 'Au moins un caractère spécial',
         },
+        biometricTitle: 'Connexion par empreinte',
+        biometricInfo:
+            'Connectez-vous sur ce téléphone avec l’empreinte ou le visage qu’il reconnaît déjà, au lieu de saisir votre mot de passe.',
+        biometricOn: 'Activée sur ce téléphone',
+        biometricOnDesc:
+            'Vos identifiants sont conservés dans le stockage sécurisé de ce téléphone et ne sont transmis qu’une fois votre identité confirmée par le téléphone.',
+        biometricOffDesc:
+            'Activez cette option depuis l’écran de connexion : cochez « La prochaine fois, se connecter avec votre empreinte » au moment de saisir votre mot de passe.',
+        biometricTurnOff: 'Désactiver',
+        biometricTurnedOff: 'La connexion par empreinte est désactivée sur ce téléphone.',
+
         twoFactorTitle: 'Authentification à deux facteurs',
         twoFactorInfo:
             'Une seconde étape à la connexion — un code sur votre téléphone en plus de votre mot de passe. Pas encore disponible.',

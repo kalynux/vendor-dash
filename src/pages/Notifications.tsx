@@ -234,36 +234,33 @@ export function Notifications() {
       {isMobile ? (
         <MobilePageHeader
           title={t('notifications.title')}
-          actions={
-            <>
-              {unreadCount > 0 && (
-                <button
-                  type="button"
-                  onClick={() => markAllAsRead()}
-                  aria-label={t('notifications.actions.markAllRead')}
-                  className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-accent transition-colors"
-                >
-                  <Check className="w-5 h-5" />
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={refresh}
-                aria-label={t('common.actions.refresh')}
-                className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-accent transition-colors"
-              >
-                <RefreshCw className={cn('w-5 h-5', isLoading && 'animate-spin')} />
-              </button>
-              <button
-                type="button"
-                aria-label={t('notifications.settings.title')}
-                onClick={() => navigate('/dashboard/settings/notifications')}
-                className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-accent transition-colors"
-              >
-                <Settings className="w-5 h-5" />
-              </button>
-            </>
-          }
+          description={t('notifications.subtitle')}
+          actions={[
+            // Conditional rather than disabled: "mark all read" with nothing
+            // unread is not an action that is temporarily unavailable, it is
+            // one that does not apply.
+            ...(unreadCount > 0
+              ? [{
+                id: 'mark-all',
+                icon: Check,
+                label: t('notifications.actions.markAllRead'),
+                onClick: () => markAllAsRead(),
+              }]
+              : []),
+            {
+              id: 'refresh',
+              icon: RefreshCw,
+              label: t('common.actions.refresh'),
+              onClick: refresh,
+              busy: isLoading,
+            },
+            {
+              id: 'settings',
+              icon: Settings,
+              label: t('notifications.settings.title'),
+              onClick: () => navigate('/dashboard/settings/notifications'),
+            },
+          ]}
           subheader={filtersNode}
         />
       ) : (

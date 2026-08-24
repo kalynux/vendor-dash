@@ -237,11 +237,9 @@ export const products = {
         compareAtTooLowHint: 'Customers only see a discount when this is higher than the price.',
         bargainMaxPrice: 'Negotiable up to',
         bargainOptional: 'Optional — no negotiation',
-        bargainHint:
-            'Buyers can make an offer between your price and this ceiling. Leave it blank to switch negotiation off.',
+        bargainHint: 'Buyers can offer up to this. Blank switches it off.',
         /** Create flow: the window saves fine, it just does nothing until AI discovery is on. */
-        bargainInertHint:
-            'Buyers can make an offer between your price and this ceiling. It starts working once you turn on AI discovery for this product.',
+        bargainInertHint: 'Buyers can offer up to this. Starts once AI discovery is on.',
         unlimitedStock: 'Unlimited stock',
         unlimitedStockHint: 'Never runs out.',
         /** Shown instead of the hint when the product is warehoused by an agency. */
@@ -322,22 +320,34 @@ export const products = {
      */
     bargain: {
         title: 'Price negotiation',
-        description:
-            'Buyers can make an offer between the price and the ceiling you set here. Leave a row blank to switch negotiation off for it.',
+        description: 'Buyers can offer between your price and this ceiling.',
         ceilingLabel: 'Negotiable up to',
         ceilingPlaceholder: 'No negotiation',
         /** The floor this variant's price implies, shown under the input. */
-        ceilingMin: 'Minimum {{min}} — at least 20% above the price',
-        badge: 'Negotiable up to {{max}}',
-        inertHint: 'Saved, but only active while AI discovery is on.',
-        clearHint: 'Clear a field to remove that variant’s negotiation window.',
+        ceilingMin: 'Min {{min}} — 20% above price',
+        badge: 'Up to {{max}}',
+        inertHint: 'Needs AI discovery on.',
+        clearHint: 'Leave a row blank to switch its negotiation off.',
+
+        /**
+         * The collapsed row on the review step — all that stays inline now the
+         * rows live in a sheet. It has to carry the error state too: Publish is
+         * blocked on an invalid ceiling, and the sheet explaining why can be
+         * dismissed.
+         */
+        summaryNone: 'No ceilings set',
+        summarySet: plural({
+            one: '{{count}} variant negotiable',
+            other: '{{count}} variants negotiable',
+        }),
+        summaryInvalid: 'A ceiling needs fixing',
+        summaryAction: 'Set',
     },
 
     /** The option builder that generates the variant matrix. */
     options: {
         title: 'Options & Variants',
-        description:
-            'Define product options (e.g. Size, Color) then configure SKU, price and stock per combination.',
+        description: 'Each combination of options becomes its own variant.',
         skuPrefix: 'SKU Prefix',
         skuPrefixPlaceholder: 'e.g. TSHIRT',
         skuPrefixHint: 'Auto-generated SKUs will start with this prefix',
@@ -443,8 +453,7 @@ export const products = {
         keepAsDraft: 'Keep as draft',
         publishing: 'Publishing…',
         vectorisationTitle: 'Enable AI vectorisation',
-        vectorisationDescription:
-            'When enabled and the product is complete and active, product data is sent for vectorisation so customers can find it via AI search. Status and retry options are available from the product card.',
+        vectorisationDescription: 'Let customers find this product through AI search.',
         lockedIndexing: 'This product is being indexed for AI search. Editing is temporarily disabled.',
         archivedNotice:
             'This product is archived and read-only. Restore it to draft from the products list to edit or publish it.',

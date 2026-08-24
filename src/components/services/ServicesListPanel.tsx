@@ -250,7 +250,6 @@ function ServiceGridCard({ service, onOpen, actions }: ServiceCardProps) {
           <img
             src={service.firstFileUrl}
             alt={service.title}
-            crossOrigin="use-credentials"
             className="absolute inset-0 h-full w-full object-cover"
           />
         ) : (
@@ -580,7 +579,7 @@ export function ServicesListPanel({ onOpenDetail, onCreate, reloadToken }: Servi
                   <div className="flex items-center gap-3">
                     <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-lg bg-muted">
                       {s.firstFileUrl ? (
-                        <img src={s.firstFileUrl} alt="" className="h-full w-full object-cover" crossOrigin="use-credentials" />
+                        <img src={s.firstFileUrl} alt="" className="h-full w-full object-cover" />
                       ) : (
                         <CalendarClock className="h-4 w-4 text-muted-foreground" />
                       )}
@@ -620,7 +619,7 @@ export function ServicesListPanel({ onOpenDetail, onCreate, reloadToken }: Servi
         >
           <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted">
             {s.firstFileUrl ? (
-              <img src={s.firstFileUrl} alt="" className="h-full w-full object-cover" crossOrigin="use-credentials" />
+              <img src={s.firstFileUrl} alt="" className="h-full w-full object-cover" />
             ) : (
               <CalendarClock className="h-5 w-5 text-muted-foreground" />
             )}

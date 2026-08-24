@@ -1339,6 +1339,230 @@ Needs a device, like every phase since 2:
 
 ---
 
+# Phase 5.5 — First-run field fixes ✅
+
+Three things the vendor asked for after the first real install, none of which a browser
+could have shown us.
+
+### P5.5a — The status bar was showing app content through it ✅
+
+**New:** `src/components/layout/StatusBarScrim.tsx`
+**Modified:** `src/index.css` (`.h-safe-top`), `src/App.tsx`
+
+P3.3 got the *icons* right — light or dark to match the theme — and got the *padding*
+right, so nothing starts under the clock. It could not fix the third thing, because
+padding cannot: the bar is a transparent strip over the app's own pixels, so on any
+scrolled page the vendor watched their order list slide behind the battery icon.
+
+A `fixed`, `pointer-events-none` band of `env(safe-area-inset-top)` painted `bg-background`,
+rendered once beside `OfflineBanner` so it covers sign-in and onboarding too. `z-40` is
+load-bearing: above `MobilePageHeader` (`z-30`), whose `bg-background/95` lets content
+through, and below `OfflineBanner` and every Radix overlay (`z-50`), which own the top of
+the screen while they are up.
+
+⚠ **Not `StatusBar.setBackgroundColor`** — unavailable on Android 15+, for the same reason
+`setOverlaysWebView` is (see `platform/shell/statusBar.ts`). Painting from the web layer
+also means the strip follows a theme switch with no second source of truth for the colour.
+
+### P5.5b — Registration collided with the clock ✅
+
+**Modified:** `src/pages/auth/AuthLayout.tsx`
+
+⚠ **`justify-center` and `my-auto` are not interchangeable, and this is the case that
+proves it.** `AuthLayout` centred its card with `justify-center`, which overflows a flex
+container *equally at both ends* — so as soon as the content is taller than the viewport,
+which the six-field sign-up form is on every phone, the top of the form is pushed **above
+the container's own padding**, out from under the safe-area inset and behind the status
+bar, where scrolling cannot reach it. Auto margins only consume *positive* free space, so
+the card centres when it fits and sits at the padding edge when it does not.
+
+Login looked fine only because its two fields happen to fit. It was the same bug.
+
+### P5.5c — Language before sign-in, and fingerprint sign-in ✅
+
+**New:** `src/i18n/LanguageSwitcher.tsx`, `src/platform/biometrics.ts`,
+`src/platform/auth/biometricLogin.ts`
+**Modified:** `src/i18n/config.ts`, `src/i18n/SessionLocaleSync.tsx`, `src/i18n/index.ts`,
+`src/pages/auth/Login.tsx`, `src/pages/auth/AuthLayout.tsx`,
+`src/onboarding/OnboardingLayout.tsx`, `src/components/vendor-settings/ProfileSettings.tsx`,
+`src/components/vendor-settings/SecuritySettings.tsx`, en/fr `auth`, `account`, `common`
+
+**The language picker sits top right of `AuthLayout`** (all four auth screens) and in the
+onboarding header, icon-only. Account → Localization was the only switch and it is behind a
+sign-in and four onboarding steps — unreachable by exactly the vendor who needs it.
+
+⚠ **A pre-sign-in pick has to outrank the profile, or the picker is a no-op.** A new
+account's `preferred_language` defaults to `en`, so `SessionLocaleSync` would have replaced
+the vendor's choice the instant `/auth/me` answered and run the whole of onboarding in
+English. Hence `LOCALE_MANUAL_KEY`: a hand-picked locale wins until the profile catches up,
+and `ProfileSettings` clears it when a language is saved there — which is the deliberate act
+that makes the choice permanent and starts governing notifications.
+
+**Fingerprint sign-in** is `@aparajita/capacitor-biometric-auth@10` (Capacitor 8; same
+author as the secure-storage plugin already in use, and needs no manifest permission or
+`variables.gradle` entry of its own).
+
+⚠ **What is behind the gate is the vendor's password, and that is the only option that
+works.** The token pair is already restored without a prompt and dies with `logout()`; a
+kept refresh token expires on the same 30-day sliding window that made the vendor need this
+screen in the first place. Stored in the keystore/keychain under its own entry, released
+only after the OS confirms the holder. The clean replacement is a backend-issued,
+device-bound, revocable biometric credential — at which point only the stored payload
+changes. **Backend ticket, listed below.**
+
+Enable is offered on the sign-in form and nowhere else, because that is the one screen that
+has the password — and only *after* the server has accepted it, so an unverified password
+can never be stored. Account → Security can turn it off and says where to turn it on.
+Three things destroy the credential: the vendor turning it off, a `401`/`403` from the
+stored password (changed on another device), and biometry being removed from the phone.
+A password changed *in the app* re-keys it instead. **A different account signing in on the
+same phone also clears it** — the gate proves "someone enrolled on this device", not "the
+person who saved this".
+
+The prompt is never raised automatically on mount: a shared phone, a staff handover, or
+simply signing in as someone else would each start with an unasked-for system dialog.
+
+### Phase 5.5 exit criteria
+
+Verified on this machine:
+
+- [x] `npm run build` → green
+- [x] Lint unchanged (**34 errors**), `i18n:audit:deep` unchanged (**97**, byte-identical to
+      a clean `git archive HEAD` run — the "94" in older notes predates the share/deep-link
+      commits)
+- [x] `npm run mobileauth:verify` → ALL CHECKS PASSED
+- [x] `npx cap update android` (**15 plugins**) + `./gradlew assembleDebug` → BUILD SUCCESSFUL
+- [x] Web build untouched: the scrim is zero-height where `env()` is 0, and
+      `biometricLoginStatus()` answers "no biometry" off native, so neither surface renders
+
+Needs a device:
+
+- [ ] The status-bar band reads as one surface with the page under it, in both themes
+- [ ] Sign-up scrolls from its own first pixel, with nothing under the clock
+- [ ] Enrol → sign out → fingerprint sign-in, in en and fr; then change the password in
+      Account → Security and confirm the fingerprint still works
+
+---
+
+# Phase 5.6 — Mobile UI/UX pass ✅
+
+Not a Capacitor phase — every change is CSS and React, and the web's narrow breakpoint
+gets all of it. It is here because the phone is where it was noticed and where it matters.
+
+### P5.6a — Every dropdown is a bottom sheet below `md` ✅
+
+**New:** `src/components/ui/mobile-sheet.tsx`, `src/components/ui/mobile-sheet.styles.ts`
+**Modified:** `ui/select.tsx`, `ui/dropdown-menu.tsx`, `ui/popover.tsx`, `ui/command.tsx`
+
+⚠ **The primitives were restyled, not replaced, and that was the whole design decision.**
+Rendering a `Sheet` instead of the popper on mobile means re-earning typeahead, roving
+focus, `aria-activedescendant`, scroll locking, dismiss-on-outside-press and the
+selected-value semantics `SelectValue` reads — and then maintaining two of them. So the
+Radix element stays and only its *presentation* changes. **Every existing call site got
+bottom sheets without being touched** — 14 files use `Select`, 11 use `DropdownMenu`, 12
+use `Popover` — and so does every future one.
+
+⚠ **`!important` beats a running animation.** Radix positions a popper with an inline
+`transform: translate(x, y)`, so pinning it to the bottom means overriding that transform —
+and per the cascade an `!important` author declaration outranks an animation. Put it on the
+element the sheet is drawn on and `slide-in-from-bottom` silently does nothing: the sheet
+appears fully formed, with no motion. Hence **two** elements: the Radix element is an
+invisible positioning shell (pinned, transparent, `transform: none !important`) and a plain
+wrapper inside it is the surface that has the ground, the radius and the slide. The wrapper
+reads open/closed off the shell via `group-data-[state=…]`, which is why the shell always
+carries `group`. Above `md` the wrapper is `display: contents` — no box, every class inert,
+desktop byte-for-byte unchanged.
+
+Radix renders no overlay for any of these, so `MobileSheetScrim` is a sibling inside the
+same portal. It needs no click handler: a press on it is a press *outside* the content,
+which is already what dismisses all four.
+
+Verified in the emitted CSS, not just by eye: the kill rule lands inside
+`@media not all and (min-width:768px)`, and the slide selector is on the panel.
+
+### P5.6b — Vectorisation opens the price-range sheet ✅
+
+**New:** `src/components/products/BargainCeilingsSheet.tsx`
+**Modified:** `src/components/products/steps/StepReview.tsx`, en/fr `products`
+
+The ceilings used to unfold inline the moment the switch flipped — below the switch, at the
+bottom of an already long review step, where a forty-row matrix pushed Publish off the
+screen and was routinely missed entirely. Flipping the switch now *presents* the rows.
+Dismissing is a real answer (pricing is optional) and a summary row reopens it, on create
+and on edit alike — `ProductEdit` and `ProductUpload` both render this step.
+
+⚠ **The summary row is not decoration.** Publish is blocked while a ceiling is invalid, and
+the sheet that explains why can be dismissed — so the collapsed row carries the error state,
+or a vendor is left on a disabled button with the reason hidden.
+
+Nothing saves from the sheet. The inputs stay owned by the review step and are written by
+the same handler that persists the vectorisation flip, because the order between them is
+load-bearing (a bargain PATCH while vectorisation is `pending` is a 409).
+
+### P5.6c — Preview goes edge to edge on a phone ✅
+
+**Modified:** `src/components/preview/StorefrontFrame.tsx`
+
+The bezel is only correct when the viewport is *wider* than the frame it draws. On a phone
+it never is — a 390px frame in a ~390px viewport **is** the viewport, so the padding, border
+and rounded corners shrank the preview below the size it was previewing and drew a picture
+of a phone on a phone. Below `md` the frame is full-bleed, which is also the only honest
+rendering: the width the vendor sees is the width a customer's browser gives the page. The
+device toggle was already `md`-only, so nothing new is hidden.
+
+### P5.6d — Tables become cards ✅
+
+**New:** `src/components/ui/data-card.tsx`
+**Modified:** `src/pages/Inventory.tsx`
+
+Only two files ever used `<Table>`; `StockRequestsTab` already had cards, so this is
+Inventory's three (alerts, reservations, history). A table teaches its columns once in a
+header and every row after is read positionally — drop the header and each row has to name
+its own values, which is what `DataCard` does. One shared shape rather than three bespoke
+ones, because three tables is exactly how you end up with three conventions.
+
+Not a `<table>` with `display: block` rows: that keeps table semantics for something that is
+no longer a table, and "row 4 of 20, column 3" is worse than the list it actually is.
+
+Both of the page's modals moved from `Dialog` to `ResponsiveModal`, so the action reached
+from a card opens as a sheet rather than a centred popup over a list of cards.
+
+### P5.6e — Shorter helper prose ✅
+
+Measured before touching anything: **128 English strings ≥ 95 characters**. Most turned out
+to be *already correct* — the settings surfaces moved their prose behind `InfoHint` /
+`FieldLabel` tips in the flat-layout pass, so it costs no layout and is the only
+documentation those fields have. Trimming it would have destroyed real value.
+
+What was actually always-visible got cut, in en and fr: the vectorisation description
+(193 → 52), the two bargain field hints, the variant-options description, and two payout
+notes. A useful side effect of P5.6a: every one of those `InfoHint` popovers is now a
+comfortable bottom sheet on a phone instead of a cramped bubble.
+
+### Phase 5.6 exit criteria
+
+Verified on this machine:
+
+- [x] `npm run build` → green; `npx tsc -b` clean
+- [x] Lint unchanged (**34 errors**) — the sheet class tokens live in their own
+      `.styles.ts` precisely because `react-refresh/only-export-components` fails a file
+      that exports both components and constants
+- [x] `i18n:audit:deep` unchanged (**97**), parity **4132 / 4132**, `i18n:smoke` passes
+- [x] `mobileauth:verify` → ALL CHECKS PASSED
+- [x] Emitted CSS checked directly: `transform:none!important` sits inside
+      `@media not all and (min-width:768px)`, and the slide animation is on the panel
+
+Needs a device — none of this can be proven from a build:
+
+- [ ] Open a `Select`, a row menu, the country picker and an `InfoHint` on hardware:
+      each should slide up, dim the page, and dismiss on an outside tap
+- [ ] Flip vectorisation on a product with variants; close the sheet, confirm the summary
+      row reopens it and that an invalid ceiling shows on the collapsed row
+- [ ] Inventory's three tabs as cards, and the adjust sheet from a card
+- [ ] Storefront preview with no side gutter
+
+---
+
 # Phase 6 — iOS
 
 **Blocked by:** access to a Mac or a CI runner with Xcode. The development machine is
@@ -1391,6 +1615,7 @@ Windows, so this is a separately-scheduled track, not a same-sprint afterthought
 | ~~Decide the Google Calendar OAuth story on bearer (P3.5)~~ **Done — P3.5a.** Now an ops task: set `GOOGLE_OAUTH_APP_SCHEMES=wivendor` per environment | Ops | Calendar on device |
 | ~~`.well-known/assetlinks.json` on `vendor.wi-mall.com`~~ **Written 20 Aug 2026** (`public/.well-known/`, debug fingerprint). Remaining ops work: **deploy it**, then **add the Play App Signing SHA-256** before the first store release — without it App Links silently do not verify for store builds | Ops | App Links on a *store* build |
 | APNs key on the messaging Firebase project | Ops | Phase 6 |
+| **A device-bound biometric credential** — `POST /auth/mobile/biometric-token` (mint at enrol, exchange for a session, individually revocable, dies with a password change). Today P5.5c keeps the vendor's **password** in the keystore behind the fingerprint gate, because nothing else survives `logout()` or a 30-day gap. Swapping it in changes only the stored payload in `platform/auth/biometricLogin.ts` | Backend | nothing — fingerprint sign-in ships without it, this makes it revocable |
 
 **The first row is the hard one.** Everything client-side can be built and an APK can
 assemble without it, but no request succeeds until it lands — and the failure looks like a
@@ -1518,6 +1743,15 @@ android/app/src/main/res/drawable/ic_stat_wi_vendor.xml  P4.1  status-bar mask
 ```
 src/platform/purchases.ts                        P5.1
 src/components/billing/PurchasesUnavailable.tsx  P5.3
+```
+
+### Shipped (Phase 5.5)
+
+```
+src/components/layout/StatusBarScrim.tsx         P5.5a  opaque status-bar band
+src/i18n/LanguageSwitcher.tsx                    P5.5c  language before sign-in
+src/platform/biometrics.ts                       P5.5c  the OS prompt
+src/platform/auth/biometricLogin.ts              P5.5c  the credential behind it
 ```
 
 ### Modified

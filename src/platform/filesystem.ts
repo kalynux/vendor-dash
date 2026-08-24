@@ -171,10 +171,15 @@ async function pruneStagingDir(): Promise<void> {
  * ⚠ **For files the platform serves publicly**, which is every tree vendor-dash
  * touches: product media, avatars, logos, banners, and the general-intake
  * `documents/` or `images/` a ticket attachment actually lands in.
- * `credentials: 'include'` mirrors the `crossOrigin="use-credentials"` this app
- * already puts on `<img>` for the same files, so it needs no CORS configuration
- * that is not already there — and unlike an `Authorization` header it triggers
- * no preflight, which `express.static` would not answer.
+ *
+ * ⚠ **No `credentials`, and no `Authorization` header either.** These trees are
+ * unauthenticated, no-cookie content by the backend's own classification
+ * (`core/storage/storage-trees.ts`), so there is nothing for either to carry.
+ * Sending credentials anyway is not free: it obliges the response to come back
+ * with `Access-Control-Allow-Credentials` and an exact-origin ACAO, which makes
+ * a public byte-fetch fail on any origin `ALLOWED_ORIGINS` has not been told
+ * about. An `Authorization` header would be worse still — it forces a preflight
+ * that `express.static` does not answer. A bare cross-origin GET needs neither.
  *
  * ⚠ The two genuinely private trees (`digital/`, `shipments/`) are **not**
  * reachable this way, and must not be bolted on here: per the backend's
@@ -183,7 +188,7 @@ async function pruneStagingDir(): Promise<void> {
  * correctly.
  */
 export async function fetchFileBlob(url: string): Promise<Blob> {
-  const response = await fetch(url, { credentials: 'include' });
+  const response = await fetch(url);
   if (!response.ok) {
     throw new Error(`Could not fetch the file (${response.status})`);
   }

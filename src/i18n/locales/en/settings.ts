@@ -195,8 +195,7 @@ export const settings = {
         cardCountryPlaceholder: 'Country that issued the card',
         issuingBank: 'Issuing Bank (optional)',
         issuingBankPlaceholder: 'e.g. Afriland First Bank',
-        cardSettlementNote:
-            'Card payouts are released by hand today, so they take longer to arrive. Keep a mobile money or bank method as your preferred one if you want the fastest payout.',
+        cardSettlementNote: 'Released by hand, so slower. Mobile money is fastest.',
 
         /** The saved-methods list and its add/edit dialog. */
         addMethod: 'Add payout method',
@@ -244,8 +243,7 @@ export const settings = {
         paymentMethodsTitle: 'Payment Methods',
         paymentMethodsInfo1:
             'Where your withdrawals are sent. Add up to 3 methods — the first one is the preferred one and is used by default; the rest are fallbacks.',
-        paymentMethodsInfo2:
-            'Account names must match the name registered with the provider, otherwise the transfer is rejected and the payout is sent back to your available balance.',
+        paymentMethodsInfo2: 'The account name must match the one your provider holds, or the transfer is rejected.',
         saved: 'Payout setup updated',
     },
 

@@ -50,15 +50,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from '@/components/ui/dialog';
+// Both of this page's modals are `ResponsiveModal`, not `Dialog`: each is
+// reached from a card on mobile, and a centred popup over a list of cards is the
+// one place a bottom sheet obviously belongs.
+import { ResponsiveModal } from '@/components/services/ResponsiveModal';
+import { DataCard, DataCardList } from '@/components/ui/data-card';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useRouteSwipe } from '@/hooks/use-route-swipe';
 import { MobilePageHeader } from '@/components/layout/MobilePageHeader';
 import { SubPageHeader } from '@/components/layout/SubPageHeader';
 import { StatTile } from '@/components/features/StatTile';
@@ -164,51 +162,24 @@ function AdjustStockDialog({
   }, [alert, value, onSaved, onClose, t, tDynamic, hasKey, apiError]);
 
   return (
-    <Dialog open={!!alert} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="sm:max-w-sm">
-        <DialogHeader>
-          <DialogTitle>{t('inventory.adjust.title')}</DialogTitle>
-          <DialogDescription>
-            {alert ? (
-              <Trans
-                i18nKey="inventory.adjust.description"
-                params={{ sku: alert.sku, product: alert.productTitle }}
-                components={[<span className="font-medium" />]}
-              />
-            ) : null}
-          </DialogDescription>
-        </DialogHeader>
-        {alert && (
-          <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-3 text-sm">
-              <div className="rounded-lg border p-3">
-                <p className="text-muted-foreground text-xs">{t('inventory.adjust.currentStock')}</p>
-                <p className="text-lg font-semibold">{alert.currentStock}</p>
-              </div>
-              <div className="rounded-lg border p-3">
-                <p className="text-muted-foreground text-xs">{t('inventory.adjust.reserved')}</p>
-                <p className="text-lg font-semibold">{alert.activeReservations}</p>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="new-stock">{t('inventory.adjust.newLevel')}</Label>
-              <Input
-                id="new-stock"
-                type="number"
-                value={value}
-                onChange={(e) => setValue(e.target.value)}
-                disabled={!!pendingRequest}
-                autoFocus
-              />
-              <p className="text-xs text-muted-foreground">
-                {pendingRequest
-                  ? t('inventory.adjust.hasOpenRequest')
-                  : t('inventory.adjust.newLevelHint')}
-              </p>
-            </div>
-          </div>
-        )}
-        <DialogFooter>
+    <ResponsiveModal
+      open={!!alert}
+      onOpenChange={(o) => !o && onClose()}
+      title={t('inventory.adjust.title')}
+      description={
+        alert ? (
+          <Trans
+            i18nKey="inventory.adjust.description"
+            params={{ sku: alert.sku, product: alert.productTitle }}
+            components={[<span className="font-medium" />]}
+          />
+        ) : null
+      }
+      desktopClassName="sm:max-w-sm"
+      // A four-field form — a full-height sheet would be mostly empty.
+      mobileClassName="h-auto max-h-[92dvh]"
+      footer={
+        <>
           <Button variant="outline" onClick={onClose} disabled={saving}>
             {t('common.actions.cancel')}
           </Button>
@@ -228,9 +199,44 @@ function AdjustStockDialog({
               {saving && <Loader2 className="h-4 w-4 animate-spin" />} {t('common.actions.save')}
             </Button>
           )}
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </>
+      }
+    >
+      {alert && (
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <div className="rounded-lg border p-3">
+              <p className="text-muted-foreground text-xs">{t('inventory.adjust.currentStock')}</p>
+              <p className="text-lg font-semibold">{alert.currentStock}</p>
+            </div>
+            <div className="rounded-lg border p-3">
+              <p className="text-muted-foreground text-xs">{t('inventory.adjust.reserved')}</p>
+              <p className="text-lg font-semibold">{alert.activeReservations}</p>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="new-stock">{t('inventory.adjust.newLevel')}</Label>
+            <Input
+              id="new-stock"
+              type="number"
+              // 16px on mobile: anything smaller and the WebView zooms the
+              // viewport on focus, which leaves the sheet mis-scaled behind the
+              // keyboard.
+              className="h-11 text-base sm:h-9 sm:text-sm"
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              disabled={!!pendingRequest}
+              autoFocus
+            />
+            <p className="text-xs text-muted-foreground">
+              {pendingRequest
+                ? t('inventory.adjust.hasOpenRequest')
+                : t('inventory.adjust.newLevelHint')}
+            </p>
+          </div>
+        </div>
+      )}
+    </ResponsiveModal>
   );
 }
 
@@ -357,23 +363,64 @@ function ImportCsvDialog({
   }, [file, onImported, onOpenChange, reset, t, apiError]);
 
   return (
-    <Dialog
+    <ResponsiveModal
       open={open}
       onOpenChange={(o) => {
         if (!o) reset();
         onOpenChange(o);
       }}
+      title={t('inventory.bulk.title')}
+      description={
+        <Trans
+          i18nKey="inventory.bulk.description"
+          components={[<span className="font-mono" />, <span className="font-mono" />]}
+        />
+      }
+      desktopClassName="sm:max-w-lg"
+      footer={
+            result ? (
+              <>
+                {(result.requested.length > 0 || result.notRequested.length > 0) && (
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      reset();
+                      onOpenChange(false);
+                      onGoToRequests();
+                    }}
+                  >
+                    {t('inventory.bulk.result.goToRequests')}
+                  </Button>
+                )}
+                <Button
+                  onClick={() => {
+                    reset();
+                    onOpenChange(false);
+                  }}
+                >
+                  {t('inventory.bulk.result.done')}
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    reset();
+                    onOpenChange(false);
+                  }}
+                  disabled={uploading}
+                >
+                  {t('common.actions.cancel')}
+                </Button>
+                <Button onClick={upload} disabled={!file || uploading} className="gap-2">
+                  {uploading && <Loader2 className="h-4 w-4 animate-spin" />}{' '}
+                  {t('inventory.bulk.upload')}
+                </Button>
+              </>
+            )
+      }
     >
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>{t('inventory.bulk.title')}</DialogTitle>
-          <DialogDescription>
-            <Trans
-              i18nKey="inventory.bulk.description"
-              components={[<span className="font-mono" />, <span className="font-mono" />]}
-            />
-          </DialogDescription>
-        </DialogHeader>
 
         <div className="space-y-4">
           {/* Format hint */}
@@ -502,51 +549,7 @@ function ImportCsvDialog({
           )}
         </div>
 
-        <DialogFooter>
-          {result ? (
-            <>
-              {(result.requested.length > 0 || result.notRequested.length > 0) && (
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    reset();
-                    onOpenChange(false);
-                    onGoToRequests();
-                  }}
-                >
-                  {t('inventory.bulk.result.goToRequests')}
-                </Button>
-              )}
-              <Button
-                onClick={() => {
-                  reset();
-                  onOpenChange(false);
-                }}
-              >
-                {t('inventory.bulk.result.done')}
-              </Button>
-            </>
-          ) : (
-            <>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  reset();
-                  onOpenChange(false);
-                }}
-                disabled={uploading}
-              >
-                {t('common.actions.cancel')}
-              </Button>
-              <Button onClick={upload} disabled={!file || uploading} className="gap-2">
-                {uploading && <Loader2 className="h-4 w-4 animate-spin" />}{' '}
-                {t('inventory.bulk.upload')}
-              </Button>
-            </>
-          )}
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    </ResponsiveModal>
   );
 }
 
@@ -564,6 +567,7 @@ function AlertsTab({
 }) {
   const { t } = useTranslation();
   const apiError = useApiError();
+  const isMobile = useIsMobile();
   const [rows, setRows] = useState<StockAlert[]>([]);
   const [meta, setMeta] = useState<InventoryPageMeta>(EMPTY_META);
   const [page, setPage] = useState(1);
@@ -615,6 +619,50 @@ function AlertsTab({
           <TableSkeleton />
         ) : rows.length === 0 ? (
           <EmptyState icon={AlertTriangle} messageKey="inventory.empty.alerts" />
+        ) : isMobile ? (
+          // Seven columns do not fit a phone, so each row names its own values
+          // instead of relying on a header that isn't there. The whole card is
+          // the tap target — it opens the same adjust sheet the desktop row's
+          // button does, which is the only action a row has.
+          <DataCardList>
+            {rows.map((a) => {
+              const out = a.availableStock <= 0;
+              const openRequest = pending[a.variantId] ?? null;
+              return (
+                <DataCard
+                  key={a.variantId}
+                  title={a.productTitle}
+                  subtitle={a.sku}
+                  trailing={
+                    <Badge variant={out ? 'destructive' : 'secondary'} className={cn(!out && 'text-amber-600')}>
+                      {a.availableStock}
+                    </Badge>
+                  }
+                  fields={[
+                    { label: t('inventory.columns.inStock'), value: a.currentStock },
+                    { label: t('inventory.columns.reserved'), value: a.activeReservations },
+                    { label: t('inventory.columns.threshold'), value: a.threshold },
+                  ]}
+                  footer={
+                    openRequest ? (
+                      // The proposed number has not been written — it is a
+                      // request the agency still has to accept.
+                      <span className="inline-block rounded border border-amber-500/40 bg-amber-500/5 px-1.5 py-0.5 text-[11px] tabular-nums text-amber-700 dark:text-amber-400">
+                        {t('inventory.pending.badge', {
+                          from: a.currentStock,
+                          to: openRequest.requestedQuantity,
+                        })}
+                      </span>
+                    ) : undefined
+                  }
+                  onClick={() => (openRequest ? onViewRequest(openRequest.id) : setAdjust(a))}
+                  actionLabel={
+                    openRequest ? t('inventory.adjust.viewRequest') : t('inventory.adjust.action')
+                  }
+                />
+              );
+            })}
+          </DataCardList>
         ) : (
           <Table>
             <TableHeader>
@@ -712,6 +760,7 @@ function ReservationsTab() {
   const { t } = useTranslation();
   const fmt = useFormatters();
   const apiError = useApiError();
+  const isMobile = useIsMobile();
   const [rows, setRows] = useState<StockReservation[]>([]);
   const [meta, setMeta] = useState<InventoryPageMeta>(EMPTY_META);
   const [page, setPage] = useState(1);
@@ -741,6 +790,28 @@ function ReservationsTab() {
           <TableSkeleton />
         ) : rows.length === 0 ? (
           <EmptyState icon={Lock} messageKey="inventory.empty.reservations" />
+        ) : isMobile ? (
+          <DataCardList>
+            {rows.map((r) => (
+              <DataCard
+                key={r.reservationId}
+                title={r.productTitle}
+                subtitle={r.sku}
+                trailing={
+                  <span className={cn('text-xs font-medium', RESERVATION_STATUS_STYLES[r.status])}>
+                    {t(`inventory.reservationStatus.${r.status}` as TranslationKey)}
+                  </span>
+                }
+                fields={[
+                  { label: t('inventory.columns.quantityLocked'), value: r.quantity },
+                  {
+                    label: t('inventory.columns.expiresAt'),
+                    value: r.expiresAt ? fmt.dateTime(r.expiresAt) : t('common.labels.emptyValue'),
+                  },
+                ]}
+              />
+            ))}
+          </DataCardList>
         ) : (
           <Table>
             <TableHeader>
@@ -792,6 +863,7 @@ function HistoryTab({ refreshToken }: { refreshToken: number }) {
   const { t } = useTranslation();
   const fmt = useFormatters();
   const apiError = useApiError();
+  const isMobile = useIsMobile();
   const [rows, setRows] = useState<StockHistoryLog[]>([]);
   const [meta, setMeta] = useState<InventoryPageMeta>(EMPTY_META);
   const [page, setPage] = useState(1);
@@ -822,6 +894,52 @@ function HistoryTab({ refreshToken }: { refreshToken: number }) {
           <TableSkeleton />
         ) : rows.length === 0 ? (
           <EmptyState icon={HistoryIcon} messageKey="inventory.empty.history" />
+        ) : isMobile ? (
+          <DataCardList>
+            {rows.map((l) => (
+              <DataCard
+                key={l.id}
+                // The SKU leads on a phone: history is scanned to answer "what
+                // happened to this item", and the timestamp is the qualifier.
+                title={l.sku}
+                subtitle={fmt.dateTime(l.timestamp)}
+                trailing={
+                  <span
+                    className={cn(
+                      'text-sm font-semibold tabular-nums',
+                      l.delta < 0 ? 'text-red-600' : 'text-emerald-600',
+                    )}
+                  >
+                    {l.delta > 0 ? `+${l.delta}` : l.delta}
+                  </span>
+                }
+                fields={[
+                  {
+                    label: t('inventory.columns.beforeAfter'),
+                    // JSX rather than a template literal, to match the desktop
+                    // cell — the i18n audit flags any interpolated string as
+                    // candidate prose, and two numbers with an arrow are not.
+                    value: (
+                      <>
+                        {l.previousQuantity} → {l.newQuantity}
+                      </>
+                    ),
+                  },
+                  {
+                    label: t('inventory.columns.reason'),
+                    value: (
+                      <span className={OPERATION_STYLES[l.operation]}>
+                        {l.metadata?.reason ??
+                          l.metadata?.orderId ??
+                          l.metadata?.batchId ??
+                          t(`inventory.operation.${l.operation}` as TranslationKey)}
+                      </span>
+                    ),
+                  },
+                ]}
+              />
+            ))}
+          </DataCardList>
         ) : (
           <Table>
             <TableHeader>
@@ -871,6 +989,9 @@ function HistoryTab({ refreshToken }: { refreshToken: number }) {
 // ─── Page ───────────────────────────────────────────────────────────────────
 
 const VALID_TABS = ['alerts', 'reservations', 'history', 'requests'] as const;
+
+/** The same four, as routes — what a sideways swipe walks. Order matters. */
+const TAB_RING = VALID_TABS.map((tab) => `/dashboard/inventory/${tab}`);
 type InventoryTab = (typeof VALID_TABS)[number];
 const DEFAULT_TAB: InventoryTab = 'alerts';
 
@@ -903,6 +1024,12 @@ export function Inventory() {
   const bumpCounts = useCallback(() => setCountsToken((n) => n + 1), []);
 
   const tab: InventoryTab | null = isValidTab(tabParam) ? tabParam : null;
+
+  // Before the bare-path redirect below — a hook cannot sit behind an early
+  // return. The sub-tab strip itself scrolls horizontally, and `useSwipeNavigate`
+  // leaves gestures that start inside a horizontal scroller alone, so dragging
+  // the strip still just scrolls the strip.
+  useRouteSwipe(TAB_RING);
 
   /**
    * The summary row belongs to the PAGE, not to the tabs.
@@ -968,16 +1095,7 @@ export function Inventory() {
     );
   }
 
-  const importButton = isMobile ? (
-    <Button
-      variant="ghost"
-      size="icon"
-      onClick={() => setCsvOpen(true)}
-      aria-label={t('inventory.bulk.title')}
-    >
-      <Upload className="h-5 w-5" />
-    </Button>
-  ) : (
+  const importButton = (
     <Button variant="outline" onClick={() => setCsvOpen(true)} className="gap-2 flex-shrink-0">
       <Upload className="h-4 w-4" /> {t('inventory.bulk.importCsv')}
     </Button>
@@ -1102,7 +1220,15 @@ export function Inventory() {
       <div className="animate-fade-in -mx-6 -mt-6">
         <MobilePageHeader
           title={t(`inventory.tabs.${tab}` as TranslationKey)}
-          actions={importButton}
+          description={t(`inventory.tabSubtitles.${tab}` as TranslationKey)}
+          actions={[
+            {
+              id: 'import',
+              icon: Upload,
+              label: t('inventory.bulk.importCsv'),
+              onClick: () => setCsvOpen(true),
+            },
+          ]}
           subheader={mobileTabStrip}
         />
         {csvDialog}

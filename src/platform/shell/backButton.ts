@@ -35,6 +35,21 @@ import { isNative, platform } from '../env';
 /** How long the "press again" offer stands. Matches the toast's duration. */
 const EXIT_CONFIRM_WINDOW_MS = 2000;
 
+/**
+ * How long a back press stays "in flight" before another one is honoured.
+ *
+ * `history.go(-1)` is **asynchronous**: the entry does not change until the
+ * browser dispatches `popstate`, which is a task later. Two presses inside that
+ * window both read the same entry and both pop — so the app moves back *two*
+ * pages for what the vendor experienced as one press that felt slow, plus an
+ * impatient second. That is the shape of "back skipped a page".
+ *
+ * 300ms is under the ~400ms floor of a deliberate double-press but well over the
+ * single frame a real `popstate` takes, so going back twice on purpose still
+ * works and going back twice by accident no longer does.
+ */
+const BACK_IN_FLIGHT_MS = 300;
+
 /** One id, so holding back down replaces the prompt instead of stacking it. */
 const EXIT_TOAST_ID = 'shell:confirm-exit';
 
@@ -105,6 +120,24 @@ export function dismissTopLayer(): boolean {
 }
 
 /**
+ * How deep into the app's own history we are, or null if we cannot tell.
+ *
+ * React Router v6 stamps `{ usr, key, idx }` into `history.state` on every
+ * navigation, and `idx` is precisely the number of app screens behind this one.
+ *
+ * ⚠ This is deliberately **not** the same question as Capacitor's `canGoBack`,
+ * which reports the *WebView's* back-forward list. Those agree right up until
+ * they don't — an OAuth hand-off, a restored WebView, a redirect that happened
+ * before React mounted — and where they disagree the WebView's answer is the
+ * wrong one: it would step outside the app's own routes. The router's index is
+ * the thing that actually describes the stack of screens the vendor walked.
+ */
+function routerHistoryIndex(): number | null {
+  const state = window.history.state as { idx?: unknown } | null;
+  return typeof state?.idx === 'number' ? state.idx : null;
+}
+
+/**
  * Wire the hardware back button to the router. Call once, inside the Router.
  *
  * The listener is registered once for the life of the app and reads `navigate`
@@ -131,6 +164,9 @@ export function useHardwareBackButton(): void {
   /** When the exit offer was made. 0 means "not armed". */
   const exitArmedAt = useRef(0);
 
+  /** When the last honoured back press was issued. See BACK_IN_FLIGHT_MS. */
+  const backIssuedAt = useRef(0);
+
   useEffect(() => {
     // `platform`, not just `isNative`: iOS never fires this event, and
     // registering there would only take default handling away from a button
@@ -143,17 +179,24 @@ export function useHardwareBackButton(): void {
     void App.addListener('backButton', ({ canGoBack }) => {
       if (dismissTopLayer()) return;
 
-      if (canGoBack) {
-        // `canGoBack` is the WebView's own answer, and every route change in
-        // this app is a pushState on one document — so it is false exactly when
-        // the user is on the entry they launched into. No parallel depth
-        // counter to drift out of step with the real history.
+      const now = Date.now();
+
+      // The router's own index, with the WebView's answer as the fallback for
+      // the one case it cannot cover: a history entry this app did not create.
+      const depth = routerHistoryIndex();
+      const somewhereToGo = depth === null ? canGoBack : depth > 0;
+
+      if (somewhereToGo) {
+        // Swallow a press that lands while the previous one is still resolving
+        // — see BACK_IN_FLIGHT_MS. Without this the two pops compound and a
+        // screen is skipped.
+        if (now - backIssuedAt.current < BACK_IN_FLIGHT_MS) return;
+        backIssuedAt.current = now;
         exitArmedAt.current = 0;
         navigateRef.current(-1);
         return;
       }
 
-      const now = Date.now();
       if (now - exitArmedAt.current < EXIT_CONFIRM_WINDOW_MS) {
         void App.exitApp();
         return;

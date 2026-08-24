@@ -227,7 +227,6 @@ function OptionContent({ option }: { option: EntityOption }) {
           <img
             src={option.imageUrl}
             alt={option.title}
-            crossOrigin="use-credentials"
             className="h-full w-full object-cover"
           />
         ) : option.kind === 'product' ? (

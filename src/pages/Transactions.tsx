@@ -13,7 +13,10 @@ export function Transactions() {
   if (isMobile) {
     return (
       <div className="-mx-6 -mt-6">
-        <MobilePageHeader title={t('transactions.title')} />
+        <MobilePageHeader
+          title={t('transactions.title')}
+          description={t('transactions.subtitle')}
+        />
         <div className="pb-28">
           <TransactionsTab />
         </div>

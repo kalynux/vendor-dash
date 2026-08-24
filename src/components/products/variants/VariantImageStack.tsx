@@ -126,7 +126,6 @@ export function VariantImageStack({
           <img
             src={f.url}
             alt={f.originalName ?? t('products.media.variantImageAlt')}
-            crossOrigin="use-credentials"
             className="h-full w-full object-cover"
             draggable={false}
           />
@@ -181,7 +180,6 @@ export function VariantImageStack({
                 <img
                   src={openFile.url}
                   alt={openFile.originalName ?? t('products.media.variantImageAlt')}
-                  crossOrigin="use-credentials"
                   className="max-h-72 w-full object-contain"
                 />
               </div>

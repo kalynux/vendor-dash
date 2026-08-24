@@ -126,10 +126,10 @@ let interceptorInstalled = false;
  * ⚠ This is also what covers `AttachmentsPanel`'s `<a download>`, since
  * `download` is inert in a Capacitor WebView — the attachment opens in the
  * system browser for viewing rather than silently doing nothing. Saving it to
- * the device would need the filesystem plugin, and the attachment URL is
- * cookie-authenticated (`crossOrigin="use-credentials"`), which the bearer
- * transport has no cookie for. Both are Phase 4 problems; this at least turns a
- * dead button into a visible one.
+ * the device is a separate path that shipped in P4.6 (`downloadFile` in
+ * platform/filesystem.ts, native only), so this one is no longer the whole
+ * story — it is what turns the anchor from a dead control into a working
+ * "open it", which is what an anchor was always for.
  *
  * Returns an uninstall function; the app never calls it, but a test can.
  */

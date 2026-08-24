@@ -270,7 +270,6 @@ function FileArtwork({
       <img
         src={url}
         alt={file.originalName ?? 'File'}
-        crossOrigin="use-credentials"
         loading="lazy"
         onError={() => setBroken(true)}
         className={cn('h-full w-full object-cover', className)}
@@ -286,7 +285,6 @@ function FileArtwork({
           src={url}
           controls
           preload="metadata"
-          crossOrigin="use-credentials"
           playsInline
           onError={() => setBroken(true)}
           className={cn('h-full w-full bg-black object-contain', className)}
@@ -299,7 +297,6 @@ function FileArtwork({
           src={url}
           muted
           preload="metadata"
-          crossOrigin="use-credentials"
           playsInline
           onError={() => setBroken(true)}
           className="h-full w-full object-cover"
@@ -340,7 +337,7 @@ function FilePreview({ file }: { file: ApiFile }) {
         <div className={cn('rounded-xl p-4', kindTint.audio)}>
           <Icon className="h-8 w-8" />
         </div>
-        <audio src={url} controls crossOrigin="use-credentials" className="w-full max-w-sm" />
+        <audio src={url} controls className="w-full max-w-sm" />
       </div>
     );
   }
@@ -919,17 +916,16 @@ export function MediaGallery() {
         {isMobile && (
           <MobilePageHeader
             title={t('media.library.titleShort')}
-            actions={
-              <button
-                type="button"
-                onClick={requestUpload}
-                disabled={uploading}
-                aria-label={t('media.library.upload')}
-                className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-accent transition-colors disabled:opacity-50"
-              >
-                {uploading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Upload className="h-5 w-5" />}
-              </button>
-            }
+            description={t('media.library.description')}
+            actions={[
+              {
+                id: 'upload',
+                icon: Upload,
+                label: t('media.library.upload'),
+                onClick: requestUpload,
+                busy: uploading,
+              },
+            ]}
             subheader={toolbar(false)}
           />
         )}

@@ -1,6 +1,22 @@
 import type { ReactNode } from 'react';
-import { ArrowLeft, Monitor, RotateCw, Smartphone, Tablet } from 'lucide-react';
+import {
+  ArrowLeft,
+  Loader2,
+  Monitor,
+  MoreVertical,
+  RotateCw,
+  Smartphone,
+  Tablet,
+  type LucideIcon,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { useTranslation } from '@/i18n';
 import type { PreviewDevice } from './StorefrontFrame';
@@ -16,15 +32,52 @@ import type { PreviewDevice } from './StorefrontFrame';
  * It is sticky rather than scrolling away because the frame owns its own scroll:
  * the page itself never scrolls, so a non-sticky bar would simply be pinned by
  * accident and break the moment that changed.
+ *
+ * ── Actions are data, not JSX ────────────────────────────────────────────────
+ *
+ * A preview page can do six or seven things — copy the link, open it, share it,
+ * edit, publish, archive, reload — and on a handset that was a row of buttons
+ * wide enough to squeeze the product's own name down to a couple of words. The
+ * bar cannot fix that while the page hands it finished markup, because the page
+ * has no idea how much room is left.
+ *
+ * So pages describe what they can do (`PreviewAction`) and the bar decides where
+ * each one goes — the same arrangement `MobilePageHeader` uses, for the same
+ * reason. Below `md` **everything** collapses into one `⋮` menu, which the
+ * dropdown primitive already renders as a bottom sheet. On a wide screen the one
+ * or two actions a vendor actually came for stay visible as labelled buttons
+ * (`emphasis`) and the rest share that same menu.
  */
+
+export interface PreviewAction {
+  /** Stable identity for React keys. */
+  id: string;
+  icon: LucideIcon;
+  /** The visible label in the menu, and the accessible name when icon-only. */
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  /** Why it is disabled. Becomes the tooltip in place of the label. */
+  disabledReason?: string;
+  /** Swaps the icon for a spinner and blocks the press. */
+  busy?: boolean;
+  /** Tints it red — archive, delete. */
+  destructive?: boolean;
+  /**
+   * How prominent this action is **on `md` and up**: a filled or outlined button
+   * with a label, instead of a row in the menu. Below `md` it buys nothing —
+   * everything is in the sheet there, which is the whole point.
+   */
+  emphasis?: 'primary' | 'outline';
+}
 
 interface PreviewBannerProps {
   title: string;
   subtitle?: string;
   /** Rendered left of the device toggle — status badges and the like. */
   meta?: ReactNode;
-  /** Buttons and menus. Keep them icon-only below `sm`. */
-  actions?: ReactNode;
+  /** Everything this page can do, most important first. */
+  actions?: PreviewAction[];
   /**
    * A read-only line about what customers can currently see. Rendered as a
    * second row so it never competes with the actions for width.
@@ -46,7 +99,7 @@ export function PreviewBanner({
   title,
   subtitle,
   meta,
-  actions,
+  actions = [],
   notice,
   device,
   onDeviceChange,
@@ -54,6 +107,28 @@ export function PreviewBanner({
   onRefresh,
 }: PreviewBannerProps) {
   const { t } = useTranslation();
+
+  const refresh: PreviewAction = {
+    id: 'refresh',
+    icon: RotateCw,
+    label: t('common.preview.refresh'),
+    onClick: onRefresh,
+  };
+
+  // Wide screens keep the one or two actions worth a labelled button, plus
+  // Refresh as its own icon; everything else shares the menu. Narrow screens put
+  // the lot in there — that is the whole point.
+  //
+  // Pages list their actions most-important-first, which is the order the menu
+  // wants. A toolbar wants the opposite for the filled one — a primary button
+  // belongs at the end of a row, not in the middle of it — so the inline set is
+  // re-sorted rather than asking every page to order for both at once. Refresh
+  // trails them: it is about the preview, not about the thing being previewed.
+  const inline = actions
+    .filter((action) => action.emphasis)
+    .sort((a, b) => Number(a.emphasis === 'primary') - Number(b.emphasis === 'primary'));
+  const wideMenu = actions.filter((action) => !action.emphasis);
+  const narrowMenu = [...actions, refresh];
 
   return (
     // `pt-safe`: the preview pages render outside the dashboard shell and fill
@@ -113,19 +188,44 @@ export function PreviewBanner({
           })}
         </div>
 
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="size-9 shrink-0"
-          onClick={onRefresh}
-          aria-label={t('common.preview.refresh')}
-          title={t('common.preview.refresh')}
-        >
-          <RotateCw className="size-4" />
-        </Button>
+        <div className="hidden shrink-0 items-center gap-1.5 md:flex">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-9 shrink-0"
+            onClick={refresh.onClick}
+            aria-label={refresh.label}
+            title={refresh.label}
+          >
+            <RotateCw className="size-4" />
+          </Button>
 
-        {actions}
+          {inline.map((action) => (
+            <Button
+              key={action.id}
+              type="button"
+              variant={action.emphasis === 'primary' ? 'default' : 'outline'}
+              size="sm"
+              className="shrink-0 gap-1.5"
+              onClick={action.onClick}
+              disabled={action.disabled || action.busy}
+              title={action.disabled ? action.disabledReason ?? action.label : action.label}
+            >
+              {action.busy ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <action.icon className="size-4" />
+              )}
+              {action.label}
+            </Button>
+          ))}
+          <PreviewActionsMenu title={title} items={wideMenu} />
+        </div>
+
+        <div className="shrink-0 md:hidden">
+          <PreviewActionsMenu title={title} items={narrowMenu} />
+        </div>
       </div>
 
       {notice && (
@@ -134,5 +234,60 @@ export function PreviewBanner({
         </div>
       )}
     </header>
+  );
+}
+
+/**
+ * The `⋮` menu. Below `md` the dropdown primitive draws itself as a bottom
+ * sheet, so this is the whole mobile action bar — see `ui/mobile-sheet.tsx`.
+ *
+ * A disabled row keeps its `disabledReason` as a second line rather than a
+ * tooltip: there is no hover on a handset, so a tooltip is a message nobody
+ * receives.
+ */
+function PreviewActionsMenu({ title, items }: { title: string; items: PreviewAction[] }) {
+  const { t } = useTranslation();
+
+  if (items.length === 0) return null;
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="size-9 shrink-0"
+          aria-label={t('common.a11y.moreActions')}
+        >
+          <MoreVertical className="size-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-56">
+        <DropdownMenuLabel className="truncate">{title}</DropdownMenuLabel>
+        {items.map((action) => (
+          <DropdownMenuItem
+            key={action.id}
+            disabled={action.disabled || action.busy}
+            onClick={action.onClick}
+            className={cn('items-start', action.destructive && 'text-destructive')}
+          >
+            {action.busy ? (
+              <Loader2 className="mt-0.5 size-4 animate-spin" />
+            ) : (
+              <action.icon className="mt-0.5 size-4" />
+            )}
+            <span className="min-w-0 flex-1">
+              <span className="block">{action.label}</span>
+              {action.disabled && action.disabledReason && (
+                <span className="block text-xs font-normal text-muted-foreground">
+                  {action.disabledReason}
+                </span>
+              )}
+            </span>
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

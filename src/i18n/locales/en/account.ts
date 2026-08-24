@@ -89,6 +89,27 @@ export const account = {
             number: 'At least one number',
             special: 'At least one special character',
         },
+        /**
+         * The whole panel is hidden unless the device actually has enrolled
+         * biometry, so none of this is ever seen on the web.
+         *
+         * ⚠ There is deliberately no "turn on" control here: switching it on
+         * needs the password, and this screen does not have it. Asking for it
+         * again just to store it would be a second password prompt whose only
+         * purpose is to be saved — so the switch-on lives on the sign-in screen,
+         * where the password is being typed anyway, and this panel says so.
+         */
+        biometricTitle: 'Fingerprint sign-in',
+        biometricInfo:
+            'Sign in on this phone with the fingerprint or face it already recognises, instead of typing your password.',
+        biometricOn: 'On for this phone',
+        biometricOnDesc:
+            'Your sign-in details are held in this phone’s secure storage and released only after the phone confirms it is you.',
+        biometricOffDesc:
+            'Turn this on from the sign-in screen — tick “next time, sign in with your fingerprint” when you enter your password.',
+        biometricTurnOff: 'Turn off',
+        biometricTurnedOff: 'Fingerprint sign-in is off on this phone.',
+
         twoFactorTitle: 'Two-Factor Authentication',
         twoFactorInfo:
             'A second step at login — a code from your phone on top of your password. Not available yet.',

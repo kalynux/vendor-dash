@@ -5,11 +5,12 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
   PreviewBanner,
-  PreviewLinkActions,
   PreviewUnavailable,
   StorefrontFrame,
   useDefaultPreviewDevice,
   usePreviewBack,
+  usePreviewLinkActions,
+  type PreviewAction,
   type PreviewDevice,
 } from '@/components/preview';
 import { useStoreStore } from '@/store';
@@ -44,6 +45,19 @@ export function StorePreview() {
 
   const goBack = usePreviewBack('/dashboard/account/store');
 
+  const linkActions = usePreviewLinkActions({ url: publicUrl });
+
+  const actions: PreviewAction[] = [
+    {
+      id: 'edit',
+      icon: Pencil,
+      label: t('settings.storefront.preview.edit'),
+      onClick: () => navigate('/dashboard/account/store'),
+      emphasis: 'outline',
+    },
+    ...linkActions,
+  ];
+
   if (isLoading && !store) {
     return (
       <div className="flex h-[100dvh] items-center justify-center">
@@ -71,21 +85,7 @@ export function StorePreview() {
         onDeviceChange={setDevice}
         onBack={goBack}
         onRefresh={() => setReloadToken((n) => n + 1)}
-        actions={
-          <>
-            <PreviewLinkActions url={publicUrl} />
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="shrink-0 gap-1.5"
-              onClick={() => navigate('/dashboard/account/store')}
-            >
-              <Pencil className="size-4" />
-              <span className="hidden sm:inline">{t('settings.storefront.preview.edit')}</span>
-            </Button>
-          </>
-        }
+        actions={actions}
       />
 
       <div className="min-h-0 flex-1">

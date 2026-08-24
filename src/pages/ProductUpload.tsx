@@ -4,7 +4,7 @@ import { toast } from 'sonner';
 import { AlertCircle, Box, Package, ImageIcon, Tag, FileDigit, CheckSquare } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { PageBackButton } from '@/components/layout/PageBackButton';
+import { EditorPageShell } from '@/components/layout/EditorPageShell';
 import { ProductStepIndicator } from '@/components/products/ProductStepIndicator';
 import {
   StepProductMode,
@@ -866,21 +866,14 @@ export function ProductUpload() {
   }
 
   return (
-    <div className="space-y-4 sm:space-y-6 animate-fade-in max-w-3xl mx-auto -mx-6 sm:mx-auto">
-      <div className="px-4 sm:px-0">
-        <PageBackButton
-          fallbackPath="/dashboard/products"
-          label={t('products.wizard.backToProducts')}
-          className="mb-1"
-        />
-        <h1 className="text-xl sm:text-2xl font-bold">{t('products.wizard.createTitle')}</h1>
-        <p className="text-muted-foreground text-xs sm:text-sm mt-1">
-          {t('products.wizard.createSubtitle')}
-        </p>
-      </div>
-
+    <EditorPageShell
+      title={t('products.wizard.createTitle')}
+      description={t('products.wizard.createSubtitle')}
+      backTo="/dashboard/products"
+      backLabel={t('products.wizard.backToProducts')}
+    >
       {state.productType && visibleSteps.length > 0 && (
-        <Card className="rounded-none border-x-0 sm:rounded-xl sm:border">
+        <Card className="rounded-none border-x-0 md:rounded-xl md:border">
           <CardContent className="p-3 sm:p-4">
             <ProductStepIndicator
               steps={visibleSteps}
@@ -897,7 +890,7 @@ export function ProductUpload() {
       )}
 
       {isLockedForVectorisation && state.currentStep !== 'review' && (
-        <div className="px-4 sm:px-0">
+        <div className="px-4 md:px-0">
           <Alert>
             <AlertCircle className="w-4 h-4" />
             <AlertDescription>
@@ -907,7 +900,7 @@ export function ProductUpload() {
         </div>
       )}
 
-      <Card className="rounded-none border-x-0 sm:rounded-xl sm:border">
+      <Card className="rounded-none border-x-0 md:rounded-xl md:border">
         <CardContent className="p-4 sm:p-6">
           <div
             className={
@@ -920,6 +913,6 @@ export function ProductUpload() {
           </div>
         </CardContent>
       </Card>
-    </div>
+    </EditorPageShell>
   );
 }

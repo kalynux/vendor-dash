@@ -41,7 +41,6 @@ export function VariantThumb({ files, fallback, className }: VariantThumbProps) 
           alt={image.originalName ?? t('products.media.variantImageAlt')}
           // The file endpoints are cookie-authenticated; without this the image
           // is fetched anonymously and comes back 401.
-          crossOrigin="use-credentials"
           loading="lazy"
           draggable={false}
           className="size-full object-cover"

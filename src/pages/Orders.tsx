@@ -725,7 +725,10 @@ export function Orders() {
           <MobilePageHeader
             title={t('common.pagination.selected', { count: selectedOrders.length })}
             onBack={exitSelectionMode}
-            actions={
+            // Selection mode owns the whole bar — a bell here would navigate
+            // away and silently drop the selection.
+            hideNotifications
+            actionsSlot={
               <div className="flex items-center gap-1">
                 <button
                   type="button"
@@ -789,16 +792,15 @@ export function Orders() {
         ) : (
           <MobilePageHeader
             title={t('orders.title')}
-            actions={
-              <button
-                type="button"
-                onClick={() => {/* create order */ }}
-                aria-label={t('orders.list.createOrderLabel')}
-                className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-accent transition-colors"
-              >
-                <Plus className="w-5 h-5" />
-              </button>
-            }
+            description={t('orders.subtitle')}
+            actions={[
+              {
+                id: 'create',
+                icon: Plus,
+                label: t('orders.list.createOrderLabel'),
+                onClick: () => {/* create order */ },
+              },
+            ]}
             subheader={ordersSearchBar}
           />
         )}
@@ -861,7 +863,6 @@ export function Orders() {
                     <img
                       src={order.customer.avatar || `https://i.pravatar.cc/150?u=${order.customer.id}`}
                       alt={order.customer.name}
-                      crossOrigin="use-credentials"
                       className="w-10 h-10 rounded-full flex-shrink-0 object-cover"
                     />
                     <div className="flex-1 min-w-0">
@@ -1167,7 +1168,6 @@ export function Orders() {
                           <img
                             src={order.customer.avatar || `https://i.pravatar.cc/150?u=${order.customer.id}`}
                             alt={order.customer.name}
-                            crossOrigin="use-credentials"
                             className="w-8 h-8 rounded-full"
                           />
                           <div>

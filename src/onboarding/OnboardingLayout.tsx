@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils';
 import { AppLogo } from '@/components/layout/AppLogo';
 import { Button } from '@/components/ui/button';
 import { useOnboarding } from '@/onboarding/store/onboarding.store';
-import { useTranslation, type TranslationKey } from '@/i18n';
+import { LanguageSwitcher, useTranslation, type TranslationKey } from '@/i18n';
 import type { VendorOnboardingStep } from '@/types/api';
 
 // ─── Step metadata ────────────────────────────────────────────────────────────
@@ -170,15 +170,23 @@ export function OnboardingLayout({ children, ctaSlot, stepKey }: OnboardingLayou
                     </div>
                 </div>
 
-                <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={logout}
-                    className="text-muted-foreground gap-1.5"
-                >
-                    <LogOut className="w-4 h-4" />
-                    <span className="hidden sm:inline">{t('onboarding.layout.signOut')}</span>
-                </Button>
+                <div className="flex items-center gap-0.5">
+                    {/* Onboarding is four screens of forms a vendor has to
+                        understand before they can finish signing up, and the
+                        Profile picker that would let them change language sits
+                        *behind* it. Icon-only: the header is already carrying a
+                        brand, a business name and a sign-out at 4rem. */}
+                    <LanguageSwitcher variant="icon" />
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={logout}
+                        className="text-muted-foreground gap-1.5"
+                    >
+                        <LogOut className="w-4 h-4" />
+                        <span className="hidden sm:inline">{t('onboarding.layout.signOut')}</span>
+                    </Button>
+                </div>
             </header>
 
             {/* ── Progress ── */}

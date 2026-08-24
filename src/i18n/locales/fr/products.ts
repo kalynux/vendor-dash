@@ -226,10 +226,8 @@ export const products = {
             'Les clients ne voient une remise que si ce montant est supérieur au prix.',
         bargainMaxPrice: 'Négociable jusqu’à',
         bargainOptional: 'Facultatif — pas de négociation',
-        bargainHint:
-            'Les acheteurs peuvent proposer un montant entre votre prix et ce plafond. Laissez vide pour désactiver la négociation.',
-        bargainInertHint:
-            'Les acheteurs peuvent proposer un montant entre votre prix et ce plafond. Cela s’active dès que vous activez la découverte par IA pour ce produit.',
+        bargainHint: 'Les acheteurs peuvent proposer jusqu’ici. Vide = désactivé.',
+        bargainInertHint: 'Proposition jusqu’ici. Actif dès la découverte par IA.',
         unlimitedStock: 'Stock illimité',
         unlimitedStockHint: 'Ne s’épuise jamais.',
         unlimitedStockLockedHint:
@@ -308,21 +306,27 @@ export const products = {
 
     bargain: {
         title: 'Négociation du prix',
-        description:
-            'Les acheteurs peuvent proposer un montant entre le prix et le plafond que vous fixez ici. Laissez une ligne vide pour désactiver la négociation.',
+        description: 'Les acheteurs peuvent proposer entre votre prix et ce plafond.',
         ceilingLabel: 'Négociable jusqu’à',
         ceilingPlaceholder: 'Pas de négociation',
         /** The floor this variant's price implies, shown under the input. */
-        ceilingMin: 'Minimum {{min}} — au moins 20 % au-dessus du prix',
-        badge: 'Négociable jusqu’à {{max}}',
-        inertHint: 'Enregistré, mais actif uniquement si la découverte par IA est activée.',
-        clearHint: 'Videz un champ pour retirer la négociation sur cette variante.',
+        ceilingMin: 'Min {{min}} — 20 % au-dessus du prix',
+        badge: 'Jusqu’à {{max}}',
+        inertHint: 'Nécessite la découverte par IA.',
+        clearHint: 'Laissez une ligne vide pour désactiver sa négociation.',
+
+        summaryNone: 'Aucun plafond défini',
+        summarySet: plural({
+            one: '{{count}} variante négociable',
+            other: '{{count}} variantes négociables',
+        }),
+        summaryInvalid: 'Un plafond est à corriger',
+        summaryAction: 'Définir',
     },
 
     options: {
         title: 'Options et variantes',
-        description:
-            'Définissez les options du produit (ex. Taille, Couleur), puis configurez le SKU, le prix et le stock de chaque combinaison.',
+        description: 'Chaque combinaison d’options devient une variante.',
         skuPrefix: 'Préfixe SKU',
         skuPrefixPlaceholder: 'ex. TSHIRT',
         skuPrefixHint: 'Les SKU générés automatiquement commenceront par ce préfixe',
@@ -431,8 +435,7 @@ export const products = {
         keepAsDraft: 'Garder en brouillon',
         publishing: 'Publication…',
         vectorisationTitle: 'Activer la vectorisation IA',
-        vectorisationDescription:
-            'Lorsque cette option est activée et que le produit est complet et actif, ses données sont envoyées pour vectorisation afin que les clients le trouvent via la recherche IA. Le statut et les options de relance sont disponibles depuis la fiche produit.',
+        vectorisationDescription: 'Rendez ce produit trouvable via la recherche IA.',
         lockedIndexing:
             'Ce produit est en cours d’indexation pour la recherche IA. La modification est temporairement désactivée.',
         archivedNotice:

@@ -1,7 +1,7 @@
-export { PreviewBanner } from './PreviewBanner';
-export { PreviewLinkActions } from './PreviewLinkActions';
+export { PreviewBanner, type PreviewAction } from './PreviewBanner';
+export { usePreviewLinkActions } from './usePreviewLinkActions';
 export { PreviewUnavailable } from './PreviewUnavailable';
-export { ProductStatusMenu } from './ProductStatusMenu';
+export { useProductStatusActions } from './useProductStatusActions';
 export {
   StorefrontFrame,
   DEVICE_WIDTHS,

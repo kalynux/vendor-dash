@@ -16,9 +16,16 @@ export const auth = {
     login: {
         title: 'Welcome back',
         subtitle: 'Sign in to manage your storefront, orders and payouts.',
-        identifierLabel: 'Phone or email',
-        identifierPlaceholder: 'you@example.com',
-        identifierHint: 'Use the phone number or email you signed up with.',
+        /** The two ways in — labels for the tab strip above the identifier. */
+        tabs: {
+            phone: 'Phone',
+            email: 'Email',
+        },
+        phoneLabel: 'Phone number',
+        phoneHint: 'The number you signed up with.',
+        emailLabel: 'Email address',
+        emailPlaceholder: 'you@example.com',
+        emailHint: 'The email you signed up with.',
         passwordLabel: 'Password',
         passwordPlaceholder: 'Your password',
         submit: 'Sign in',
@@ -78,12 +85,52 @@ export const auth = {
     },
 
     /**
+     * Fingerprint / face sign-in. Native only — the web build never renders any
+     * of this, because `biometricLoginStatus()` answers "no biometry" there.
+     *
+     * `{{method}}` is always the device's own name for what it is about to show
+     * (`method.*` below), so the app's wording and the system dialog's heading
+     * agree. Never write "biometrics" into a sentence here.
+     */
+    biometric: {
+        method: {
+            generic: 'biometrics',
+            touchId: 'Touch ID',
+            faceId: 'Face ID',
+            fingerprint: 'your fingerprint',
+            face: 'face unlock',
+            iris: 'iris unlock',
+        },
+
+        signInWith: 'Sign in with {{method}}',
+        asAccount: 'as {{identifier}}',
+        orDivider: 'or',
+
+        /** The three strings the OS dialog renders. */
+        promptTitle: 'Wi-Vendor',
+        unlockReason: 'Confirm {{method}} to sign in.',
+        enableReason: 'Confirm {{method}} to turn on quick sign-in.',
+
+        optInLabel: 'Next time, sign in with {{method}}',
+        optInHint:
+            'Your sign-in details are kept in this phone’s secure storage and are only released to the app after your phone confirms it is you.',
+
+        enabled: 'You can now sign in with {{method}}.',
+        enableFailed: 'Could not turn that on. You can try again next time you sign in.',
+        noLongerAvailable:
+            'This phone no longer has a fingerprint or face set up, so quick sign-in has been turned off.',
+        rejected:
+            'Your password has changed since you set this up. Sign in with your password once, and you can turn it back on.',
+    },
+
+    /**
      * Client-side validation. Keys, not sentences, in the zod schemas — the
      * resolver looks them up so a message follows the vendor's language.
      */
     validation: {
         identifierRequired: 'Enter your phone number or email.',
         identifierInvalid: 'Enter a valid phone number or email address.',
+        emailRequired: 'Enter your email address.',
         passwordRequired: 'Enter your password.',
         passwordTooShort: 'Use at least 8 characters.',
         confirmMismatch: 'The two passwords do not match.',

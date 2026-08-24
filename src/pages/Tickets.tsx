@@ -421,26 +421,21 @@ export function Tickets() {
       <div className="-mx-6 -mt-6">
         <MobilePageHeader
           title={t('nav.items.tickets')}
-          actions={
-            <>
-              <button
-                type="button"
-                onClick={() => setFaqOpen(true)}
-                aria-label="FAQ"
-                className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-accent transition-colors"
-              >
-                <HelpCircle className="h-5 w-5" />
-              </button>
-              <button
-                type="button"
-                onClick={() => setCreateOpen(true)}
-                aria-label={t('tickets.list.newTicket')}
-                className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-accent transition-colors"
-              >
-                <Plus className="h-5 w-5" />
-              </button>
-            </>
-          }
+          description={t('tickets.subtitle')}
+          actions={[
+            {
+              id: 'new',
+              icon: Plus,
+              label: t('tickets.list.newTicket'),
+              onClick: () => setCreateOpen(true),
+            },
+            {
+              id: 'faq',
+              icon: HelpCircle,
+              label: t('tickets.faq.title'),
+              onClick: () => setFaqOpen(true),
+            },
+          ]}
           subheader={filtersNode}
         />
 

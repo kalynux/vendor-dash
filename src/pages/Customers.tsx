@@ -364,16 +364,15 @@ export function Customers() {
       <div className="-mx-6 -mt-6">
         <MobilePageHeader
           title={t('customers.title')}
-          actions={
-            <button
-              type="button"
-              onClick={() => setFlagsManagerOpen(true)}
-              aria-label={t('customers.list.manageFlags')}
-              className="flex h-9 w-9 items-center justify-center rounded-full transition-colors hover:bg-accent"
-            >
-              <Tag className="h-5 w-5" />
-            </button>
-          }
+          description={t('customers.subtitle')}
+          actions={[
+            {
+              id: 'flags',
+              icon: Tag,
+              label: t('customers.list.manageFlags'),
+              onClick: () => setFlagsManagerOpen(true),
+            },
+          ]}
           subheader={filtersNode}
         />
 

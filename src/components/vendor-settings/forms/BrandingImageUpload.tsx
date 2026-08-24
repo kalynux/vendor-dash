@@ -98,7 +98,7 @@ export function BrandingImageUpload({
                     )}
                 >
                     {displayUrl ? (
-                        <img src={displayUrl} alt={label} crossOrigin="use-credentials" className="w-full h-full object-cover" />
+                        <img src={displayUrl} alt={label} className="w-full h-full object-cover" />
                     ) : (
                         <ImageIcon className="w-5 h-5 text-muted-foreground" />
                     )}

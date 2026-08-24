@@ -157,6 +157,13 @@
 .h-safe-bottom {
   height: env(safe-area-inset-bottom);
 }
+/* The status-bar band itself, as a box rather than as padding. Used by
+   `StatusBarScrim` to paint the strip the clock and the battery sit on, which
+   is otherwise transparent and shows whatever the page happens to be scrolling
+   underneath it. Zero-height everywhere `env()` resolves to 0. */
+.h-safe-top {
+  height: env(safe-area-inset-top);
+}
 /* Cancels an ancestor's `padding-top: env(safe-area-inset-top)` so the element
    sits flush against the top of the viewport again. Paired with `.pt-safe` on
    the same element it *moves* the inset from the ancestor onto this element

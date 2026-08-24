@@ -3,6 +3,16 @@ import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu"
 import { CheckIcon, ChevronRightIcon, CircleIcon } from "lucide-react"
 
 import { cn } from "@/lib/utils"
+import {
+  MobileSheetHandle,
+  MobileSheetPanel,
+  MobileSheetScrim,
+} from "@/components/ui/mobile-sheet"
+import {
+  mobileSheetItem,
+  mobileSheetScrollArea,
+  mobileSheetShell,
+} from "@/components/ui/mobile-sheet.styles"
 
 function DropdownMenu({
   ...props
@@ -32,19 +42,32 @@ function DropdownMenuTrigger({
 function DropdownMenuContent({
   className,
   sideOffset = 4,
+  children,
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Content>) {
   return (
+    // ⚠ The portal takes exactly one child. `Menu.Portal` is `<Portal asChild>`,
+    // and a second element there throws `React.Children.only` — which is why the
+    // scrim is inside the content. See `MobileSheetScrim`.
     <DropdownMenuPrimitive.Portal>
       <DropdownMenuPrimitive.Content
         data-slot="dropdown-menu-content"
         sideOffset={sideOffset}
         className={cn(
-          "bg-popover text-popover-foreground data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 z-50 max-h-(--radix-dropdown-menu-content-available-height) min-w-[8rem] origin-(--radix-dropdown-menu-content-transform-origin) overflow-x-hidden overflow-y-auto rounded-md border p-1 shadow-md",
-          className
+          "bg-popover text-popover-foreground data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 md:data-[state=closed]:zoom-out-95 md:data-[state=open]:zoom-in-95 md:data-[side=bottom]:slide-in-from-top-2 md:data-[side=left]:slide-in-from-right-2 md:data-[side=right]:slide-in-from-left-2 md:data-[side=top]:slide-in-from-bottom-2 z-50 max-h-(--radix-dropdown-menu-content-available-height) min-w-[8rem] origin-(--radix-dropdown-menu-content-transform-origin) overflow-x-hidden overflow-y-auto rounded-md border p-1 shadow-md",
+          className,
+          mobileSheetShell
         )}
         {...props}
-      />
+      >
+        {/* Inside the content, and transparent to the pointer, so a press on it
+            is still an outside-press. See `MobileSheetScrim`. */}
+        <MobileSheetScrim />
+        <MobileSheetPanel>
+          <MobileSheetHandle />
+          <div className={cn("max-md:p-2", mobileSheetScrollArea)}>{children}</div>
+        </MobileSheetPanel>
+      </DropdownMenuPrimitive.Content>
     </DropdownMenuPrimitive.Portal>
   )
 }
@@ -73,6 +96,10 @@ function DropdownMenuItem({
       data-variant={variant}
       className={cn(
         "focus:bg-accent focus:text-accent-foreground data-[variant=destructive]:text-destructive data-[variant=destructive]:focus:bg-destructive/10 dark:data-[variant=destructive]:focus:bg-destructive/20 data-[variant=destructive]:focus:text-destructive data-[variant=destructive]:*:[svg]:!text-destructive [&_svg:not([class*='text-'])]:text-muted-foreground relative flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-hidden select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[inset]:pl-8 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        // An action sheet, not a menu: rows are thumb-sized and the icon leads
+        // at a size that reads at arm's length.
+        mobileSheetItem,
+        "max-md:gap-3 max-md:[&_svg:not([class*='size-'])]:size-5",
         className
       )}
       {...props}
@@ -91,6 +118,8 @@ function DropdownMenuCheckboxItem({
       data-slot="dropdown-menu-checkbox-item"
       className={cn(
         "focus:bg-accent focus:text-accent-foreground relative flex cursor-default items-center gap-2 rounded-sm py-1.5 pr-2 pl-8 text-sm outline-hidden select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        mobileSheetItem,
+        "max-md:pl-11",
         className
       )}
       checked={checked}
@@ -127,6 +156,8 @@ function DropdownMenuRadioItem({
       data-slot="dropdown-menu-radio-item"
       className={cn(
         "focus:bg-accent focus:text-accent-foreground relative flex cursor-default items-center gap-2 rounded-sm py-1.5 pr-2 pl-8 text-sm outline-hidden select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        mobileSheetItem,
+        "max-md:pl-11",
         className
       )}
       {...props}
@@ -154,6 +185,7 @@ function DropdownMenuLabel({
       data-inset={inset}
       className={cn(
         "px-2 py-1.5 text-sm font-medium data-[inset]:pl-8",
+        "max-md:px-3 max-md:pt-2 max-md:pb-1 max-md:text-[11px] max-md:font-semibold max-md:uppercase max-md:tracking-wide max-md:text-muted-foreground",
         className
       )}
       {...props}

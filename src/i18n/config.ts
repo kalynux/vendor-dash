@@ -117,3 +117,54 @@ export function detectBrowserLocale(): Locale {
 
 /** localStorage key holding the last locale, so a reload doesn't flash English. */
 export const LOCALE_STORAGE_KEY = 'vendor-dash:locale';
+
+/**
+ * localStorage key recording a locale the vendor picked **by hand**, as opposed
+ * to one inherited from their profile.
+ *
+ * ── Why a second key ─────────────────────────────────────────────────────────
+ *
+ * `preferred_language` on the profile is the source of truth, and
+ * `SessionLocaleSync` applies it the moment `/auth/me` resolves. That is right
+ * for a returning vendor and wrong for the case the sign-in language picker
+ * exists to serve: someone who cannot read English switches to French on the
+ * *login* screen, signs in or registers, and — because a fresh account's
+ * `preferred_language` defaults to `en` — is thrown straight back into English
+ * for the whole of onboarding. The picker would appear to do nothing.
+ *
+ * So a manual pick is remembered as manual, and outranks the profile until the
+ * profile catches up. `ProfileSettings` clears it when the vendor saves a
+ * language there, which is the deliberate act that hands authority back — and is
+ * also the only place the choice becomes permanent and starts governing
+ * notifications (api-doc/vendor/profile.md).
+ */
+export const LOCALE_MANUAL_KEY = 'vendor-dash:locale:manual';
+
+/** Record that this locale was chosen by the vendor, not derived from a profile. */
+export function markLocaleManual(locale: Locale): void {
+    try {
+        localStorage.setItem(LOCALE_MANUAL_KEY, locale);
+    } catch {
+        // Private mode / storage disabled. The switch still applies for this
+        // session; it just will not survive the next session sync.
+    }
+}
+
+/** The vendor's outstanding manual pick, if there is one. */
+export function readManualLocale(): Locale | null {
+    try {
+        const raw = localStorage.getItem(LOCALE_MANUAL_KEY);
+        return isLocale(raw) ? raw : null;
+    } catch {
+        return null;
+    }
+}
+
+/** Hand authority back to the profile. */
+export function clearManualLocale(): void {
+    try {
+        localStorage.removeItem(LOCALE_MANUAL_KEY);
+    } catch {
+        // Nothing to do — see markLocaleManual.
+    }
+}

@@ -2,6 +2,15 @@ import { plural } from '../../types';
 
 /** Vocabulaire partagé par tout le tableau de bord. Miroir de `en/common.ts`. */
 export const common = {
+    /**
+     * Le sélecteur de langue d’avant-connexion (`LanguageSwitcher`). Les *noms*
+     * de langue ne sont jamais traduits : ils viennent du registre des locales,
+     * chacun dans sa propre langue.
+     */
+    language: {
+        change: 'Changer de langue',
+    },
+
     actions: {
         save: 'Enregistrer',
         saving: 'Enregistrement…',

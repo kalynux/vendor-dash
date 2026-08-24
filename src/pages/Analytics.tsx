@@ -21,6 +21,8 @@ import { useAnalyticsStore } from '@/store';
 import { SalesChart } from '@/components/features/SalesChart';
 import { TopProductsList } from '@/components/features/TopProductsList';
 import { DateRangePicker } from '@/components/features/DateRangePicker';
+import { MobilePageHeader } from '@/components/layout/MobilePageHeader';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 import { useTranslation, useFormatters } from '@/i18n';
 
@@ -129,6 +131,7 @@ function useTwoUpMetrics(values: string[]) {
 export function Analytics() {
   const { t } = useTranslation();
   const fmt = useFormatters();
+  const isMobile = useIsMobile();
 
   // Analytics totals carry no per-currency field; use the platform default (XAF)
   // via the shared, locale-aware formatter.
@@ -188,21 +191,48 @@ export function Analytics() {
   const { gridRef, measureRef, twoUp } = useTwoUpMetrics(metricTiles.map((m) => m.value));
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold">{t('analytics.title')}</h1>
-          <p className="text-muted-foreground">{t('analytics.headerSubtitle')}</p>
+    <div className={cn('animate-fade-in', isMobile ? '-mx-6 -mt-6' : 'space-y-6')}>
+      {/* Header. The mobile one is pinned and carries the notifications bell —
+          this page had no header of its own on a phone, so the desktop row was
+          stacking into three lines above the first chart. The date range moves
+          into the reveal-on-scroll-up row, where every other list page puts its
+          controls. */}
+      {isMobile ? (
+        <MobilePageHeader
+          title={t('analytics.title')}
+          description={t('analytics.headerSubtitle')}
+          actions={[
+            {
+              id: 'export',
+              icon: Download,
+              label: t('analytics.export'),
+              onClick: () => {/* export */ },
+            },
+          ]}
+          subheader={
+            <div className="flex justify-end">
+              <DateRangePicker value={dateRange} onChange={setDateRange} />
+            </div>
+          }
+        />
+      ) : (
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold">{t('analytics.title')}</h1>
+            <p className="text-muted-foreground">{t('analytics.headerSubtitle')}</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <DateRangePicker value={dateRange} onChange={setDateRange} />
+            <Button variant="outline" className="gap-2">
+              <Download className="w-4 h-4" />
+              {t('analytics.export')}
+            </Button>
+          </div>
         </div>
-        <div className="flex items-center gap-3">
-          <DateRangePicker value={dateRange} onChange={setDateRange} />
-          <Button variant="outline" className="gap-2">
-            <Download className="w-4 h-4" />
-            {t('analytics.export')}
-          </Button>
-        </div>
-      </div>
+      )}
+
+      {/* Full-bleed on mobile means the body has to restore main's gutter. */}
+      <div className={cn(isMobile && 'space-y-6 px-6 pt-4')}>
 
       {/* Data-not-ready notice (backend 503 AGGREGATION_NOT_READY) */}
       {notReady && !isLoading && (
@@ -390,6 +420,7 @@ export function Analytics() {
           </div>
         </TabsContent>
       </Tabs>
+      </div>
     </div>
   );
 }

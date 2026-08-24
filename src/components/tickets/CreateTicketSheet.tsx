@@ -476,7 +476,7 @@ export function CreateTicketSheet({ open, onOpenChange, onCreated }: CreateTicke
                       <li key={f.id} className="flex items-center gap-3 rounded-lg border bg-card p-2">
                         <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted">
                           {isImage && f.url ? (
-                            <img src={f.url} alt={f.originalName ?? ''} crossOrigin="use-credentials" className="h-full w-full object-cover" />
+                            <img src={f.url} alt={f.originalName ?? ''} className="h-full w-full object-cover" />
                           ) : (
                             <FileText className="h-4 w-4 text-muted-foreground" />
                           )}

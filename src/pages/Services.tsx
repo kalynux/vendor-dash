@@ -9,6 +9,7 @@ import { CalendarConnectionPanel } from '@/components/services/CalendarConnectio
 import { MobilePageHeader } from '@/components/layout/MobilePageHeader';
 import { SubPageHeader } from '@/components/layout/SubPageHeader';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useRouteSwipe } from '@/hooks/use-route-swipe';
 import type { CalendarStatus } from '@/types/services.types';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { closeExternal } from '@/platform/browser';
@@ -26,6 +27,17 @@ const TAB_TO_PATH: Record<ServicesTab, string> = {
   bookings: '/dashboard/services/appointments',
   calendar: '/dashboard/services/calendar',
 };
+
+/**
+ * The three, as routes, in strip order — what a sideways swipe walks.
+ * Spelled out rather than read off `TAB_TO_PATH`, whose key order is an
+ * implementation detail that a reorder would silently change.
+ */
+const TAB_RING = [
+  TAB_TO_PATH.services,
+  TAB_TO_PATH.bookings,
+  TAB_TO_PATH.calendar,
+];
 
 // Header title per sidebar sub-tab (mirrors the Bookings submenu labels).
 const TAB_TITLE_KEYS: Record<ServicesTab, TranslationKey> = {
@@ -60,6 +72,9 @@ export function Services() {
   const isMobile = useIsMobile();
   const { tab: tabParam } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
+
+  // Before the redirect below — a hook cannot sit behind an early return.
+  useRouteSwipe(TAB_RING);
 
   const [reloadToken] = useState(0);
   const [calendarRefreshKey, setCalendarRefreshKey] = useState(0);
@@ -183,7 +198,10 @@ export function Services() {
   if (isMobile) {
     return (
       <div className="-mx-6 -mt-6">
-        <MobilePageHeader title={t(TAB_TITLE_KEYS[tab])} />
+        <MobilePageHeader
+          title={t(TAB_TITLE_KEYS[tab])}
+          description={t(TAB_SUBTITLE_KEYS[tab])}
+        />
         <div className="space-y-4 px-4 pt-4 pb-24">
           {connectBanner}
           {tabsNode}

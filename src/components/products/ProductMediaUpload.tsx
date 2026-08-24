@@ -188,7 +188,6 @@ export function ProductMediaUpload({
                 <img
                   src={item.url}
                   alt={item.name}
-                  crossOrigin="use-credentials"
                   className="pointer-events-none h-full w-full object-cover"
                   draggable={false}
                 />

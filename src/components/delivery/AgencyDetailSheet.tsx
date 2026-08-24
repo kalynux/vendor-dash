@@ -59,7 +59,6 @@ export function AgencyDetailSheet({ agency, open, onOpenChange, footerSlot }: Ag
                                 <img
                                     src={logoUrl}
                                     alt={agency.agencyName}
-                                    crossOrigin="use-credentials"
                                     className="w-full h-full object-cover"
                                 />
                             ) : (

@@ -15,6 +15,7 @@ import { SubPageHeader } from '@/components/layout/SubPageHeader';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent } from '@/components/ui/tabs';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useRouteSwipe } from '@/hooks/use-route-swipe';
 // Both referenced only by the commented-out `currentDefault` panel below.
 // import { fileRefUrl } from '@/services/files.service';
 // import { formatAgencyLocality } from '@/lib/agencyAddress';
@@ -23,6 +24,9 @@ import { type DeliveryAgency } from '@/types/api';
 import { useTranslation, type TranslationKey } from '@/i18n';
 
 const VALID_TABS = ['connections', 'browse'] as const;
+
+/** The same two, as routes — what a sideways swipe walks. Order matters. */
+const TAB_RING = VALID_TABS.map((tab) => `/dashboard/agency/${tab}`);
 const DEFAULT_TAB = 'connections';
 
 type AgencyTab = (typeof VALID_TABS)[number];
@@ -49,6 +53,10 @@ export function Agency() {
     const { tab } = useParams();
     const navigate = useNavigate();
     const isMobile = useIsMobile();
+
+    // Before the redirect below — a hook cannot sit behind an early return.
+    useRouteSwipe(TAB_RING);
+
     const { session, setDeliveryAgency } = useOnboarding();
     const roleEntity = session?.role_entity;
     const currentId = roleEntity?.default_delivery_agency_id ?? null;
@@ -137,7 +145,7 @@ export function Agency() {
     //             <div className="flex items-center gap-3">
     //                 <div className="w-10 h-10 rounded-lg bg-background border flex items-center justify-center overflow-hidden flex-shrink-0">
     //                     {fileRefUrl(current.logo) ? (
-    //                         <img src={fileRefUrl(current.logo)!} alt={current.agencyName} crossOrigin="use-credentials" className="w-full h-full object-cover" />
+    //                         <img src={fileRefUrl(current.logo)!} alt={current.agencyName} className="w-full h-full object-cover" />
     //                     ) : (
     //                         <Building2 className="w-5 h-5 text-muted-foreground" />
     //                     )}
@@ -191,6 +199,7 @@ export function Agency() {
             <div className="-mx-6 -mt-6">
                 <MobilePageHeader
                     title={t(TAB_LABEL_KEYS[activeTab])}
+                    description={t(TAB_SUBTITLE_KEYS[activeTab])}
                     subheader={
                         <div className="flex gap-2">
                             {VALID_TABS.map((value) => (

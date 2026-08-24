@@ -11,13 +11,22 @@ import type { CapacitorConfig } from '@capacitor/cli';
 /**
  * On-device development against a LAN backend (`npm run sync:android:lan`).
  *
- * The WebView origin is `https://vendor.wi-mall.internal`, so a call to a plain
- * `http://<lan-ip>:8022` dev API is mixed content and the WebView drops it
- * before it reaches the network — which looks exactly like the backend being
- * down. This flag is the only thing that relaxes it, it is off by default, and
- * `npm run build:mobile` never sets it. Cleartext also needs the Android side's
- * permission: android/app/src/debug/AndroidManifest.xml, which is debug-only and
- * therefore cannot reach a release build.
+ * An https WebView origin plus a plain `http://<lan-ip>:8022` dev API is mixed
+ * content, and the WebView drops it before it reaches the network — which looks
+ * exactly like the backend being down. This flag is what relaxes that, it is off
+ * by default, and `npm run build:mobile` never sets it. Cleartext also needs the
+ * Android side's permission: android/app/src/debug/AndroidManifest.xml, which is
+ * debug-only and therefore cannot reach a release build.
+ *
+ * ⚠ It takes BOTH switches below — `androidScheme` and `allowMixedContent` — and
+ * the reason is that mixed content is not one rule but two. `allowMixedContent`
+ * covers only the *blockable* class (fetch/XHR), so with the scheme left at https
+ * the API calls go through while every `<img src="http://…">` is still killed:
+ * Chromium auto-upgrades a mixed image to https and blocks it when that fails,
+ * which a dev backend with no TLS guarantees. That is a renderer-side decision no
+ * backend header can reach — the request dies before it is made — so the only fix
+ * is to stop the scheme split at its source and serve the LAN-dev WebView over
+ * http as well. Every image blank while the data loads is that bug's signature.
  */
 const lanDev = process.env.CAP_LAN_DEV === '1';
 
@@ -34,7 +43,15 @@ const config: CapacitorConfig = {
   webDir: 'dist',
 
   server: {
-    androidScheme: 'https',
+    // https everywhere except a LAN-dev sync, where it drops to http so the
+    // WebView origin and the cleartext dev API share a scheme — see `lanDev`.
+    // Release builds are untouched: production is https on both sides, so this
+    // whole class of bug is LAN-dev only.
+    //
+    // Dropping it costs the secure context, and here that is nothing: clipboard,
+    // geolocation and push all resolve to native plugins through `src/platform/`
+    // on a device and never reach for the secure-context web API.
+    androidScheme: lanDev ? 'http' : 'https',
 
     // D5 — a custom hostname rather than `localhost`.
     //
@@ -44,10 +61,12 @@ const config: CapacitorConfig = {
     // never route publicly — that is precisely why it was chosen. Pointing this
     // at a live domain would make that domain unreachable from inside the app.
     //
-    // Resulting origins, both of which must be in the backend's ALLOWED_ORIGINS
-    // before anything native can talk to the API (the D5 ticket):
-    //   Android → https://vendor.wi-mall.internal
-    //   iOS     → capacitor://vendor.wi-mall.internal
+    // Resulting origins, ALL of which must be in the backend's ALLOWED_ORIGINS
+    // before anything native can talk to the API (the D5 ticket) — the LAN-dev
+    // one is a separate origin from the https one, not a variant of it:
+    //   Android          → https://vendor.wi-mall.internal
+    //   Android, LAN dev → http://vendor.wi-mall.internal
+    //   iOS              → capacitor://vendor.wi-mall.internal
     hostname: 'vendor.wi-mall.internal',
   },
 
@@ -55,6 +74,10 @@ const config: CapacitorConfig = {
     // False for every build that is not an explicit LAN-dev sync. In production
     // the API is https, so a standing mixed-content allowance would only ever
     // hide a misconfigured base URL — and quietly permit an on-path downgrade.
+    //
+    // Kept alongside the http `androidScheme` rather than replaced by it: the
+    // scheme governs the app's own origin, this governs anything else the page
+    // pulls over cleartext, and neither one implies the other.
     allowMixedContent: lanDev,
   },
 

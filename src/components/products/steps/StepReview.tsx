@@ -3,22 +3,18 @@ import { AlertCircle, CheckCircle2, ChevronLeft, Globe, Handshake, Package, File
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import { validateActivation } from '@/components/products/schemas/product.schemas';
 import {
   collectCeilingEdits,
-  minCeilingFor,
   seedCeilings,
   validateCeilings,
-  variantLabel,
   type BargainCeilingEdit,
 } from '@/components/products/bargain';
-import { VariantThumb } from '@/components/products/VariantThumb';
+import { BargainCeilingsSheet } from '@/components/products/BargainCeilingsSheet';
 import { AgencySelector } from '@/components/products/review/AgencySelector';
-import { useFormatters, useMessage, useTranslation, type TranslationKey } from '@/i18n';
+import { useMessage, useTranslation, type TranslationKey } from '@/i18n';
 import type { WizardState, VendorAgencyListItemDto, ApiPickupLocation } from '@/types/product.types';
 import { getProductFileCount } from '@/types/product.types';
 
@@ -48,7 +44,6 @@ export function StepReview({
 }: StepReviewProps) {
   const { t } = useTranslation();
   const m = useMessage();
-  const fmt = useFormatters();
   const product = serverData.serverProduct;
   const variants = serverData.serverVariants ?? [];
   const isDigital = product?.type === 'digital';
@@ -101,6 +96,17 @@ export function StepReview({
   // Same approach as `activationErrors` below.
   const ceilingErrors = validateCeilings(bargainVariants, ceilings);
   const hasCeilingErrors = Object.keys(ceilingErrors).length > 0;
+
+  // Whether there is anything to price at all. A product still being built has
+  // no server variants yet, and a service product has none that qualify.
+  const canPriceBargain = !!product && bargainVariants.length > 0;
+  const [bargainOpen, setBargainOpen] = useState(false);
+  // How many rows currently carry a window — the one number the collapsed
+  // summary has to show, so closing the sheet never hides what was set in it.
+  const ceilingsSetCount = bargainVariants.filter(
+    (v) => (ceilings[v.id] ?? '').trim() !== '',
+  ).length;
+
   const submitValues = () => ({
     vectorisationEnabled,
     bargainEdits: collectCeilingEdits(bargainVariants, ceilings),
@@ -305,12 +311,12 @@ export function StepReview({
       )}
 
       {/* Vectorisation toggle — pure form field, saved on publish/draft */}
-      <div className="rounded-xl border border-border p-5">
+      <div className="rounded-xl border border-border p-4 sm:p-5">
         <div className="flex items-start gap-3">
           <Sparkles className="w-5 h-5 text-muted-foreground mt-0.5 shrink-0" />
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between gap-3">
-              <div>
+              <div className="min-w-0">
                 <p className="font-medium text-sm">{t('products.review.vectorisationTitle')}</p>
                 <p className="text-xs text-muted-foreground mt-0.5 max-w-md">
                   {t('products.review.vectorisationDescription')}
@@ -318,7 +324,15 @@ export function StepReview({
               </div>
               <Switch
                 checked={vectorisationEnabled}
-                onCheckedChange={setVectorisationEnabled}
+                onCheckedChange={(next) => {
+                  setVectorisationEnabled(next);
+                  // Turning this on is the *only* thing that makes a negotiation
+                  // ceiling meaningful, so it presents the rows straight away
+                  // rather than unfolding them below the fold where they were
+                  // routinely missed. Dismissing is a real answer — pricing is
+                  // optional, and the summary row below reopens it.
+                  if (next && canPriceBargain) setBargainOpen(true);
+                }}
                 disabled={controlsDisabled}
                 aria-label={t('products.review.vectorisationTitle')}
               />
@@ -327,106 +341,63 @@ export function StepReview({
         </div>
       </div>
 
-      {/* Bargainable pricing — one ceiling per variant.
-          Gated on the LOCAL toggle state, not `product.vectorisationEnabled`, so it
-          appears the moment the switch flips; the flip is persisted by the same
-          handler that writes these ceilings. */}
-      {vectorisationEnabled && product && bargainVariants.length > 0 && (
-        <div className="rounded-xl border border-border p-5 space-y-4">
-          <div className="flex items-start gap-3">
-            <Handshake className="w-5 h-5 text-muted-foreground mt-0.5 shrink-0" />
-            <div className="min-w-0">
-              <p className="font-medium text-sm">{t('products.bargain.title')}</p>
-              <p className="text-xs text-muted-foreground mt-0.5 max-w-md">
-                {t('products.bargain.description')}
-              </p>
-            </div>
+      {/*
+        Bargainable pricing.
+
+        The rows themselves live in a sheet (BargainCeilingsSheet) — see its
+        header for why. What stays inline is a summary: how many windows are
+        set, and the way back in. That matters more than it looks, because the
+        sheet is dismissible and Publish is blocked while a ceiling is invalid;
+        without a collapsed row carrying that error, a vendor could be stuck on
+        a disabled button with the explanation hidden behind a closed sheet.
+
+        Gated on the LOCAL toggle state, not `product.vectorisationEnabled`, so it
+        appears the moment the switch flips; the flip is persisted by the same
+        handler that writes these ceilings.
+      */}
+      {vectorisationEnabled && canPriceBargain && (
+        <button
+          type="button"
+          onClick={() => setBargainOpen(true)}
+          disabled={controlsDisabled}
+          className={cn(
+            'flex w-full items-center gap-3 rounded-xl border p-4 text-left transition-colors',
+            'hover:bg-accent/40 disabled:pointer-events-none disabled:opacity-60',
+            hasCeilingErrors ? 'border-destructive/50 bg-destructive/5' : 'border-border',
+          )}
+        >
+          <Handshake className="size-5 shrink-0 text-muted-foreground" aria-hidden />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium">{t('products.bargain.title')}</p>
+            <p
+              className={cn(
+                'mt-0.5 text-xs',
+                hasCeilingErrors ? 'text-destructive' : 'text-muted-foreground',
+              )}
+            >
+              {hasCeilingErrors
+                ? t('products.bargain.summaryInvalid')
+                : ceilingsSetCount > 0
+                  ? t('products.bargain.summarySet', { count: ceilingsSetCount })
+                  : t('products.bargain.summaryNone')}
+            </p>
           </div>
-
-          <div className="space-y-3">
-            {bargainVariants.map((v) => {
-              const rowError = ceilingErrors[v.id];
-              const minCeiling = minCeilingFor(v.price);
-              return (
-                <div
-                  key={v.id}
-                  className="grid grid-cols-1 gap-2 border-t border-border pt-3 first:border-t-0 first:pt-0 sm:grid-cols-[1fr_auto] sm:items-start"
-                >
-                  {/* The variant's own first image, so a vendor pricing a
-                      forty-row matrix recognises the row instead of decoding
-                      "Rouge / XL" against a SKU. */}
-                  <div className="flex min-w-0 items-start gap-3">
-                    <VariantThumb files={v.files} fallback={productImages} />
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium truncate">{variantLabel(v)}</p>
-                      <div className="mt-0.5 flex flex-wrap items-center gap-2">
-                        <span className="font-mono text-xs text-muted-foreground">{v.sku}</span>
-                        <span className="text-xs tabular-nums text-muted-foreground">
-                          {fmt.currency(v.price)}
-                        </span>
-                        {/* A stored window shows regardless; `bargainable` only decides
-                            whether it reads as live or dimmed. Never struck through —
-                            this is a ceiling, not a "was" price. */}
-                        {v.bargain && (
-                          <Badge
-                            variant="outline"
-                            className={cn('text-[10px] font-normal', !v.bargainable && 'opacity-60')}
-                          >
-                            {t('products.bargain.badge', { max: fmt.currency(v.bargain.maxPrice) })}
-                          </Badge>
-                        )}
-                        {v.bargain && !v.bargainable && (
-                          <span className="text-[10px] text-muted-foreground">
-                            {t('products.bargain.inertHint')}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="sm:w-[180px]">
-                    <Label htmlFor={`bargain-${v.id}`} className="sr-only">
-                      {t('products.bargain.ceilingLabel')}
-                    </Label>
-                    <Input
-                      id={`bargain-${v.id}`}
-                      type="number"
-                      min={minCeiling}
-                      step="any"
-                      inputMode="decimal"
-                      value={ceilings[v.id] ?? ''}
-                      placeholder={t('products.bargain.ceilingPlaceholder')}
-                      disabled={controlsDisabled}
-                      onChange={(e) =>
-                        setCeilings((prev) => ({ ...prev, [v.id]: e.target.value }))
-                      }
-                      aria-invalid={!!rowError}
-                      aria-describedby={`bargain-${v.id}-hint`}
-                      className={cn('h-9 text-sm', rowError && 'border-destructive')}
-                    />
-                    {/* The floor is spelled out per row rather than only in the
-                        error, because the number depends on this variant's price
-                        and guessing it is the whole difficulty. */}
-                    <p
-                      id={`bargain-${v.id}-hint`}
-                      className={cn(
-                        'mt-1 text-xs',
-                        rowError ? 'text-destructive' : 'text-muted-foreground',
-                      )}
-                    >
-                      {rowError
-                        ? t(rowError)
-                        : t('products.bargain.ceilingMin', { min: fmt.currency(minCeiling) })}
-                    </p>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          <p className="text-xs text-muted-foreground">{t('products.bargain.clearHint')}</p>
-        </div>
+          <span className="shrink-0 text-xs font-semibold text-primary">
+            {ceilingsSetCount > 0 ? t('common.actions.edit') : t('products.bargain.summaryAction')}
+          </span>
+        </button>
       )}
+
+      <BargainCeilingsSheet
+        open={bargainOpen}
+        onOpenChange={setBargainOpen}
+        variants={bargainVariants}
+        ceilings={ceilings}
+        onCeilingChange={(id, raw) => setCeilings((prev) => ({ ...prev, [id]: raw }))}
+        errors={ceilingErrors}
+        disabled={controlsDisabled}
+        productImages={productImages}
+      />
 
       {/* Activation checklist */}
       <div className="space-y-2">

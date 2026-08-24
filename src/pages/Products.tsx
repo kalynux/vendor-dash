@@ -705,15 +705,15 @@ export function Products() {
       <div className="-mx-6 -mt-6">
         <MobilePageHeader
           title={t('products.title')}
-          actions={
-            <button
-              onClick={() => legacyNavigate('product-upload')}
-              aria-label={t('products.actions.addProduct')}
-              className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-accent transition-colors"
-            >
-              <Plus className="w-5 h-5" />
-            </button>
-          }
+          description={t('products.subtitle')}
+          actions={[
+            {
+              id: 'add',
+              icon: Plus,
+              label: t('products.actions.addProduct'),
+              onClick: () => legacyNavigate('product-upload'),
+            },
+          ]}
           subheader={
             <div className="space-y-3">
               <SearchFilterBar
@@ -1203,7 +1203,6 @@ function ProductThumbnail({ product, size }: { product: ProductListItem; size: '
           src={product.firstFileUrl}
           alt={product.title}
           className="w-full h-full object-cover"
-          crossOrigin="use-credentials"
         />
       ) : product.type === 'digital' ? (
         <FileDigit className="w-5 h-5 text-muted-foreground" />
@@ -1247,7 +1246,6 @@ function ProductGridCard({
               src={product.firstFileUrl}
               alt={product.title}
               className="absolute inset-0 w-full h-full object-cover"
-              crossOrigin="use-credentials"
             />
           ) : (
             <div className="absolute inset-0 flex items-center justify-center">

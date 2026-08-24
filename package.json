@@ -14,7 +14,7 @@
     "sync:android:lan": "npm run build:mobile:lan && cross-env CAP_LAN_DEV=1 cap sync android",
     "open:android": "cap open android",
     "run:android": "npm run build:mobile:lan && cross-env CAP_LAN_DEV=1 cap run android",
-    "build:apk": "npm run sync:android:lan && cd android && ./gradlew assembleDebug && cd ..",
+    "build:apk": "npm run sync:android:lan && cd android && .\\gradlew.bat assembleDebug && cd ..",
     "fonts:vendor": "node tools/fonts/vendor-fonts.mjs .",
     "i18n:audit": "node tools/i18n/audit.mjs",
     "i18n:audit:deep": "node tools/i18n/audit-deep.mjs",
@@ -25,6 +25,7 @@
     "mobileauth:verify": "esbuild tools/mobileauth/verify.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/mobileauth-verify.mjs --define:import.meta.env.DEV=true --define:import.meta.env.VITE_FORCE_MOBILE_AUTH=\"'true'\" --define:import.meta.env.VITE_API_BASE_URL=\"'http://localhost:8022/api'\" --alias:@=./src --log-level=error && node node_modules/.cache/mobileauth-verify.mjs"
   },
   "dependencies": {
+    "@aparajita/capacitor-biometric-auth": "^10.0.0",
     "@aparajita/capacitor-secure-storage": "^8.0.0",
     "@capacitor/android": "^8.5.0",
     "@capacitor/app": "^8.1.1",

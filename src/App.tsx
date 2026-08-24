@@ -36,7 +36,9 @@ import { Header } from '@/components/layout/Header';
 import { MobileTabBar } from '@/components/layout/MobileTabBar';
 import { NotificationsBootstrap } from '@/components/notifications/NotificationsBootstrap';
 import { OfflineBanner } from '@/components/layout/OfflineBanner';
+import { StatusBarScrim } from '@/components/layout/StatusBarScrim';
 import { useIsMobile, useIsTablet } from '@/hooks/use-mobile';
+import { useRouteSwipe } from '@/hooks/use-route-swipe';
 import { cn } from '@/lib/utils';
 
 // Native shell behaviour (CAPACITOR-PLAN.md → Phase 3). Both are inert on the
@@ -165,12 +167,23 @@ export const useRouter = () => useContext(LegacyRouterContext);
 
 // ─── Dashboard shell ──────────────────────────────────────────────────────────
 
+/**
+ * The bottom tab bar's three destinations, in the order they sit in the bar —
+ * which is the order a sideways swipe walks them. The FAB and "More" are not
+ * destinations, so they are not in the ring.
+ */
+const TAB_BAR_RING = ['/dashboard', '/dashboard/orders', '/dashboard/products'] as const;
+
 function DashboardShell() {
   const { sidebarCollapsed } = useUI();
   const isMobile = useIsMobile();
   // Always false on the web, so the browser build is unchanged (P3.2).
   const keyboardOpen = useKeyboardOpen();
   const { fetchStore } = useStoreStore();
+
+  // Swipe left/right to move along the bottom tab bar. Inert off mobile, and
+  // inert on any screen that is not one of the three — see `useRouteSwipe`.
+  useRouteSwipe(TAB_BAR_RING);
 
   useEffect(() => {
     fetchStore();
@@ -308,6 +321,11 @@ function AppContent() {
           {/* The theme class is applied to <html> by StoreProvider — it has to
               sit above <body>, which carries `bg-background`/`text-foreground`. */}
           <>
+            {/* Also outside the routes, and for the same reason: the status bar
+                is drawn *over* every screen, so the band it occupies has to be
+                painted on every screen — sign-in and onboarding included, not
+                just the dashboard shell. Zero-height in a browser. */}
+            <StatusBarScrim />
             {/* Outside the routes on purpose: "you are offline" is as true on
                 the sign-in screen as it is on the dashboard, and that is the
                 screen where mistaking it for a rejected password costs the

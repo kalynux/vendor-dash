@@ -23,10 +23,15 @@ import { TopProductsList } from '@/components/features/TopProductsList';
 import { DateRangePicker } from '@/components/features/DateRangePicker';
 import { OrderStatusBadge } from '@/components/orders/OrderStatusBadge';
 import { MobileOrderDetailSheet } from '@/components/orders/MobileOrderDetailSheet';
+import { MobilePageHeader } from '@/components/layout/MobilePageHeader';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useRouter } from '@/App';
 import { cn } from '@/lib/utils';
 import { storePath, storefrontUrl } from '@/lib/storefront/urls';
+// The storefront link used to be an <a target="_blank">, which the global
+// interceptor turned into a Custom Tab. As a header action it is a button, so
+// it has to call the same opener itself.
+import { openExternal } from '@/platform/browser';
 import {
   AreaChart,
   Area,
@@ -230,40 +235,43 @@ export function Overview() {
   // ─── Mobile Layout ─────────────────────────────────────────────────────────
   if (isMobile) {
     return (
-      <div className="space-y-4 pt-2">
-        {/* Greeting */}
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3 min-w-0">
-            {store?.logo?.url ? (
+      <div className="-mx-6 -mt-6">
+        {/* The greeting *is* the page header here. It was a plain block that
+            scrolled away, which meant the one screen with no page title also had
+            nowhere to hang the notifications bell — and the bell has to be in
+            the same place on every screen or it is not "always one tap away".
+            The store's own logo and name carry the identity the block had. */}
+        <MobilePageHeader
+          leading={
+            store?.logo?.url ? (
               <img
                 src={store.logo.url}
-                alt={store.name}
-                crossOrigin="use-credentials"
-                className="w-10 h-10 rounded-full object-cover flex-shrink-0 border"
+                alt=""
+                className="h-8 w-8 rounded-full border object-cover"
               />
-            ) : null}
-            <div className="min-w-0">
-              <p className="text-sm text-muted-foreground">{t('overview.welcomeBack')}</p>
-              <h1 className="text-xl font-bold truncate">{store?.name ?? t('overview.myStore')}</h1>
+            ) : undefined
+          }
+          title={store?.name ?? t('overview.myStore')}
+          description={t('overview.welcomeBack')}
+          actions={
+            store?.slug
+              ? [{
+                id: 'storefront',
+                icon: ExternalLink,
+                label: t('overview.myStore'),
+                onClick: () => openExternal(storefrontUrl(storePath(store.slug!))),
+              }]
+              : []
+          }
+          subheader={
+            <div className="flex justify-end">
+              <DateRangePicker value={dateRange} onChange={setDateRange} />
             </div>
-          </div>
-          {store?.slug && (
-            <a
-              href={storefrontUrl(storePath(store.slug))}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex-shrink-0 flex items-center gap-1.5 text-xs font-medium border rounded-full px-3 py-1.5 bg-background hover:bg-accent transition-colors"
-            >
-              <ExternalLink className="w-3 h-3" />
-              {t('overview.myStore')}
-            </a>
-          )}
-        </div>
+          }
+        />
 
-        {/* Date range */}
-        <div className="flex justify-end">
-          <DateRangePicker value={dateRange} onChange={setDateRange} />
-        </div>
+        {/* Full-bleed above means the body restores main's own gutter. */}
+        <div className="space-y-4 px-6 pb-4 pt-4">
 
         {/* Data-not-ready notice (backend 503 AGGREGATION_NOT_READY) */}
         {notReady && !isLoading && (
@@ -441,6 +449,7 @@ export function Overview() {
           isDetailLoading={isDetailLoading}
           onOpenChange={setOrderSheetOpen}
         />
+        </div>
       </div>
     );
   }

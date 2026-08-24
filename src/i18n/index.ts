@@ -25,12 +25,18 @@ export {
     SUPPORTED_LOCALES,
     SELECTABLE_LOCALES,
     LOCALE_STORAGE_KEY,
+    LOCALE_MANUAL_KEY,
     isLocale,
     resolveLocale,
     detectBrowserLocale,
+    markLocaleManual,
+    readManualLocale,
+    clearManualLocale,
     type Locale,
     type LocaleMeta,
 } from './config';
+
+export { LanguageSwitcher } from './LanguageSwitcher';
 
 export { I18nProvider } from './context';
 export { useI18n, type I18nContextValue } from './I18nContext';

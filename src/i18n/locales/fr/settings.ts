@@ -180,8 +180,7 @@ export const settings = {
         cardCountryPlaceholder: 'Pays qui a émis la carte',
         issuingBank: 'Banque émettrice (facultatif)',
         issuingBankPlaceholder: 'ex. Afriland First Bank',
-        cardSettlementNote:
-            'Les versements par carte sont traités manuellement aujourd’hui, ils mettent donc plus de temps à arriver. Gardez un moyen Mobile Money ou bancaire en moyen préféré si vous voulez être payé au plus vite.',
+        cardSettlementNote: 'Traité manuellement, donc plus lent. Mobile Money est le plus rapide.',
 
         addMethod: 'Ajouter un moyen de versement',
         addTitle: 'Ajouter un moyen de versement',
@@ -215,8 +214,7 @@ export const settings = {
         paymentMethodsTitle: 'Moyens de paiement',
         paymentMethodsInfo1:
             'Là où vos retraits sont envoyés. Ajoutez jusqu’à 3 moyens — le premier est le moyen préféré, utilisé par défaut ; les autres servent de solutions de repli.',
-        paymentMethodsInfo2:
-            'Les noms de compte doivent correspondre au nom enregistré chez le prestataire, faute de quoi le virement est rejeté et le versement retourne à votre solde disponible.',
+        paymentMethodsInfo2: 'Le nom du compte doit correspondre à celui du prestataire, sinon le virement est rejeté.',
         saved: 'Configuration de versement mise à jour',
     },
 

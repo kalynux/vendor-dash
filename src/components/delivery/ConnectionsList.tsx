@@ -315,7 +315,7 @@ export function ConnectionsList({
                                 <div className="flex items-center gap-3 min-w-0">
                                     <div className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center flex-shrink-0 overflow-hidden">
                                         {logoUrl ? (
-                                            <img src={logoUrl} alt={agency?.agencyName} crossOrigin="use-credentials" className="w-full h-full object-cover" />
+                                            <img src={logoUrl} alt={agency?.agencyName} className="w-full h-full object-cover" />
                                         ) : (
                                             <Building2 className="w-4 h-4 text-muted-foreground" />
                                         )}

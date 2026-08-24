@@ -2,11 +2,10 @@ import { useReducer, useCallback, useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { AlertCircle, Box, Package, ImageIcon, Tag, FileDigit, CheckSquare, Eye, Share2 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { PageBackButton } from '@/components/layout/PageBackButton';
+import { EditorPageShell } from '@/components/layout/EditorPageShell';
 import { useOpenPreview } from '@/components/preview';
 import { ShareProductDialog } from '@/components/products/ShareProductDialog';
 import { ProductStepIndicator } from '@/components/products/ProductStepIndicator';
@@ -927,60 +926,43 @@ export function ProductEdit() {
   }
 
   return (
-    <div className="space-y-4 sm:space-y-6 animate-fade-in max-w-3xl mx-auto -mx-6 sm:mx-auto">
-      <div className="px-4 sm:px-0">
-        <PageBackButton
-          fallbackPath="/dashboard/products"
-          alwaysFallback
-          label={t('products.wizard.backToProducts')}
-          className="mb-1"
-        />
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h1 className="text-xl sm:text-2xl font-bold">{t('products.wizard.editTitle')}</h1>
-            {state.serverProduct && (
-              <p className="text-muted-foreground text-xs sm:text-sm mt-1 truncate">
-                {state.serverProduct.title}
-              </p>
-            )}
-          </div>
-          {/* Preview and Share sit next to the product being edited because that
-              is where a vendor is when they finish writing a description and want
-              to see how it lands — on the storefront, and in a real chat. */}
-          {state.productId && (
-            <div className="flex shrink-0 items-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="shrink-0 gap-1.5"
-                onClick={() => openPreview(`/preview/product/${state.productId}`)}
-              >
-                <Eye className="w-4 h-4" />
-                <span className="hidden sm:inline">{t('products.preview.action')}</span>
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="shrink-0 gap-1.5"
-                onClick={() => setShareOpen(true)}
-              >
-                <Share2 className="w-4 h-4" />
-                <span className="hidden sm:inline">{t('products.share.action')}</span>
-              </Button>
-            </div>
-          )}
-        </div>
-      </div>
-
+    <EditorPageShell
+      title={t('products.wizard.editTitle')}
+      description={state.serverProduct?.title}
+      backTo="/dashboard/products"
+      backLabel={t('products.wizard.backToProducts')}
+      alwaysFallback
+      // Preview and Share sit next to the product being edited because that is
+      // where a vendor is when they finish writing a description and want to see
+      // how it lands — on the storefront, and in a real chat.
+      actions={
+        state.productId
+          ? [
+              {
+                id: 'preview',
+                icon: Eye,
+                label: t('products.preview.action'),
+                onClick: () => openPreview(`/preview/product/${state.productId}`),
+                inline: true,
+              },
+              {
+                id: 'share',
+                icon: Share2,
+                label: t('products.share.action'),
+                onClick: () => setShareOpen(true),
+                inline: true,
+              },
+            ]
+          : []
+      }
+    >
       <ShareProductDialog
         productId={shareOpen ? state.productId : null}
         onOpenChange={(open) => !open && setShareOpen(false)}
       />
 
       {state.productType && (
-        <Card className="rounded-none border-x-0 sm:rounded-xl sm:border">
+        <Card className="rounded-none border-x-0 md:rounded-xl md:border">
           <CardContent className="p-3 sm:p-4">
             <ProductStepIndicator
               steps={steps}
@@ -995,7 +977,7 @@ export function ProductEdit() {
       )}
 
       {isLockedForVectorisation && state.currentStep !== 'review' && (
-        <div className="px-4 sm:px-0">
+        <div className="px-4 md:px-0">
           <Alert>
             <AlertCircle className="w-4 h-4" />
             <AlertDescription>
@@ -1008,7 +990,7 @@ export function ProductEdit() {
       {/* Status banners — the Review step renders its own (like the
           vectorisation lock), so these only show on the other steps. */}
       {isReadOnlyStatus && state.currentStep !== 'review' && (
-        <div className="px-4 sm:px-0">
+        <div className="px-4 md:px-0">
           <Alert>
             <AlertCircle className="w-4 h-4" />
             <AlertDescription>
@@ -1020,7 +1002,7 @@ export function ProductEdit() {
         </div>
       )}
       {productStatus === 'suspended' && state.currentStep !== 'review' && (
-        <div className="px-4 sm:px-0">
+        <div className="px-4 md:px-0">
           <Alert>
             <AlertCircle className="w-4 h-4" />
             <AlertDescription>
@@ -1030,7 +1012,7 @@ export function ProductEdit() {
         </div>
       )}
 
-      <Card className="rounded-none border-x-0 sm:rounded-xl sm:border">
+      <Card className="rounded-none border-x-0 md:rounded-xl md:border">
         <CardContent className="p-4 sm:p-6">
           <div
             className={
@@ -1059,6 +1041,6 @@ export function ProductEdit() {
           window.location.reload();
         }}
       />
-    </div>
+    </EditorPageShell>
   );
 }

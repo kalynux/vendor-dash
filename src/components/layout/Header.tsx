@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth, useRouter } from '@/App';
+import { useRouter } from '@/App';
 import { useNotificationStore, useStoreStore } from '@/store';
 import { useOnboarding } from '@/onboarding/store/onboarding.store';
 import {
@@ -28,16 +28,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
+import { SignOutDialog } from '@/components/layout/SignOutDialog';
 import { QUICK_ACTIONS, type QuickAction } from '@/config/quickActions';
 import { notificationRoute, notificationVisual, notificationTimeAgo } from '@/lib/notifications.utils';
 import { storePath, storefrontUrl } from '@/lib/storefront/urls';
@@ -59,7 +50,6 @@ export function Header() {
   const [logoutOpen, setLogoutOpen] = useState(false);
   const { t } = useTranslation();
   const fmt = useFormatters();
-  const { logout } = useAuth();
   const { navigate } = useRouter();
   const reactNavigate = useNavigate();
   const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotificationStore();
@@ -271,26 +261,9 @@ export function Header() {
         </div>
       </header>
 
-      {/* Logout confirmation */}
-      <AlertDialog open={logoutOpen} onOpenChange={setLogoutOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{t('nav.header.logoutTitle')}</AlertDialogTitle>
-            <AlertDialogDescription>
-              {t('nav.header.logoutDescription')}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>{t('common.actions.cancel')}</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => logout()}
-              className="bg-destructive text-white hover:bg-destructive/90"
-            >
-              {t('nav.header.logout')}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {/* Logout confirmation — shared with the mobile profile screen, and the
+          reason this stopped calling the `useAuth()` shim. See SignOutDialog. */}
+      <SignOutDialog open={logoutOpen} onOpenChange={setLogoutOpen} />
 
       {/* Global Search Overlay */}
       {isSearchOpen && (

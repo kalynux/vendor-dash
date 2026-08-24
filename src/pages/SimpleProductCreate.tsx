@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { PageBackButton } from '@/components/layout/PageBackButton';
+import { EditorPageShell } from '@/components/layout/EditorPageShell';
 import {
   SimpleProductForm,
   type SimpleFieldErrors,
@@ -128,23 +128,24 @@ export function SimpleProductCreate() {
   );
 
   return (
-    <div className="space-y-4 sm:space-y-6 animate-fade-in max-w-3xl mx-auto -mx-6 sm:mx-auto">
-      <div className="px-4 sm:px-0">
-        <PageBackButton
-          fallbackPath="/dashboard/products"
-          label={t('products.wizard.backToProducts')}
-          className="mb-1"
-        />
-        <h1 className="text-xl sm:text-2xl font-bold">{t('products.quickAdd.title')}</h1>
-        <p className="text-muted-foreground text-xs sm:text-sm mt-1">
+    <EditorPageShell
+      title={t('products.quickAdd.title')}
+      // The handset gets the sentence without its link: the mobile header is one
+      // truncated line, and a link that may be cut mid-word is worse than none.
+      // The full editor is a tap away from the products list either way.
+      description={t('products.quickAdd.subtitleLead')}
+      descriptionNode={
+        <>
           {t('products.quickAdd.subtitleLead')}{' '}
           <Link to="/dashboard/product-upload" className="underline hover:text-foreground">
             {t('products.quickAdd.subtitleLink')}
           </Link>
-        </p>
-      </div>
-
-      <Card className="rounded-none border-x-0 sm:rounded-xl sm:border">
+        </>
+      }
+      backTo="/dashboard/products"
+      backLabel={t('products.wizard.backToProducts')}
+    >
+      <Card className="rounded-none border-x-0 md:rounded-xl md:border">
         <CardContent className="p-4 sm:p-6 space-y-6">
           {result ? (
             <ActivationBlockersPanel
@@ -186,6 +187,6 @@ export function SimpleProductCreate() {
           )}
         </CardContent>
       </Card>
-    </div>
+    </EditorPageShell>
   );
 }

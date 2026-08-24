@@ -144,7 +144,6 @@ export function MobileMoreDrawer({ open, onOpenChange }: MobileMoreDrawerProps) 
               <img
                 src={user?.avatar || `https://i.pravatar.cc/150?u=${user?.id}`}
                 alt={user?.name}
-                crossOrigin="use-credentials"
                 className="w-12 h-12 rounded-full flex-shrink-0 object-cover"
               />
               <div className="flex-1 min-w-0">

@@ -10,7 +10,14 @@ import { TIMEZONES } from '@/components/vendor-settings/forms/basicSetup.helpers
 import { UnsavedChangesBar } from '@/components/vendor-settings/UnsavedChangesBar';
 import { MediaPicker } from '@/components/features/MediaPicker';
 import { resolveFileUrl } from '@/services/files.service';
-import { useTranslation, useApiError, useFormatters, LOCALES, SELECTABLE_LOCALES } from '@/i18n';
+import {
+  useTranslation,
+  useApiError,
+  useFormatters,
+  LOCALES,
+  SELECTABLE_LOCALES,
+  clearManualLocale,
+} from '@/i18n';
 import type { BrandingFileRef, VendorProfileUpdatePayload } from '@/types/api';
 import type { ApiFile } from '@/types/file.types';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -192,6 +199,13 @@ export function ProfileSettings() {
         });
         // The merged session now holds the new avatar — drop the local override.
         if (avatarChanged) setPendingAvatar(undefined);
+        // Saving a language here IS the deliberate act that makes it permanent:
+        // it is the value the backend renders every notification in. So it
+        // retires any pre-sign-in pick from `LanguageSwitcher`, which was only
+        // ever an override for "the profile does not know yet"
+        // (see LOCALE_MANUAL_KEY). Without this, changing the language on this
+        // screen would update the profile and leave the UI in the old one.
+        if (languageChanged) clearManualLocale();
       }
       savedLocal.current = { whatsapp };
       toast.success(t('account.profile.updated'));
@@ -226,7 +240,6 @@ export function ProfileSettings() {
                     <AvatarImage
                       src={avatarUrl}
                       alt={displayLabel}
-                      crossOrigin="use-credentials"
                       className="object-cover"
                     />
                     <AvatarFallback className="text-2xl font-medium">
