@@ -9,7 +9,10 @@ import { tStatic } from '@/i18n';
 import type {
   ApiFile,
   ApiFileDetail,
+  FileAccess,
   FileKind,
+  FileRef,
+  FileUrlSource,
   MediaCategory,
   FileListParams,
   FileListResponse,
@@ -48,28 +51,91 @@ const FILE_PUBLIC_BASE: string =
   (import.meta.env.VITE_FILE_BASE_URL as string | undefined) ??
   `${BASE_URL.replace(/\/$/, '')}/files`;
 
-/** Resolve a displayable URL for a file, preferring the backend-populated `url`. */
-export function resolveFileUrl(file: Pick<ApiFile, 'url' | 'key'>): string {
+/**
+ * Storage trees the backend serves only to a credentialed reader. The static
+ * mount carries the eleven public trees and nothing else, so a URL rebuilt from a
+ * key in one of these resolves to a 404 rather than to the file.
+ *
+ * Kept in sync with api-doc/files/private-files.md § "Which trees are private".
+ */
+const PRIVATE_KEY_PREFIXES = ['digital/', 'shipments/', 'ticket-attachments/'];
+
+function isPrivateKey(key: string): boolean {
+  const k = key.replace(/^\//, '');
+  return PRIVATE_KEY_PREFIXES.some((p) => k.startsWith(p));
+}
+
+/**
+ * Resolve a displayable URL for a file, or `null` when there is none to show.
+ *
+ * 🔴 The key-based fallback exists for `GET /api/files`, which returns raw file
+ * records carrying **no `url` and no `access`** — reconstructing from `key` is the
+ * only option there, and the backend docs acknowledge that as a contract gap.
+ *
+ * It must never fire for a private tree. `FileRef.url` is `null` on an authorized
+ * file deliberately, to stop a client rendering a path that only works while
+ * signed in; rebuilding that path from `key` would reintroduce exactly the bug the
+ * null was added to prevent, except now pointing at an unmounted tree that 404s
+ * for everyone.
+ */
+export function resolveFileUrl(file: FileUrlSource): string | null {
   if (file.url) return file.url;
+  // Explicitly private, or a key in a tree the public mount does not serve.
+  if (file.access === 'authorized' || isPrivateKey(file.key)) return null;
   const base = FILE_PUBLIC_BASE.replace(/\/$/, '');
   const key = file.key.replace(/^\//, '');
   return `${base}/${key}`;
 }
 
 /**
- * Normalize a file-reference field into a displayable URL, or `null` when unset.
+ * Normalize a file-reference field into a displayable URL, or `null` when there is
+ * nothing renderable — the slot is unset, or the file is authorized-access.
  *
- * Read endpoints now return a populated file object `{ id, key, url, … }` for every
- * single-file slot (avatars, logos, banners, covers — the same shape product images
- * use). This accepts that object, a bare URL string (legacy / not-yet-migrated
- * fields), or `null`/`undefined`, and always yields a URL string or `null`.
+ * Accepts the populated `FileRef` object every read endpoint returns for a single
+ * file slot (avatars, logos, banners, covers, product media), a bare URL string
+ * (legacy / not-yet-migrated fields), or `null`/`undefined`.
+ *
+ * A `null` return is a normal, renderable state — show a placeholder or the file's
+ * metadata, not an error.
  */
 export function fileRefUrl(
-  ref: string | Pick<ApiFile, 'url' | 'key'> | null | undefined,
+  ref: string | FileUrlSource | null | undefined,
 ): string | null {
   if (!ref) return null;
   if (typeof ref === 'string') return ref;
   return resolveFileUrl(ref);
+}
+
+/**
+ * Which access class a storage key falls into.
+ *
+ * Needed because `GET /api/files` returns the raw file record, which carries no
+ * `access` field at all — so a `FileRef` built from a library pick has to derive
+ * one. Mirrors the backend classifier, including its fail-closed default.
+ */
+export function fileAccessForKey(key: string): FileAccess {
+  return isPrivateKey(key) ? 'authorized' : 'public';
+}
+
+/**
+ * Build the `FileRef` an entity write expects from a file picked out of the media
+ * library.
+ *
+ * The two shapes differ in more than naming: a library record has no `url` and no
+ * `access`, both of which a `FileRef` must carry. Deriving them in one place keeps
+ * every picker consistent — and keeps the `access` derivation honest, since the
+ * obvious hand-written version is to hardcode `'public'`.
+ */
+export function fileRefFromApiFile(file: ApiFile): FileRef {
+  return {
+    id: file.id,
+    key: file.key,
+    url: resolveFileUrl(file),
+    access: fileAccessForKey(file.key),
+    mimeType: file.mimeType,
+    size: file.size,
+    originalName: file.originalName,
+  };
 }
 
 /** Coarse UI category from a MIME type. */

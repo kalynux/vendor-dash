@@ -223,6 +223,7 @@ export const media = {
         deleteFailed: "We couldn't delete that file. Please try again.",
         stillReferenced: 'This file is still used somewhere. Detach it before deleting.',
         detachFirst: 'Detach this file from everything using it before deleting it.',
+        notDownloadable: "This file is stored privately and can't be downloaded here.",
     },
 } as const;
 

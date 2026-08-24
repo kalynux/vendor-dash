@@ -49,17 +49,17 @@ async function hardLogout(): Promise<void> {
 // ─── Terminal vs. recoverable auth failures ───────────────────────────────────
 
 /**
- * 401s and 403s that no refresh can fix. Branch on `error.code`, never on the
- * status — the status is the same for the one case that IS recoverable.
+ * 401s that no refresh can fix. Branch on `error.code`, never on the status —
+ * the status is the same for the one case that IS recoverable.
  *
  * `AUTH_TOKEN_EXPIRED` is deliberately absent: it is the only non-terminal one,
  * and it means *refresh now*. Anything not listed here also falls through to the
  * refresh attempt, which is the conservative direction — an unrecognised code
  * costs one doomed round trip rather than signing someone out by surprise.
  *
- * See backend api-doc/auth/FRONTEND-CHANGELOG-mobile-auth.md §3.
+ * See api-doc/auth/README.md §3 ("Terminal — sign the user out").
  */
-const TERMINAL_AUTH_CODES: ReadonlySet<string> = new Set([
+const TERMINAL_401_CODES: ReadonlySet<string> = new Set([
     // No token and no refresh credential — refreshing cannot help.
     'AUTH_MISSING_TOKEN',
     // The refresh token itself was rejected. In development this most often
@@ -74,26 +74,64 @@ const TERMINAL_AUTH_CODES: ReadonlySet<string> = new Set([
     // surfacing verbatim: to someone who did not change their own password, it
     // is the first sign that somebody else did.
     'AUTH_PASSWORD_CHANGED',
+    // The 90-day absolute session cap. Enforced at BOTH the refresh rotation and
+    // the auth middleware, precisely so `auth-me` and `add-role` cannot be used
+    // to walk past it — so a refresh-and-retry is guaranteed to fail twice.
+    // `auth_time` is copied, not re-stamped, by every non-credential path; only a
+    // real sign-in, a registration, a magic-link redemption or a password change
+    // resets the clock. See api-doc/auth/README.md §2.
+    'AUTH_SESSION_CAP_REACHED',
     'AUTH_USER_NOT_FOUND',
-    // 403, not 401 — but equally unrecoverable from here.
-    'AUTH_ACCOUNT_SUSPENDED',
+    // 404 on `add-role`, 401 everywhere else.
+    'AUTH_ACCOUNT_NOT_FOUND',
+    // The token names a role with no profile behind it.
+    'AUTH_ROLE_PROFILE_NOT_FOUND',
 ]);
 
 /**
- * A response that ends the session outright.
+ * 403s that are equally unrecoverable, and which therefore must also end the
+ * session rather than surface as an ordinary request failure.
  *
- * Returns the error to throw, or `null` when the ordinary refresh-and-retry is
- * worth attempting.
+ * ⚠ These need their own set because the terminal check runs per-status.
+ * `AUTH_ACCOUNT_SUSPENDED` sat in the 401 list for a long time and was dead
+ * code the whole time: it is a 403, and only 401s were ever tested against the
+ * list.
+ *
+ * `AUTH_ROLE_NOT_FOUND` is deliberately NOT here. It means "wrong active role
+ * for this endpoint", which a single mis-aimed request can produce without the
+ * session being over — signing out on it would be a surprise logout.
  */
-async function terminalAuthError(res: Response): Promise<ApiError | null> {
+const TERMINAL_403_CODES: ReadonlySet<string> = new Set([
+    // Irreversible.
+    'AUTH_ACCOUNT_CLOSED',
+    'AUTH_ACCOUNT_SUSPENDED',
+    // The vendor *role* is suspended. The same account's other roles still work,
+    // but this dashboard only ever acts as a vendor, so there is nothing here to
+    // switch to — the session is over as far as this app is concerned.
+    'AUTH_VENDOR_SUSPENDED',
+]);
+
+/**
+ * Classify an auth failure.
+ *
+ * ⚠ Returns the parsed `ApiError` whether or not it was terminal, because a
+ * `Response` body can only be read once. The 403 caller re-throws this same
+ * object rather than calling `buildApiError` again — a second read yields an
+ * empty body, which would silently downgrade a real error code to the bare
+ * status and lose the message with it.
+ */
+async function classifyAuthError(
+    res: Response,
+): Promise<{ err: ApiError; terminal: boolean }> {
     const err = await buildApiError(res);
-    if (!TERMINAL_AUTH_CODES.has(err.code)) return null;
+    const set = res.status === 403 ? TERMINAL_403_CODES : TERMINAL_401_CODES;
+    if (!set.has(err.code)) return { err, terminal: false };
     // Anything parked behind an in-flight refresh is dead too — the same rule
     // refuses every credential this session holds.
     isRefreshing = false;
     flushQueue(err);
     await hardLogout();
-    return err;
+    return { err, terminal: true };
 }
 
 /**
@@ -157,9 +195,16 @@ async function request<T>(
     });
 
     if (res.status === 401 && !isRetry) {
-        const terminal = await terminalAuthError(res);
-        if (terminal) throw terminal;
+        const { err, terminal } = await classifyAuthError(res);
+        if (terminal) throw err;
         return refreshThenRetry(() => request<T>(path, init, true));
+    }
+
+    // A 403 never warrants a refresh — the credential was read fine, the account
+    // or role is simply not allowed. Only the handful of codes that mean "this
+    // session is over" end it; every other 403 is thrown as an ordinary error.
+    if (res.status === 403) {
+        throw (await classifyAuthError(res)).err;
     }
 
     if (!res.ok) {
@@ -193,9 +238,13 @@ async function requestFormData<T>(
     });
 
     if (res.status === 401 && !isRetry) {
-        const terminal = await terminalAuthError(res);
-        if (terminal) throw terminal;
+        const { err, terminal } = await classifyAuthError(res);
+        if (terminal) throw err;
         return refreshThenRetry(() => requestFormData<T>(path, method, body, true));
+    }
+
+    if (res.status === 403) {
+        throw (await classifyAuthError(res)).err;
     }
 
     if (!res.ok) {

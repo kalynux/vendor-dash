@@ -24,7 +24,7 @@ import { emailErrorKey, normalizeEmail } from '@/lib/email';
 import { PhoneInput } from '@/components/phone';
 import { useStoreStore } from '@/store';
 import { updateStore, updateStoreStatus } from '@/services/store.service';
-import { resolveFileUrl } from '@/services/files.service';
+import { fileRefFromApiFile } from '@/services/files.service';
 import { MediaPicker } from '@/components/features/MediaPicker';
 import { mapProfileError } from '@/components/vendor-settings/errors';
 import { UnsavedChangesBar } from '@/components/vendor-settings/UnsavedChangesBar';
@@ -268,15 +268,7 @@ export function StorefrontSettings() {
     (files: ApiFile[]) => {
       const file = files[0];
       if (file && picker) {
-        const ref: FileRef = {
-          id: file.id,
-          key: file.key,
-          url: resolveFileUrl(file),
-          mimeType: file.mimeType,
-          size: file.size,
-          originalName: file.originalName,
-        };
-        set(picker, ref);
+        set(picker, fileRefFromApiFile(file));
       }
       setPicker(null);
     },
@@ -325,7 +317,7 @@ export function StorefrontSettings() {
       <div className="overflow-hidden max-md:-mx-6 md:rounded-xl md:border md:bg-card md:shadow-sm">
         {/* Banner — live preview of the picked image */}
         <div className="relative aspect-[3/1] min-h-[130px] max-h-[260px] w-full bg-muted">
-          {form.banner ? (
+          {form.banner?.url ? (
             <>
               <img
                 src={form.banner.url}
@@ -375,7 +367,7 @@ export function StorefrontSettings() {
         <div className="md:px-6 md:pb-5">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
             <div className="relative -mt-10 shrink-0 sm:-mt-12">
-              {form.logo ? (
+              {form.logo?.url ? (
                 <>
                   <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-xl border-4 border-card bg-muted shadow-md sm:h-24 sm:w-24">
                     <img

@@ -13,7 +13,10 @@ import type { ApiFileDetail } from '@/types/product.types';
 // product files and freshly picked library files reduce to this shape.
 interface GalleryFile {
   id: string;
-  url: string;
+  // `null` for an authorized-access file — there is no URL to render. Product
+  // imagery is public in practice, but the backend's tree classifier fails
+  // closed, so this stays nullable rather than asserting a string.
+  url: string | null;
   name: string;
   size: number;
   mime: string;
@@ -36,7 +39,7 @@ function formatMime(mime: string): string {
 }
 
 function fromDetail(f: ApiFileDetail): GalleryFile {
-  return { id: f.id, url: f.url, name: f.originalName ?? f.key, size: f.size, mime: f.mimeType };
+  return { id: f.id, url: resolveFileUrl(f), name: f.originalName ?? f.key, size: f.size, mime: f.mimeType };
 }
 
 function fromApiFile(f: ApiFile): GalleryFile {
@@ -185,12 +188,18 @@ export function ProductMediaUpload({
                   isDragTarget ? 'scale-[1.03] border-primary ring-2 ring-primary/40' : 'border-border',
                 )}
               >
-                <img
-                  src={item.url}
-                  alt={item.name}
-                  className="pointer-events-none h-full w-full object-cover"
-                  draggable={false}
-                />
+                {item.url ? (
+                  <img
+                    src={item.url}
+                    alt={item.name}
+                    className="pointer-events-none h-full w-full object-cover"
+                    draggable={false}
+                  />
+                ) : (
+                  <div className="pointer-events-none flex h-full w-full items-center justify-center bg-muted px-2 text-center text-[10px] leading-tight text-muted-foreground">
+                    {formatMime(item.mime)}
+                  </div>
+                )}
 
                 <div className="pointer-events-none absolute inset-0 bg-black/0 transition-colors group-hover:bg-black/35" />
 

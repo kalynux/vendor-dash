@@ -9,7 +9,7 @@ import { normalizeStoredPhone, phoneErrorKey, toE164 } from '@/lib/phone';
 import { TIMEZONES } from '@/components/vendor-settings/forms/basicSetup.helpers';
 import { UnsavedChangesBar } from '@/components/vendor-settings/UnsavedChangesBar';
 import { MediaPicker } from '@/components/features/MediaPicker';
-import { resolveFileUrl } from '@/services/files.service';
+import { fileRefFromApiFile } from '@/services/files.service';
 import {
   useTranslation,
   useApiError,
@@ -148,14 +148,7 @@ export function ProfileSettings() {
   const handleAvatarSelect = (files: ApiFile[]) => {
     const file = files[0];
     if (file) {
-      setPendingAvatar({
-        id: file.id,
-        key: file.key,
-        url: resolveFileUrl(file),
-        mimeType: file.mimeType,
-        size: file.size,
-        originalName: file.originalName,
-      });
+      setPendingAvatar(fileRefFromApiFile(file));
     }
     setAvatarPickerOpen(false);
   };

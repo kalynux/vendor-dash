@@ -160,10 +160,13 @@ function describeAccepted(types: FileKind[], t: Translate): string {
 function FileThumb({ file }: { file: ApiFile }) {
   const kind = kindFromMime(file.mimeType);
   const Icon = typeIcons[kind];
-  if (kind === 'image') {
+  // `null` for an authorized-access file — there is no URL to preview, so these
+  // fall through to the type icon below.
+  const url = resolveFileUrl(file);
+  if (kind === 'image' && url) {
     return (
       <img
-        src={resolveFileUrl(file)}
+        src={url}
         alt={file.originalName ?? 'File'}
         loading="lazy"
         className="h-full w-full object-cover"
@@ -171,11 +174,11 @@ function FileThumb({ file }: { file: ApiFile }) {
       />
     );
   }
-  if (kind === 'video') {
+  if (kind === 'video' && url) {
     return (
       <div className="relative h-full w-full bg-black">
         <video
-          src={resolveFileUrl(file)}
+          src={url}
           muted
           preload="metadata"
           playsInline

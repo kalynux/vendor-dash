@@ -215,6 +215,7 @@ export const media = {
         deleteFailed: "Nous n'avons pas pu supprimer ce fichier. Réessayez.",
         stillReferenced: 'Ce fichier est encore utilisé. Détachez-le avant de le supprimer.',
         detachFirst: 'Détachez ce fichier de tout ce qui l’utilise avant de le supprimer.',
+        notDownloadable: 'Ce fichier est stocké de façon privée et ne peut pas être téléchargé ici.',
     },
 };
 

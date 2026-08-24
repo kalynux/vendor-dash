@@ -37,25 +37,57 @@ export type MediaCategory =
   | 'archive'
   | 'other';
 
-// Canonical "resolved file reference" — the shape every read endpoint now returns
-// for a single file slot (product media, avatar, logo, banner, cover). Mirrors the
-// product-image object `{ id, key, url, mimeType, size, originalName }`. A slot that
-// is unset reads back as `null`. Normalize to a displayable URL with `fileRefUrl`.
+// Whether a referenced file is served from a public storage tree or requires a
+// credential. Always present on a `FileRef`.
+//
+// ⚠ The backend classifier FAILS CLOSED: a storage tree it does not recognise is
+// reported as `authorized`. So a tree added later reads as private until somebody
+// says otherwise, and this stays a two-value branch even for product imagery.
+export type FileAccess = 'public' | 'authorized';
+
+// Canonical "resolved file reference" — the shape every read endpoint returns for
+// a single file slot (product media, avatar, logo, banner, cover). A slot that is
+// unset reads back as `null`. Normalize to a displayable URL with `fileRefUrl`.
+//
+// 🔴 `url` is `string | null`, not `string` (api-doc/files/private-files.md).
+// It is `null` exactly when `access === 'authorized'`, and it is null rather than
+// a private path ON PURPOSE: an authorized path is indistinguishable from a public
+// URL, so a client that kept `<img src={url}>` would render nothing for anyone not
+// signed in — a bug that presents as "the photo is sometimes missing". Do NOT
+// reconstruct a URL from `key` to work around it; the static mount serves the
+// public trees only and a rebuilt private path 404s.
+//
+// In practice a vendor is barely affected: of the three private trees, `shipments/`
+// never reaches a vendor route, `ticket-attachments/` is legacy and unwritten, and
+// `digital/` assets are not a `FileRef` at all (see `AssetDetail`).
 export interface FileRef {
   id: string;
   key: string;
-  url: string;
+  url: string | null;
+  access: FileAccess;
   mimeType: string;
   size: number;
+  // Omitted from the JSON entirely when the backend has none — not sent as null.
   originalName?: string;
 }
 
-// List-item shape returned by GET /files. `url` is populated by the backend when
-// available; when absent we construct a public URL from `key` (see resolveFileUrl).
+// The least a value needs to carry for `fileRefUrl`/`resolveFileUrl` to answer.
+// Deliberately wider than either concrete shape: `FileRef` always sends `url` and
+// `access`, while the raw records from `GET /api/files` send neither.
+export interface FileUrlSource {
+  key: string;
+  url?: string | null;
+  access?: FileAccess;
+}
+
+// List-item shape returned by GET /files. This route returns the RAW file record,
+// which carries neither `url` nor `access` (api-doc/files/private-files.md) — the
+// display URL has to be constructed from `key`. `url` stays optional because older
+// payloads did populate it and constructing is only the fallback.
 export interface ApiFile {
   id: string;
   key: string;
-  url?: string;
+  url?: string | null;
   provider: StorageProvider;
   mimeType: string;
   size: number;

@@ -13,15 +13,14 @@ export interface ApiUser {
 
 // ─── Vendor Role Entity ───────────────────────────────────────────────────────
 
-/** Populated file reference returned for a branding image slot. */
-export interface BrandingFileRef {
-  id: string;
-  key: string;
-  url: string;
-  mimeType: string;
-  size: number;
-  originalName?: string;
-}
+/**
+ * Populated file reference returned for a branding image slot.
+ *
+ * This was a second, hand-maintained copy of `FileRef` for the same wire object.
+ * The two drifted the moment `url` became nullable and `access` was added, so it
+ * is now an alias — one shape, one place to change.
+ */
+export type BrandingFileRef = FileRef;
 
 /**
  * @deprecated The business logo/cover moved to the **Store** — read them from

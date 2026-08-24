@@ -265,6 +265,19 @@ function FileArtwork({
   const [broken, setBroken] = useState(false);
   const url = resolveFileUrl(file);
 
+  // No URL means the file lives in an authorized-access tree and there is nothing
+  // to point a tag at. Fall through to the icon tile — the same place a load
+  // failure lands — rather than emitting `src={null}`.
+  if (!url) {
+    return (
+      <div className={cn('flex h-full w-full items-center justify-center', className)}>
+        <div className={cn('rounded-xl p-4', kindTint[kind])}>
+          <Icon className="h-8 w-8" />
+        </div>
+      </div>
+    );
+  }
+
   if (kind === 'image' && !broken) {
     return (
       <img
@@ -330,8 +343,21 @@ function FilePreview({ file }: { file: ApiFile }) {
     return <FileArtwork file={file} controls />;
   }
 
+  const Icon = kindIcon[kind];
+
+  // Authorized-access file: there is no URL to play or open. Show the tile alone.
+  // `FileArtwork` handles this case for images and videos.
+  if (!url) {
+    return (
+      <div className="flex h-full w-full flex-col items-center justify-center gap-3 p-6 text-center">
+        <div className={cn('rounded-xl p-4', kindTint[kind])}>
+          <Icon className="h-8 w-8" />
+        </div>
+      </div>
+    );
+  }
+
   if (kind === 'audio') {
-    const Icon = kindIcon.audio;
     return (
       <div className="flex h-full w-full flex-col items-center justify-center gap-4 p-6">
         <div className={cn('rounded-xl p-4', kindTint.audio)}>
@@ -342,7 +368,6 @@ function FilePreview({ file }: { file: ApiFile }) {
     );
   }
 
-  const Icon = kindIcon[kind];
   return (
     <a
       href={url}
@@ -672,10 +697,17 @@ export function MediaGallery() {
    */
   const handleDownload = useCallback(
     async (file: ApiFile) => {
+      const url = resolveFileUrl(file);
+      // Authorized-access trees have no reader a vendor can reach, so there is no
+      // URL to hand the downloader. Say so instead of failing mid-transfer.
+      if (!url) {
+        toast.error(t('media.errors.notDownloadable'));
+        return;
+      }
       setDownloadingId(file.id);
       try {
         const outcome = await downloadFile({
-          url: resolveFileUrl(file),
+          url,
           fileName: file.originalName ?? file.key.split('/').pop() ?? 'download',
         });
         // A dismissed share sheet is a decision, not a failure — say nothing.
