@@ -30,6 +30,38 @@ function normalizeAvatar<T extends { avatar: string | null }>(c: T): T {
   return { ...c, avatar: fileRefUrl(c.avatar) } as T;
 }
 
+/**
+ * The literal `realName` an anonymised account carries.
+ *
+ * A customer who closes their account is **anonymised and retained**, not
+ * deleted: the row keeps its `_id` so past orders and money records stay
+ * coherent, and every identifier is erased. Their orders, totals and flags are
+ * preserved and still appear in a vendor's customer list.
+ */
+const CLOSED_ACCOUNT_NAME = 'Closed account';
+
+/**
+ * Whether this customer closed their account.
+ *
+ * 🔴 **The literal string is genuinely the only signal available.** Closure sets
+ * the underlying user's `status` to `inactive`, but that field is selected by
+ * neither the list nor the detail query and appears on neither DTO — there is no
+ * flag to branch on. See api-doc/me/account-closure.md.
+ *
+ * ⚠ Do NOT collapse this with `realName === 'Unknown'`, which means the relation
+ * exists but the customer profile is missing. That is a data-integrity gap, not a
+ * closure, and the two want different handling.
+ *
+ * ⚠ `"Closed account"` is searchable — `?search=closed` matches it through the
+ * name filter, so a vendor searching for "Closed" gets every closed customer.
+ * Harmless, but surprising enough to be worth knowing.
+ */
+export function isClosedAccount(
+  customer: Pick<CustomerListItem, 'realName'>,
+): boolean {
+  return customer.realName === CLOSED_ACCOUNT_NAME;
+}
+
 // Reuses the tickets/products query-string convention: drop empty values.
 function buildQueryString(params: Record<string, unknown>): string {
   const entries = Object.entries(params).filter(

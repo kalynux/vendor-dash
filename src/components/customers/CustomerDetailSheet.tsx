@@ -24,7 +24,7 @@ import { OrderStatusBadge } from '@/components/orders/OrderStatusBadge';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useTranslation, useFormatters, useApiError, type TranslationKey } from '@/i18n';
 import {
-  fetchCustomerById, updateCustomerName, updateCustomerFlags,
+  fetchCustomerById, isClosedAccount, updateCustomerName, updateCustomerFlags,
 } from '@/services/customers.service';
 import { fetchOrders } from '@/services/orders.service';
 import { ApiError } from '@/types/api';
@@ -60,6 +60,16 @@ export function CustomerDetailSheet({
   const [customer, setCustomer] = useState<CustomerDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  /**
+   * Whether this row is an anonymised, closed account.
+   *
+   * Closure keeps the customer and their order history but erases every
+   * identifier, so such a row still appears in the list with its totals and
+   * flags intact and nothing to contact. There is no flag on the DTO to branch
+   * on — the literal name is the only signal. See api-doc/me/account-closure.md.
+   */
+  const closedAccount = customer ? isClosedAccount(customer) : false;
 
   // Name override editing
   const [editingName, setEditingName] = useState(false);
@@ -242,17 +252,31 @@ export function CustomerDetailSheet({
                   ) : (
                     <>
                       <div className="flex items-center gap-2">
-                        <h2 className="truncate text-xl font-bold">{customer.displayName}</h2>
-                        <button
-                          type="button"
-                          onClick={() => { setEditingName(true); setDraftName(customer.hasNameOverride ? customer.displayName : ''); }}
-                          aria-label={t('customers.detail.editName')}
-                          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-70 transition hover:bg-accent hover:opacity-100"
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </button>
+                        <h2 className="truncate text-xl font-bold">
+                          {closedAccount ? t('customers.detail.closedName') : customer.displayName}
+                        </h2>
+                        {/* A closed account can technically still take a name
+                            override — the endpoint accepts it — but naming an
+                            anonymised row is misleading, so the control is not
+                            offered. There is no email, phone or address left on
+                            it either. */}
+                        {!closedAccount && (
+                          <button
+                            type="button"
+                            onClick={() => { setEditingName(true); setDraftName(customer.hasNameOverride ? customer.displayName : ''); }}
+                            aria-label={t('customers.detail.editName')}
+                            className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-70 transition hover:bg-accent hover:opacity-100"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </button>
+                        )}
                       </div>
-                      {customer.hasNameOverride && (
+                      {closedAccount && (
+                        <p className="text-xs text-muted-foreground">
+                          {t('customers.detail.closedNote')}
+                        </p>
+                      )}
+                      {!closedAccount && customer.hasNameOverride && (
                         <p className="text-xs text-muted-foreground">
                           {t('customers.detail.overrideNote', { name: customer.realName })}
                         </p>

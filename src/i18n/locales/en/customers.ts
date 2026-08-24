@@ -52,6 +52,10 @@ export const customers = {
         editName: 'Edit display name',
         resetToRealName: 'Reset to “{{name}}”',
         overrideNote: 'Override of {{name}} · only you see this name',
+        // A closed account is anonymised and kept, not deleted — its orders and
+        // totals stay, but there is nothing left to contact.
+        closedName: 'Closed account',
+        closedNote: 'This customer closed their account. Their order history is kept, but their contact details were removed.',
         totalOrders: 'Total orders',
         totalSpent: 'Total spent',
         flags: 'Flags',

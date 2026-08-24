@@ -51,6 +51,8 @@ export const customers = {
         editName: 'Modifier le nom affiché',
         resetToRealName: 'Rétablir « {{name}} »',
         overrideNote: 'Remplace {{name}} · vous seul voyez ce nom',
+        closedName: 'Compte fermé',
+        closedNote: 'Ce client a fermé son compte. Son historique de commandes est conservé, mais ses coordonnées ont été supprimées.',
         totalOrders: 'Total des commandes',
         totalSpent: 'Total dépensé',
         flags: 'Étiquettes',
