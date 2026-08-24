@@ -202,6 +202,49 @@ export const products = {
             'Your {{channel}} isn’t linked yet. Send {{command}} to our bot, then enter the code it replies with in Settings → Notifications.',
     },
 
+    /**
+     * Product-level shipping configuration — the parcel, not the courier.
+     *
+     * Weight is labelled in GRAMS because the backend stores grams. Its own docs
+     * say kilograms in two places, and a vendor typing 2 for a 2 kg parcel would
+     * be describing a 2 g one.
+     */
+    shipping: {
+        title: 'Parcel & handling',
+        description:
+            'The size and weight of this product once it’s packed, and how long you need to get it ready.',
+        // The question this screen creates, answered before it is asked.
+        notActivationHint:
+            'This doesn’t affect whether you can publish. It tells a storage agency how big the parcel is.',
+        weight: 'Weight (g)',
+        length: 'Length (cm)',
+        width: 'Width (cm)',
+        height: 'Height (cm)',
+        handlingDays: 'Handling time (days)',
+        originZip: 'Ships from (postcode)',
+        enabled: 'Available for shipping',
+        enabledHint: 'Turn off to mark this product as not shippable.',
+        summaryNone: 'Not set yet',
+        summarySet: '{{weight}} g · {{length}} × {{width}} × {{height}} cm',
+        summaryAction: 'Set up',
+        clear: 'Clear',
+        saved: 'Parcel details saved.',
+        cleared: 'Parcel details cleared.',
+        saveFailed: 'We couldn’t save those parcel details. Please try again.',
+        clearFailed: 'We couldn’t clear those parcel details. Please try again.',
+        loadFailed: 'We couldn’t load the parcel details. Please try again.',
+        vectorisationPending:
+            'This product is being indexed for AI search. Try again in a moment.',
+        validation: {
+            required: 'Required.',
+            // The backend accepts 0 — its validator says >= 0, only the message
+            // it prints says "positive". Do not tighten this to > 0.
+            nonNegative: 'Enter 0 or more.',
+            zip: 'Enter a postcode (up to 20 characters).',
+            handlingDays: 'Enter a whole number of days, 0 or more.',
+        },
+    },
+
     /** The customer preview — the real storefront page, embedded. */
     preview: {
         action: 'Preview',

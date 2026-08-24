@@ -188,6 +188,39 @@ export const products = {
             'Votre {{channel}} n’est pas encore lié. Envoyez {{command}} à notre bot, puis saisissez le code reçu dans Paramètres → Notifications.',
     },
 
+    shipping: {
+        title: 'Colis et préparation',
+        description:
+            'La taille et le poids de ce produit une fois emballé, et le temps qu’il vous faut pour le préparer.',
+        notActivationHint:
+            'Cela n’a aucune incidence sur la publication. C’est ce qui indique à une agence de stockage la taille du colis.',
+        weight: 'Poids (g)',
+        length: 'Longueur (cm)',
+        width: 'Largeur (cm)',
+        height: 'Hauteur (cm)',
+        handlingDays: 'Délai de préparation (jours)',
+        originZip: 'Expédié depuis (code postal)',
+        enabled: 'Disponible à l’expédition',
+        enabledHint: 'Désactivez pour indiquer que ce produit ne peut pas être expédié.',
+        summaryNone: 'Pas encore renseigné',
+        summarySet: '{{weight}} g · {{length}} × {{width}} × {{height}} cm',
+        summaryAction: 'Configurer',
+        clear: 'Effacer',
+        saved: 'Détails du colis enregistrés.',
+        cleared: 'Détails du colis effacés.',
+        saveFailed: 'Nous n’avons pas pu enregistrer ces détails. Veuillez réessayer.',
+        clearFailed: 'Nous n’avons pas pu effacer ces détails. Veuillez réessayer.',
+        loadFailed: 'Nous n’avons pas pu charger les détails du colis. Veuillez réessayer.',
+        vectorisationPending:
+            'Ce produit est en cours d’indexation pour la recherche IA. Réessayez dans un instant.',
+        validation: {
+            required: 'Champ requis.',
+            nonNegative: 'Saisissez 0 ou plus.',
+            zip: 'Saisissez un code postal (20 caractères maximum).',
+            handlingDays: 'Saisissez un nombre entier de jours, 0 ou plus.',
+        },
+    },
+
     preview: {
         action: 'Aperçu',
         subtitle: 'Ce que voit un client',

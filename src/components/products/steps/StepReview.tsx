@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { AlertCircle, CheckCircle2, ChevronLeft, Globe, Handshake, Package, FileDigit, Sparkles } from 'lucide-react';
+import { AlertCircle, CheckCircle2, ChevronLeft, Globe, Handshake, Package, FileDigit, Ruler, Sparkles } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -13,9 +13,12 @@ import {
   type BargainCeilingEdit,
 } from '@/components/products/bargain';
 import { BargainCeilingsSheet } from '@/components/products/BargainCeilingsSheet';
+import { ShippingConfigSheet } from '@/components/products/ShippingConfigSheet';
 import { AgencySelector } from '@/components/products/review/AgencySelector';
+import { fetchShippingConfig } from '@/services/shipping.service';
 import { useMessage, useTranslation, type TranslationKey } from '@/i18n';
 import type { WizardState, VendorAgencyListItemDto, ApiPickupLocation } from '@/types/product.types';
+import type { ShippingConfig } from '@/types/shipping.types';
 import { getProductFileCount } from '@/types/product.types';
 
 interface StepReviewProps {
@@ -62,6 +65,38 @@ export function StepReview({
   useEffect(() => {
     setVectorisationEnabled(product?.vectorisationEnabled ?? false);
   }, [product?.vectorisationEnabled, product?.id]);
+
+  // ── Shipping configuration ────────────────────────────────────────────────
+  // Product-level parcel weight, dimensions, origin postcode and handling time.
+  // Physical products only; a non-physical one is a 400 on that endpoint.
+  //
+  // Deliberately NOT part of the activation checklist below: this record does not
+  // gate publishing. What an agency warehousing the product reads it for is the
+  // parcel's dimensions when the variant carries none of its own.
+  const productId = product?.id;
+  const [shipping, setShipping] = useState<ShippingConfig | null>(null);
+  const [shippingOpen, setShippingOpen] = useState(false);
+
+  useEffect(() => {
+    if (!isPhysical || !productId) {
+      setShipping(null);
+      return;
+    }
+    let cancelled = false;
+    // A failure leaves the summary reading "not set", which is the same thing the
+    // vendor sees when it genuinely is not — the row opens the sheet either way,
+    // and the sheet surfaces its own load error.
+    fetchShippingConfig(productId)
+      .then((config) => {
+        if (!cancelled) setShipping(config);
+      })
+      .catch(() => {
+        if (!cancelled) setShipping(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isPhysical, productId]);
 
   // ── Bargainable pricing ───────────────────────────────────────────────────
   // Active variants only: an archived variant is never sent to the AI index, so
@@ -386,6 +421,57 @@ export function StepReview({
             {ceilingsSetCount > 0 ? t('common.actions.edit') : t('products.bargain.summaryAction')}
           </span>
         </button>
+      )}
+
+      {/*
+        Shipping configuration — same collapsed-summary-plus-sheet shape as the
+        bargain row above, and for the same reason: seven fields unfolded inline
+        would push Publish off a phone screen.
+
+        Unlike that one, this sheet saves for itself. There is no ordering
+        constraint to respect (the bargain rows have to be written before the
+        vectorisation flip; this record is independent), so making the caller own
+        the inputs would buy nothing and would mean a vendor could leave the step
+        with a half-entered parcel.
+      */}
+      {isPhysical && productId && (
+        <button
+          type="button"
+          onClick={() => setShippingOpen(true)}
+          disabled={controlsDisabled}
+          className={cn(
+            'flex w-full items-center gap-3 rounded-xl border border-border p-4 text-left',
+            'transition-colors hover:bg-accent/40 disabled:pointer-events-none disabled:opacity-60',
+          )}
+        >
+          <Ruler className="size-5 shrink-0 text-muted-foreground" aria-hidden />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium">{t('products.shipping.title')}</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {shipping
+                ? t('products.shipping.summarySet', {
+                    weight: shipping.weight,
+                    length: shipping.length,
+                    width: shipping.width,
+                    height: shipping.height,
+                  })
+                : t('products.shipping.summaryNone')}
+            </p>
+          </div>
+          <span className="shrink-0 text-xs font-semibold text-primary">
+            {shipping ? t('common.actions.edit') : t('products.shipping.summaryAction')}
+          </span>
+        </button>
+      )}
+
+      {isPhysical && productId && (
+        <ShippingConfigSheet
+          open={shippingOpen}
+          onOpenChange={setShippingOpen}
+          productId={productId}
+          disabled={controlsDisabled}
+          onSaved={setShipping}
+        />
       )}
 
       <BargainCeilingsSheet
