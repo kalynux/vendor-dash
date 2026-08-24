@@ -175,6 +175,17 @@ export const products = {
             'L’écran de partage Telegram envoie du texte brut : le gras et l’italique ne sont pas conservés. Vos listes, sauts de ligne et émojis le sont.',
         noStoreUrl:
             'Le lien de votre boutique n’est pas encore prêt : le message partira sans celui-ci.',
+        nameWhatsapp: 'WhatsApp',
+        nameTelegram: 'Telegram',
+        sendToSelfTitle: 'Ou envoyez-le-vous à vous-même',
+        sendToSelfHint:
+            'Nous enverrons le produit sur votre propre compte — transférez-le ensuite à vos clients.',
+        sentToSelf: 'Envoyé sur votre {{channel}}. Ouvrez-le là-bas pour le transférer.',
+        sendToSelfFailed: 'Nous n’avons pas pu l’envoyer pour l’instant. Réessayez dans un moment.',
+        windowClosed:
+            'WhatsApp ne nous autorise pas à vous écrire pour le moment. Envoyez n’importe quel message à notre bot, puis réessayez.',
+        connectFirst:
+            'Votre {{channel}} n’est pas encore lié. Envoyez {{command}} à notre bot, puis saisissez le code reçu dans Paramètres → Notifications.',
     },
 
     preview: {

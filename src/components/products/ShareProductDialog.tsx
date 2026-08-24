@@ -1,12 +1,19 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { Check, Copy, Link2, Share2 } from 'lucide-react';
+import { Check, Copy, ExternalLink, Link2, Loader2, Send, Share2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ResponsiveModal } from '@/components/services/ResponsiveModal';
 import { ChatPreview, CHANNEL_BRAND, CHANNEL_ORDER } from '@/components/rich-text';
 import { fetchProductById, fetchVariants } from '@/services/products.service';
+import { listConnections } from '@/services/connections.service';
+import {
+  shareConnectionHint,
+  shareProductToChannel,
+} from '@/services/product-share.service';
+import { ApiError } from '@/types/api';
+import type { ConnectionInstructions } from '@/types/connections.types';
 import { useStoreStore } from '@/store';
 import { useApiError, useFormatters, useTranslation, type TranslationKey } from '@/i18n';
 import { cn } from '@/lib/utils';
@@ -48,6 +55,19 @@ const CHANNEL_LABEL: Record<ShareChannel, TranslationKey> = {
 };
 
 /**
+ * Bare channel names.
+ *
+ * `CHANNEL_LABEL` above is a full sentence because it is the accessible name for
+ * an icon-only button. The server-side send row uses ordinary labelled buttons,
+ * where "Share on WhatsApp" would both misdescribe the action and read oddly
+ * inside a sentence.
+ */
+const CHANNEL_NAME: Record<ShareChannel, TranslationKey> = {
+  whatsapp: 'products.share.nameWhatsapp',
+  telegram: 'products.share.nameTelegram',
+};
+
+/**
  * Share a product.
  *
  * The description editor's whole premise is that the message a customer
@@ -84,6 +104,22 @@ export function ShareProductDialog({ productId, onOpenChange }: ShareProductDial
   const [entry, setEntry] = useState<{ id: string; data?: Loaded; error?: string } | null>(null);
   const [channel, setChannel] = useState<ShareChannel>('whatsapp');
   const [linkCopied, setLinkCopied] = useState(false);
+
+  /**
+   * Which messaging channels the vendor has linked, for the server-side send.
+   *
+   * `null` while unknown — the row that needs it stays hidden rather than
+   * flashing two disabled buttons. A failed load leaves it `null` too, which
+   * hides the row entirely: the deep-link buttons above work regardless, so a
+   * connections outage costs the vendor nothing rather than showing them a
+   * broken affordance.
+   */
+  const [linked, setLinked] = useState<Set<ShareChannel> | null>(null);
+  const [sending, setSending] = useState<ShareChannel | null>(null);
+  /** The connection recipe from a refused send, rendered inline. */
+  const [connectHint, setConnectHint] = useState<
+    { channel: ShareChannel; how: ConnectionInstructions } | null
+  >(null);
 
   const current = entry && entry.id === productId ? entry : null;
   const data = current?.data ?? null;
@@ -142,9 +178,92 @@ export function ShareProductDialog({ productId, onOpenChange }: ShareProductDial
     };
   }, [productId, storeSlug, currency, apiError]);
 
+  // Connections are per-account, not per-product, so this rides the open rather
+  // than the product id.
+  useEffect(() => {
+    if (!productId) return;
+    let cancelled = false;
+    setConnectHint(null);
+
+    (async () => {
+      try {
+        const connections = await listConnections();
+        if (cancelled) return;
+        setLinked(
+          new Set(
+            connections
+              .filter((c) => c.connected)
+              .map((c) => c.channel as ShareChannel),
+          ),
+        );
+      } catch {
+        if (!cancelled) setLinked(null);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [productId]);
+
   const message = useMemo(
     () => (data ? buildProductShareMessage(data, channel) : ''),
     [data, channel],
+  );
+
+  /**
+   * Have the backend send the product to the vendor's own linked account.
+   *
+   * Distinct from `openChannel` above: that one opens WhatsApp or Telegram with
+   * a client-composed message for the vendor to address; this one asks the server
+   * to send the product to the vendor themselves, formatted from
+   * `descriptionRich`, for them to forward.
+   *
+   * Every failure gets its own copy. `PRODUCT_SHARE_SEND_FAILED` is a 502, whose
+   * `external_service` category means the boundary replaces the message and drops
+   * `details` in every environment — so there is nothing to surface but our own
+   * sentence and the `requestId`.
+   */
+  const sendToSelf = useCallback(
+    async (target: ShareChannel) => {
+      if (!productId) return;
+      setSending(target);
+      setConnectHint(null);
+      try {
+        await shareProductToChannel(productId, target);
+        toast.success(
+          t('products.share.sentToSelf', { channel: t(CHANNEL_NAME[target]) }),
+        );
+      } catch (err) {
+        if (err instanceof ApiError) {
+          const how = shareConnectionHint(err);
+          if (how) {
+            // The refusal carries the fix — show it here instead of sending the
+            // vendor to a settings page to look for it.
+            setConnectHint({ channel: target, how });
+            setLinked((prev) => {
+              if (!prev) return prev;
+              const next = new Set(prev);
+              next.delete(target);
+              return next;
+            });
+            return;
+          }
+          if (err.code === 'PRODUCT_SHARE_WINDOW_CLOSED') {
+            toast.error(t('products.share.windowClosed'));
+            return;
+          }
+          if (err.code === 'PRODUCT_SHARE_SEND_FAILED') {
+            toast.error(t('products.share.sendToSelfFailed'));
+            return;
+          }
+        }
+        apiError.toast(err, { fallbackKey: 'products.share.sendToSelfFailed' });
+      } finally {
+        setSending(null);
+      }
+    },
+    [productId, t, apiError],
   );
 
   const openChannel = (target: ShareChannel) => {
@@ -325,6 +444,70 @@ export function ShareProductDialog({ productId, onOpenChange }: ShareProductDial
               )}
             </div>
           </div>
+
+          {/* Server-side send, offered only for channels the vendor has actually
+              linked. Deliberately text buttons rather than a second row of brand
+              plates: the round marks above open the messaging app to compose,
+              this asks the backend to send the product to the vendor themselves,
+              and two identical-looking rows would be read as duplicates. */}
+          {linked && linked.size > 0 && (
+            <div className="space-y-2 border-t pt-4">
+              <p className="text-xs font-medium text-muted-foreground">
+                {t('products.share.sendToSelfTitle')}
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                {CHANNEL_ORDER.filter((target) => linked.has(target)).map((target) => (
+                  <Button
+                    key={target}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={sending !== null}
+                    onClick={() => void sendToSelf(target)}
+                  >
+                    {sending === target ? (
+                      <Loader2 className="mr-2 size-4 animate-spin" />
+                    ) : (
+                      <Send className="mr-2 size-4" />
+                    )}
+                    {t(CHANNEL_LABEL[target])}
+                  </Button>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {t('products.share.sendToSelfHint')}
+              </p>
+            </div>
+          )}
+
+          {connectHint && (
+            <Alert>
+              <AlertDescription className="space-y-2">
+                <p>
+                  {t('products.share.connectFirst', {
+                    channel: t(CHANNEL_NAME[connectHint.channel]),
+                    command: connectHint.how.command,
+                  })}
+                </p>
+                {connectHint.how.deepLink && (
+                  <Button asChild variant="outline" size="sm">
+                    <a
+                      href={connectHint.how.deepLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <ExternalLink className="mr-2 size-4" />
+                      {t(
+                        connectHint.channel === 'telegram'
+                          ? 'products.share.telegram'
+                          : 'products.share.whatsapp',
+                      )}
+                    </a>
+                  </Button>
+                )}
+              </AlertDescription>
+            </Alert>
+          )}
         </div>
       )}
     </ResponsiveModal>

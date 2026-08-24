@@ -179,6 +179,27 @@ export const products = {
         telegramPlainNote:
             'Telegram’s share screen sends plain text — bold and italic are not carried over. Your lists, line breaks and emojis are.',
         noStoreUrl: 'Your storefront link is not ready yet, so the message will go out without it.',
+        /**
+         * Bare channel names, for the labelled buttons in the send-to-self row.
+         * `whatsapp` / `telegram` above are full sentences because they name an
+         * icon-only button; these read correctly inside one.
+         */
+        nameWhatsapp: 'WhatsApp',
+        nameTelegram: 'Telegram',
+        // The server-side send: it goes to the vendor's OWN linked account, with
+        // no recipient field, for them to forward. Worded so nobody expects to
+        // pick a customer.
+        sendToSelfTitle: 'Or send it to yourself',
+        sendToSelfHint:
+            'We’ll send the product to your own account — forward it to customers from there.',
+        sentToSelf: 'Sent to your {{channel}}. Open it there to forward.',
+        sendToSelfFailed: 'We couldn’t send that just now. Try again in a moment.',
+        // WhatsApp closes the free-form window when a business hasn't heard from
+        // the user recently. Messaging the bot reopens it.
+        windowClosed:
+            'WhatsApp won’t let us message you right now. Send our bot any message, then try again.',
+        connectFirst:
+            'Your {{channel}} isn’t linked yet. Send {{command}} to our bot, then enter the code it replies with in Settings → Notifications.',
     },
 
     /** The customer preview — the real storefront page, embedded. */
