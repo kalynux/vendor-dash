@@ -67,6 +67,77 @@ export const account = {
         cannotRemove: "Can't remove: {{list}}. Reassign those products first.",
     },
 
+    /**
+     * Account → Security → the sign-in identifiers panel.
+     *
+     * 🔴 Deliberately worded as "sign-in details", never as "contact details":
+     * the Profile tab has its own editable Phone that writes the vendor *role*
+     * profile, and two panels both called "contact" would read as duplicates of
+     * one field when they are two records with two endpoints.
+     *
+     * ⚠ Nothing here may say the vendor will be signed out. Neither change
+     * stamps the password epoch, so every existing session survives — that is
+     * the *password* panel's warning, not this one's.
+     */
+    contact: {
+        title: 'Sign-in details',
+        info: 'The email address and phone number you sign in with. Changing either takes two steps, and the old one keeps working until the new one is confirmed.',
+        emailLabel: 'Email address',
+        phoneLabel: 'Phone number',
+        change: 'Change',
+        cancelChange: 'Cancel change',
+
+        newEmailLabel: 'New email address',
+        newEmailPlaceholder: 'you@example.com',
+        emailFlowHint:
+            "We'll email a confirmation link to the new address. Open it and confirm there — the change only takes effect once you do. The link is valid for one hour.",
+        sendLink: 'Send confirmation link',
+        emailChangeRequested: 'Confirmation link sent to the new address.',
+        emailChangeCancelled: 'Email change cancelled.',
+        /** Explicit, or a vendor who closes the tab tries the new address and fails. */
+        emailPendingNotice:
+            'Keep signing in with your current email until you confirm this from the link we sent.',
+
+        newPhoneLabel: 'New phone number',
+        /** 🔴 There is no SMS code — the WhatsApp connection IS the proof. */
+        whatsappRequired:
+            'Changing your phone number needs a linked WhatsApp account using the new number. A linked Telegram account does not count.',
+        whatsappNumberMismatch:
+            "Your linked WhatsApp number ends in {{hint}}, which doesn't match this one. Link WhatsApp with the new number first, or the confirmation will be refused.",
+        manageConnections: 'Manage connections',
+        phoneFlowHint:
+            "Next you'll confirm from this page — we check that your linked WhatsApp account uses this number. There is no code to type. You have 24 hours.",
+        phoneChangeRequested: 'Now confirm the change to finish.',
+        phoneChangeCancelled: 'Phone change cancelled.',
+        phoneChanged: 'Your phone number has been changed.',
+        confirmPhone: 'Confirm change',
+        phonePendingNotice:
+            'Keep signing in with your current number until this is confirmed.',
+
+        pendingTarget: 'Waiting to switch to {{target}}',
+        pendingExpires: 'Expires {{when}}.',
+        pendingExpired: 'This request has expired. Cancel it and start again.',
+
+        confirmPage: {
+            title: 'Confirm your new email address',
+            subtitle: 'Press the button below to finish the change.',
+            confirm: 'Confirm email change',
+            /** The link is a page, not the confirmation — see the page's docblock. */
+            missingToken:
+                "This link is missing its confirmation code. Open the link from the email again, or start the change over from Account › Security.",
+            doneTitle: 'Email address changed',
+            doneSubtitle: 'You now sign in with {{email}}.',
+            doneHint: 'Everywhere you are already signed in stays signed in.',
+            backToAccount: 'Go to account settings',
+        },
+
+        errors: {
+            loadFailed: "We couldn't load your sign-in details. Please try again.",
+            actionFailed: "We couldn't complete that. Please try again.",
+            confirmFailed: "We couldn't confirm this change. The link may have expired.",
+        },
+    },
+
     /** Account → Security. */
     security: {
         passwordTitle: 'Change Password',

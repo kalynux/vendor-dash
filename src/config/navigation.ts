@@ -91,6 +91,9 @@ export const PRIMARY_NAV: NavItem[] = [
       { id: 'inventory-reservations', labelKey: 'inventory.tabs.reservations', path: '/dashboard/inventory/reservations', icon: Lock },
       { id: 'inventory-history', labelKey: 'inventory.tabs.history', path: '/dashboard/inventory/history', icon: History },
       { id: 'inventory-requests', labelKey: 'inventory.tabs.requests', path: '/dashboard/inventory/requests', icon: PackageSearch },
+      // Warehousing rent an agency charges for holding stock — NOT the plan's
+      // media-storage quota, which lives on Account › Billing under the same word.
+      { id: 'inventory-invoices', labelKey: 'inventory.tabs.invoices', path: '/dashboard/inventory/invoices', icon: Receipt },
     ],
   },
   {

@@ -254,12 +254,31 @@ export const errors = {
         PAYMENT_MISSING_BOOKING_ID: 'Il manque la référence de réservation pour ce paiement.',
         PAYMENT_GATEWAY_NOT_IMPLEMENTED: "Ce moyen de paiement n'est pas encore disponible.",
         PAYMENT_CARD_DECLINED: 'La carte a été refusée. Essayez un autre moyen de paiement.',
+        PAYMENT_OPERATOR_UNDETERMINED:
+            "Nous n'avons pas pu déterminer l'opérateur mobile money de ce numéro. Choisissez-le manuellement.",
+        PAYMENT_CURRENCY_NOT_SUPPORTED: 'Ce moyen de paiement n’accepte pas cette devise.',
+        PAYMENT_WEBHOOK_AMOUNT_MISMATCH:
+            "Le montant confirmé par le prestataire de paiement ne correspond pas à celui débité. Le paiement n'a pas été accepté.",
+        PAYMENT_OTP_INVALID: 'Ce code est incorrect. Vérifiez-le et réessayez.',
+        PAYMENT_OTP_NOT_REQUIRED: 'Ce paiement n’attend aucun code.',
+        PAYMENT_OTP_ATTEMPTS_EXCEEDED:
+            'Trop de codes incorrects. Relancez le paiement pour en obtenir un nouveau.',
         PAYMENT_CART_NOT_FOUND: 'Ce panier est introuvable.',
         PAYMENT_CART_NO_PAYABLE_ORDERS: "Il n'y a rien à payer dans ce panier.",
         PAYMENT_CART_MIXED_CURRENCY: 'Tous les articles d’un même paiement doivent utiliser la même devise.',
         PAYMENT_REFERENCE_REQUIRED: 'Une référence de paiement est obligatoire.',
         PAYMENT_ORDER_IS_COD: 'Cette commande est en paiement à la livraison.',
         STRIPE_WEBHOOK_SIGNATURE_INVALID: "Nous n'avons pas pu vérifier cette notification de paiement.",
+        WEBHOOK_SECRET_INVALID:
+            "Nous n'avons pas pu vérifier cette notification. Contactez le support.",
+        NOTCHPAY_REQUEST_FAILED:
+            'Le prestataire de paiement a rejeté cette demande. Réessayez.',
+        NOTCHPAY_UNREACHABLE:
+            "Nous n'avons pas pu joindre le prestataire de paiement. Réessayez dans quelques minutes.",
+        MYCOOLPAY_REQUEST_FAILED:
+            'Le prestataire de paiement a rejeté cette demande. Réessayez.',
+        MYCOOLPAY_UNREACHABLE:
+            "Nous n'avons pas pu joindre le prestataire de paiement. Réessayez dans quelques minutes.",
         PAYMENT_METHOD_NOT_FOUND: 'Ce moyen de paiement est introuvable.',
         PAYMENT_METHOD_LIMIT_REACHED:
             'Vous avez atteint le nombre maximum de moyens de paiement enregistrés. Supprimez-en un pour en ajouter un autre.',
@@ -372,6 +391,8 @@ export const errors = {
         CANCELLATION_NOT_ALLOWED: "Votre politique d'annulation ne permet pas d'annuler cela.",
         ORDER_CART_EMPTY: 'Ce panier est vide.',
         ORDER_CART_INVALID: "Ce panier n'est plus valide. Reconstituez-le.",
+        ORDER_DELIVERY_ADDRESS_REQUIRED:
+            'Cette commande a besoin d’une adresse de livraison pour continuer.',
         ORDER_PRODUCT_NOT_FOUND: 'Un des produits de cette commande est introuvable.',
         ORDER_VENDOR_NOT_FOUND: 'Le vendeur de cette commande est introuvable.',
         ORDER_NO_DELIVERY_AGENCY:
@@ -414,6 +435,8 @@ export const errors = {
         CONFIG_NOTIFICATION_CATALOG_INCOMPLETE: 'Les paramètres de notification sont indisponibles. Contactez le support.',
         CONFIG_INVALID_STORAGE_PROVIDER: 'Le stockage de fichiers est mal configuré. Contactez le support.',
         CONFIG_INVALID_GEO_PROVIDER: "La recherche d'adresse est mal configurée. Contactez le support.",
+        CONFIG_INVALID_UPLOAD_SCANNER:
+            'L’analyse des fichiers est mal configurée. Contactez le support.',
         STORAGE_UPLOAD_FAILED: "L'envoi a échoué. Réessayez.",
         UPLOAD_POLICY_VIOLATION: "Certains fichiers n'ont pas pu être envoyés car ils ne respectent pas les règles d'envoi.",
         STORAGE_FILE_NOT_FOUND: 'Ce fichier est introuvable.',
@@ -631,6 +654,8 @@ export const errors = {
         AGENT_CAPACITY_OUT_OF_BOUNDS: 'Cette capacité est hors des bornes autorisées.',
         AGENT_CAPACITY_BELOW_IN_USE: 'Cette capacité est inférieure à ce qui est déjà utilisé.',
         AGENT_KYC_NOT_VERIFIED: "L'identité de ce livreur n'a pas encore été vérifiée.",
+        AGENT_TRUST_OVERRIDE_OUT_OF_BOUNDS:
+            'Un score de confiance doit être compris entre 0 et 100.',
         AGENT_PLATFORM_BANNED: 'Ce livreur est banni de la plateforme.',
         AGENT_PAYOUT_DETAILS_MISSING: "Ce livreur n'a aucune coordonnée de versement enregistrée.",
         AGENT_SERVICE_TOKEN_INVALID: 'Une connexion entre services a échoué. Réessayez.',
@@ -681,6 +706,10 @@ export const errors = {
         CUSTOMER_PAYMENT_METHOD_NOT_FOUND: 'Ce moyen de paiement est introuvable.',
         USER_NOT_FOUND: 'Cet utilisateur est introuvable.',
         USER_INVALID_PASSWORD: 'Ce mot de passe est incorrect.',
+        USER_CHANNEL_UNAVAILABLE: 'Ce compte n’a aucune adresse sur le canal choisi.',
+        USER_CREDENTIAL_LINK_THROTTLED: 'Trop de demandes. Patientez un moment et réessayez.',
+        USER_LOGIN_LINK_ROLE_UNSUPPORTED:
+            'Les liens de connexion ne sont disponibles que pour les comptes clients.',
 
         // ── Boutique ──────────────────────────────────────────────────────────
         STORE_NOT_FOUND: 'Votre boutique est introuvable.',
@@ -699,6 +728,9 @@ export const errors = {
         CART_DIGITAL_LIMIT_REACHED: 'Vous avez atteint le maximum de produits numériques par commande.',
         CART_NOT_FOUND: 'Ce panier est introuvable.',
         CART_EMPTY_CHECKOUT: 'Ce panier est vide.',
+        CART_ITEM_NOT_FOUND:
+            'Cet article ne figure plus dans le panier. Actualisez et réessayez.',
+        WISHLIST_ITEM_NOT_FOUND: 'Cet article ne figure pas dans la liste d’envies.',
 
         // ── Réservations ──────────────────────────────────────────────────────
         BOOKING_PRODUCT_NOT_FOUND: 'Ce service est introuvable.',
@@ -880,6 +912,20 @@ export const errors = {
             'Nous n’avons pas pu identifier ce compte de messagerie. Réessayez la connexion.',
         MESSAGING_DELIVERY_FAILED:
             'Nous n’avons pas pu délivrer ce message. Réessayez dans un moment.',
+
+        // ── Connexion par lien magique ────────────────────────────────────────
+        // 🔴 Un seul message couvre « inconnu », « déjà utilisé » et « mauvaise
+        // personne » : le backend les confond volontairement pour que le point
+        // de terminaison ne devienne pas un oracle d’inscription. Ne pas préciser.
+        MAGIC_LINK_INVALID: 'Ce lien de connexion n’est pas valide. Demandez-en un nouveau.',
+        MAGIC_LINK_EXPIRED: 'Ce lien de connexion a expiré. Demandez-en un nouveau.',
+        MAGIC_CODE_INVALID: 'Ce code de connexion n’est pas valide. Demandez-en un nouveau.',
+        MAGIC_CODE_EXPIRED: 'Ce code de connexion a expiré. Demandez-en un nouveau.',
+        MAGIC_ATTEMPTS_EXCEEDED: 'Trop de tentatives. Demandez un nouveau code de connexion.',
+        MAGIC_CONTACT_UNVERIFIED:
+            'Ce contact n’a pas encore été vérifié : il ne peut pas servir à se connecter.',
+        MAGIC_SESSION_GENERATION_FAILED:
+            "Nous n'avons pas pu finaliser cette connexion. Réessayez.",
 
         PRODUCT_SHARE_CHANNEL_NOT_CONNECTED:
             'Ce canal n’est pas encore lié à votre compte. Connectez-le, puis réessayez.',

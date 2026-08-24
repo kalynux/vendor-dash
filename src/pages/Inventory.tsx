@@ -8,6 +8,7 @@ import {
   Loader2,
   PackageSearch,
   Pencil,
+  Receipt,
   Upload,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -62,6 +63,7 @@ import { SubPageHeader } from '@/components/layout/SubPageHeader';
 import { StatTile } from '@/components/features/StatTile';
 import { InventoryPagination } from '@/components/inventory/InventoryPagination';
 import { StockRequestsTab } from '@/components/inventory/StockRequestsTab';
+import { StorageInvoicesTab } from '@/components/inventory/StorageInvoicesTab';
 import { cn } from '@/lib/utils';
 import { Trans, useApiError, useFormatters, useTranslation, type TranslationKey } from '@/i18n';
 
@@ -988,9 +990,9 @@ function HistoryTab({ refreshToken }: { refreshToken: number }) {
 
 // ─── Page ───────────────────────────────────────────────────────────────────
 
-const VALID_TABS = ['alerts', 'reservations', 'history', 'requests'] as const;
+const VALID_TABS = ['alerts', 'reservations', 'history', 'requests', 'invoices'] as const;
 
-/** The same four, as routes — what a sideways swipe walks. Order matters. */
+/** The same five, as routes — what a sideways swipe walks. Order matters. */
 const TAB_RING = VALID_TABS.map((tab) => `/dashboard/inventory/${tab}`);
 type InventoryTab = (typeof VALID_TABS)[number];
 const DEFAULT_TAB: InventoryTab = 'alerts';
@@ -1000,6 +1002,7 @@ const TAB_ICONS: Record<InventoryTab, typeof Boxes> = {
   reservations: Lock,
   history: HistoryIcon,
   requests: PackageSearch,
+  invoices: Receipt,
 };
 
 const isValidTab = (v: string | null | undefined): v is InventoryTab =>
@@ -1187,6 +1190,9 @@ export function Inventory() {
       )}
       {tab === 'reservations' && <ReservationsTab />}
       {tab === 'history' && <HistoryTab refreshToken={refreshToken} />}
+      {/* Read-only, and nothing on it feeds the three summary tiles — so it takes
+          no refresh token and reports nothing back to the page. */}
+      {tab === 'invoices' && <StorageInvoicesTab />}
       {tab === 'requests' && (
         <StockRequestsTab
           refreshToken={refreshToken}

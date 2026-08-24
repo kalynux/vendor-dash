@@ -321,6 +321,59 @@ export const orders = {
     },
 
     /**
+     * Rating a delivery, from the shipment row on either order-detail surface.
+     *
+     * 🔴 A vendor rates a DELIVERY, never a product and never a customer — so
+     * every string here talks about the delivery, and none of them names the
+     * agent or the agency as the thing being scored. The backend resolves who
+     * carried the shipment and does not tell the author back.
+     *
+     * The two notices are load-bearing rather than decorative: a comment sends
+     * the review to moderation, and nothing can be edited afterwards. Both are
+     * stated before the button, because neither can be undone after it.
+     */
+    review: {
+        action: 'Rate delivery',
+        reviewed: 'Rated',
+        title: 'Rate this delivery',
+        subtitleBoth: 'Carried by {{agent}} of {{agency}}.',
+        subtitleAgency: 'Carried by {{agency}}.',
+        subtitleGeneric: 'Tell us how this delivery went.',
+        checking: 'Checking this delivery…',
+        checkFailed: "We couldn't check this delivery just now. Please close this and try again.",
+
+        ratingLabel: 'Your rating',
+        ratingHelp: 'One to five stars. A rating on its own goes live right away.',
+        starsAria: plural({ one: '{{count}} star', other: '{{count}} stars' }),
+
+        addComment: 'Add a comment',
+        removeComment: 'Remove comment',
+        titleLabel: 'Headline (optional)',
+        titlePlaceholder: 'Sum it up in a few words',
+        bodyLabel: 'Comment (optional)',
+        bodyPlaceholder: 'What went well, or what could have gone better?',
+
+        /** Shown only once something is actually typed — see the dialog. */
+        moderationNotice:
+            'Comments are checked by a moderator before they appear. Your rating on its own would publish immediately.',
+        writeOnceNotice: "Ratings can't be changed or removed once submitted.",
+
+        submit: 'Submit rating',
+        submittedPublished: 'Thanks — your rating is live.',
+        submittedPending: "Thanks — your review was submitted and will appear once it's been checked.",
+        submitFailed: "We couldn't submit your rating. Please try again.",
+
+        /** Why the form isn't being offered. One sentence per eligibility reason. */
+        blocked: {
+            notDelivered: "This delivery isn't complete yet. You can rate it once it's been delivered.",
+            noAgent: 'This delivery has no agent assigned, so there is nobody to rate.',
+            notAllowed: "That isn't something you can rate.",
+            alreadyReviewed: "You've already rated this delivery.",
+            generic: "This delivery can't be rated.",
+        },
+    },
+
+    /**
      * Order-timeline event lines. `services/orders.service.ts` maps each
      * `eventType` to one of these keys and the detail sheets resolve it, so the
      * timeline follows a language switch without refetching the order.

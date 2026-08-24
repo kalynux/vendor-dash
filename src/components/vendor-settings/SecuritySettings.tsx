@@ -10,6 +10,7 @@ import {
   type BiometricLoginStatus,
 } from '@/platform/auth/biometricLogin';
 import { mapPasswordError } from '@/components/vendor-settings/errors';
+import { ContactDetailsSection } from '@/components/vendor-settings/ContactDetailsSection';
 import { Button } from '@/components/ui/button';
 import {
   SettingsSection,
@@ -97,6 +98,14 @@ export function SecuritySettings() {
 
   return (
     <SettingsSections>
+      {/*
+        Sign-in identifiers first: they are what you authenticate WITH, so they
+        belong beside the password rather than on Profile — where that tab's own
+        editable Phone writes the vendor ROLE profile, a different record with a
+        different endpoint.
+      */}
+      <ContactDetailsSection />
+
       {/* Password change */}
       <SettingsSection
         title={t('account.security.passwordTitle')}

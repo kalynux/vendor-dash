@@ -13,6 +13,7 @@ import { PageBackButton } from '@/components/layout/PageBackButton';
 import { STATUS_INTENT_ICON } from '@/components/products/statusIntentIcons';
 import { useOpenPreview } from '@/components/preview';
 import { AgencySelector } from '@/components/products/review/AgencySelector';
+import { ShippingConfigRow } from '@/components/products/ShippingConfigRow';
 import {
   SimpleProductForm,
   type SimpleFieldErrors,
@@ -568,6 +569,28 @@ export function SimpleProductEdit() {
                 onPickupLocationChange={handlePickupLocationChange}
                 pickup={product.pickup ?? null}
                 unlimitedStockVariants={unlimitedStockVariants}
+              />
+
+              {/*
+                Product-level parcel record — origin postcode, handling days and
+                the dimension fallback an agency reads when a variant carries
+                none of its own. The advanced wizard's review step has had this
+                since shipping config shipped; quick-add had no equivalent, so a
+                vendor who never left this editor could not set it at all.
+
+                🔴 Not a duplicate of the form's own weight/length/width/height
+                inputs above — those write the VARIANT's parcel, on a different
+                endpoint, and take precedence over this one. See
+                `ShippingConfigRow` for the three-records distinction.
+
+                Edit-only, like the wizard's: the record is keyed by product id,
+                and quick-add's create page returns to the product list rather
+                than holding onto the id it just made.
+              */}
+              <ShippingConfigRow
+                productId={product.id}
+                isPhysical={product.type === 'physical'}
+                disabled={isSubmitting || isLocked}
               />
 
               <div className="rounded-xl border border-border p-5 flex items-start gap-3">

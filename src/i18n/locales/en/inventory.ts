@@ -23,6 +23,7 @@ export const inventory = {
         reservations: 'Reservations',
         history: 'History',
         requests: 'Stock requests',
+        invoices: 'Storage invoices',
     },
 
     /** One line under the "Inventory › <tab>" header, describing *that* sub-tab. */
@@ -31,6 +32,7 @@ export const inventory = {
         reservations: 'Units currently locked by open checkouts and orders.',
         history: 'Every recorded stock movement, and what caused it.',
         requests: 'Quantity changes on warehoused SKUs, waiting on a second signature.',
+        invoices: 'Monthly rent your agencies charge for warehousing your stock.',
     },
 
     columns: {
@@ -286,6 +288,80 @@ export const inventory = {
             one: 'Stock updated on {{count}} variant',
             other: 'Stock updated on {{count}} variants',
         }),
+    },
+
+    /**
+     * Storage invoices — the monthly rent an agency charges for warehousing.
+     *
+     * 🔴 Not the plan's media-storage quota. Account › Billing has a card called
+     * "Storage" that measures uploaded bytes; this is shelf rent for physical
+     * stock, and the two share nothing but a word. The copy here says
+     * "warehousing" and "stock" wherever it can, to keep them apart.
+     *
+     * 🔴 `settlementNotice` is the load-bearing string on the whole surface. No
+     * money moves through the platform — nothing is deducted from earnings, and
+     * there is no Pay button because there is nothing behind one.
+     */
+    invoices: {
+        countSummary: plural({
+            one: '{{count}} storage invoice',
+            other: '{{count}} storage invoices',
+        }),
+        settlementNotice:
+            'These are billed and settled directly by your delivery agency — nothing is taken from your earnings or payouts. Contact the agency about anything on an invoice.',
+        snapshotNotice:
+            'Everything on an invoice is a snapshot from the day it was issued, so product names, SKUs and depots may differ from today. Quantities are the units on the shelf at that moment, not a monthly average.',
+        filterTitle: 'Filter invoices',
+        viewBreakdown: 'View breakdown',
+        unknownAgency: 'Storage agency',
+
+        detailTitle: '{{period}} storage',
+        detailTitleFallback: 'Storage invoice',
+        linesTitle: 'What you were billed for',
+        noLines: 'This invoice has no line items.',
+        issuedOn: 'Issued {{date}}',
+        settledOn: 'Marked settled {{date}}',
+
+        columns: {
+            period: 'Period',
+            agency: 'Agency',
+            depot: 'Depot',
+            /** Context, not a multiplier — the charge is per SKU, not per unit. */
+            unitsHeld: 'Units held',
+            charge: 'Charge',
+        },
+
+        fields: {
+            status: 'Status',
+            skus: 'SKUs',
+            units: 'Units',
+            total: 'Total',
+        },
+
+        status: {
+            open: 'Open',
+            /** The agency's own claim that it was paid — nothing verifies it. */
+            settled: 'Settled',
+            void: 'Cancelled',
+        },
+
+        filters: {
+            status: 'Status',
+            anyStatus: 'Any status',
+            period: 'Month',
+        },
+
+        empty: {
+            none: 'No storage invoices yet',
+            noneHint:
+                'An invoice appears at the start of each month for agencies that warehouse your stock and charge for it.',
+            filtered: 'No invoices match your filters.',
+        },
+
+        errors: {
+            loadFailed: "We couldn't load your storage invoices. Please try again.",
+            loadDetailFailed: "We couldn't load that invoice. Please try again.",
+        },
     },
 
     errors: {

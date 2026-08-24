@@ -46,6 +46,7 @@ import { Input } from '@/components/ui/input';
 import { OrderStatusBadge } from './OrderStatusBadge';
 import { PaymentStatusBadge } from './PaymentStatusBadge';
 import { DeliveryStatusBadge } from './DeliveryStatusBadge';
+import { ShipmentReviewControl } from '@/components/reviews/ShipmentReviewControl';
 import { DeliveryRejectionNotice } from './DeliveryRejectionNotice';
 import { ReassignAgencyPopover } from './ReassignAgencyPopover';
 import { cn } from '@/lib/utils';
@@ -498,6 +499,13 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                             {shipment.trackingNumber && (
                               <p className="text-xs text-muted-foreground mt-0.5">{t('orders.detail.shipping.tracking', { number: shipment.trackingNumber })}</p>
                             )}
+                            <ShipmentReviewControl
+                              className="mt-2"
+                              shipmentId={shipment.shipmentId}
+                              deliveryStatus={shipment.deliveryStatus}
+                              agencyName={shipment.agencyName}
+                              agentName={shipment.agent?.name}
+                            />
                           </div>
                         ))}
                       </Section>

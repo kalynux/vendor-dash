@@ -318,6 +318,48 @@ export const orders = {
         noteFailed: "Nous n'avons pas pu ajouter votre note. Réessayez.",
     },
 
+    review: {
+        action: 'Noter la livraison',
+        reviewed: 'Notée',
+        title: 'Noter cette livraison',
+        subtitleBoth: 'Effectuée par {{agent}}, de {{agency}}.',
+        subtitleAgency: 'Effectuée par {{agency}}.',
+        subtitleGeneric: "Dites-nous comment s'est passée cette livraison.",
+        checking: 'Vérification de cette livraison…',
+        checkFailed:
+            "Nous n'avons pas pu vérifier cette livraison pour le moment. Fermez cette fenêtre et réessayez.",
+
+        ratingLabel: 'Votre note',
+        ratingHelp: "D'une à cinq étoiles. Une note seule est publiée immédiatement.",
+        starsAria: plural({ one: '{{count}} étoile', other: '{{count}} étoiles' }),
+
+        addComment: 'Ajouter un commentaire',
+        removeComment: 'Retirer le commentaire',
+        titleLabel: 'Titre (facultatif)',
+        titlePlaceholder: 'Résumez en quelques mots',
+        bodyLabel: 'Commentaire (facultatif)',
+        bodyPlaceholder: "Qu'est-ce qui s'est bien passé, ou aurait pu mieux se passer ?",
+
+        moderationNotice:
+            "Les commentaires sont vérifiés par un modérateur avant d'apparaître. Votre note seule serait publiée immédiatement.",
+        writeOnceNotice: 'Une note ne peut plus être modifiée ni retirée une fois envoyée.',
+
+        submit: 'Envoyer la note',
+        submittedPublished: 'Merci — votre note est en ligne.',
+        submittedPending:
+            'Merci — votre avis a été envoyé et apparaîtra une fois vérifié.',
+        submitFailed: "Nous n'avons pas pu envoyer votre note. Réessayez.",
+
+        blocked: {
+            notDelivered:
+                "Cette livraison n'est pas encore terminée. Vous pourrez la noter une fois qu'elle aura été livrée.",
+            noAgent: "Aucun livreur n'est affecté à cette livraison, il n'y a donc personne à noter.",
+            notAllowed: "Ce n'est pas quelque chose que vous pouvez noter.",
+            alreadyReviewed: 'Vous avez déjà noté cette livraison.',
+            generic: 'Cette livraison ne peut pas être notée.',
+        },
+    },
+
     timeline: {
         orderCreated: 'Commande passée',
         paymentUpdated: 'Statut du paiement mis à jour',

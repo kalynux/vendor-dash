@@ -60,6 +60,63 @@ export const account = {
             'Suppression impossible : {{list}}. Réattribuez d’abord ces produits.',
     },
 
+    contact: {
+        title: 'Identifiants de connexion',
+        info: "L'adresse e-mail et le numéro de téléphone avec lesquels vous vous connectez. Chaque modification se fait en deux étapes, et l'ancienne valeur reste valable jusqu'à la confirmation de la nouvelle.",
+        emailLabel: 'Adresse e-mail',
+        phoneLabel: 'Numéro de téléphone',
+        change: 'Modifier',
+        cancelChange: 'Annuler la modification',
+
+        newEmailLabel: 'Nouvelle adresse e-mail',
+        newEmailPlaceholder: 'vous@exemple.com',
+        emailFlowHint:
+            "Nous enverrons un lien de confirmation à la nouvelle adresse. Ouvrez-le et confirmez depuis cette page — la modification ne prend effet qu'à ce moment-là. Le lien est valable une heure.",
+        sendLink: 'Envoyer le lien de confirmation',
+        emailChangeRequested: 'Lien de confirmation envoyé à la nouvelle adresse.',
+        emailChangeCancelled: "Modification de l'e-mail annulée.",
+        emailPendingNotice:
+            "Continuez à vous connecter avec votre e-mail actuel jusqu'à ce que vous confirmiez depuis le lien envoyé.",
+
+        newPhoneLabel: 'Nouveau numéro de téléphone',
+        whatsappRequired:
+            'Changer votre numéro de téléphone nécessite un compte WhatsApp lié utilisant le nouveau numéro. Un compte Telegram lié ne suffit pas.',
+        whatsappNumberMismatch:
+            "Votre numéro WhatsApp lié se termine par {{hint}}, ce qui ne correspond pas à celui-ci. Liez WhatsApp avec le nouveau numéro d'abord, sinon la confirmation sera refusée.",
+        manageConnections: 'Gérer les connexions',
+        phoneFlowHint:
+            "Vous confirmerez ensuite depuis cette page — nous vérifions que votre compte WhatsApp lié utilise ce numéro. Aucun code à saisir. Vous avez 24 heures.",
+        phoneChangeRequested: 'Confirmez maintenant la modification pour terminer.',
+        phoneChangeCancelled: 'Modification du numéro annulée.',
+        phoneChanged: 'Votre numéro de téléphone a été modifié.',
+        confirmPhone: 'Confirmer la modification',
+        phonePendingNotice:
+            "Continuez à vous connecter avec votre numéro actuel jusqu'à la confirmation.",
+
+        pendingTarget: 'En attente de passage à {{target}}',
+        pendingExpires: 'Expire {{when}}.',
+        pendingExpired: 'Cette demande a expiré. Annulez-la et recommencez.',
+
+        confirmPage: {
+            title: 'Confirmez votre nouvelle adresse e-mail',
+            subtitle: 'Appuyez sur le bouton ci-dessous pour terminer la modification.',
+            confirm: "Confirmer le changement d'e-mail",
+            missingToken:
+                "Ce lien ne contient pas son code de confirmation. Rouvrez le lien depuis l'e-mail, ou recommencez la modification depuis Compte › Sécurité.",
+            doneTitle: 'Adresse e-mail modifiée',
+            doneSubtitle: 'Vous vous connectez désormais avec {{email}}.',
+            doneHint: 'Vous restez connecté partout où vous l’êtes déjà.',
+            backToAccount: 'Aller aux paramètres du compte',
+        },
+
+        errors: {
+            loadFailed: "Nous n'avons pas pu charger vos identifiants de connexion. Réessayez.",
+            actionFailed: "Nous n'avons pas pu effectuer cette action. Réessayez.",
+            confirmFailed:
+                "Nous n'avons pas pu confirmer cette modification. Le lien a peut-être expiré.",
+        },
+    },
+
     security: {
         passwordTitle: 'Changer le mot de passe',
         passwordInfo:

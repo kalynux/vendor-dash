@@ -19,6 +19,7 @@ export const inventory = {
         reservations: 'Réservations',
         history: 'Historique',
         requests: 'Demandes de stock',
+        invoices: 'Factures de stockage',
     },
 
     tabSubtitles: {
@@ -27,6 +28,7 @@ export const inventory = {
         history: 'Chaque mouvement de stock enregistré, et sa cause.',
         requests:
             'Modifications de quantité sur les SKU entreposés, en attente d’une seconde signature.',
+        invoices: 'Loyer mensuel facturé par vos agences pour l’entreposage de votre stock.',
     },
 
     columns: {
@@ -269,6 +271,66 @@ export const inventory = {
             one: 'Stock mis à jour sur {{count}} variante',
             other: 'Stock mis à jour sur {{count}} variantes',
         }),
+    },
+
+    invoices: {
+        countSummary: plural({
+            one: '{{count}} facture de stockage',
+            other: '{{count}} factures de stockage',
+        }),
+        settlementNotice:
+            "Ces factures sont émises et réglées directement avec votre agence de livraison — rien n'est prélevé sur vos revenus ni sur vos versements. Contactez l'agence pour toute question sur une facture.",
+        snapshotNotice:
+            "Tout ce qui figure sur une facture est un instantané du jour de son émission : les noms de produits, SKU et dépôts peuvent différer d'aujourd'hui. Les quantités correspondent aux unités en rayon à ce moment précis, et non à une moyenne mensuelle.",
+        filterTitle: 'Filtrer les factures',
+        viewBreakdown: 'Voir le détail',
+        unknownAgency: 'Agence de stockage',
+
+        detailTitle: 'Stockage — {{period}}',
+        detailTitleFallback: 'Facture de stockage',
+        linesTitle: 'Ce qui vous a été facturé',
+        noLines: 'Cette facture ne comporte aucune ligne.',
+        issuedOn: 'Émise le {{date}}',
+        settledOn: 'Marquée réglée le {{date}}',
+
+        columns: {
+            period: 'Période',
+            agency: 'Agence',
+            depot: 'Dépôt',
+            unitsHeld: 'Unités en stock',
+            charge: 'Montant',
+        },
+
+        fields: {
+            status: 'Statut',
+            skus: 'SKU',
+            units: 'Unités',
+            total: 'Total',
+        },
+
+        status: {
+            open: 'Ouverte',
+            settled: 'Réglée',
+            void: 'Annulée',
+        },
+
+        filters: {
+            status: 'Statut',
+            anyStatus: 'Tous les statuts',
+            period: 'Mois',
+        },
+
+        empty: {
+            none: 'Aucune facture de stockage pour le moment',
+            noneHint:
+                'Une facture apparaît au début de chaque mois pour les agences qui entreposent votre stock et le facturent.',
+            filtered: 'Aucune facture ne correspond à vos filtres.',
+        },
+
+        errors: {
+            loadFailed: "Nous n'avons pas pu charger vos factures de stockage. Réessayez.",
+            loadDetailFailed: "Nous n'avons pas pu charger cette facture. Réessayez.",
+        },
     },
 
     errors: {

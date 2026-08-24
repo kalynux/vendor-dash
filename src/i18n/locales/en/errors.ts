@@ -16,15 +16,26 @@
  * shipment, reading a booking — because an untranslated code would surface as
  * the raw string.
  *
- * ⚠ **26 codes are deliberately absent**, and `npm run i18n:audit` reports them
- * every run. They belong to surfaces this dashboard does not call at all and
- * cannot reach even indirectly: the customer payment flow
- * (`PAYMENT_*`, `NOTCHPAY_*`, `MYCOOLPAY_*` — this app never calls
- * `/api/payments/*`), gateway webhooks, magic-link sign-in, the storefront cart
- * and wishlist, agent trust scoring, and server-side upload-scanner
- * configuration. Writing vendor-facing copy for an error a vendor cannot see
- * would be inventing a screen. Anything unexpected still lands on the
- * `category` fallback below, which is what that tier is for.
+ * **The catalog is now complete — all 603 codes have a message**, so
+ * `npm run i18n:audit` reports none missing.
+ *
+ * The last 26 were held back for a while as unreachable from this app: the
+ * customer payment flow (`PAYMENT_*`, `NOTCHPAY_*`, `MYCOOLPAY_*` — this
+ * dashboard never calls `/api/payments/*`), gateway webhooks, magic-link
+ * sign-in, the storefront cart and wishlist, agent trust scoring and
+ * upload-scanner configuration. They are filled in now on the same reasoning as
+ * the other-role codes above: "unreachable" is a claim about today's call sites,
+ * not a property of the code, and the cost of being wrong is a raw
+ * `SCREAMING_SNAKE_CASE` string in a vendor's face.
+ *
+ * ⚠ Two of them carry a constraint the copy must respect, noted at their entries:
+ * the `MAGIC_*` messages must NOT distinguish "unknown" from "already used" from
+ * "wrong person" — the backend deliberately collapses those so the redeem
+ * endpoint is not a registration oracle — and `PAYMENT_WEBHOOK_AMOUNT_MISMATCH`
+ * must not read as if the payment went through.
+ *
+ * Anything genuinely unexpected still lands on the `category` fallback below,
+ * which is what that tier is for.
  */
 
 export const errors = {
@@ -339,12 +350,30 @@ export const errors = {
         PAYMENT_MISSING_BOOKING_ID: 'This payment is missing its booking reference.',
         PAYMENT_GATEWAY_NOT_IMPLEMENTED: 'That payment method is not available yet.',
         PAYMENT_CARD_DECLINED: 'The card was declined. Try another payment method.',
+        PAYMENT_OPERATOR_UNDETERMINED:
+            "We couldn't tell which mobile-money network that number belongs to. Pick the network manually.",
+        PAYMENT_CURRENCY_NOT_SUPPORTED: 'That payment method cannot take this currency.',
+        PAYMENT_WEBHOOK_AMOUNT_MISMATCH:
+            "The amount the payment provider confirmed doesn't match what was charged. The payment was not accepted.",
+        PAYMENT_OTP_INVALID: 'That code is incorrect. Check it and try again.',
+        PAYMENT_OTP_NOT_REQUIRED: 'This payment is not waiting for a code.',
+        PAYMENT_OTP_ATTEMPTS_EXCEEDED:
+            'Too many incorrect codes. Start the payment again to get a new one.',
         PAYMENT_CART_NOT_FOUND: 'We could not find that cart.',
         PAYMENT_CART_NO_PAYABLE_ORDERS: 'There is nothing to pay for in this cart.',
         PAYMENT_CART_MIXED_CURRENCY: 'All items in one payment must use the same currency.',
         PAYMENT_REFERENCE_REQUIRED: 'A payment reference is required.',
         PAYMENT_ORDER_IS_COD: 'This is a cash-on-delivery order and is paid on delivery.',
         STRIPE_WEBHOOK_SIGNATURE_INVALID: 'We could not verify that payment notification.',
+        WEBHOOK_SECRET_INVALID: 'We could not verify that notification. Contact support.',
+        // The provider answered non-2xx, versus never answered at all. Different
+        // remedies — one is theirs to fix, the other may clear by itself.
+        NOTCHPAY_REQUEST_FAILED: 'The payment provider rejected that request. Please try again.',
+        NOTCHPAY_UNREACHABLE:
+            "We couldn't reach the payment provider. Please try again in a few minutes.",
+        MYCOOLPAY_REQUEST_FAILED: 'The payment provider rejected that request. Please try again.',
+        MYCOOLPAY_UNREACHABLE:
+            "We couldn't reach the payment provider. Please try again in a few minutes.",
         PAYMENT_METHOD_NOT_FOUND: 'We could not find that payment method.',
         PAYMENT_METHOD_LIMIT_REACHED:
             'You have reached the maximum number of saved payment methods. Remove one to add another.',
@@ -457,6 +486,7 @@ export const errors = {
         CANCELLATION_NOT_ALLOWED: 'Your cancellation policy does not allow cancelling this.',
         ORDER_CART_EMPTY: 'That cart is empty.',
         ORDER_CART_INVALID: 'That cart is no longer valid. Please rebuild it.',
+        ORDER_DELIVERY_ADDRESS_REQUIRED: 'This order needs a delivery address before it can go ahead.',
         ORDER_PRODUCT_NOT_FOUND: 'We could not find one of the products on this order.',
         ORDER_VENDOR_NOT_FOUND: 'We could not find the vendor for this order.',
         ORDER_NO_DELIVERY_AGENCY:
@@ -499,6 +529,7 @@ export const errors = {
         CONFIG_NOTIFICATION_CATALOG_INCOMPLETE: 'Notification settings are unavailable. Contact support.',
         CONFIG_INVALID_STORAGE_PROVIDER: 'File storage is misconfigured. Contact support.',
         CONFIG_INVALID_GEO_PROVIDER: 'Address search is misconfigured. Contact support.',
+        CONFIG_INVALID_UPLOAD_SCANNER: 'File scanning is misconfigured. Contact support.',
         STORAGE_UPLOAD_FAILED: 'The upload failed. Please try again.',
         UPLOAD_POLICY_VIOLATION: "Some files couldn't be uploaded because they don't meet the upload rules.",
         STORAGE_FILE_NOT_FOUND: 'We could not find that file.',
@@ -724,6 +755,7 @@ export const errors = {
         AGENT_CAPACITY_OUT_OF_BOUNDS: 'That capacity is outside the allowed range.',
         AGENT_CAPACITY_BELOW_IN_USE: 'That capacity is below what is already in use.',
         AGENT_KYC_NOT_VERIFIED: "That agent's identity has not been verified yet.",
+        AGENT_TRUST_OVERRIDE_OUT_OF_BOUNDS: 'A trust score has to be between 0 and 100.',
         AGENT_PLATFORM_BANNED: 'That agent is banned from the platform.',
         AGENT_PAYOUT_DETAILS_MISSING: 'That agent has no payout details on file.',
         AGENT_SERVICE_TOKEN_INVALID: 'A service connection failed. Please try again.',
@@ -774,6 +806,9 @@ export const errors = {
         CUSTOMER_PAYMENT_METHOD_NOT_FOUND: 'We could not find that payment method.',
         USER_NOT_FOUND: 'We could not find that user.',
         USER_INVALID_PASSWORD: 'That password is incorrect.',
+        USER_CHANNEL_UNAVAILABLE: 'That account has no address on the channel you chose.',
+        USER_CREDENTIAL_LINK_THROTTLED: 'Too many requests. Please wait a while and try again.',
+        USER_LOGIN_LINK_ROLE_UNSUPPORTED: 'Sign-in links are only available for customer accounts.',
 
         // ── Store ─────────────────────────────────────────────────────────────
         STORE_NOT_FOUND: 'We could not find your store.',
@@ -792,6 +827,10 @@ export const errors = {
         CART_DIGITAL_LIMIT_REACHED: 'That is the maximum number of digital products per order.',
         CART_NOT_FOUND: 'We could not find that cart.',
         CART_EMPTY_CHECKOUT: 'That cart is empty.',
+        // Ordinary staleness — a stale tab, or a second device that already
+        // removed the line. The remedy is to re-read the cart, not the product.
+        CART_ITEM_NOT_FOUND: 'That item is no longer in the cart. Refresh and try again.',
+        WISHLIST_ITEM_NOT_FOUND: 'That item is not in the wishlist.',
 
         // ── Bookings ──────────────────────────────────────────────────────────
         BOOKING_PRODUCT_NOT_FOUND: 'We could not find that service.',
@@ -994,6 +1033,20 @@ export const errors = {
             "We couldn't identify that messaging account. Please try connecting again.",
         MESSAGING_DELIVERY_FAILED:
             "We couldn't deliver that message. Please try again in a moment.",
+
+        // ── Magic-link sign-in ────────────────────────────────────────────────
+        // 🔴 "Not valid" is deliberately ONE message covering an unknown link, a
+        // spent one and an identity mismatch. Splitting it would turn the redeem
+        // endpoint into a registration oracle answering "is this phone a customer
+        // here?" for any number anybody types — so this copy must not narrow it.
+        MAGIC_LINK_INVALID: 'That sign-in link is not valid. Request a new one.',
+        MAGIC_LINK_EXPIRED: 'That sign-in link has expired. Request a new one.',
+        MAGIC_CODE_INVALID: 'That sign-in code is not valid. Request a new one.',
+        MAGIC_CODE_EXPIRED: 'That sign-in code has expired. Request a new one.',
+        MAGIC_ATTEMPTS_EXCEEDED: 'Too many attempts. Request a new sign-in code.',
+        MAGIC_CONTACT_UNVERIFIED:
+            'That contact has not been verified yet, so it cannot be used to sign in.',
+        MAGIC_SESSION_GENERATION_FAILED: "We couldn't complete that sign-in. Please try again.",
 
         // ── Product sharing ───────────────────────────────────────────────────
         PRODUCT_SHARE_CHANNEL_NOT_CONNECTED:

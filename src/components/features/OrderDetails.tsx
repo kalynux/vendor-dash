@@ -47,6 +47,7 @@ import { OrderStatusBadge } from '@/components/orders/OrderStatusBadge';
 import { DeliveryStatusBadge } from '@/components/orders/DeliveryStatusBadge';
 import { DeliveryRejectionNotice } from '@/components/orders/DeliveryRejectionNotice';
 import { ReassignAgencyPopover } from '@/components/orders/ReassignAgencyPopover';
+import { ShipmentReviewControl } from '@/components/reviews/ShipmentReviewControl';
 import { ApiError } from '@/types/api';
 import { toast } from 'sonner';
 import { formatPhoneInternational } from '@/lib/phone';
@@ -511,6 +512,15 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
                         <p className="text-muted-foreground mt-1">{t('orders.detail.shipping.tracking', { number: shipment.trackingNumber })}</p>
                       )}
                     </div>
+                    {/* Spans both columns: the rating is about the shipment, not
+                        about the agency half or the agent half it sits under. */}
+                    <ShipmentReviewControl
+                      className="col-span-2 mt-1"
+                      shipmentId={shipment.shipmentId}
+                      deliveryStatus={shipment.deliveryStatus}
+                      agencyName={shipment.agencyName}
+                      agentName={shipment.agent?.name}
+                    />
                   </div>
                 ))}
               </CardContent>

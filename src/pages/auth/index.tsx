@@ -8,6 +8,7 @@ import { Login } from './Login';
 export { Register } from './Register';
 export { ForgotPassword } from './ForgotPassword';
 export { ResetPassword } from './ResetPassword';
+export { ConfirmEmailChange } from './ConfirmEmailChange';
 
 /**
  * The web build's sign-in card — what `/login` has always rendered.
