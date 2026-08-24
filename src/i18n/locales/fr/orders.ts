@@ -121,7 +121,7 @@ export const orders = {
         filters: {
             title: 'Filtrer les commandes',
             apply: 'Voir les commandes',
-            searchPlaceholder: 'Rechercher des commandes…',
+            searchPlaceholder: 'Rechercher par numéro de commande…',
             open: 'Filtrer les commandes',
             orderStatus: 'Statut de la commande',
             paymentStatus: 'Statut du paiement',

@@ -38,6 +38,7 @@ import {
   renameOptionValue,
   reorderOptions,
   applyBargainEdits,
+  wasSilentlyDemoted,
 } from '@/services/products.service';
 import { ACTIVATION_ERROR_KEYS, getDeliveryErrorMessage } from '@/services/products.service';
 import type { BargainCeilingEdit } from '@/components/products/bargain';
@@ -52,6 +53,8 @@ import type {
   WizardState,
   WizardAction,
   WizardStep,
+  ApiProduct,
+  ApiProductStatus,
   ApiProductType,
   DigitalFormatRow,
   ApiFileDetail,
@@ -262,6 +265,28 @@ export function ProductEdit() {
   const productStatus = state.serverProduct?.status ?? null;
   const isReadOnlyStatus = productStatus === 'archived' || productStatus === 'pending_review';
 
+  /**
+   * Warn when a save silently took the product offline.
+   *
+   * 🔴 The backend re-runs the activation check after EVERY update, and rewrites
+   * an `active` product to `draft` when it now fails — with no error, no warning
+   * and no `message`. The `status` on the response is the only signal, so without
+   * this the vendor sees "Saved" and finds out from a customer.
+   *
+   * Called with the status captured before the write, because `state` has already
+   * moved on by the time the response lands.
+   */
+  function notifyIfDemoted(
+    statusBefore: ApiProductStatus | undefined,
+    updated: Pick<ApiProduct, 'status'>,
+  ) {
+    if (wasSilentlyDemoted(statusBefore, updated)) {
+      toast.warning(t('products.toast.demotedToDraft'), {
+        description: t('products.toast.demotedToDraftHint'),
+      });
+    }
+  }
+
   function advance(updates: Partial<WizardState> = {}) {
     const next = nextStep(state.currentStep, state.productType);
     dispatch({
@@ -284,6 +309,7 @@ export function ProductEdit() {
       const productId = state.productId;
       if (!values || !productId) return;
 
+      const statusBefore = state.serverProduct?.status;
       dispatch({ type: 'SET_SAVING', value: true });
       try {
         const { data: updated } = await updateProduct(productId, {
@@ -297,6 +323,7 @@ export function ProductEdit() {
           seoDescription: values.seoDescription || undefined,
         });
         toast.success(t('products.toast.infoSaved'));
+        notifyIfDemoted(statusBefore, updated);
         advance({ serverProduct: updated });
       } catch (err: unknown) {
         const msg = apiError.resolve(err, { fallbackKey: 'products.errors.saveFailed' });
@@ -317,10 +344,12 @@ export function ProductEdit() {
       // ordered fileIds. The backend reconciles usageCount against the diff.
       const fileIds = updates._mediaFileIds ?? [];
 
+      const statusBefore = state.serverProduct?.status;
       dispatch({ type: 'SET_SAVING', value: true });
       try {
         const { data: updated } = await updateProduct(productId, { fileIds });
         toast.success(t('products.toast.mediaSaved'));
+        notifyIfDemoted(statusBefore, updated);
         advance({ serverProduct: updated });
       } catch (err: unknown) {
         dispatch({ type: 'SET_STEP_ERROR', error: getUploadErrorMessage(err) });
@@ -665,15 +694,21 @@ export function ProductEdit() {
     async (agencyId: string | null) => {
       const productId = state.productId;
       if (!productId) return;
+      const statusBefore = state.serverProduct?.status;
       dispatch({ type: 'SET_SAVING', value: true });
       try {
         const { message } = await updateProduct(productId, { delivery: { agencyId } });
         const updated = await fetchProductById(productId);
         dispatch({ type: 'SAVE_COMPLETE', updates: { serverProduct: updated } });
+        // `message` changes when in-flight order items were reassigned to the new
+        // agency, and it is the ONLY notice of that — the reassignment is
+        // fire-and-forget and its failures never reach us. Preferred over our own
+        // copy for exactly that reason.
         toast.success(
           message ??
             t(agencyId ? 'products.toast.agencyUpdated' : 'products.toast.agencyDefault'),
         );
+        notifyIfDemoted(statusBefore, updated);
       } catch (err: unknown) {
         const msg = err instanceof ApiError
           ? getAgencyConnectionErrorMessage(err)

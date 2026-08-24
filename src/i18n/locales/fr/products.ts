@@ -892,6 +892,8 @@ export const products = {
         duplicated: 'Produit dupliqué',
         statusChanged: '« {{name}} » est maintenant : {{status}}.',
         infoSaved: 'Informations du produit enregistrées.',
+        demotedToDraft: 'Enregistré, mais ce produit n’est plus publié.',
+        demotedToDraftHint: 'Il ne remplit plus les conditions pour être en ligne. Vérifiez l’étape de révision, puis republiez.',
         mediaSaved: 'Médias enregistrés.',
         optionsSaved: 'Options enregistrées.',
         variantsSaved: 'Variantes enregistrées.',

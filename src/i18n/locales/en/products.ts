@@ -948,6 +948,11 @@ export const products = {
         duplicated: 'Product duplicated',
         statusChanged: '“{{name}}” is now {{status}}.',
         infoSaved: 'Product info saved.',
+        // The backend re-runs the activation check after every update and
+        // rewrites an active product to draft when it now fails — silently. This
+        // is the only notice a vendor gets.
+        demotedToDraft: 'Saved, but this product is no longer published.',
+        demotedToDraftHint: 'It no longer meets the requirements to be live. Check the review step and publish again.',
         mediaSaved: 'Media saved.',
         optionsSaved: 'Options saved.',
         variantsSaved: 'Variants saved.',

@@ -120,7 +120,9 @@ export const orders = {
         filters: {
             title: 'Filter orders',
             apply: 'Show orders',
-            searchPlaceholder: 'Search orders…',
+            // `q` matches the order number ONLY — not customer name or email.
+            // A generic "Search orders" invited names and returned nothing.
+            searchPlaceholder: 'Search by order number…',
             open: 'Filter orders',
             orderStatus: 'Order status',
             paymentStatus: 'Payment status',

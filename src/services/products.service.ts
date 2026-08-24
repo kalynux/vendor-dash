@@ -108,6 +108,25 @@ export async function updateProduct(
   return { data: res.data, message: res.message };
 }
 
+/**
+ * Did this write silently take the product offline?
+ *
+ * 🔴 After **every** update the backend re-runs the activation check on an
+ * `active` product, and rewrites it to `draft` if it now fails — with no error,
+ * no warning and no `message`. The `status` field in the response you already
+ * hold is the only signal there is; a vendor who is not told will find out from a
+ * customer.
+ *
+ * Pass the status from before the write and the product that came back.
+ * See api-doc/vendor/product-update.md § 2.
+ */
+export function wasSilentlyDemoted(
+  statusBefore: ApiProductStatus | undefined,
+  after: Pick<ApiProduct, 'status'>,
+): boolean {
+  return statusBefore === 'active' && after.status === 'draft';
+}
+
 export async function updateProductStatus(id: string, status: ApiProductStatus): Promise<ApiProduct> {
   const res = await api.patch<{ success: boolean; data: ApiProduct; message: string }>(`/vendor/products/${id}/status`, { status });
   return res.data;
