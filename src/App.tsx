@@ -27,7 +27,7 @@ import { ProductPreview } from '@/pages/ProductPreview';
 import { StorePreview } from '@/pages/StorePreview';
 
 // Auth screens — see pages/auth/index.tsx for which transport gets which.
-import { LoginScreen, Register, ForgotPassword, ResetPassword, ConfirmEmailChange } from '@/pages/auth';
+import { LoginScreen, Register, ForgotPassword, ResetPassword } from '@/pages/auth';
 import { useBearerAuth } from '@/platform/env';
 
 // Layout
@@ -343,19 +343,21 @@ function AppContent() {
                       choice lives in `pages/auth/index.tsx`, not here. */}
                   <Route path="/login" element={<LoginScreen />} />
 
-                  {/* Email-change confirmation. Public and ungated on BOTH
-                      transports, unlike the three screens below: it mints no
-                      session, and the person following the link from their
-                      mailbox may not be signed in or may be on another device.
+                  {/* `/account/confirm-email` used to be routed here and is GONE.
 
-                      ⚠ The backend builds this link as
-                      `<STOREFRONT_URL>/account/confirm-email?token=…`, and that
-                      base currently points at the storefront. Which app owns the
-                      page is an open question with the backend — this route is
-                      inert until the variable is repointed, and correct the
-                      moment it is. The path matches the link exactly, so it must
-                      stay at the root rather than move under /dashboard. */}
-                  <Route path="/account/confirm-email" element={<ConfirmEmailChange />} />
+                      The open question it was hedging against is closed: the
+                      backend builds that link from `STOREFRONT_URL`, a single
+                      variable with no role branch, so it has always pointed at
+                      the main site and now points at a page there that serves
+                      all four apps. This route was inert for its whole life.
+
+                      Do not re-add it. The confirm endpoint reads no session and
+                      syncs the new address onto every role profile the account
+                      holds, so a copy here would have nothing to do differently
+                      — it would only be a second place to get the POST-not-GET
+                      rule wrong. The emailed link carries `app=vendor`, and the
+                      main site's page uses it to send the vendor back here.
+                      See jovi-mall api-doc/auth/FRONTEND-CHANGELOG-email-verification.md. */}
 
                   {/* The other three auth screens exist only for the transport
                       that has no main site to fall back on. Rendering them on

@@ -7,10 +7,16 @@ Four changes to how a product warehoused by a delivery agency behaves. Read §0,
 your role's section. Everything is additive except the two behaviour changes flagged
 **⚠️ BREAKING FOR CLIENTS** — those will make an existing screen lie if you ignore them.
 
-> Reference docs: [Agency → Inventory](./agency/inventory.md) ·
+**Re-verified against backend source on 2026-08-24.** 🔵 **Historical changelog — kept as the
+narrative record of the agency-warehousing feature.** The current contract for the vendor half
+is [`vendor/stock-requests.md`](./vendor/stock-requests.md) and
+[`vendor/storage-invoices.md`](./vendor/storage-invoices.md); where this page and those
+disagree, **those win**. The `agency/*` pages it names live in the backend repo only.
+
+> Reference docs: `Agency → Inventory` ·
 > [Agency → Stock requests](./agency/stock-requests.md) ·
 > [Vendor → Stock requests](./vendor/stock-requests.md) ·
-> [Agency → Magazin](./agency/magazin.md) · [Errors](./errors/README.md)
+> `Agency → Magazin` · [Errors](./errors/README.md)
 
 ---
 

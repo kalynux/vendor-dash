@@ -1,5 +1,32 @@
 # Onboarding API Endpoints Documentation
 
+**Verified against the live route dump on 2026-08-24.** The five vendor routes below are
+confirmed present and correctly named.
+
+> ### Scope for this repository
+>
+> This is the **three-role** onboarding page. The agent and agency sections are here because
+> the general flow is shared, but their routes are not callable by a vendor session and their
+> `agent/*` and `agency/*` references are **not mirrored in this repository** — printed as
+> plain paths for that reason.
+>
+> **The page you build from is [`../vendor/onboarding.md`](../vendor/onboarding.md)** — five
+> routes, in full, with the request bodies from the Zod schemas. Read this one for the *flow
+> shape* and the cross-role differences.
+>
+> The five vendor routes, confirmed in the route dump:
+>
+> ```
+> GET /api/vendor/onboarding/status
+> PUT /api/vendor/onboarding/basic-setup
+> PUT /api/vendor/onboarding/branding
+> PUT /api/vendor/onboarding/delivery-linking
+> PUT /api/vendor/onboarding/policy-setup
+> ```
+>
+> ✅ The warning below about `PATCH …/onboarding/step` is **still accurate**: no such vendor
+> route exists in the dump. If your code calls it, it 404s.
+
 This document provides details on the onboarding flows and endpoints for the different roles in the Jovi Mall platform: **Vendor**, **Delivery Agent**, and **Delivery Agency**. 
 
 Note: **Customers** do not have an onboarding flow (their `onboarding_step` is inherently `0` or complete upon registration).
@@ -128,7 +155,7 @@ Delivery Agents (Drivers) must provide vehicle information. Identity setup can b
 ```
 
 > Full contract (colour palette, photo rules, merge semantics):
-> [agent/onboarding.md](../agent/onboarding.md) and [agent/profile.md](../agent/profile.md).
+> `agent/onboarding.md` and `agent/profile.md`.
 
 #### **Step 2: Identity Setup (Skippable)**
 **Payload**:
@@ -152,14 +179,14 @@ Agencies must define their coverage areas and headquarters, followed by payout s
 *   **Submit Step**: `PUT /api/agency/onboarding/{logistics|payout|branding|policies}` (steps 1–4)
 
 > [!IMPORTANT]
-> **[`agency/onboarding.md`](../agency/onboarding.md) is authoritative** for the agency flow — full
+> **`agency/onboarding.md` is authoritative** for the agency flow — full
 > field references, validation rules and error codes. The payloads below are a summary.
 
 ### Steps & Payloads
 
 #### **Step 1: Logistics Setup (Mandatory)**
 
-`coverage_areas` and `headquarters_addresses` are stored on the [Magazin](../agency/magazin.md) and
+`coverage_areas` and `headquarters_addresses` are stored on the `Magazin` and
 validated against `country`. Coverage areas are **region keys** of that country (from
 `locations.json`), not polygons. Each HQ entry carries a `geo` — a result selected from
 `GET /api/geo/search` — and `location`, `region` and `city` are **derived from it** server-side.
@@ -193,7 +220,7 @@ validated against `country`. Coverage areas are **region keys** of that country 
 
 `payout_details` is an **ordered array** of methods (max 3); the first entry is the preferred one.
 Each is `mobile_money`, `bank` or `card` — though 🚧 **only `mobile_money` can be configured right
-now**. Full field reference: [Agency payout methods](../agency/payout-methods.md) (vendors: [the
+now**. Full field reference: `Agency payout methods` (vendors: [the
 same schema, vendor side](../vendor/payout-methods.md)).
 
 **Payload**:
@@ -227,7 +254,7 @@ same schema, vendor side](../vendor/payout-methods.md)).
 
 The largest payload of the flow — pricing (at least one of `storage_based` / `pickup_based` enabled),
 returns, damage, and optional `cod` participation. See
-[`agency/onboarding.md`](../agency/onboarding.md) for the full field reference.
+`agency/onboarding.md` for the full field reference.
 
 **Payload**:
 ```jsonc

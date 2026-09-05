@@ -1,180 +1,104 @@
-# Telegram Account Linking & Notifications
+# Telegram — the bot bridge
 
-Any authenticated user (**any role**) can link their Telegram account to receive platform
-notifications there, toggle them on/off, and disconnect. Admins can also send a Telegram message
-directly. Linking uses a **deep-link + single-use token** handshake completed inside the Telegram app.
+**Verified against backend source on 2026-08-24.**
 
-- **Base path**: `/api/webhooks/telegram` — the user-facing endpoints share this prefix with the bot
-  webhook (`POST /webhook`, called by the bot bridge). Only `/webhook` is public; everything else
-  requires auth.
-- **Auth**: cookie or `Bearer`. The user is resolved from the **User id** (`req.auth.user.id`), so
-  these are **role-agnostic** — a customer, vendor, agency, agent or admin can all link.
-- **Response envelope**: standard `{ success, data, message? }` — see [../README.md](../README.md#the-response-envelope-read-this-first).
-
-## Endpoints
-
-| Method | Path | Auth | Purpose |
-|---|---|---|---|
-| `POST` | `/webhooks/telegram/link-token` | any authenticated | Generate a Telegram deep-link + token |
-| `GET` | `/webhooks/telegram/status` | any authenticated | Check the caller's Telegram link status |
-| `POST` | `/webhooks/telegram/toggle` | any authenticated | Toggle notifications on/off |
-| `POST` | `/webhooks/telegram/disconnect` | any authenticated | Unlink the Telegram account |
-| `POST` | `/webhooks/telegram/send` | **admin** | Send a Telegram message to a user/chat |
-| `POST` | `/webhooks/telegram/webhook` | public (bot bridge) | Inbound bot messages — **not** a frontend endpoint |
-
-### Linking flow (frontend)
-
-```
-1. POST /api/webhooks/telegram/link-token         → { bot_url, expires_at }
-2. Open `bot_url` (https://t.me/<bot>?start=<token>) — the user taps "Start" in Telegram.
-   The bot consumes the single-use token and links the account server-side; the user
-   gets a "successfully linked" message in Telegram.
-3. GET  /api/webhooks/telegram/status             → { linked: true, ... } to confirm & render state.
-```
+> ## 🔴 Nothing on this page is a frontend endpoint.
+>
+> **Account linking is at [`../connections/README.md`](../connections/README.md)** —
+> `/api/me/connections`, one mechanism for WhatsApp and Telegram alike.
+>
+> This page used to document five Telegram endpoints the dashboard could call. **All five are
+> gone.** Four of them are still called by
+> [`src/services/notification-channels.service.ts`](../MIGRATION-2026-08.md#1--seven-dead-calls)
+> and return 404 today.
 
 ---
 
-## POST `/webhooks/telegram/link-token`
+## 0 · Why this page shrank
 
-**Purpose**: Generate a single-use link token and a Telegram deep-link URL for the caller.
+The frontend's previous copy of this file was **longer than the backend's** — the classic drift
+signature of content that was *removed* upstream and never propagated. It documented
+`link-token`, `status`, `toggle`, `disconnect` and `send` as live routes. What actually happened:
 
-**Auth**: any authenticated user
+| Endpoint | Fate | Source |
+|---|---|---|
+| `POST /webhooks/telegram/link-token` | **deleted** | `src/modules/telegram/telegram.routes.ts:9-15` |
+| `GET /webhooks/telegram/status` | **deleted** | *ibid.* |
+| `POST /webhooks/telegram/toggle` | **deleted** — the toggle concept is gone entirely | *ibid.* |
+| `POST /webhooks/telegram/disconnect` | **deleted** | *ibid.* |
+| `POST /webhooks/telegram/send` | **moved** to `POST /api/internal/admin/messaging/telegram` | `src/modules/telegram/admin-messaging.routes.ts:9-25` |
 
-### Example success `200`
+The four linking routes went because they were *authenticated, user-facing* endpoints that
+inherited the `/api/webhooks` prefix's rate-limit and maintenance exemptions purely by being
+routed next to a webhook. `send` went one step further: it was **admin-only** on a
+public-looking prefix, guarded by a legacy platform `admin` role that predates wi-admin's
+permission catalog. It is now behind the service token, gated on `messaging.telegram.send`,
+and audited against a real administrator identity.
 
-```json
+> `telegram.routes.ts` states the rule that produced both removals: *"If a route on this prefix
+> has a `requireAuth` or a `requireRole` on it, it is in the wrong file."*
+
+---
+
+## 1 · What is left
+
+**One route.**
+
+| Method | Path | Auth | Caller |
+|---|---|---|---|
+| `POST` | `/api/webhooks/telegram/webhook` | `X-Webhook-Secret` | the automation layer (n8n) — **never a browser** |
+
+Verified in `src/modules/telegram/telegram.routes.ts:39`. It is the only `router.post` in the file.
+
+### Why a vendor dashboard should know it exists at all
+
+Because it is the **other half of the connection flow you do build a UI for.** When a vendor
+follows your "send `/connect` to our bot" instruction, this is the endpoint that mints the
+6-character code they bring back to your input box. If connections stop working platform-wide,
+this is the pipe — not your code.
+
+It answers the automation layer, not a frontend, so it is one of the deliberate exceptions to
+the `{ success, data }` envelope: the CommandBus result is returned verbatim.
+
+```jsonc
+// what the bot bridge gets back from `command: "connect"` — NOT a shape you consume
 {
+  "message": "Your connection code is: A7K9P2\n\nEnter this code on Jovi Mall to…",
   "success": true,
-  "data": {
-    "bot_url": "https://t.me/YourBotName?start=8f3c1a2b...",
-    "expires_at": "2026-07-17T10:40:00.000Z"
-  }
+  "channel": "telegram",
+  "code": "A7K9P2",
+  "expiresInSeconds": 600
 }
 ```
 
-> Open `bot_url` in Telegram (or render it as a QR / button). The embedded token is single-use and
-> expires at `expires_at`.
+Four commands are registered: `connect`, `login`, `reset_password` and `login_contact`.
+Only `connect` concerns a vendor — the other three are the **customer** passwordless sign-in
+path and a cross-role password reset. A vendor signs in with a password at
+[`../auth/README.md`](../auth/README.md).
 
 ---
 
-## GET `/webhooks/telegram/status`
+## 2 · Where the backend's own doc is wrong
 
-**Purpose**: Return the caller's Telegram link status.
+Filed as **F-29** in the sync register.
 
-**Auth**: any authenticated user
+🔴 **`jovi-mall/api-doc/telegram/README.md:9` still lists
+`POST /api/webhooks/telegram/send` in its route table, and documents it in full at line 141**
+under the heading `POST /webhooks/telegram/send (admin)`. That path does not exist. The route
+dump has no `/api/webhooks/telegram/send`, and `telegram.routes.ts` registers exactly one route
+(`/webhook`, line 39). The capability moved to `POST /api/internal/admin/messaging/telegram`
+— which the same repository's `admin-messaging.routes.ts:11` says plainly. The page corrected
+its *linking* section for Phase 5 and missed its own *send* section.
 
-### Example success `200` (linked)
-
-```json
-{
-  "success": true,
-  "data": {
-    "linked": true,
-    "chatId": "123456789",
-    "telegramUserId": 123456789,
-    "firstName": "Jane",
-    "lastName": "Doe",
-    "username": "janedoe",
-    "isActive": true,
-    "connectedAt": "2026-07-10T08:00:00.000Z"
-  }
-}
-```
-
-### Example success `200` (not linked)
-
-```json
-{ "success": true, "data": { "linked": false } }
-```
+It does not affect a vendor dashboard (the route was admin-only either way), but it is the
+same failure mode that left seven dead calls in this repo's source: **a page half-updated for
+a change reads as authoritative for the half nobody touched.**
 
 ---
 
-## POST `/webhooks/telegram/toggle`
+## 3 · Related
 
-**Purpose**: Toggle whether the caller receives Telegram notifications (does not unlink).
-
-**Auth**: any authenticated user
-
-### Example success `200`
-
-```json
-{ "success": true, "data": { "is_active": false } }
-```
-
-### Errors
-
-| Status | `error.code` | When |
-|---|---|---|
-| 404 | `TELEGRAM_NOT_LINKED` | The caller has no linked Telegram account |
-
----
-
-## POST `/webhooks/telegram/disconnect`
-
-**Purpose**: Unlink the caller's Telegram account. Sends a warning message to the chat, then deletes the link.
-
-**Auth**: any authenticated user
-
-### Example success `200`
-
-```json
-{ "success": true, "data": null, "message": "Account disconnected" }
-```
-
-### Errors
-
-| Status | `error.code` | When |
-|---|---|---|
-| 404 | `TELEGRAM_NOT_LINKED` | Nothing to disconnect |
-
----
-
-## POST `/webhooks/telegram/send` (admin)
-
-**Purpose**: Send a Telegram message directly to a user (by `userId`) or a chat (by `chatId`).
-
-**Auth**: `admin` only
-
-### Request body
-
-| Field | Type | Required | Validation |
-|---|---|---|---|
-| `userId` | string | conditionally | Provide **either** `userId` **or** `chatId` |
-| `chatId` | string | conditionally | " |
-| `message` | string | ✅ | 1–4096 chars |
-
-> Validation: at least one of `userId` / `chatId` must be present, else `400 VALIDATION_ERROR`
-> ("Either userId or chatId must be provided").
-
-### Example request
-
-```json
-{ "userId": "664usr...", "message": "Your payout has been processed." }
-```
-
-### Example success `200`
-
-```json
-{ "success": true, "data": { "success": true, "messageId": 42 } }
-```
-
-## Possible error codes
-
-| `error.code` | Status | When |
-|---|---|---|
-| `VALIDATION_ERROR` | 400 | Missing `message`, or neither `userId` nor `chatId` |
-| `AUTH_MISSING_TOKEN` | 401 | Not authenticated |
-| `AUTH_ROLE_NOT_FOUND` | 403 | `/send` called by a non-admin |
-| `TELEGRAM_NOT_LINKED` | 404 | Toggle/disconnect with no linked account |
-| `TELEGRAM_LINK_FAILED` | 500 | Token generation failed |
-| `INTERNAL_SERVER_ERROR` | 500 | Send/status failure |
-
-## Notes
-- `POST /webhooks/telegram/webhook` is the **bot bridge** endpoint (inbound `/start <token>` etc.), not
-  a frontend endpoint — do not call it from the app.
-- Requires `TELEGRAM_BOT_NAME` configured server-side for the deep-link URL.
-
-## Related
-- [../whatsapp/README.md](../whatsapp/README.md) — the equivalent WhatsApp linking
-- [../notifications/whatsapp-templates.md](../notifications/whatsapp-templates.md)
-- Per-role notification preferences: `vendor/notifications.md`, `agency/notifications.md`, `agent/notifications.md`
+- [`../connections/README.md`](../connections/README.md) — **the page you actually want**
+- [`../whatsapp/README.md`](../whatsapp/README.md) — the sibling bot bridge
+- [`../vendor/notifications.md`](../vendor/notifications.md) — per-vendor notification preferences
+- [`../MIGRATION-2026-08.md`](../MIGRATION-2026-08.md) — the dead calls, with file and line

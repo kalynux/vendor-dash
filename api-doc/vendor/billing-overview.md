@@ -1,5 +1,18 @@
 # Billing Module — Overview (Pricing Plans & Credit Wallet)
 
+**Verified against backend source on 2026-08-24** — `scripts/seed/seed-pricing-plans.ts:47-51`,
+`src/modules/billing/services/entitlement.service.ts`, `src/modules/billing/validators/billing.validators.ts`.
+
+> **This is the concept page.** The routes are at [`billing.md`](./billing.md); the cross-role
+> model is at [`../billing-plans-across-roles.md`](../billing-plans-across-roles.md); Stripe
+> specifics are at [`stripe-payments.md`](./stripe-payments.md).
+>
+> 🔴 **The Admin Billing API is no longer browser-reachable.** jovi-mall's public `/api/admin`
+> mount was removed; the catalog now lives at `/api/internal/admin/billing/*` behind
+> `INTERNAL_SERVICE_TOKEN`, answered only to wi-admin. Its page is not mirrored here. The
+> reference below is kept unlinked because the *field names* on that surface are the field
+> names you read back.
+
 The billing module monetizes vendors through **pricing plans** and meters two
 costly platform actions (AI product **vectorisation** and outbound **WhatsApp
 template messages**) through a **credit wallet**.
@@ -8,7 +21,7 @@ This overview explains the domain concepts and data shapes shared by all billing
 endpoints. See the companion docs for the actual requests:
 
 - [**Vendor Billing API**](./billing.md) — plans, plan purchase, current plan, credit balance/ledger, top-ups, settings (vendor role)
-- [**Admin Billing API**](../admin/billing.md) — pricing plan catalog CRUD + manual plan assignment (admin role)
+- **Admin Billing API** — pricing plan catalog CRUD + manual plan assignment. **wi-admin only** (`/api/internal/admin/billing/*`); see the note above
 
 ---
 

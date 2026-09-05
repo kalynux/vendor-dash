@@ -1,5 +1,25 @@
 # Vendor Media Storage
 
+**Verified against backend source on 2026-08-24** —
+`src/api/controllers/file-management.controller.ts:183-220` (the `storage` object),
+`src/core/uploads/upload-config.ts:136-190` (the per-type caps),
+`src/api/validators/file-management.validator.ts:14` (the six category keys),
+`scripts/seed/seed-pricing-plans.ts:47-51` (the plan limits).
+
+> **The `GET /api/files/storage` shape on this page is correct** — `limitBytes`, `usedBytes`,
+> `remainingBytes`, `byCategory`, and nothing else. It is the page that gets it right; the
+> older [`file-management.md`](./file-management.md) does not. Where the two disagree, this
+> one wins.
+>
+> ⚠ The `byCategory` keys are **singular** — `image`, `video`, `audio`, `document`,
+> `archive`, `other` — while the *storage folders* a file lands in are **plural**
+> (`images/`, `videos/`, …). They are two vocabularies for the same six groups. Do not key
+> one off the other.
+>
+> **The `starter` plan limit is 1 GB**, not the 10 GB in the example body below (which is a
+> `growth`-sized number). Verified in `seed-pricing-plans.ts:47`. Never hardcode either —
+> read `limitBytes`.
+
 How product-media storage works for vendors: the per-plan limit, how to read
 usage/analytics, how uploads are gated, the storage-alert notifications, and the
 automated storage lifecycle (cleanup) that can detach/delete unused media.

@@ -1,5 +1,15 @@
 # Health probes and metrics
 
+**Verified against backend source on 2026-08-24** — `src/api/routes/health.routes.ts`,
+`src/modules/system/services/dependency-probe.service.ts`,
+`src/infra/redis/redis.factory.ts`.
+
+> **Scope for this repository.** `/api/health` and `/api/health/live` are useful to a
+> dashboard as a connectivity check. `/api/health/ready` and `/metrics` are operator
+> surfaces — documented here because the page is a mirror of the platform contract, not
+> because a vendor screen should render them. `/metrics` in particular is **token-gated in
+> production** and is not something a browser can read.
+
 Unauthenticated, mounted on the bare app, and **ahead of the maintenance gate** — a probe that
 fails during a maintenance window makes the orchestrator restart the fleet, and telemetry matters
 most during an incident.
@@ -64,11 +74,53 @@ somebody else's database — so a dependency has no business failing a liveness 
   "degraded": false,          // true when Redis is down but not required
   "maintenance": null,        // "readonly" | "down" while a window is open
   "dependencies": {
-    "mongo": { "status": "up", "readyState": "connected", "latencyMs": 3, "required": true },
-    "redis": { "entries": [ { "db": 7, "constant": "SLOT_LOCK_DB", "status": "up", "latencyMs": 1 } ],
+    "mongo": { "status": "up", "readyState": "connected", "database": "jovi_mall",
+               "host": "127.0.0.1:27017", "latencyMs": 3, "error": null, "required": true },
+    "redis": { "entries": [ /* ONE ENTRY PER CATALOGUED DB — see below */ ],
                "required": false } },
   "timestamp": "…" }
 ```
+
+### `dependencies.redis.entries[]` — **12 entries, 9 keys each**
+
+This is where the old copy of this page was wrong. It showed a four-key entry and one array
+element, which reads as "a sample". It is neither: the array is **the whole catalogue, always**,
+and every entry carries **nine** keys.
+
+```jsonc
+{
+  "db": 7,                        // the Redis logical database number
+  "constant": "SLOT_LOCK_DB",     // the name used in backend source
+  "label": "Booking slot holds",  // human label
+  "purpose": "The 15-minute courtesy hold between choosing a slot and paying for it",
+  "status": "idle",               // "up" | "idle" | "down"  — see the table below
+  "everOpened": false,            // has this PROCESS ever opened this db?
+  "latencyMs": null,              // ping time when "up", else null
+  "connectionErrors": 0,          // cumulative, per db
+  "error": null                   // the ping failure message when "down"
+}
+```
+
+`REDIS_DB_CATALOG` (`redis.factory.ts:75`) has **12** rows, so `entries` has 12 elements on
+every call:
+
+| db | constant | what it holds |
+|---:|---|---|
+| 3 | `EMAIL_VERIFY_DB` | email-verification tokens |
+| 5 | `WA_IDEMPOTENCY_DB` | WhatsApp idempotency keys |
+| 6 | `WA_WINDOW_DB` | WhatsApp 24-hour service window |
+| 7 | `SLOT_LOCK_DB` | booking slot holds |
+| 8 | `DOWNLOAD_TOKEN_DB` | digital-download tokens |
+| 10 | `TELEGRAM_WINDOW_DB` | Telegram send window |
+| 11 | `RATE_LIMIT_DB` | rate-limit counters |
+| 12 | `WORKER_LOCK_DB` | background-worker overlap locks |
+| 13 | `CONNECTION_CODE_DB` | messaging connection codes (`/connect`) |
+| 14 | `LOGIN_CODE_DB` | passwordless sign-in sessions |
+| 15 | `GEO_CACHE_DB` | geocoding results |
+| 16 | `RECOMMENDATION_CACHE_DB` | computed related-product lists |
+
+⚠ **`everOpened` and `connectionErrors` are per-PROCESS, not per-cluster.** Behind more than
+one instance the numbers differ between scrapes and neither is a fleet total.
 
 ### Mongo is required. Redis is not — and the probe must not connect.
 
@@ -97,8 +149,8 @@ does not silently create a connection.
 ### geo-tracker is deliberately not a dependency here
 
 Its readiness already depends on this service. Making the reverse true creates a mutual-readiness
-deadlock in which a cold start of both never converges. It appears on
-[`/system/integrations`](./admin/system.md#get-integrations) as reachability, and nowhere on a probe.
+deadlock in which a cold start of both never converges. It appears on `GET /api/internal/admin/system/integrations` as reachability, and nowhere on a
+probe. (That route is wi-admin's, not a browser's — see [§ note](#a-note-on-the-operator-surfaces).)
 
 ### 200 during maintenance, always
 
@@ -147,6 +199,23 @@ distinction is logged server-side.
 geo-tracker's `internal/platform/metrics/metrics.go`. Includes Node default metrics — **event-loop
 lag** is the single most useful Node-specific signal and nothing else here reports it.
 
-The JSON projection of the same registry is at
-[`GET /system/metrics`](./admin/system.md#get-metrics), where the label-cardinality rules and the
-error-counter coverage caveats are documented.
+The JSON projection of the same registry is at `GET /api/internal/admin/system/metrics`, where
+the label-cardinality rules and the error-counter coverage caveats are documented.
+
+---
+
+## A note on the operator surfaces
+
+`/api/internal/admin/system/*` is referenced twice above. **It is not reachable from a
+browser** — it is guarded by `INTERNAL_SERVICE_TOKEN` and answered only to wi-admin, server to
+server. Its documentation lives in the backend repository's own `api-doc/admin/system.md` and
+in `admin/docs/ADR-014-SYSTEM-OPERATIONS.md`; neither is mirrored here, and this page names
+them rather than linking them for that reason.
+
+What a vendor dashboard can usefully do with this page:
+
+- **`GET /api/health`** — an unauthenticated liveness ping for a connectivity banner. It is
+  frozen: exactly `{ status, timestamp }`, unconditional 200, and **exempt from rate
+  limiting**. It is safe to poll.
+- **Everything else** — read it to understand what an operator sees when you report a problem,
+  not to render it.

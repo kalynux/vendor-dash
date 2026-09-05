@@ -1,128 +1,115 @@
-# Linking Notification Channels (Email / Telegram / WhatsApp)
+# Notification channels — SUPERSEDED
 
-To receive notifications on a secondary channel, a vendor completes **two independent steps**:
+**Verified against backend source on 2026-08-24.**
 
-1. **Verify / link the channel** (the flows on this page) → flips the read-only `*Verified` flag to `true`.
-2. **Enable the channel** in notification settings (`PATCH /api/vendor/notification-preferences`, see [notifications.md](./notifications.md)) → only **one** secondary channel can be active at a time.
-
-Both are required: the backend only delivers on a channel that is **verified AND enabled**. In-app notifications always work and need neither step.
-
-> The settings UI should read `emailVerified` / `telegramVerified` / `whatsappVerified` from `GET /api/vendor/notification-preferences` to decide whether to show "Connect" (start a flow below) or "Enable" (toggle the channel).
-
-All authenticated endpoints below require `Authorization: Bearer <vendor token>`.
-
----
-
-## Email
-
-Sets `emailVerified: true` (backed by the vendor's `email_verified`).
-
-### Step 1 — Request the verification email
-`POST /api/auth/send-email-verification`
-
-- No body. Uses the authenticated vendor's email.
-- Sends an email containing a one-time verification link (token valid ~ configured TTL).
-
-**Success** — `200 OK`:
-```json
-{ "message": "Verification email sent" }
-```
-**Errors**:
-- `404 AUTH_PROFILE_NOT_FOUND` — no profile for the role
-- `409 AUTH_EMAIL_ALREADY_VERIFIED` — already verified
-- `422 AUTH_EMAIL_MISSING` — vendor has no email on file
-
-### Step 2 — Vendor clicks the emailed link
-`GET /api/auth/verify-email?token=<token>`
-
-- Public endpoint; the link is opened from the vendor's inbox (frontend does not build it).
-- Marks the email verified.
-
-**Success** — `200 OK`:
-```json
-{ "message": "Email verified successfully" }
-```
-**Errors**:
-- `400 AUTH_VERIFY_TOKEN_INVALID` — missing, invalid, or expired token
-
-After this, `emailVerified` becomes `true` and the vendor can set `emailEnabled: true`.
+> ## 🔴 This page described a mechanism that no longer exists.
+>
+> It documented **three** per-channel linking flows — email, Telegram, WhatsApp — as if they
+> were siblings. They are not, any more:
+>
+> | Channel | Where it lives now |
+> |---|---|
+> | **Telegram** | [`../connections/README.md`](../connections/README.md) — `/api/me/connections` |
+> | **WhatsApp** | [`../connections/README.md`](../connections/README.md) — same three routes, same code |
+> | **Email** | still its own flow — [§ 2](#2--email-verification--the-one-flow-that-did-not-move) below |
+>
+> And **enabling** a channel once linked is [`vendor/notifications.md`](./notifications.md),
+> which it always was.
 
 ---
 
-## Telegram
+## 1 · What changed, and what it costs you
 
-Sets `telegramVerified: true` (backed by an **active** Telegram link).
+The old model had one linking endpoint pair per channel, each with its own token, its own
+status shape and its own disconnect verb. The replacement is **one** mechanism for both
+messaging channels, at `/api/me/connections`, and **the direction of the handshake is
+inverted**: the bot mints a 6-character code that the user carries back to your dashboard,
+rather than the platform minting a token the user carries to the bot.
 
-### Step 1 — Get the bot deep-link
-`POST /api/webhooks/telegram/link-token`
+🔴 **Six of the endpoints this page used to document are called by
+[`src/services/notification-channels.service.ts`](../MIGRATION-2026-08.md#1--seven-dead-calls)
+right now, and all six 404.** That file is the single largest concentration of dead calls in
+this repository. This page is not the fix — it is the reason the fix is needed.
 
-**Success** — `200 OK`:
-```json
-{
-  "bot_url": "https://t.me/<BotName>?start=<token>",
-  "expires_at": "2026-06-26T12:10:00.000Z"
-}
-```
-- Token is single-use, valid 10 minutes. Show `bot_url` as a button/QR for the vendor to open in Telegram.
+**Two consequences for the UI you have already built:**
 
-### Step 2 — Vendor taps "Start" in Telegram
-The vendor opens `bot_url` and presses Start; Telegram sends `/start <token>` to the bot, which the backend consumes to create the link and replies with a confirmation message. No frontend call needed.
-
-### Status / manage
-- `GET /api/webhooks/telegram/status` →
-  ```json
-  { "linked": true, "isActive": true, "chatId": "...", "firstName": "...", "connectedAt": "..." }
-  ```
-- `POST /api/webhooks/telegram/toggle` → flips `isActive` (`{ "is_active": false }`). **Note:** when `isActive` is `false`, `telegramVerified` reports `false` and Telegram delivery stops, even if previously linked.
-- `POST /api/webhooks/telegram/disconnect` → removes the link.
-
-After linking (and `isActive: true`), `telegramVerified` becomes `true`; the vendor can set `telegramEnabled: true`.
+1. **There is nothing to poll.** The platform is passive between "we told them to message the
+   bot" and "they typed the code in". A spinner waiting for a connection to appear spins
+   forever. Build an input box.
+2. **The per-channel toggle is gone** (`POST /webhooks/telegram/toggle` had no replacement).
+   Enabling and disabling is now entirely `PATCH /api/vendor/notification-preferences`, and
+   that endpoint has **its own trap** — a lone `false` writes nothing, and enabling one
+   secondary channel force-disables the other two. It is a radio group, not three switches.
+   See [`notifications.md` § 0.2](./notifications.md).
 
 ---
 
-## WhatsApp
+## 2 · Email verification — the one flow that did **not** move
 
-Sets `whatsappVerified: true` (backed by the vendor's verified `wa` binding).
+Still two routes, still on `/api/auth`. Verified in `src/modules/auth/auth.routes.ts:11,55`.
 
-### Step 1 — Request a WhatsApp verification code
-`POST /api/auth/request-wa-verification`
+### `POST /api/auth/send-email-verification`
 
-- Optional body: `{ "update_other_roles": true }` — also verify the same person's other roles (vendor/customer/agency/agent) in one go.
+**Auth:** any signed-in role. **Body:** none — the address comes from the caller's own
+role profile (`auth.service.ts:520-529`).
 
-**Success** — `200 OK`:
-```json
-{
-  "code": "A1B2C3D4E5F6G7H8",
-  "command": "/link:A1B2C3D4E5F6G7H8",
-  "bot_number": "<WA_BOT_NUMBER>",
-  "wa_link": "https://wa.me/<WA_BOT_NUMBER>?text=%2Flink%3AA1B2C3D4E5F6G7H8",
-  "expires_in_seconds": 600,
-  "instructions": "Click the link to verify your WhatsApp account automatically, or send the command manually to our WhatsApp bot."
-}
+```jsonc
+// 200
+{ "success": true, "data": { "message": "Verification email sent" } }
 ```
-**Errors**:
-- `404 AUTH_PROFILE_NOT_FOUND`
-- `409 AUTH_WA_ALREADY_VERIFIED`
 
-### Step 2 — Vendor sends the command to the bot
-The vendor taps `wa_link` (opens WhatsApp pre-filled with `/link:CODE`) and sends it — or sends `/link:CODE` manually to `bot_number`. The backend matches the code, binds the sender's WhatsApp number, and marks it verified. No frontend call needed.
+⚠ **The envelope correction.** This page previously showed the body as a bare
+`{ "message": "Verification email sent" }`. The controller sends it through `sendSuccess`
+(`auth.controller.ts:129`), so it is wrapped — read `data.message`, not `message`.
 
-### Status / manage
-- `GET /api/webhooks/whatsapp/link/status` →
-  ```json
-  { "linked": true, "wa_phone_id": "...", "name": "...", "bound_at": "..." }
-  ```
-- `DELETE /api/webhooks/whatsapp/link` → unlinks the WhatsApp account.
+| Status | `error.code` | When |
+|---|---|---|
+| 404 | `AUTH_PROFILE_NOT_FOUND` | no profile for the acting role — `details: { role }` |
+| 409 | `AUTH_EMAIL_ALREADY_VERIFIED` | already verified |
+| 422 | `AUTH_EMAIL_MISSING` | the profile carries no email address |
 
-After linking, `whatsappVerified` becomes `true`; the vendor can set `whatsappEnabled: true`.
+The token is a 32-byte hex string held in Redis for **24 hours** (`EMAIL_VERIFY_EXPIRE`,
+`auth.service.ts:35`). The emailed link points at the **API**, not at your dashboard:
+`${API_PUBLIC_URL}/api/auth/verify-email?token=…` (`auth.service.ts:537`).
+
+### `GET /api/auth/verify-email?token=…`
+
+**Public.** Opened from the vendor's inbox — **your frontend never builds this URL and never
+calls this route.** It is listed only so you do not try to.
+
+| Status | `error.code` | When |
+|---|---|---|
+| 400 | `AUTH_VERIFY_TOKEN_INVALID` | `token` absent or not a string (`auth.controller.ts:135`) |
+
+### The flag it flips
+
+`email_verified` on the role profile, surfaced as **`emailVerified`** in
+`GET /api/vendor/notification-preferences`. Read it there to decide between rendering
+"Verify" and "Enable" — the same decision the two messaging channels make from
+`GET /api/me/connections`'s `connected`.
+
+> ### Two gates, not one — unchanged, and still the thing that confuses users
+>
+> A channel delivers only when it is **verified/connected AND enabled**. They are independent
+> writes to independent endpoints. A vendor who has connected Telegram and not enabled it
+> receives nothing, and there is no error anywhere to tell them so. Render the two states
+> together, in one row, or they will not connect them.
+>
+> In-app notifications always work and need neither gate.
 
 ---
 
-## Putting it together (suggested UI flow)
+## 3 · Changing the address, rather than verifying it
 
-For each channel card in the notification settings screen:
+Not this page either. `PATCH /api/me/email` and `PATCH /api/me/phone` are the contact-change
+surface — a different flow with a different token lifetime, documented at
+[`../me/contact-change.md`](../me/contact-change.md).
 
-1. Read `*Verified` from `GET /api/vendor/notification-preferences`.
-2. If **not verified** → show **Connect**, which starts the relevant Step 1 above (email: send link; telegram: open `bot_url`; whatsapp: open `wa_link`). Poll/refresh preferences to detect when `*Verified` turns `true`.
-3. If **verified** → show an **Enable** toggle that calls `PATCH /api/vendor/notification-preferences`. Remember enabling one secondary channel auto-disables the others (single-channel rule, priority telegram → email → whatsapp).
-4. Language is set separately on the profile (`preferred_language`) — see [notifications.md](./notifications.md#notification-language).
+---
+
+## 4 · Related
+
+- [`../connections/README.md`](../connections/README.md) — **WhatsApp and Telegram linking**
+- [`./notifications.md`](./notifications.md) — the inbox, preferences and devices (7 routes)
+- [`../MIGRATION-2026-08.md`](../MIGRATION-2026-08.md) — the seven dead calls, with file and line
+- [`../me/contact-change.md`](../me/contact-change.md) — changing email or phone

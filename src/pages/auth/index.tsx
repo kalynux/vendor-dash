@@ -8,7 +8,8 @@ import { Login } from './Login';
 export { Register } from './Register';
 export { ForgotPassword } from './ForgotPassword';
 export { ResetPassword } from './ResetPassword';
-export { ConfirmEmailChange } from './ConfirmEmailChange';
+// `ConfirmEmailChange` is GONE — the main site serves /account/confirm-email for
+// all four apps. See the note where its route used to be in App.tsx.
 
 /**
  * The web build's sign-in card — what `/login` has always rendered.

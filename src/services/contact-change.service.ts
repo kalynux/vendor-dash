@@ -34,32 +34,26 @@ export async function requestEmailChange(email: string): Promise<void> {
 }
 
 /**
- * Redeem the token from the confirmation email.
+ * `confirmEmailChange` lived here and is GONE, along with the page that called it.
  *
- * 🔴 Three things about this route:
+ * It existed to hedge an open question — which app owns `/account/confirm-email`
+ * — and that question is closed. The backend builds the link from
+ * `STOREFRONT_URL`, a single variable with no role branch, so it has always
+ * pointed at the main site; the page there now serves all four apps and receives
+ * `app=vendor` so it can send the vendor back here afterwards.
  *
- *  1. It is under **`/api/auth`**, not `/api/me`.
- *  2. It is **public** — no session required. Deliberate: the person clicking the
- *     link in their mailbox may not be signed in, or may be on another device.
- *  3. It is a **POST**, specifically because mail clients and security scanners
- *     prefetch URLs and a GET would confirm the change without the user acting.
- *     So the emailed link points at a page carrying the token as a query
- *     parameter, and **that page must POST it** — following the link is not
- *     itself the confirmation.
+ * ⚠ **Do not reinstate it.** `POST /api/auth/email-change/confirm` reads no
+ * session, resolves the account from the token in the link, and syncs the
+ * confirmed address onto every role profile the account holds — so a second
+ * implementation would have nothing to do differently, and would only be another
+ * place to get the POST-not-GET rule wrong. (A `GET` that mutates is spent by
+ * whatever prefetches the mail.)
  *
- * ⚠ The link the backend builds is `<STOREFRONT_URL>/account/confirm-email?token=…`,
- * and that base is a single environment variable that today points at the
- * storefront, not at this dashboard. Which app owns `/account/confirm-email` is an
- * open question for the backend team — this function exists so that whichever app
- * handles it has one correct call to make.
+ * The half of the flow this dashboard *does* own is `requestEmailChange` above:
+ * it is authenticated, and it is what stamps `app=vendor` into the link.
+ *
+ * See jovi-mall `api-doc/auth/FRONTEND-CHANGELOG-email-verification.md`.
  */
-export async function confirmEmailChange(token: string): Promise<{ email: string }> {
-  const res = await api.post<{ success: boolean; data: { email: string } }>(
-    '/auth/email-change/confirm',
-    { token },
-  );
-  return res.data;
-}
 
 /** Abandon a pending email change. `409 CONTACT_CHANGE_NOT_PENDING` if there is none. */
 export async function cancelEmailChange(): Promise<void> {

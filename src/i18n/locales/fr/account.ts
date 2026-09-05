@@ -97,17 +97,8 @@ export const account = {
         pendingExpires: 'Expire {{when}}.',
         pendingExpired: 'Cette demande a expiré. Annulez-la et recommencez.',
 
-        confirmPage: {
-            title: 'Confirmez votre nouvelle adresse e-mail',
-            subtitle: 'Appuyez sur le bouton ci-dessous pour terminer la modification.',
-            confirm: "Confirmer le changement d'e-mail",
-            missingToken:
-                "Ce lien ne contient pas son code de confirmation. Rouvrez le lien depuis l'e-mail, ou recommencez la modification depuis Compte › Sécurité.",
-            doneTitle: 'Adresse e-mail modifiée',
-            doneSubtitle: 'Vous vous connectez désormais avec {{email}}.',
-            doneHint: 'Vous restez connecté partout où vous l’êtes déjà.',
-            backToAccount: 'Aller aux paramètres du compte',
-        },
+        // `confirmPage` est SUPPRIMÉ avec la page correspondante — le site
+        // principal sert /account/confirm-email pour les quatre applications.
 
         errors: {
             loadFailed: "Nous n'avons pas pu charger vos identifiants de connexion. Réessayez.",

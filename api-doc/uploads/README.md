@@ -1,175 +1,263 @@
-# Files & Uploads (all roles)
+# Files & uploads — the shared `/api/files` tree
 
-The `/api/files` surface is **shared by every authenticated role** (customer, vendor, agency, agent,
-admin), with per-role size limits. Uploaded files are referenced elsewhere by their returned `id`
-(product images, vendor/agency branding, KYC documents, ticket attachments, etc.).
+**Verified against backend source on 2026-08-24** — `src/api/routes/file-upload.routes.ts`,
+`src/api/controllers/file-upload.controller.ts`,
+`src/api/controllers/file-management.controller.ts`,
+`src/core/storage/storage-trees.ts`, `src/api/index.ts:460-530`.
 
-- **Base URL**: `http://localhost:8022/api`
-- **Auth**: Required on every route (`requireAuth`) — cookie or `Bearer`.
-- **Permissions**: any authenticated role; a few management routes are `admin`-only (noted below).
-- **Response envelope**: standard `{ success, data, meta?, message? }` — see [../README.md](../README.md#the-response-envelope-read-this-first).
+**Base path:** `/api/files` · **Auth:** `requireAuth` on every route — **no role guard at all**
+· **Routes: 7**
 
-> This is the role-neutral contract. Vendor-specific storage/quota details are in
-> [../vendor/storage.md](../vendor/storage.md) and [../vendor/file-management.md](../vendor/file-management.md).
-
-## Endpoints
-
-| Method | Path | Purpose | Permissions |
-|---|---|---|---|
-| `POST` | `/files/upload` | Upload 1–10 files (multipart) | any authenticated |
-| `POST` | `/files/upload/video` | Upload video files (dedicated route) | any authenticated |
-| `GET` | `/files` | List your files (search / filter / paginate / sort) | any authenticated |
-| `GET` | `/files/storage` | Storage usage + plan limit summary | any authenticated |
-| `GET` | `/files/orphans` | List orphaned files (GC candidates) | **admin** |
-| `GET` | `/files/:id` | Get single file metadata | any authenticated |
-| `PATCH` | `/files/:id` | Update file metadata (`originalName` only) | any authenticated (owner) |
-| `DELETE` | `/files/:id` | Soft-delete (only if no live references) | any authenticated (owner) |
-| `DELETE` | `/files/:id/permanent` | Permanently delete | **admin** |
-| `GET` | `/files/<path>` | Static file serving (local storage provider) | (served by `express.static`) |
+> ### Three pages cover this surface. Read them in this order.
+>
+> 1. **This page** — the route list, the limits, the storage layout, and how to render a URL.
+> 2. [`../files/private-files.md`](../files/private-files.md) — 🔴 **`FileDetail.url` is
+>    `string | null` and there is a new `access` field.** The breaking change. Read it before
+>    you render anything.
+> 3. [`../vendor/file-management.md`](../vendor/file-management.md) — the long-form reference
+>    for the upload policy pipeline and its eleven violation codes.
+>
+> This page was **wrong in twelve ways** against source; the corrections are itemised in
+> `private-files.md` § "Where the backend's own docs are wrong" and summarised in
+> [§ 7](#7--what-this-page-used-to-say) below.
 
 ---
 
-## POST `/files/upload`
+## 1 · The seven routes
 
-**Purpose**: Upload 1–10 files in one multipart request.
+| Method | Path | Purpose |
+|---|---|---|
+| `POST` | `/api/files/upload` | upload 1–10 files (multipart, field `files`) |
+| `POST` | `/api/files/upload/video` | upload videos (multipart, field `videos`) |
+| `GET` | `/api/files` | list your own files |
+| `GET` | `/api/files/storage` | storage usage + plan limit |
+| `GET` | `/api/files/:id` | one file's record |
+| `PATCH` | `/api/files/:id` | rename (`originalName` only) |
+| `DELETE` | `/api/files/:id` | soft-delete |
 
-**Content-Type**: `multipart/form-data` · **Form field**: `files` (repeatable, up to 10).
+### 🔴 There is no admin half of this router any more
 
-### Per-role size limit (per file)
+`GET /files/orphans` and `DELETE /files/:id/permanent` were the only two `requireRole(['admin'])`
+routes here. **Both are gone**, moved to `/api/internal/admin/files` behind the service token
+(`file-upload.routes.ts:16-23`). The handlers did not change — only the door. An `admin` role
+can no longer arrive on this router at all.
 
-| Role | Max size / file |
+If your code has a "permanently delete" button wired to `DELETE /api/files/:id/permanent`, it
+404s. Soft-delete is the only delete a dashboard can perform.
+
+---
+
+## 2 · `POST /api/files/upload`
+
+`multipart/form-data`, field name **`files`**, **1–10** files per request.
+
+### Per-file size ceiling, by the caller's role
+
+From `file-upload.controller.ts:48-52` — a **coarse per-request gate only**; the policy engine
+applies the real rules afterwards.
+
+| Role | Ceiling |
 |---|---|
 | Customer | 100 MB |
 | Agency | 200 MB |
-| Vendor | 500 MB |
+| **Vendor** | **500 MB** |
 | Agent | 1 GB |
 | Admin | 2 GB |
 
-An unrecognised role falls back to the **customer** limit (100 MB).
+An unrecognised role falls back to the customer ceiling.
 
-### Example success `201` (representative shape)
+### `201` — and note what it is *not*
 
-```json
+```jsonc
 {
   "success": true,
-  "data": [
-    {
-      "id": "664file...",
-      "originalName": "product-front.jpg",
-      "mimeType": "image/jpeg",
-      "size": 254013,
-      "url": "http://localhost:8022/api/files/images/2026/07/664file....jpg",
-      "provider": "local",
-      "ownerType": "vendor",
-      "createdAt": "2026-07-17T10:20:30.000Z"
-    }
-  ]
+  "data": [ /* raw file RECORDS — see below */ ],
+  "message": "Successfully uploaded 1 file(s)",
+  "meta": { "count": 1, "roleLimit": "500 MB" }
 }
 ```
 
-> Exact metadata fields are owned by the file model — see [../vendor/file-management.md](../vendor/file-management.md).
+🔴 **`data` is an array of file *records*, not `FileDetail` objects.** They carry
+`id`, `key`, `provider`, `mimeType`, `size`, `checksum`, `originalName`, `ownerType`,
+`ownerId`, `createdAt`, `updatedAt`, `deletedAt`, `purgeAt` — **no `url` and no `access`**
+(`upload-intake.service.ts:110-124`). You get a URL only when the file comes back *referenced
+from another entity*, as a `FileDetail`.
 
-### Where a file is stored
+**So: upload, keep the `id`, attach the `id`, and render from whatever the owning entity
+returns.** Never build a display URL out of the upload response.
 
-This route is **general media intake**: you are not saying what the file is *for* (that is decided
-later, when you attach the returned `id`), so each file is stored under the folder for **its own
-detected media type** — `images/`, `videos/`, `audio/`, `documents/`, `archives/`, `other/` — the same
-taxonomy as `?category=` on `GET /files`. The type is taken from the file's actual bytes, not from the
-declared `Content-Type` or the extension, and follows any conversion the pipeline applies (a `png`
-stored as `webp` still lands in `images/`).
-
-This is a storage-layout detail: always use the returned `id`/`url`, never a hand-built path.
-Purpose-scoped folders (product media, digital assets, delivery proofs, system files) belong to their
-own dedicated endpoints and carry their own role restrictions.
+⚠ `meta.roleLimit` is a **display string** (`"500 MB"`), not a number of bytes.
 
 ### Errors
 
 | Status | `error.code` | When |
 |---|---|---|
-| 400 | `VALIDATION_ERROR` | No files, or an unexpected/too-many-files field |
-| 400 | `UPLOAD_POLICY_VIOLATION` | A file failed the upload policy — `error.details.violations[]` lists each one with its own `code` (`MIME_NOT_ALLOWED`, `MIME_TYPE_MISMATCH`, `UNDETECTABLE_TYPE`, `QUOTA_EXCEEDED`, `VIRUS_DETECTED`, …) |
-| 413 | `CATALOG_FILE_TOO_LARGE` | A file exceeds the caller's role size limit |
+| 400 | `UPLOAD_POLICY_VIOLATION` | any policy refusal — read `details.violations[]`, never `message` |
+| 413 | `CATALOG_FILE_TOO_LARGE` | a file exceeds the role ceiling above |
+| 400 | `VALIDATION_ERROR` | multer rejected the multipart (unexpected field, too many files) |
+
+🔴 **"No files attached" is `UPLOAD_POLICY_VIOLATION`, not `VALIDATION_ERROR`** — the cheap
+pre-pipeline gate raises it through the same shape, with
+`violations[0].code = "NO_FILES_UPLOADED"`. The eleven pipeline codes and the varying status
+(413 for `FILE_TOO_LARGE`, 400 otherwise) are in
+[`../errors/README.md`](../errors/README.md).
 
 ---
 
-## POST `/files/upload/video`
+## 3 · `POST /api/files/upload/video`
 
-**Purpose**: Upload video files on a dedicated route (`mp4`, `mov`, `webm`).
+`multipart/form-data`, field name **`videos`**. `mp4`, `mov`, `webm`.
 
-**Content-Type**: `multipart/form-data` · **Form field**: `videos`.
-
-- **Per-file size limit**: 70 MB.
-- **Per-actor count limit**: customers max **1**, all other roles max **3**.
-
-### Errors
-
-| Status | `error.code` | When |
-|---|---|---|
-| 400 | `VALIDATION_ERROR` | No files, too many files, or unsupported type |
-| 413 | `CATALOG_FILE_TOO_LARGE` | A video exceeds 70 MB |
+- **70 MB** per file (`VIDEO_MAX_FILE_SIZE`, `file-upload.controller.ts:56`) — **not** the role
+  ceiling from § 2. A vendor's 500 MB allowance does not apply here.
+- **Count:** customers 1, every other role **3**.
+- `201` mirrors § 2, with `meta` carrying `count` and `perFileLimit: "70 MB"`.
 
 ---
 
-## GET `/files`
+## 4 · `GET /api/files` — the list, and its two traps
 
-**Purpose**: List the caller's uploaded files with pagination, name search, characteristic filtering
-and sorting.
-
-### Query parameters (see `ListFilesQuerySchema`)
-
-| Param | Type | Notes |
-|---|---|---|
-| `page` | integer | ≥ 1, default `1` |
-| `limit` | integer | 1–100 |
-| `search` | string | name substring |
-| `mimeType` / `category` | string | filter by content type / category |
-| `provider` | string | `local` \| `firebase` \| `cloudinary` |
-| `ownerType` | string | owner role/type |
-| `minSize` / `maxSize` | integer | byte range |
-| `startDate` / `endDate` | date | upload-date range |
-| `sort` | string | field; prefix `-` for descending |
-
-### Example success `200`
-
-```json
-{ "success": true, "data": [ { "id": "664file...", "originalName": "logo.png", "size": 12044, "...": "..." } ], "meta": { "total": 42, "page": 1, "limit": 20, "pages": 3 } }
+```jsonc
+{
+  "success": true,
+  "data": {
+    "files": [ /* file records */ ],
+    "storage": { "limitBytes": 1073741824, "usedBytes": 734003200,
+                 "remainingBytes": 339480576,
+                 "byCategory": { "image": { "bytes": 700000000, "count": 118 } } },
+    "pagination": { "page": 1, "limit": 20, "total": 42, "pages": 3 }
+  }
+}
 ```
 
+🔴 **Pagination is inside `data`, not in `meta`.** This is one of the few list endpoints on the
+platform that does not use the house `meta` envelope. Read `data.pagination`.
+
+🔴 **The list leaks soft-deleted rows** (**F-26**). The query is built from ownership plus your
+filters and **never excludes `deletedAt`** (`file-management.controller.ts:139-149`). Every
+id-scoped route does exclude it; this one does not. **Filter `deletedAt !== null` client-side**
+or a deleted file reappears in a media browser.
+
+### Query parameters — from `ListFilesQuerySchema`, not from the old doc
+
+| Param | Values |
+|---|---|
+| `page` | ≥ 1, default 1 |
+| `limit` | 1–**50**, default 20 |
+| `search` | 1–255 chars, case-insensitive substring on `originalName` (escaped server-side) |
+| `mimeType` | exact string — **wins over `category`** |
+| `category` | `image`, `video`, `audio`, `document`, `archive`, `other` — **singular**, and *not* the plural storage-folder names |
+| `provider` | `local`, `s3`, `gcs`, `r2`, `firebase`, `cloudinary` |
+| `ownerType` | `vendor`, `admin`, `customer`, `agent`, `agency`, `system` |
+| `minSize` / `maxSize` | bytes; `minSize` above `maxSize` → `400` |
+| **`createdAfter` / `createdBefore`** | dates; out of order → `400` |
+| **`sortBy`** | `createdAt`, `updatedAt`, `size`, `originalName` (default `createdAt`) |
+| **`sortOrder`** | `asc`, `desc` (default `desc`) |
+
+⚠ Four of those names are **different from what this page used to say**: the limit maximum is
+**50** not 100, the date filters are `createdAfter`/`createdBefore` not `startDate`/`endDate`,
+and sorting is a `sortBy` + `sortOrder` pair, **not** a single `sort` field with a `-` prefix.
+A `-createdAt` sent as `sort` is silently ignored — the schema has no such key.
+
+⚠ **`ownerType` does nothing for you.** A vendor is already scoped to their own
+`ownerType: "vendor"` and `ownerId` before your filters apply
+(`file-management.controller.ts:50-55`). It exists for the admin caller who no longer reaches
+this router.
+
+⚠ **`provider` is effectively always `"local"`** — `upload-intake.service.ts:145` returns the
+literal regardless of configuration. Filtering on anything else returns nothing.
+
 ---
 
-## GET `/files/storage`
+## 5 · `GET /api/files/storage`
 
-**Purpose**: Storage usage and plan-limit summary for the authenticated owner.
+The same `storage` object embedded in § 4, on its own.
 
-```json
-{ "success": true, "data": { "usedBytes": 734003200, "limitBytes": 2147483648, "fileCount": 42, "plan": "pro" } }
+```jsonc
+{ "success": true,
+  "data": { "limitBytes": 1073741824, "usedBytes": 734003200,
+            "remainingBytes": 339480576,
+            "byCategory": { "image": { "bytes": 700000000, "count": 118 } } } }
 ```
 
----
+`limitBytes` and `remainingBytes` are **nullable** — `null` means no plan cap applies.
+There is **no `fileCount` and no `plan`** field; both appeared in the old copy of this page and
+neither exists. The vendor's plan cap is 1 GB on `starter` — see
+[`../billing-plans-across-roles.md`](../billing-plans-across-roles.md).
 
-## GET `/files/:id` · PATCH `/files/:id` · DELETE `/files/:id`
-
-- **GET** — single file metadata. `404 NOT_FOUND` if not found / not owned.
-- **PATCH** — update metadata; only `originalName` is editable. Body: `{ "originalName": "new-name.jpg" }`.
-- **DELETE** — soft-delete (marks for garbage collection). **Only succeeds if the file has no live
-  references** — a file still attached to a product/branding/ticket cannot be deleted until detached.
+`403 AUTH_FORBIDDEN` for a role with no owner scope.
 
 ---
 
-## Admin-only management
+## 6 · Rendering a `url` — and the one attribute that will break you
 
-- `GET /files/orphans` — list files with no live references (older than a threshold), GC candidates.
-- `DELETE /files/:id/permanent` — hard-delete. Best-effort storage delete: a storage failure is logged
-  but does not roll back the DB delete.
+A public file's `url` points at the API host, so every dashboard renders it cross-origin.
+**Render it with a plain tag:**
 
-## Business rules & notes
+```html
+<img src={file.url} />                            <!-- correct -->
+<img src={file.url} crossOrigin="anonymous" />    <!-- do NOT -->
+```
 
-- The active storage backend is selected by `STORAGE_PROVIDER` (`local` | `firebase` | `cloudinary`);
-  `url` shape varies by provider. For `local`, files are additionally served under `/api/files/<path>`.
-- Files are **soft-deleted**; a daily cleanup worker performs detach → delete → alert.
-- Upload a file first, then pass its returned `id` where a file is referenced (products, branding,
-  KYC, ticket attachments).
+Public file responses carry **`Cross-Origin-Resource-Policy: cross-origin`**
+(`api/index.ts:522`), which is what lets a **no-cors** subresource — a plain `img`, `video` or
+`audio` tag — paint from any origin. No CORS, no `Origin` header, nothing to allowlist. Every
+other response in this service keeps helmet's `same-origin`.
 
-## Related
-- [../vendor/storage.md](../vendor/storage.md) · [../vendor/file-management.md](../vendor/file-management.md)
-- [../auth/README.md](../auth/README.md)
+Adding `crossOrigin` turns the load into a CORS request, which then requires the API to name
+your exact origin in `ALLOWED_ORIGINS` — a standing dependency on a backend env var for
+something as ordinary as an avatar, and one that fails on any client whose origin is not in
+that list: a packaged Capacitor build, a new subdomain, a preview deploy. The attribute buys
+only un-tainted canvas readback; if you need that, fetch the bytes through the API.
+
+> **This failure reads as a CORS problem and is not one.** `ALLOWED_ORIGINS` can name your
+> origin, the response can carry a perfect `Access-Control-Allow-Origin`, and the image still
+> does not paint — because a no-cors request never consults ACAO. `api/index.ts:484-508` says
+> the `crossOrigin` workaround "is how this arrived here".
+
+### Which paths are actually served
+
+`express.static` is mounted **per public tree**, derived from `STORAGE_TREE_VISIBILITY`
+(`core/storage/storage-trees.ts`). Fourteen trees; **eleven public**:
+
+```
+images · videos · audio · documents · archives · other
+products · variants · vendor-policy-documents · agency-policy-documents · system
+```
+
+**Three private** — `digital`, `shipments`, `ticket-attachments` — are **not on the static
+mount and 404 there**. That is the change behind `FileDetail.url` becoming nullable; see
+[`../files/private-files.md`](../files/private-files.md).
+
+An unclassified tree is treated as **private**, deliberately: the alternative is how the
+original defect happened.
+
+---
+
+## 7 · What this page used to say
+
+Kept so a reader who has the old version in their head can check themselves against it.
+
+| The old page said | Source says |
+|---|---|
+| `GET /files/orphans` and `DELETE /files/:id/permanent` are admin routes here | both **moved** to `/api/internal/admin/files`; this router has no role guard |
+| the upload `201` carries `url` and `provider` per file | file **records** — no `url`, no `access` |
+| `GET /files` returns a `data` array plus `meta` | `data` is an object of `files`, `storage`, `pagination` — **no `meta`** |
+| `limit` accepts 1–100 | **1–50** |
+| date filters are `startDate` / `endDate` | **`createdAfter` / `createdBefore`** |
+| sorting is `sort` with a `-` prefix | **`sortBy` + `sortOrder`** |
+| `/files/storage` returns `usedBytes`, `limitBytes`, `fileCount`, `plan` | `limitBytes`, `usedBytes`, `remainingBytes`, `byCategory` |
+| a "no files" upload is `VALIDATION_ERROR` | `UPLOAD_POLICY_VIOLATION` / `NO_FILES_UPLOADED` |
+| `/api/files/<path>` serves storage | only the **11 public trees**; the 3 private ones 404 |
+| "404 if not found or not owned" | **404 `CATALOG_FILE_NOT_FOUND`** and **403 `AUTH_FORBIDDEN`** are different answers |
+| `provider` is `local`, `firebase` or `cloudinary` | the schema accepts six values; the writer always emits `local` |
+| *(nothing about it)* | the list **leaks soft-deleted rows** — F-26 |
+
+---
+
+## 8 · Related
+
+- [`../files/private-files.md`](../files/private-files.md) — 🔴 the `FileDetail` break
+- [`../vendor/file-management.md`](../vendor/file-management.md) — the policy pipeline in full
+- [`../vendor/storage.md`](../vendor/storage.md) — the vendor's quota and what counts against it
+- [`../errors/README.md`](../errors/README.md) — `UPLOAD_POLICY_VIOLATION` and its eleven codes

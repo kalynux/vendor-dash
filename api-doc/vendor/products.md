@@ -1,1384 +1,563 @@
-# Vendor Product Management API
+# Products — core CRUD
 
-Complete API reference for managing products in the Jovi Mall multi-vendor platform.
+**Verified against backend source on 2026-08-24.** Every statement below was read out of
+`jovi-mall/src/`, not out of a document. Where the backend's own `api-doc/vendor/products.md`
+disagrees, source won and the disagreement is filed — see [§ 9](#11--where-the-backends-own-doc-is-wrong).
 
-> [!IMPORTANT]
-> **Authentication Required**
-> All endpoints require:
-> - `Authorization: Bearer <access_token>` header
-> - Vendor role
-> - Vendors can only access and modify their own products — ownership is enforced at the repository level using the vendor identity from the JWT
+**Base path:** `/api/vendor/products` · **Auth:** vendor session · **Routes on this page: 8**
 
----
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/api/vendor/products/` | list |
+| `POST` | `/api/vendor/products/` | create a draft |
+| `GET` | `/api/vendor/products/:id` | detail |
+| `DELETE` | `/api/vendor/products/:id` | archive (**not** delete) |
+| `POST` | `/api/vendor/products/:id/duplicate` | copy |
+| `PATCH` | `/api/vendor/products/:id/status` | publish / unpublish / archive |
+| `POST` | `/api/vendor/products/bulk/archive` | archive up to 50 |
+| `POST` | `/api/vendor/products/bulk/status` | status-change up to 50 |
 
-> [!TIP]
-> **Simple mode.** Physical products with a single price and no options can be
-> created and edited in one call via `POST /api/vendor/products/simple` — see
-> **[simple-products.md](./simple-products.md)**. Those products carry
-> `mode: "simple"` and **reject** the variant/option endpoints documented here
-> until `POST /:id/convert-to-advanced` is called. Everything below applies to
-> `mode: "advanced"` products, which is what every product created through the
-> endpoints on this page (and every pre-existing product) reports.
-
----
-
-## Table of Contents
-
-- [Product Object Shape](#product-object-shape)
-- [Product CRUD](#product-crud)
-- [Default Variant Management](#default-variant-management)
-- [Bulk Operations](#bulk-operations)
-- [Digital Product Asset Management](#digital-product-asset-management)
-- [Product Options](#product-options)
-- [Vectorisation](#vectorisation)
-- [Activation Requirements](#activation-requirements)
-- [Error Codes](#error-codes)
+Related pages: [product-update.md](./product-update.md) (`PATCH /:id`) ·
+[variants.md](./variants.md) · [option-variant-management.md](./option-variant-management.md) ·
+[simple-products.md](./simple-products.md) · [shipping.md](./shipping.md) ·
+[product-upload-flow.md](./product-upload-flow.md) (vectorisation) ·
+[product-description-rich.md](./product-description-rich.md) ·
+[digital-products.md](./digital-products.md) · [availability-rules.md](./availability-rules.md)
 
 ---
 
-## Product Object Shape
+## 0 · Read this first — two response shapes for "a product"
 
-This is the full shape of a product object returned by all read endpoints.
+This is the single most expensive mistake available on this surface.
 
-```json
-{
-  "id": "507f1f77bcf86cd799439011",
-  "vendorId": "507f1f77bcf86cd799439012",
-  "type": "physical",
-  "mode": "advanced",
-  "status": "draft",
-  "title": "Blue T-Shirt",
-  "description": "Comfortable cotton t-shirt",
-  "slug": "blue-t-shirt",
-  "category": "Apparel",
-  "tags": ["cotton", "summer", "casual"],
-  "seo": {
-    "title": "Buy Blue T-Shirt Online",
-    "description": "High quality cotton t-shirt in blue"
-  },
-  "files": [
-    {
-      "id": "507f1f77bcf86cd799439030",
-      "key": "products/abc123.jpg",
-      "url": "https://storage.example.com/products/abc123.jpg",
-      "mimeType": "image/jpeg",
-      "size": 245678,
-      "originalName": "cover.jpg"
-    }
-  ],
-  "hasVariants": true,
-  "defaultVariantId": "507f1f77bcf86cd799439015",
-  "vectorisationEnabled": false,
-  "vectorisationStatus": "not_started",
-  "vectorisedDataId": null,
-  "createdAt": "2026-01-29T10:00:00.000Z",
-  "updatedAt": "2026-01-29T10:00:00.000Z"
-}
+| Route | Media key | `pickup` present? |
+|---|---|---|
+| `GET /`, `GET /:id`, `POST /`, `PATCH /:id` | **`files: FileDetail[]`** | yes |
+| `PATCH /:id/status`, `POST /:id/duplicate` | **`fileIds: string[]`** | no |
+
+The first group returns the *enriched* product; the second returns the raw domain object.
+**A client that re-hydrates its store from a status-change response will blank its own gallery**,
+because `files` is absent and `fileIds` is a list of id strings.
+
+And within the enriched group there is a second trap: **the list endpoint keys its populated
+`FileDetail` objects as `fileIds`, while the detail endpoint keys the same objects as `files`.**
+Same type, two key names, deliberately
+(`src/modules/catalog/read-models/product-detail.read-model.ts:57-74`). A shared `<ProductCard>`
+reading `product.files` renders nothing on the list.
+
+```ts
+// Safe accessor for both shapes.
+const media = (p: any): FileDetail[] =>
+  Array.isArray(p.files) ? p.files
+  : Array.isArray(p.fileIds) && typeof p.fileIds[0] === 'object' ? p.fileIds
+  : [];   // raw shape: fileIds is string[], you have no media without a re-fetch
 ```
-
-> **Note:** The `GET /api/vendor/products/:id` endpoint returns fully populated `files` objects (id, key, url, mimeType, size, originalName) instead of bare `fileIds`. The list endpoint (`GET /api/vendor/products`) also returns populated file objects, but under the field name `fileIds` and with a **trimmed payload shape tailored to the products grid/list UI** — see [List Products](#list-products) for the exact response.
-
-**Vectorisation fields:**
-
-| Field | Type | Values | Description |
-|-------|------|--------|-------------|
-| `vectorisationEnabled` | boolean | `true` / `false` | Opt-in flag. Vendor must set this to `true` for vectorisation to run. Defaults to `false`. |
-| `vectorisationStatus` | string | `not_started` / `pending` / `completed` / `failed` | Current pipeline state. Read-only from the frontend — managed by the backend. |
-| `vectorisedDataId` | string \| null | — | External ID returned by the vectoriser service once `vectorisationStatus` is `completed`. `null` until then. |
-
-> **Note on async behaviour:** Vectorisation never blocks the API response. After a create or update call, the product is saved first and the response is returned immediately. The vectorisation pipeline runs in the background. Poll `GET /api/vendor/products/:id` to check `vectorisationStatus` if you need to know when it completes.
-
-**Digital product — additional fields:**
-```json
-{
-  "digitalConfig": {
-    "isActive": true
-  }
-}
-```
-
-> [!IMPORTANT]
-> **Digital products are now multi-variant.** Each variant owns its own asset, price, SKU, name, and download limits (`maxDownloads`, `expiresAfterDays`). The product-level `digitalConfig` only carries `isActive` — a product-wide download kill switch. The asset/limit fields are **no longer** on the product.
->
-> See the dedicated **[Digital Products — Multi-Variant Guide](./digital-products.md)** for the full model, per-variant asset upload endpoints, the variant `status ⇔ asset` invariant, the 1–5 variant cap, and frontend UI guidance. The per-variant asset shape is documented on the variant object (`variant.digital.asset`) in [variants.md](./variants.md).
-
-> [!IMPORTANT]
-> **Service config + pricing live on the variant, not the product.** A service product has **exactly one** variant that carries its `price` and `serviceConfig` (slot duration, buffers, booking mode, optional peak-hours surcharge). The product itself has no `serviceConfig`. Create the variant via `POST /products/:id/variants` — see [variants.md](./variants.md).
-
-**Physical product — additional fields:**
-```json
-{
-  "delivery": {
-    "agencyId": null,
-    "freeDelivery": false,
-    "pickupLocation": {
-      "source": "agency_storage",
-      "vendorAddressId": null,
-      "agencyAddressId": "6641abc123def458"
-    }
-  },
-  "pickup": {
-    "source": "agency_storage",
-    "vendorAddressId": null,
-    "agencyAddressId": "6641abc123def458",
-    "address": {
-      "label": "Bonabéri branch",
-      "formattedAddress": "Bonabéri, Douala, Cameroon",
-      "addressLine1": "Bonabéri, Rue des Palmiers",
-      "addressLine2": null,
-      "city": "Douala",
-      "state": "Littoral",
-      "country": "Cameroon",
-      "coordinates": { "lat": 4.0731, "lng": 9.6812 }
-    },
-    "isPrimaryFallback": false
-  }
-}
-```
-
-> [!IMPORTANT]
-> **Physical products require a `delivery.pickupLocation` to activate** — it tells the resolved delivery agency where to collect the item from. `source: "vendor_address"` points at one of your [`business_addresses`](./profile.md) (`vendorAddressId` required); `source: "agency_storage"` means the agency already warehouses your stock for this product (`vendorAddressId` is always `null`; `agencyAddressId` optionally names *which* depot). Which sources are actually usable depends on the **resolved agency's** own policy — see the note under [Update Product](#update-product) and [Delivery Agencies](./delivery-agencies.md#pickup_based--storage_based-and-pickup-locations).
-
-**`pickup` (read-only, on product detail responses)** — the same pickup location with its address
-resolved, so you can label the current choice without a second request. `null` for products with no
-pickup location (digital, service, or an unconfigured physical product). `delivery.pickupLocation`
-keeps the raw ids, so a client can round-trip that object back on a `PATCH`.
-
-| Field | Type | Notes |
-|-------|------|-------|
-| `source` | `"vendor_address"` \| `"agency_storage"` | Mirrors `delivery.pickupLocation.source`. |
-| `vendorAddressId` | string \| null | Mirrors the request field. |
-| `agencyAddressId` | string \| null | Mirrors the request field. `null` = the agency's primary depot. |
-| `address` | object \| null | Standard address shape (`label`, `formattedAddress`, `addressLine1/2`, `city`, `state`, `country`, `coordinates: { lat, lng }`). `null` when the referenced address no longer exists — for `vendor_address`, an address you deleted; the activation gate will report it. |
-| `isPrimaryFallback` | boolean | `true` when `address` is the agency's **primary** depot standing in — either because `agencyAddressId` is null (no choice made) or because it names a depot the agency has since deleted. Worth surfacing: it means the address shown is a default, not something the vendor picked. Always `false` for `vendor_address`. |
-
-<a id="service-products"></a>
-> [!NOTE]
-> **Service products & bookings.** A service product is the bookable unit. The end-to-end lifecycle is:
-> 1. **Connect Google Calendar** — see [Google Calendar connection](./calendar.md). Required before customers can book (booking writes a calendar event); also lets the system block the vendor's existing busy times.
-> 2. **Create** the product with `type: "service"` (`POST /api/vendor/products`).
-> 3. **Create the service variant** via `POST /api/vendor/products/:id/variants` with `price` + `serviceConfig` (`durationMinutes` required). `price` is the base price per `durationMinutes`. See [variants.md](./variants.md).
-> 4. **Define availability** with one or more [availability rules](./availability-rules.md) and activate them.
-> 5. **Activate** the product (it needs one active default variant with `serviceConfig.durationMinutes` and `price > 0` — see [Change Product Status](#change-product-status)).
-> 6. Customers then discover slots and book via the [Customer Booking Flow](../customer/bookings.md); vendors manage incoming bookings via [Booking Management](./bookings.md).
 
 ---
 
-## Product CRUD
+## 1 · `GET /api/vendor/products/`
 
-### List Products
+List the calling vendor's products. Ownership comes from the token — there is no `vendorId`
+parameter anywhere on this surface, and another vendor's product is simply not in the result set.
 
-```http
-GET /api/vendor/products
-```
+### Query parameters
 
-**Query Parameters:**
+Parsed by `ProductQuerySchema` (`src/modules/catalog/validators/product.validator.ts:162-174`).
+The schema is **not** `.strict()`, so an unknown query key is silently dropped rather than refused.
 
-| Parameter | Type | Required | Default | Description |
-|-----------|------|----------|---------|-------------|
-| `type` | string | No | — | Filter: `physical`, `digital`, `service` |
-| `status` | string | No | — | Filter: `draft`, `active`, `archived` |
-| `q` | string | No | — | Full-text search on title and description |
-| `sortBy` | string | No | `createdAt` | `createdAt`, `updatedAt`, `title` |
-| `sortOrder` | string | No | `desc` | `asc`, `desc` |
-| `page` | number | No | `1` | Page number (1-indexed) |
-| `limit` | number | No | `20` | Items per page (max: 100) |
+| Param | Type | Default | Values |
+|---|---|---|---|
+| `type` | enum | — | `physical` · `digital` · `service` |
+| `status` | enum | — | `draft` · `active` · `archived` · `pending_review` · `suspended` |
+| `q` | string | — | free text; matches `title` **or** `description` |
+| `sortBy` | enum | `createdAt` | `createdAt` · `updatedAt` · `title` |
+| `sortOrder` | enum | `desc` | `asc` · `desc` |
+| `page` | integer | `1` | ≥ 1 |
+| `limit` | integer | `20` | 1 – 100 |
 
-> [!IMPORTANT]
-> **The list endpoint returns a trimmed payload tailored to the products grid/list UI.**
-> Only the fields the grid/list view and row actions consume are included. To get the full product object — `vendorId`, `slug`, `description`, `tags`, `seo`, `defaultVariantId`, `digitalConfig`, `delivery` (`{ agencyId, freeDelivery }`), `vectorisedDataId`, `createdAt`, `updatedAt`, etc. — call `GET /api/vendor/products/:id`. (Service config + price live on the variant.)
->
-> File performance: `fileIds` is populated with full `FileDetail` objects (id, key, url, mimeType, size, originalName), resolved in a **single batched query** across the whole page — no N+1 lookups.
+> **`status` accepts five values, not three.** `pending_review` and `suspended` are real product
+> states a vendor can be filtered into by the platform or an agency; they simply cannot be
+> *requested* by the vendor on `PATCH /:id/status`. A status filter UI offering only
+> draft/active/archived hides products the vendor owns.
 
-**Response item shape:**
+### Response `200`
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `id` | string | Product ObjectId. Used as React key, for selection, delete actions, and the edit route. |
-| `title` | string | Product display name. |
-| `type` | `"physical" \| "digital" \| "service"` | Drives placeholder icon choice and type label. |
-| `status` | `"draft" \| "active" \| "archived" \| "pending_review" \| "suspended"` | Passed to `StatusBadge`; used for client-side filtering. |
-| `category` | string | Category label/badge text. |
-| `fileIds` | `FileDetail[]` | Populated product images. Empty array when none. Each entry: `{ id, key, url, mimeType, size, originalName? }`. The frontend's `ProductThumbnail` shows the first entry. |
-| `hasVariants` | boolean | Drives the "Has variants" / "Variants" badge. |
-| `vectorisationEnabled` | boolean | Vendor opt-in flag. Passed to `VectorisationBadge`. |
-| `vectorisationStatus` | `"not_started" \| "pending" \| "completed" \| "failed"` | Indexing state. Passed to `VectorisationBadge`; row edit menu is locked while `pending`. |
-
-**Response `200`:**
-
-```json
+```jsonc
 {
   "success": true,
   "data": [
     {
-      "id": "507f1f77bcf86cd799439011",
-      "title": "Blue T-Shirt",
+      "id": "66b1e4f2a91c3d0012ab34cd",
+      "title": "Ankara Wax Print — 6 yards",
       "type": "physical",
       "status": "active",
-      "category": "Apparel",
-      "fileIds": [
-        {
-          "id": "507f1f77bcf86cd799439030",
-          "key": "products/abc123.jpg",
-          "url": "https://storage.example.com/products/abc123.jpg",
-          "mimeType": "image/jpeg",
-          "size": 245678,
-          "originalName": "cover.jpg"
-        }
-      ],
+      "mode": "advanced",                    // simple | advanced
+      "category": "Fabrics",
+      "fileIds": [ /* FileDetail objects — see § 6 */ ],
       "hasVariants": true,
       "vectorisationEnabled": true,
       "vectorisationStatus": "completed"
     }
   ],
-  "meta": {
-    "total": 120,
-    "page": 1,
-    "limit": 20,
-    "pages": 6
-  }
+  "meta": { "total": 84, "page": 1, "limit": 20, "pages": 5 }
 }
 ```
 
-> **`meta.pages`** is the total number of pages (renamed from `totalPages` in earlier docs to match the actual response field).
+- **Pagination is keyed `meta`**, and the page-count field is **`pages`** — not `totalPages`.
+  `pages = ceil(total / limit)`, so **an empty result has `pages: 0`, not 1.**
+- `mode` **is** on every list row. (The backend's doc omits it; it is there —
+  `src/modules/catalog/domain/services/ProductListService.ts:86`.)
+- A file that has been deleted since it was referenced is **dropped from the array** rather than
+  returned as a null hole (`ProductListService.ts:90-91`), so `fileIds.length` can be smaller than
+  what the editor last saved.
+
+### Errors
+
+`400 VALIDATION_ERROR` for a bad enum / page / limit, plus the shared auth and rate-limit set
+([§ 7](#7--errors-every-route-on-this-page-can-raise)).
+
+### ⚠ Two source-level cautions
+
+- **`q` is interpolated into a MongoDB `$regex` without escaping**
+  (`src/modules/catalog/repositories/product.repository.mongo.ts:205-210`). A term containing
+  regex metacharacters behaves unpredictably, and a catastrophic-backtracking term such as
+  `(a+)+$` is a live denial-of-service vector against this endpoint. **Do not offer a raw
+  free-text box straight to this parameter without client-side length limiting**, and do not
+  build features that fire it per keystroke. Filed as a backend defect.
+- The handler `console.log`s the whole page payload on every request
+  (`vendor-product.controller.ts:145`). Harmless to you; expect noisy backend logs.
 
 ---
 
-### Get Product
+## 2 · `POST /api/vendor/products/`
 
-```http
-GET /api/vendor/products/:id
-```
+Creates a **draft**. It cannot create an active product — publishing is a separate call to
+`PATCH /:id/status` and has its own gate ([§ 5.2](#52-the-activation-gate)).
 
-**Path Parameters:**
+### Body
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `id` | string | Product ObjectId (24-char hex) |
+`CreateProductSchema` (`product.validator.ts:43-76`). Not `.strict()`.
 
-**Response `200`:** Full product object (see [Product Object Shape](#product-object-shape)).
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `type` | `physical` · `digital` · `service` | **yes** | immutable afterwards |
+| `title` | string | **yes** | 3–200 chars, trimmed |
+| `description` | string | **yes** | min 1 char. Required here even though `PATCH` can leave it alone |
+| `category` | string | **yes** | min 1 char |
+| `descriptionRich` | `RichDoc \| null` | no | see [product-description-rich.md](./product-description-rich.md) |
+| `fileIds` | string[] | no | 24-hex ids from `POST /api/files/upload`; **duplicates are rejected** |
+| `tags` | string[] | no | each non-empty; **must be unique** |
+| `seoTitle` | string | no | ≤ 60 |
+| `seoDescription` | string | no | ≤ 160 |
 
-**Error Responses:**
-- `404 CATALOG_PRODUCT_NOT_FOUND` — Product does not exist or does not belong to this vendor
+> **Fields you may be tempted to send here that are silently discarded:** `delivery`,
+> `serviceConfig`, `vectorisationEnabled`, `mode`, `status`. The schema is not strict, so they are
+> stripped without complaint and you get a `201` that did not do what you asked. `digitalConfig`
+> is declared in the schema but never read by the service (`ProductDraftService.ts:50-79`) —
+> same outcome. **Set all of these with `PATCH /:id` after creation.**
 
----
+### Response `201`
 
-### Create Product
+The enriched product ([§ 6](#6--the-product-object)), with `message: "Product created successfully"`.
+Server-set values: `mode: "advanced"`, `status: "draft"`, `hasVariants: false`,
+`vectorisationEnabled: false`, `vectorisationStatus: "not_started"`, `vectorisedDataId: null`,
+`seo: { title: "", description: "" }` when you sent neither.
 
-```http
-POST /api/vendor/products
-```
+**`defaultVariantId` is omitted from the JSON**, not `null` — it is `undefined` on a fresh draft
+(`product.mapper.ts:121`). Check with `in` or optional chaining, not `=== null`.
 
-All products start in `draft` status. The `type` cannot be changed after creation.
+### Errors
 
-**Request Body:**
+| Status | Code | When |
+|---|---|---|
+| 400 | `VALIDATION_ERROR` | Zod |
+| **403** | **`BILLING_LIMIT_EXCEEDED`** | the plan's product cap is reached. `details: { limit, current }` |
+| 400 | `CATALOG_IMAGE_LIMIT_EXCEEDED` | too many images: **physical 7 · service 7 · digital 1**. `details: { scope, type, limit, received }` |
+| 404 | `CATALOG_FILE_NOT_FOUND` | a `fileIds` entry does not exist |
+| 403 | `CATALOG_PRODUCT_ACCESS_DENIED` | a `fileIds` entry belongs to another vendor |
+| 422 | `CATALOG_PRODUCT_INVALID_TITLE` | empty after trim (unreachable behind Zod) |
 
-```json
-{
-  "type": "physical",
-  "title": "Blue T-Shirt",
-  "category": "Apparel",
-  "description": "Comfortable cotton t-shirt",
-  "tags": ["cotton", "summer", "casual"],
-  "seoTitle": "Buy Blue T-Shirt Online",
-  "seoDescription": "High quality cotton t-shirt",
-  "fileIds": ["507f1f77bcf86cd799439030"]
-}
-```
+**The plan cap counts non-archived, non-deleted products** — archiving frees a slot, and that is
+the affordance to offer when a vendor hits `BILLING_LIMIT_EXCEEDED`.
 
-**Fields:**
+### Behaviour worth knowing
 
-| Field | Type | Required | Validation |
-|-------|------|----------|-----------|
-| `type` | string | ✅ | `physical`, `digital`, or `service` |
-| `title` | string | ✅ | 3–200 characters |
-| `category` | string | ✅ | Non-empty string |
-| `description` | string | ✅ | Non-empty string. Plain text — no markup. |
-| `descriptionRich` | object \| null | No | Structured description powering WhatsApp / Telegram formatting. `description` must be its plain-text projection — see [product-description-rich.md](./product-description-rich.md). |
-| `tags` | string[] | No | Array of unique, non-empty strings |
-| `seoTitle` | string | No | Max 60 characters |
-| `seoDescription` | string | No | Max 160 characters |
-| `fileIds` | string[] | No | Product images. Array of file ObjectIds; **must be unique** (duplicates rejected). Subject to the per-type image cap below. |
-
-> **Do not** pass `digitalConfig` or `serviceConfig` here. `digitalConfig` is set via `PATCH /products/:id`; service config + price live on the service variant (`POST /products/:id/variants`).
-
-> [!IMPORTANT]
-> **Image limit (per product, by type):** physical **7**, service **7**, digital **1**. Exceeding the cap returns `400 CATALOG_IMAGE_LIMIT_EXCEEDED`. Duplicate file IDs in the same array are rejected with `400 VALIDATION_ERROR`.
-
-**Response `201`:**
-
-```json
-{
-  "success": true,
-  "data": {
-    "id": "507f1f77bcf86cd799439011",
-    "vendorId": "507f1f77bcf86cd799439012",
-    "type": "physical",
-    "status": "draft",
-    "title": "Blue T-Shirt",
-    "slug": "blue-t-shirt",
-    "category": "Apparel",
-    "tags": [],
-    "seo": {},
-    "fileIds": [],
-    "hasVariants": false,
-    "defaultVariantId": null,
-    "vectorisationEnabled": false,
-    "vectorisationStatus": "not_started",
-    "vectorisedDataId": null,
-    "createdAt": "2026-01-29T10:00:00.000Z",
-    "updatedAt": "2026-01-29T10:00:00.000Z"
-  },
-  "message": "Product created successfully"
-}
-```
-
-> **Vectorisation on create:** The product is saved first and the `201` response is returned immediately. Vectorisation then runs asynchronously in the background — no action required from the frontend. `vectorisationStatus` will be `not_started` on fresh drafts (vectorisation only triggers once the product is active and `vectorisationEnabled` is `true`).
-
-**Error Responses:**
-- `400 VALIDATION_ERROR` — Request body failed schema validation (includes duplicate `fileIds`)
-- `400 CATALOG_IMAGE_LIMIT_EXCEEDED` — More images than the per-type cap (physical/service 7, digital 1)
+- The slug is derived from the title and made unique per vendor with `-2`, `-3`… suffixes.
+- File authorisation runs **after** the product row is created: the draft is written with
+  `fileIds: []`, the files are reconciled, then a second write attaches them. So a rejected file
+  leaves you a **media-less draft that exists**, not a failed create. Re-`PATCH` the images.
+- Vectorisation is kicked off after the response is sent. `vectorisationStatus` in the body you
+  receive is the value *before* that fires.
 
 ---
 
-### Update Product
+## 3 · `GET /api/vendor/products/:id`
 
-```http
-PATCH /api/vendor/products/:id
-```
+Returns the enriched product ([§ 6](#6--the-product-object)).
 
-Partial update — only provided fields are changed. Allowed on `draft` and `active` products.
+A malformed id does **not** 500 — the repository refuses to cast it and you get
+`404 CATALOG_PRODUCT_NOT_FOUND`, which is also what another vendor's id returns. **404 is the
+answer for "not yours" as well as "not there"**, deliberately: there is no 403 to distinguish them.
 
-**Request Body:**
+---
+
+## 4 · `DELETE /api/vendor/products/:id` — archives
+
+### It does not delete
+
+This sets `status` to `archived`. `deletedAt` is untouched
+(`ProductArchiveService.ts:27-29`). The product stays in the vendor's list under
+`?status=archived` and can be brought back with `PATCH /:id/status` → `draft`.
+
+**Label the button "Archive", not "Delete".** There is no destructive delete on this surface.
+
+### Response `200`
 
 ```json
+{ "success": true, "message": "Product archived successfully" }
+```
+
+**There is no `data` key.** Do not read `res.data.id`.
+
+### Errors
+
+| Status | Code | When |
+|---|---|---|
+| 409 | `CATALOG_PRODUCT_VECTORISATION_PENDING` | image vectorisation is mid-flight — see [§ 8](#8--the-vectorisation-lock) |
+| 404 | `CATALOG_PRODUCT_NOT_FOUND` | |
+| **422** | **`CATALOG_PRODUCT_INVALID_STATE`** | only `draft` and `active` are archivable. `details: { status }` |
+
+An already-`archived`, `suspended` or `pending_review` product returns 422 — so disable the
+control rather than letting the vendor discover it.
+
+---
+
+## 5 · Status
+
+### 5.1 `PATCH /api/vendor/products/:id/status`
+
+**Body:** `{ "status": "draft" | "active" | "archived" }` — required.
+
+`pending_review` and `suspended` are **not accepted** here and produce `400 VALIDATION_ERROR`.
+They exist on the model and can be *filtered* on the list; only the platform sets them.
+
+**Transition map** (`ProductStatusValidationService.ts:47-53`):
+
+| From | May become |
+|---|---|
+| `draft` | `active`, `archived` |
+| `active` | `draft`, `archived` |
+| `archived` | `draft` **only** |
+| `pending_review` | — nothing |
+| `suspended` | — nothing (a platform/agency lock; the vendor cannot lift it) |
+
+Setting a product to the status it already holds is an accepted no-op, not an error.
+
+An illegal transition is `422 CATALOG_PRODUCT_INVALID_STATE` with
+`details: { status, requested }`.
+
+> ⚠ **The response `data` is the RAW product** — `fileIds: string[]`, no `files`, no `pickup`.
+> See [§ 0](#0--read-this-first--two-response-shapes-for-a-product). Re-fetch `GET /:id` if you
+> need the enriched shape.
+
+### 5.2 The activation gate
+
+Moving to `active` runs `collectActivationBlockers()`. **`PATCH /:id/status` throws only the
+first blocker**, as a `422` carrying that blocker's own code, message and `details`. It does not
+return the list.
+
+If you want the whole checklist for a publish wizard, use the simple-product endpoints, which
+serialise `ActivationBlocker[]` — see [simple-products.md](./simple-products.md). Otherwise
+expect to loop: fix one, retry, get the next.
+
+**Every blocker, in the order the backend evaluates them.** All are `422`.
+
+| # | Code | Raised when | `details` |
+|---|---|---|---|
+| 1 | `CATALOG_PRODUCT_NO_DESCRIPTION` | `description` is empty or whitespace | — |
+| 2 | `CATALOG_PRODUCT_NO_VARIANTS` | no variants at all | `{ type }` |
+| 3 | `CATALOG_PRODUCT_VARIANT_ZERO_PRICE` | an active variant has `price <= 0` — **one blocker per variant** | `{ variant }` |
+| 4 | `CATALOG_PRODUCT_NO_DEFAULT_VARIANT` | `defaultVariantId` unset, or points at a non-active variant | `{ type }` |
+| 5 | `CATALOG_PRODUCT_VENDOR_SUSPENDED` | the **vendor account** is inactive — applies to every product type | — |
+| 6 | `CATALOG_PRODUCT_NO_DELIVERY_AGENCY` | physical: the vendor's default agency is unset, inactive, or the connection is not `active` | — |
+| 7 | `CATALOG_PRODUCT_NO_DELIVERY_AGENCY` | physical: the product's own `delivery.agencyId` override fails independently | — |
+| 8 | `CATALOG_PRODUCT_NO_PICKUP_LOCATION` | physical: no `delivery.pickupLocation` set | — |
+| 9 | `CATALOG_PRODUCT_INVALID_PICKUP_LOCATION` | physical: the pickup does not match the effective agency's policy | — |
+| 10 | `CATALOG_PRODUCT_AGENCY_STORAGE_INFINITE_STOCK` | physical + agency-warehoused: an active variant has infinite stock — **one blocker per variant** | `{ variant }` |
+| 11 | `CATALOG_DIGITAL_VARIANT_LIMIT_EXCEEDED` | digital: more than 5 active variants | — |
+| 12 | `CATALOG_VARIANT_NO_DIGITAL_ASSET` | digital: an active variant has no asset — **one per variant** | `{ variant }` |
+| 13 | `CATALOG_PRODUCT_SERVICE_NO_DURATION` | service: the default variant has no `durationMinutes` | — |
+| 14 | `CATALOG_PRODUCT_SERVICE_NO_CAPACITY` | service: capacity mode with `maxBookings < 1` | — |
+| 15 | `CATALOG_PRODUCT_SERVICE_NO_AVAILABILITY` | service: no active availability rule | — |
+
+> **Three of these messages are developer placeholders that will reach a vendor's screen
+> verbatim** if you render `error.message`: `"catalog variant no digital asset"`,
+> `"catalog product service no duration"`, `"catalog product invalid state"`. **Map these codes to
+> your own copy.** The others carry written-for-humans messages and are safe to show.
+
+### 5.3 🔴 A `PATCH /:id` can silently demote a live product
+
+After **every** `PATCH /api/vendor/products/:id`, the backend re-runs the activation check on an
+`active` product. If it now fails, the product is **rewritten to `draft`** — with no error, no
+warning and no `message` (`ProductStatusValidationService.ts:439-453`).
+
+The only signal is the `status` field in the response body you already received. **Diff it against
+what you sent** and tell the vendor, or they will discover their product is offline from a
+customer.
+
+---
+
+## 6 · The product object
+
+The enriched shape, returned by `GET /`, `GET /:id`, `POST /` and `PATCH /:id`.
+
+```jsonc
 {
-  "title": "Updated Title",
-  "description": "Updated description",
-  "category": "New Category",
-  "tags": ["new-tag", "another-tag"],
-  "seoTitle": "New SEO Title",
-  "seoDescription": "New SEO description",
-  "fileIds": ["507f1f77bcf86cd799439030", "507f1f77bcf86cd799439031"],
-  "digitalConfig": {
-    "isActive": true
-  },
-  "delivery": {
-    "agencyId": "683abc1234567890abcdef01",
+  "id": "66b1e4f2a91c3d0012ab34cd",
+  "vendorId": "66a0…",
+  "type": "physical",                  // physical | digital | service
+  "status": "active",                  // draft | active | archived | pending_review | suspended
+  "mode": "advanced",                  // simple | advanced
+  "title": "Ankara Wax Print — 6 yards",
+  "description": "Plain-text description.",
+  "descriptionRich": { "version": 1, "blocks": [ /* … */ ] },   // or null
+  "slug": "ankara-wax-print-6-yards",
+  "category": "Fabrics",
+  "tags": ["fabric", "ankara"],
+  "seo": { "title": "…", "description": "…" },
+  "hasVariants": true,
+  "defaultVariantId": "66b2…",         // OMITTED when unset — not null
+  "files": [ /* FileDetail[] — keyed `fileIds` on the LIST endpoint */ ],
+  "digitalConfig": { "isActive": false },      // omitted unless present
+  "delivery": {                                // omitted unless present
+    "agencyId": "66c3…",
     "freeDelivery": false,
     "pickupLocation": {
-      "source": "vendor_address",
-      "vendorAddressId": "683abc1234567890abcdef02"
+      "source": "agency_storage",              // vendor_address | agency_storage
+      "vendorAddressId": null,
+      "agencyAddressId": null                  // null = the agency's primary depot
     }
   },
-  "vectorisationEnabled": true
+  "suspension": null,
+  "vectorisationEnabled": true,
+  "vectorisationStatus": "completed",
+  "vectorisedDataId": "66d4…",
+  "pickup": { /* resolved pickup detail — see below */ },
+  "createdAt": "2026-08-01T09:14:22.104Z",
+  "updatedAt": "2026-08-22T16:02:51.880Z",
+  "deletedAt": null,
+  "purgeAt": null
 }
 ```
 
-**Fields:**
+### Casing — camelCase on the wire, always
 
-| Field | Type | Required | Notes |
-|-------|------|----------|-------|
-| `title` | string | No | 3–200 characters |
-| `description` | string | No | Plain text — no markup. |
-| `descriptionRich` | object \| null | No | Structured description powering WhatsApp / Telegram formatting. `description` must be its plain-text projection — see [product-description-rich.md](./product-description-rich.md). |
-| `category` | string | No | Non-empty string |
-| `tags` | string[] | No | **Full replacement** of tags array |
-| `seoTitle` | string | No | Max 60 characters |
-| `seoDescription` | string | No | Max 160 characters |
-| `fileIds` | string[] | No | **Full replacement** — send complete desired array of file ObjectIds. Must be unique; capped per type (physical/service **7**, digital **1**). |
-| `digitalConfig` | object | No | Digital products only — product-wide toggle. Only `{ isActive }` is accepted (strict). Per-variant asset/limits live on the variant. |
-| `delivery` | object | No | **Physical products only** (`400 CATALOG_PRODUCT_INVALID_TYPE` otherwise). Sets the product's own delivery-agency override — see sub-fields and the important note below. |
-| `vectorisationEnabled` | boolean | No | Toggle vectorisation opt-in. When provided, the backend runs the enable or disable flow after the content update — see [Vectorisation](#vectorisation). For quick toggles only, use `PATCH /:id/vectorisation`. |
+`delivery` is stored in MongoDB as `agency_id` / `free_delivery` / `pickup_location.vendor_address_id`,
+but **it is converted on read and on write**, so a frontend only ever sees camelCase.
 
-**`delivery` sub-fields:**
+🔴 **Never send snake_case delivery keys.** The `delivery` object *is* `.strict()`, so
+`{"delivery": {"agency_id": "…"}}` fails the whole save with `400 VALIDATION_ERROR`. The
+snake_case names you may find in the backend model are storage-internal.
 
-| Field | Type | Notes |
-|-------|------|-------|
-| `agencyId` | string \| null | The delivery agency ObjectId this product should use instead of the vendor's default, or `null` to clear the override and fall back to the vendor's default. Either sub-field may be sent independently (merged against the existing value) — at least one of `agencyId`/`freeDelivery`/`pickupLocation` must be present. |
-| `freeDelivery` | boolean | Marketing/order flag, independent of agency resolution. |
-| `pickupLocation` | object \| null | Where the resolved delivery agency should collect this product from. `null` clears it. See sub-fields below. |
+### `vectorisationStatus`
 
-**`delivery.pickupLocation` sub-fields:**
+`not_started` · `pending` · `completed` · `failed` · **`skipped_no_credits`**
 
-| Field | Type | Notes |
-|-------|------|-------|
-| `source` | `"vendor_address"` \| `"agency_storage"` | Required. `vendor_address` — collect from one of your business addresses. `agency_storage` — the agency already warehouses your stock; nothing to collect. |
-| `vendorAddressId` | string \| null | Required (and must match an entry in your [`business_addresses`](./profile.md)) when `source` is `vendor_address`; ignored/omit when `source` is `agency_storage`. |
-| `agencyAddressId` | string \| null | **Optional.** Which of the agency's depots warehouses this product, when `source` is `agency_storage`; ignored/omit for `vendor_address`. List the options with [GET /delivery-agencies/:agencyId/locations](./delivery-agencies.md#list-an-agencys-pickup-locations) and send one of their `id`s. |
+Five values. The last one means the vendor's credit balance was empty when the job was
+scheduled — an actionable state that deserves its own UI, not an "unknown" fallback.
 
-> [!NOTE]
-> **`agencyAddressId` is optional, and omitting it is meaningful: it means the agency's *primary*
-> depot.** It keeps meaning that — if the agency later reorders its locations, the product follows
-> the new primary. Storing the primary's id explicitly pins that depot instead. Those are two
-> different intents, so don't pre-fill the picker with the primary's id when the vendor hasn't
-> chosen; leave it null and mark the `isPrimary` option as the default.
->
-> This is also why every product created before depots were selectable keeps working: they all
-> carry `agencyAddressId: null` and collect from the primary, exactly as before. A depot the agency
-> later **deletes** falls back to the primary too, rather than stranding the delivery.
+### `pickup` — the resolved pickup location
 
-> [!IMPORTANT]
-> **Changing `delivery.agencyId` can restore the product and reassign in-flight orders.** If this product was suspended because its previous override agency went inactive, setting it to a **new active** agency (or clearing it back to `null`, falling back to the vendor's active default) automatically restores the product if it's now eligible again, and reassigns any of its still `pending`/`assigned`/held order items from the old agency over to the new one. The response `message` reports how many order items were moved. See [Admin: Delivery Agencies](../admin/delivery-agencies.md) for the full cascade.
->
-> **Setting a non-null `agencyId` now requires an active, approved connection** between your vendor account and that agency (`422 CONNECTION_NOT_ACTIVE`) — see [Agency Connections](./agency-connections.md). Clearing the override to `null` is always allowed. An agency id that already has an active connection but is itself inactive/unresolvable is still accepted on write; the product simply fails activation (`CATALOG_PRODUCT_NO_DELIVERY_AGENCY`) until the agency comes back.
->
-> **`pickupLocation` is validated against whichever agency actually ends up handling delivery** — this product's own `agencyId` override if set (including one set in the same request), otherwise your vendor default. `source: "vendor_address"` requires that agency's policy to offer address pickup; `source: "agency_storage"` requires it to offer storage-based fulfillment — an agency offering only one of the two rejects the other (`422 CATALOG_PRODUCT_INVALID_PICKUP_LOCATION`). If neither `agencyId` (override or vendor default) is resolvable yet, you'll get `422 CATALOG_PRODUCT_NO_DELIVERY_AGENCY` — set an agency first. See [Delivery Agencies](./delivery-agencies.md#pickup_based--storage_based-and-pickup-locations) for how to tell which pickup types an agency supports before presenting the picker to the vendor.
+`null` for digital and service products, and for physical products with no pickup configured.
+This resolver never throws.
 
-> [!NOTE]
-> `serviceConfig` is **no longer accepted on the product** (neither create nor update). Service config + price live on the service variant — set them via `POST /products/:id/variants` or `PATCH /products/:productId/variants/:variantId/service/config`. See [variants.md](./variants.md).
-
-> [!WARNING]
-> **`fileIds` is a full array replacement, not an append operation.**
-> If the product currently has `fileIds: ["A", "B"]` and you send `fileIds: ["C"]`, the result is `["C"]`. Always send the complete desired array. To add a file: fetch current fileIds, append the new id, send the merged array.
->
-> File IDs must be **unique** within the array, and the total must not exceed the per-type cap (physical/service **7**, digital **1**) — otherwise `400 CATALOG_IMAGE_LIMIT_EXCEEDED`.
-
-**`digitalConfig` sub-fields:**
-
-| Field | Type | Notes |
-|-------|------|-------|
-| `isActive` | boolean | Product-wide download kill switch. When `false`, purchases of any variant do not grant a download entitlement. |
-
-> [!IMPORTANT]
-> `digitalConfig` on the product accepts **only** `isActive` (the schema is strict). `maxDownloads`, `expiresAfterDays`, and `assetId` are **per-variant** now — set them via the variant endpoints. Sending them here returns `400 VALIDATION_ERROR`. See [Digital Products Guide](./digital-products.md).
-
-**Cannot be updated:** `type`, `slug` (auto-generated from title), `vendorId`
-
-**Response `200`:**
-
-```json
+```jsonc
 {
-  "success": true,
-  "data": { "...full product object..." },
-  "message": "Product updated successfully. 2 pending order item(s) reassigned to the new agency."
+  "source": "agency_storage",
+  "vendorAddressId": null,
+  "agencyAddressId": null,
+  "address": { /* AddressDetail */ },   // null when the referenced address no longer exists
+  "isPrimaryFallback": true             // true = "the agency's primary depot", resolved for you
 }
 ```
-The trailing sentence about reassigned order items is only present when `delivery.agencyId`
-changed and at least one order item was moved (see the important note above) — otherwise
-`message` is just `"Product updated successfully"`.
 
-> **Vectorisation on update:**
-> - If the body **omits** `vectorisationEnabled`, the product is saved and the response returns immediately; the backend automatically re-vectorises in the background if the product is `active` and `vectorisationEnabled` is currently `true`. `vectorisationStatus` may briefly be `pending` before returning to `completed`.
-> - If the body **includes** `vectorisationEnabled: true`, the backend runs the enable flow after the content update (eligibility check + vectorise), exactly as if `PATCH /:id/vectorisation` had been called.
-> - If the body **includes** `vectorisationEnabled: false`, the backend runs the disable flow after the content update (clear flag + upstream delete).
-> - The HTTP response always returns immediately; the vectorisation side-effect runs in the background.
+`isPrimaryFallback` tells you whether `agencyAddressId: null` was honoured as "whichever depot is
+primary". That is a **meaningful value**, not an unset one — pinning the primary's id explicitly is
+a *different* intent that survives a depot reorder differently. Do not pre-fill the picker.
 
-**Error Responses:**
-- `404 CATALOG_PRODUCT_NOT_FOUND` — Product not found
-- `422 CATALOG_PRODUCT_INVALID_STATE` — Product is `archived` or `pending_review`; update not allowed. **`suspended` products ARE editable** — editing is often the way out of suspension (e.g. repointing `delivery.agencyId` at a working agency, which auto-restores the product if it's eligible again).
-- `422 CONNECTION_NOT_ACTIVE` — `delivery.agencyId` was set to an agency you don't have an active, approved connection with. See [Agency Connections](./agency-connections.md).
-- `422 CATALOG_PRODUCT_NO_DELIVERY_AGENCY` — `delivery.pickupLocation` was set but no delivery agency (override or vendor default) is resolvable yet.
-- `422 CATALOG_PRODUCT_INVALID_PICKUP_LOCATION` — `delivery.pickupLocation` doesn't match the resolved agency's policy, `vendorAddressId` doesn't match one of your business addresses, or `agencyAddressId` isn't one of the resolved agency's locations.
-- `400 VALIDATION_ERROR` — Body schema invalid
+### `FileDetail`
+
+```jsonc
+{
+  "id": "66b1…",
+  "key": "images/2026/08/9f2c…_front.jpg",
+  "url": "https://api.example.com/api/files/images/…",   // string | null
+  "access": "public",                                     // "public" | "authorized"
+  "mimeType": "image/jpeg",
+  "size": 284119,
+  "originalName": "front.jpg"
+}
+```
+
+**Product imagery is `access: "public"` with a real `url`** in every normal case — product media
+lands in public storage trees. But the classifier **fails closed**: an unrecognised storage tree
+yields `url: null`, `access: "authorized"`. So `url` is genuinely `string | null` and your types
+must say so. Full rules, and the trees that *are* private, in
+[files/private-files.md](../files/private-files.md).
 
 ---
 
-### Change Product Status
-
-```http
-PATCH /api/vendor/products/:id/status
-```
-
-**Request Body:**
-
-```json
-{ "status": "active" }
-```
-
-**Valid Status Values:**
-
-| Status | Description |
-|--------|-------------|
-| `draft` | Work in progress, not visible to customers |
-| `active` | Live and purchasable |
-| `archived` | Hidden, data preserved |
-| `pending_review` | Awaiting admin moderation |
-| `suspended` | **System lock — vendors can neither set nor leave it.** Applied by the delivery-agency cascade (agency deactivated, connection paused/terminated, default removed) to **`active` products only** — drafts stay drafts (and stay editable) while an agency problem lasts. Any attempt to change a suspended product's status here returns `422 CATALOG_PRODUCT_INVALID_STATE`. It clears **automatically** when the cause is fixed: new active default agency set, connection (re)approved, agency reactivated, or the product's own `delivery.agencyId` repointed at a working agency via [Update Product](#update-product) — each re-validates the activation gate before restoring. |
-
-> [!IMPORTANT]
-> **Allowed transitions (vendor-triggered).** The current status constrains what you may request:
->
-> | From | Allowed targets |
-> |------|-----------------|
-> | `draft` | `active` (runs the activation gate below), `archived` |
-> | `active` | `draft`, `archived` |
-> | `archived` | `draft` (unarchive first — activation happens from `draft` only) |
-> | `suspended` | — none (system lock, see table above) |
-> | `pending_review` | — none (admin moderation) |
->
-> Re-requesting the current status is accepted as a no-op. Anything else returns
-> `422 CATALOG_PRODUCT_INVALID_STATE` with `details: { status, requested }`. The same rules apply
-> to [Bulk Status Change](#bulk-status-change) (ineligible products are reported/skipped, not
-> errored as a whole) and to archiving (single + bulk: only `draft`/`active` products can be archived).
-
-> [!WARNING]
-> **Activation Requirements (status → `active`)**
->
-> The backend enforces ALL of the following before allowing activation for **every product type** (checked in this order):
->
-> 1. **`description` must be non-empty** — enforced as a schema-level requirement at creation and update, and double-checked by the activation gate
-> 2. **At least one variant must exist** — all product types require at least one variant for pricing
-> 3. **Every active variant must have `price > 0`** — zero-priced variants block activation
-> 4. **`defaultVariantId` must point to an active variant** — the referenced variant must exist and be active; a dangling or archived reference fails validation
->
-> Additionally, per product type:
-> - **Physical**: the vendor's default delivery agency (`vendor.default_delivery_agency_id`) must exist, currently be `active`, **and** have an active, approved [connection](./agency-connections.md) with your vendor account — this is **always** required, regardless of whether the product has its own override. If the product **also** has its own `delivery.agencyId` override set, that override must **independently** satisfy the same three conditions (active agency + active connection) too — both are checked, not either/or. On top of that, the product must have a `delivery.pickupLocation` set that's still valid against whichever agency actually ends up handling delivery (the override if set, else the vendor default) — see [Update Product](#update-product) for the sub-fields and policy-matching rules. If any agency/connection/pickup-location condition regresses later (agency deactivated, connection paused, referenced business address removed), the product is auto-suspended or demoted (and, if it has pending orders, those are put on hold) until a working replacement is configured — see [Admin: Delivery Agencies](../admin/delivery-agencies.md).
-> - **Digital**: **every active variant must have an uploaded asset**, and there must be **no more than 5** active variants. (Digital variants without an asset are auto-archived, so this normally passes by construction.) See [Digital Products Guide](./digital-products.md).
-> - **Service**: the single default variant must have a `serviceConfig.durationMinutes` (min: 1) and `price > 0` — the config + price live on the variant. If its `bookingMode` is `capacity`, it must also have `serviceConfig.maxBookings` (≥ 1).
-
-**Response `200`:**
-
-```json
-{
-  "success": true,
-  "data": { "...updated product..." },
-  "message": "Product status changed to active"
-}
-```
-
-> **Vectorisation on status change:** The status is saved first and the response returned immediately. A lightweight status-only notification is then sent asynchronously to the vectoriser. This does **not** re-vectorise the product's data — it only updates the searchability metadata on the vectoriser side. If the product was never vectorised (e.g., `vectorisationEnabled` was `false` when it was first activated), no notification is sent.
-
-**Error Responses `422`:**
-
-| Code | Meaning |
-|------|---------|
-| `CATALOG_PRODUCT_INVALID_STATE` | The requested transition isn't vendor-triggerable (see the allowed-transitions table above — e.g. any change from `suspended`, or `archived → active` without unarchiving to `draft` first). `details: { status, requested }` |
-| `CATALOG_PRODUCT_NO_DESCRIPTION` | `description` is missing or blank |
-| `CATALOG_PRODUCT_NO_VARIANTS` | No variants exist |
-| `CATALOG_PRODUCT_VARIANT_ZERO_PRICE` | An active variant has price = 0 |
-| `CATALOG_PRODUCT_NO_DEFAULT_VARIANT` | `defaultVariantId` missing or points to archived/nonexistent variant |
-| `CATALOG_PRODUCT_NO_DELIVERY_AGENCY` | Physical product: vendor has no active default delivery agency, or (if set) the product's own override agency isn't active, or its connection needs (re)approval |
-| `CATALOG_PRODUCT_NO_PICKUP_LOCATION` | Physical product: `delivery.pickupLocation` is not set |
-| `CATALOG_PRODUCT_INVALID_PICKUP_LOCATION` | Physical product: `delivery.pickupLocation` no longer matches the resolved agency's policy, or its referenced business address no longer exists |
-| `CATALOG_VARIANT_NO_DIGITAL_ASSET` | A digital product's active variant has no uploaded asset (details include the variant name/sku) |
-| `CATALOG_DIGITAL_VARIANT_LIMIT_EXCEEDED` | Digital product has more than 5 active variants |
-| `CATALOG_PRODUCT_SERVICE_NO_DURATION` | Service product has no `durationMinutes` |
-| `CATALOG_PRODUCT_SERVICE_NO_CAPACITY` | Service product in `capacity` mode has no `maxBookings` (≥ 1) |
-
----
-
-### Duplicate Product
-
-```http
-POST /api/vendor/products/:id/duplicate
-```
-
-Creates an independent copy of the product in `draft` status.
-
-**Response `201`:**
-
-```json
-{
-  "success": true,
-  "data": {
-    "id": "507f1f77bcf86cd799439014",
-    "status": "draft",
-    "title": "Blue T-Shirt (copy)",
-    "slug": "blue-t-shirt-copy",
-    "hasVariants": false,
-    "defaultVariantId": null
-  },
-  "message": "Product duplicated successfully"
-}
-```
-
-**Duplication Behavior:**
-
-| Field | Behavior |
-|-------|----------|
-| `status` | Always `draft` |
-| `title` | `{original} (copy)` |
-| `slug` | `{original-slug}-copy`, then `-copy-2`, `-copy-3` on collision |
-| `fileIds` | Copied — same file references (usage count incremented per file) |
-| `tags`, `seo`, `category` | Copied as-is |
-| `hasVariants` | Always `false` — variants are NOT copied |
-| `defaultVariantId` | Always `null` — must create new variants for the clone |
-| Digital: `digitalConfig.isActive` | Always `false` |
-| Digital: variants & per-variant assets/limits | **NOT copied** — variants aren't cloned, so the vendor must re-create each format variant and re-upload its asset |
-| Service: variant (`serviceConfig` + price) | **NOT copied** — variants aren't cloned, so the vendor must re-create the service variant with its config + price |
-| `vectorisationEnabled` | Always `false` — must be explicitly re-enabled on the clone |
-| `vectorisationStatus` | Always `not_started` |
-| `vectorisedDataId` | Always `null` |
-
-> After duplication, the vendor must create at least one variant and upload a new digital asset (for digital products) before the clone can be activated.
-
----
-
-### Archive Product
-
-```http
-DELETE /api/vendor/products/:id
-```
-
-Soft delete — sets status to `archived`. Data is preserved. Product is hidden from customers immediately.
-
-**Response `200`:**
-
-```json
-{
-  "success": true,
-  "message": "Product archived successfully"
-}
-```
-
----
-
-## Default Variant Management
-
-### Set Default Variant
-
-```http
-PATCH /api/vendor/products/:id/default-variant
-```
-
-Sets which variant is used for display, pricing preview, and as the starting selection on a product page. This endpoint is for **manual reassignment** after the first variant has been auto-assigned.
-
-> **Auto-assignment**: The first variant created for any product is automatically set as `defaultVariantId`. This endpoint lets the vendor change it afterward.
-
-**Request Body:**
-
-```json
-{ "variantId": "507f1f77bcf86cd799439015" }
-```
-
-**Fields:**
-
-| Field | Type | Required | Validation |
-|-------|------|----------|------------|
-| `variantId` | string | ✅ | Valid 24-char hex ObjectId |
-
-**Business Rules:**
-- The target variant must exist, belong to this product, and have `status: "active"`
-- Archived variants cannot be set as default
-- If an active variant is later archived and it was the default, the backend automatically reassigns `defaultVariantId` to the next available active variant (or clears it if none remain)
-
-**Response `200`:**
-
-```json
-{
-  "success": true,
-  "message": "Default variant updated successfully"
-}
-```
-
-**Error Responses:**
-- `404 CATALOG_PRODUCT_NOT_FOUND` — Product not found
-- `404 CATALOG_VARIANT_NOT_FOUND` — Variant not found, is archived, or belongs to a different product
-
----
-
-## Bulk Operations
-
-### Bulk Archive
-
-```http
-POST /api/vendor/products/bulk/archive
-```
-
-**Request Body:**
-
-```json
-{
-  "productIds": [
-    "507f1f77bcf86cd799439011",
-    "507f1f77bcf86cd799439012",
-    "507f1f77bcf86cd799439013"
-  ]
-}
-```
-
-**Limits:** Max 50 product IDs per request.
-
-> [!NOTE]
-> Only `draft` and `active` products are archived — same rule as the single-product archive
-> route. Products in any other status (`suspended`, `archived`, `pending_review`) are silently
-> skipped and reflected in the `failed` count.
-
-**Response `200`:**
-
-```json
-{
-  "success": true,
-  "data": {
-    "success": 3,
-    "failed": 0,
-    "total": 3
-  },
-  "message": "Archived 3 of 3 products"
-}
-```
-
----
-
-### Bulk Status Change
-
-```http
-POST /api/vendor/products/bulk/status
-```
-
-**Request Body:**
-
-```json
-{
-  "productIds": ["507f1f77bcf86cd799439011", "507f1f77bcf86cd799439012"],
-  "status": "active"
-}
-```
-
-**Limits:** Max 50 product IDs per request.
-
-> [!IMPORTANT]
-> When changing status to `active`, the backend validates each product individually using the same rules as the single-product status endpoint — **including the allowed-transitions table** (activation from `draft` only; `suspended`/`pending_review` products can never be moved by a vendor). Products failing either check are not updated and are reported in the `errors` array. This is a partial-success operation.
->
-> For `draft`/`archived` targets, products whose current status doesn't permit the transition (e.g. `suspended`) are silently skipped and show up in the `failed` count without a per-product error entry.
-
-**Response `200`:**
-
-```json
-{
-  "success": true,
-  "data": {
-    "success": 1,
-    "failed": 1,
-    "total": 2,
-    "errors": [
-      {
-        "productId": "507f1f77bcf86cd799439012",
-        "reason": "Product has no active variants"
-      }
-    ]
-  },
-  "message": "Updated 1 of 2 products"
-}
-```
-
----
-
-## Digital Product Asset Management
-
-> [!IMPORTANT]
-> **Digital assets are now managed per variant**, not per product. A digital product holds **1–5 variants**, each owning its own file, price, SKU, name, and download limits. The old product-scoped routes (`POST/PUT/DELETE /products/:id/digital/asset` and `PATCH /products/:id/digital/toggle`) have been **removed** and return 404.
->
-> Full reference — request/response shapes, the variant `status ⇔ asset` invariant, the 1–5 cap, the activation rules, the post-purchase entitlement model, and UI guidance — is in the **[Digital Products — Multi-Variant Guide](./digital-products.md)**. Endpoint summary below.
-
-| Action | Method & Path |
-|--------|---------------|
-| Upload a variant's asset | `POST /api/vendor/products/:productId/variants/:variantId/digital/asset` (`multipart/form-data`, field `file`) — variant becomes `active` |
-| Replace a variant's asset | `PUT /api/vendor/products/:productId/variants/:variantId/digital/asset` (`multipart/form-data`, field `file`) |
-| Remove a variant's asset | `DELETE /api/vendor/products/:productId/variants/:variantId/digital/asset` — variant becomes `archived` |
-| Update a variant's download limits | `PATCH /api/vendor/products/:productId/variants/:variantId/digital/config` — body `{ maxDownloads?, expiresAfterDays? }` |
-| Product-wide pause/resume | `PATCH /api/vendor/products/:id` — body `{ "digitalConfig": { "isActive": false } }` (replaces the old toggle endpoint) |
-
-**File constraints (all uploads):** max 500 MB (configurable via `MAX_DIGITAL_ASSET_SIZE`); allowed MIME types: `application/pdf`, `application/zip`, `application/x-zip-compressed`, `application/x-rar-compressed`, `application/octet-stream`, `video/mp4`, `video/quicktime`, `audio/mpeg`, `audio/wav`, `audio/mp3`, `image/jpeg`, `image/png`, `image/gif`, `application/msword`, `application/vnd.openxmlformats-officedocument.wordprocessingml.document`, `application/vnd.ms-excel`, `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`, `application/epub+zip`.
-
-See [Digital Products Guide §5](./digital-products.md#5-endpoints) for full request/response/error details on each endpoint.
-
----
-
-## Product Options
-
-Options define the dimensions along which variants differ (e.g., Size, Color, Material). **Only physical products support options.**
-
-> **Flow:** Create Option → Add Values to Option → Create Variants referencing those value IDs. Options must be created before variants that reference them.
-
-### Create Option
-
-```http
-POST /api/vendor/products/:productId/options
-```
-
-**Request Body:**
-
-```json
-{ "name": "Color", "position": 1 }
-```
-
-| Field | Type | Required | Validation |
-|-------|------|----------|------------|
-| `name` | string | ✅ | 1–50 chars; alphanumeric, spaces, and hyphens only; must be unique per product |
-| `position` | number | No | Display order; auto-assigned if omitted |
-
-**Response `201`:**
-
-```json
-{
-  "success": true,
-  "data": {
-    "id": "507f1f77bcf86cd799439020",
-    "productId": "507f1f77bcf86cd799439011",
-    "name": "Color",
-    "position": 1,
-    "createdAt": "2026-01-29T10:00:00.000Z",
-    "updatedAt": "2026-01-29T10:00:00.000Z"
-  },
-  "message": "Option created successfully"
-}
-```
-
----
-
-### List Options
-
-```http
-GET /api/vendor/products/:productId/options
-```
-
-Returns all options with their values nested.
-
-**Response `200`:**
-
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "id": "507f1f77bcf86cd799439020",
-      "productId": "507f1f77bcf86cd799439011",
-      "name": "Color",
-      "position": 1,
-      "values": [
-        { "id": "507f1f77bcf86cd799439030", "value": "Black" },
-        { "id": "507f1f77bcf86cd799439031", "value": "White" }
-      ]
-    }
-  ]
-}
-```
-
----
-
-### Update Option
-
-```http
-PATCH /api/vendor/products/:productId/options/:optionId
-```
-
-**Request Body:** `{ "name": "Shade", "position": 2 }` — all fields optional.
-
----
-
-### Reorder Options
-
-```http
-PUT /api/vendor/products/:productId/options/reorder
-```
-
-**Request Body:**
-
-```json
-{
-  "optionIds": ["507f1f77bcf86cd799439021", "507f1f77bcf86cd799439020"]
-}
-```
-
-The order of IDs in the array defines the new display order.
-
----
-
-### Delete Option
-
-```http
-DELETE /api/vendor/products/:productId/options/:optionId
-```
-
-> [!WARNING]
-> **Cascade delete.** Deleting an option also deletes all of its values. Variants that referenced those values will have orphaned `optionValueIds` and an invalid `optionSignature`. This does not automatically archive those variants — the vendor must manage them manually.
-
-**Response `200`:** `{ "success": true, "message": "Option deleted successfully" }`
-
----
-
-### Create Option Value
-
-```http
-POST /api/vendor/products/:productId/options/:optionId/values
-```
-
-**Request Body:** `{ "value": "Black" }`
-
-| Field | Type | Required | Validation |
-|-------|------|----------|------------|
-| `value` | string | ✅ | 1–100 characters |
-
-> Values are **unique per option** (case-insensitive, enforced by database index). Attempting to create a duplicate returns `409`.
-
-**Response `201`:**
-
-```json
-{
-  "success": true,
-  "data": {
-    "id": "507f1f77bcf86cd799439030",
-    "optionId": "507f1f77bcf86cd799439020",
-    "value": "Black"
-  },
-  "message": "Option value created successfully"
-}
-```
-
----
-
-### Bulk Create Option Values
-
-```http
-POST /api/vendor/products/:productId/options/:optionId/values/bulk
-```
-
-**Request Body:**
-
-```json
-{ "values": ["Black", "White", "Navy"] }
-```
-
-- Max 50 values per request
-- Duplicate values within the same option are silently skipped
-
-**Response `201`:**
-
-```json
-{
-  "success": true,
-  "data": [
-    { "id": "507f...", "value": "Black" },
-    { "id": "507f...", "value": "White" },
-    { "id": "507f...", "value": "Navy" }
-  ],
-  "message": "Option values created successfully"
-}
-```
-
----
-
-### List Option Values
-
-```http
-GET /api/vendor/products/:productId/options/:optionId/values
-```
-
----
-
-### Rename Option Value
-
-```http
-PATCH /api/vendor/products/:productId/options/:optionId/values/:valueId
-```
-
-**Request Body:** `{ "value": "Black" }`
-
-| Field | Type | Required | Validation |
-|-------|------|----------|------------|
-| `value` | string | ✅ | 1–100 characters |
-
-> This is a **safe operation** — the value's `id` is unchanged, so existing variant `optionValueIds` and `optionSignature` remain valid. No variant re-creation needed.
-
-**Response `200`:**
-
-```json
-{
-  "success": true,
-  "data": {
-    "id": "507f1f77bcf86cd799439030",
-    "optionId": "507f1f77bcf86cd799439020",
-    "value": "Black"
-  },
-  "message": "Option value updated successfully"
-}
-```
-
----
-
-### Delete Option Value
-
-```http
-DELETE /api/vendor/products/:productId/options/:optionId/values/:valueId
-```
-
-> [!WARNING]
-> Deleting a value invalidates any variant whose `optionValueIds` array includes this value. Those variants will have an inconsistent `optionSignature` and should be archived or updated.
-
----
-
----
-
-## Vectorisation
-
-Vectorisation is the process of sending a fully-populated product payload to the external AI search service so it can be indexed for hybrid (semantic + keyword) search on the customer-facing storefront.
-
-> [!NOTE]
-> **Vectorisation is always asynchronous.** The API never blocks on it. The product is saved first, the HTTP response is returned to the frontend, and then vectorisation runs in the background.
-
-### Eligibility
-
-A product is automatically vectorised (or re-vectorised) when **all three** conditions are met:
-
-| Condition | How to satisfy |
-|-----------|----------------|
-| `status === "active"` | Activate the product via `PATCH /:id/status` |
-| `vectorisationEnabled === true` | Set via `PATCH /:id` — update the `vectorisationEnabled` field |
-| Product is complete | `title`, `description`, and `category` must all be present |
-
-> [!NOTE]
-> **Vectorisation applies to all product types — `physical`, `digital`, and `service` alike.** The `vectorisationEnabled` opt-in flag and the entire enable/disable/retry flow below behave identically regardless of type; eligibility never checks `product.type`.
-
-#### What gets indexed
-
-The payload sent to the vectoriser is **fully populated** — no raw ObjectIds, because the AI indexer cannot interpret IDs. Everything is resolved into human-readable data:
-
-- **Product** — `title`, `description`, `category`, `tags`, `seo`, the resolved `vendor`, the product `images` (gallery files with public URLs), and the resolved `delivery` agency. Digital products also carry the product-wide `digitalConfig` (`isActive` kill switch).
-- **Each variant** carries its **own** resolved data and config — config lives on the variant that owns it, not hoisted to the product:
-  - `options` — resolved `{ option, value }` pairs (e.g. `{ "option": "Size", "value": "M" }`), not option-value IDs.
-  - `files` — the variant's images with public URLs, not file IDs.
-  - `deliveryAgency` — the resolved agency when the variant overrides the default.
-  - `digitalConfig` (digital variants) — `maxDownloads`, `expiresAfterDays`, and the resolved `asset` (`originalName`, `mimeType`, `size`), not the asset ID.
-  - `serviceConfig` (service variants) — `durationMinutes`, buffers, `bookingMode`, `maxBookings`, and the optional peak-hours surcharge.
-  - `bargain` — the [bargainable-pricing](./variants.md#bargainable-pricing) window, `{ minPrice, maxPrice }`, or `null` when the vendor configured none. `minPrice` always equals the variant's `price`; `maxPrice` is the ceiling the negotiating agent may go up to.
-
-So a service variant is indexed with its full booking config, a digital variant with its asset details and limits, and a physical variant with its options/dimensions/agency — each on the variant it belongs to.
-
-Only **active** variants are indexed, so an archived variant's bargain window never reaches the negotiator.
-
-### Enabling / Disabling Vectorisation
-
-Vectorisation is **opt-in** — it defaults to `false` on all new and duplicated products. There are two ways to toggle it:
-
-**1. As part of a product update** — pass `vectorisationEnabled` in the body of `PATCH /api/vendor/products/:id`:
-
-```http
-PATCH /api/vendor/products/:id
-```
-
-```json
-{
-  "title": "New title",
-  "vectorisationEnabled": true
-}
-```
-
-Use this when you're already editing other fields and want to flip the opt-in flag in the same request.
-
-**2. Dedicated quick-toggle endpoint** — `PATCH /api/vendor/products/:id/vectorisation` with `{ "enabled": true | false }`:
-
-```http
-PATCH /api/vendor/products/:id/vectorisation
-```
-
-```json
-{ "enabled": true }
-```
-
-Use this when you only need to flip the flag and aren't changing anything else. See [Vectorisation Endpoints](#vectorisation-endpoints) below for the full contract.
-
-Both routes share the same backend logic — they run the same eligibility check, mark `pending`, call the vectoriser, and write the result. The dedicated endpoint just lets you skip the rest of the update payload.
-
-> [!IMPORTANT]
-> ## `vectorisationEnabled` is also the bargainable-pricing gate
->
-> A variant's [bargain window](./variants.md#bargainable-pricing) only applies while its
-> parent product has `vectorisationEnabled: true` — the agent that negotiates reads its
-> catalogue from the AI index. Variant read models report this as `bargainable`.
->
-> Four consequences:
->
-> - **A window can be configured at any time**, whether or not the flag is on. It is fully
->   price-validated either way, and simply inert until the flag flips. So a brand-new
->   product may carry a window and report `bargainable: false`; that is expected.
-> - **Turning vectorisation off never deletes a window.** `bargainable` goes `false`, the
->   configuration stays visible and editable, and re-enabling brings it straight back.
-> - **The flag can turn itself off.** A product that stops being *eligible* — demoted out of
->   `active`, or its `title` / `description` / `category` emptied — has `vectorisationEnabled`
->   reset to `false` by the pipeline (see the `ineligible` outcome below). `bargainable` will
->   therefore flip with no pricing edit having taken place. Re-read it rather than caching it.
-> - **Route 1 responds before the toggle is applied.** `PATCH /api/vendor/products/:id`
->   sends its response and *then* applies `vectorisationEnabled`, so the `data` it returns —
->   and any variant read racing it — still reflects the old flag. Route 2
->   (`PATCH /:id/vectorisation`) awaits the toggle, so use it when you need the flag and its
->   effect in one round trip.
->
-> Also note that while `vectorisationStatus` is `pending`, **every** variant and product write
-> returns `409 CATALOG_PRODUCT_VECTORISATION_PENDING`. A UI that reveals a bargain editor the
-> moment vectorisation is enabled reveals it inside exactly that window — handle the 409.
-
-### Status Lifecycle
-
-| `vectorisationStatus` | Meaning |
-|-----------------------|---------|
-| `not_started` | Vectorisation has never run (new product, or `vectorisationEnabled` was `false`) |
-| `pending` | The backend has accepted the job and is calling the vectoriser |
-| `completed` | Successfully vectorised. `vectorisedDataId` is populated. |
-| `failed` | All retry attempts failed. An admin can trigger re-vectorisation via the reconciliation script or the admin bulk endpoint. |
-
-### Polling for Completion
-
-If the frontend needs to show vectorisation state, poll `GET /api/vendor/products/:id` and read `vectorisationStatus`:
-
-```js
-// Example: poll every 5 seconds until completed or failed
-async function waitForVectorisation(productId) {
-  for (let i = 0; i < 12; i++) {
-    const res = await fetch(`/api/vendor/products/${productId}`, { headers });
-    const { data } = await res.json();
-    if (data.vectorisationStatus === 'completed') return data.vectorisedDataId;
-    if (data.vectorisationStatus === 'failed') throw new Error('Vectorisation failed');
-    await new Promise(r => setTimeout(r, 5000));
-  }
-  throw new Error('Vectorisation timed out');
-}
-```
-
-> In most flows the frontend does **not** need to wait — vectorisation is a background concern. Only surfaces like a "Search Indexing" status indicator need to poll.
-
-### Re-vectorisation
-
-The backend automatically re-vectorises on:
-- Product `PATCH` (data update) without `vectorisationEnabled` in the body — re-vectorises if product is currently active and `vectorisationEnabled` is `true`
-- `vectorisationEnabled` flipped from `false` to `true` (via either `PATCH /:id` or `PATCH /:id/vectorisation`) — runs the enable flow immediately
-
-It does **not** automatically retry a `failed` product. Vendors can manually trigger a retry via the dedicated retry endpoint (`POST /:id/vectorisation/retry`), or admins can use the bulk-vectorise endpoint.
-
-### Vectorisation Endpoints
-
-In addition to managing vectorisation via the standard product `PATCH` endpoint, vendors can use these dedicated endpoints:
-
-#### GET /api/vendor/products/:id/vectorisation/status
-
-Read the current vectorisation tracking details for a specific product.
-
-**Response `200 OK`:**
-```json
-{
-  "success": true,
-  "data": {
-    "productId": "507f1f77bcf86cd799439011",
-    "vectorisationEnabled": true,
-    "vectorisationStatus": "completed",
-    "vectorisedDataId": "ext-vec-98765"
-  }
-}
-```
-
-#### PATCH /api/vendor/products/:id/vectorisation
-
-Set the vectorisation opt-in state for a product. **This is the consolidated toggle endpoint that replaces the previous `POST .../enable` and `POST .../disable` routes — both have been removed.**
-
-**Request Body:**
-
-```json
-{ "enabled": true }
-```
-
-| Field | Type | Required | Notes |
-|-------|------|----------|-------|
-| `enabled` | boolean | Yes | Desired vectorisation opt-in state. `true` runs the enable flow, `false` runs the disable flow. |
-
-**Behaviour**
-
-The endpoint is idempotent — sending the current state returns a `200` no-op. Otherwise it routes to the appropriate flow and returns `202` while the upstream call runs in the background.
-
-| Request | Current state | Response | What happens |
-|---------|---------------|----------|--------------|
-| `{ "enabled": true }` | Already `enabled` + status `pending`/`completed` | `200 OK` | No-op. Returns current state with message `Vectorisation is already enabled.` |
-| `{ "enabled": true }` | Disabled, product eligible (active + title + description + category) | `202 Accepted` | Flag set to `true`, status set to `pending`, vectoriser called in the background. |
-| `{ "enabled": true }` | Disabled, product **ineligible** (draft, missing description, etc.) | `200 OK` | Flag stays `false`. The backend explains why in the message — caller should fix the product and retry. |
-| `{ "enabled": false }` | Already disabled | `200 OK` | No-op. Returns current state with message `Vectorisation is already disabled.` |
-| `{ "enabled": false }` | Enabled | `202 Accepted` | Flag set to `false`, upstream `/delete` called and local `vectorisedDataId` cleared in the background. |
-
-**Response `202 Accepted` (enable):**
-```json
-{
-  "success": true,
-  "data": {
-    "productId": "507f1f77bcf86cd799439011",
-    "vectorisationEnabled": true,
-    "vectorisationStatus": "pending",
-    "vectorisedDataId": null
-  },
-  "message": "Vectorisation enabled. The vectoriser is being called in the background."
-}
-```
-
-**Response `202 Accepted` (disable):**
-```json
-{
-  "success": true,
-  "data": {
-    "productId": "507f1f77bcf86cd799439011",
-    "vectorisationEnabled": false,
-    "vectorisationStatus": "completed",
-    "vectorisedDataId": "ext-vec-98765"
-  },
-  "message": "Vectorisation disabled. External cleanup is running in the background."
-}
-```
-
-**Response `200 OK` (ineligible enable):**
-```json
-{
-  "success": true,
-  "data": {
-    "productId": "507f1f77bcf86cd799439011",
-    "vectorisationEnabled": false,
-    "vectorisationStatus": "not_started",
-    "vectorisedDataId": null
-  },
-  "message": "Product is not eligible for vectorisation. Vectorisation has been disabled — make the product active and ensure it has a title, description, and category, then re-enable."
-}
-```
-
-**Error Responses:**
-- `404 CATALOG_PRODUCT_NOT_FOUND` — Product not found or not owned by this vendor
-- `409 CATALOG_PRODUCT_VECTORISATION_PENDING` — A vectorisation job is currently in flight; wait for it to finish (or fail) before toggling
-- `400 VALIDATION_ERROR` — Body missing `enabled` or not a boolean
-
-> [!IMPORTANT]
-> **Migration from the old endpoints**
-> - `POST /api/vendor/products/:id/vectorisation/enable` → `PATCH /api/vendor/products/:id/vectorisation` body `{ "enabled": true }`
-> - `POST /api/vendor/products/:id/vectorisation/disable` → `PATCH /api/vendor/products/:id/vectorisation` body `{ "enabled": false }`
->
-> The old routes are removed and now return `404`. Update any clients before deploy.
-
-#### POST /api/vendor/products/:id/vectorisation/retry
-
-Manually resubmit the product payload to the vectoriser. This is useful when the status has become `failed`.
-
-**Business Rules:**
-- The product must be `active`.
-- `vectorisationEnabled` must be `true`.
-- The product must be complete (having `title`, `description`, and `category` set).
-- Cannot retry while a job is currently `pending` (returns a `409` conflict error).
-
-**Response `202 Accepted`:**
-```json
-{
-  "success": true,
-  "data": {
-    "productId": "507f1f77bcf86cd799439011",
-    "vectorisationEnabled": true,
-    "vectorisationStatus": "pending",
-    "vectorisedDataId": null
-  },
-  "message": "Retry scheduled. The vectoriser will be called in the background."
-}
-```
-
-**Error Responses `422` (`CATALOG_PRODUCT_VECTORISATION_NOT_ELIGIBLE`):**
-```json
+## 7 · Errors every route on this page can raise
+
+Beyond each route's own table. Branch on `error.code`, never on `error.message`.
+
+### Authentication and authorization
+
+| Status | Code | Meaning |
+|---|---|---|
+| 401 | `AUTH_MISSING_TOKEN` | no credential — **terminal**, go to login |
+| 401 | `AUTH_TOKEN_EXPIRED` | **the one recoverable case** — refresh and retry |
+| 401 | `AUTH_SESSION_EXPIRED` | refresh unavailable or failed — terminal |
+| 401 | `AUTH_TOKEN_INVALID` | tampered — terminal |
+| 401 | `AUTH_PASSWORD_CHANGED` | terminal. Worth showing verbatim: to someone who did not change their own password this is the first sign somebody else did |
+| 401 | **`AUTH_SESSION_CAP_REACHED`** | **terminal — the 90-day absolute cap. Do not refresh.** See [auth/README.md](../auth/README.md) |
+| 401 | `AUTH_USER_NOT_FOUND` | terminal |
+| 401 | `AUTH_ROLE_PROFILE_NOT_FOUND` | authenticated, but no vendor profile |
+| 403 | `AUTH_ACCOUNT_CLOSED` | terminal |
+| 403 | `AUTH_ACCOUNT_SUSPENDED` | terminal |
+| 403 | `AUTH_VENDOR_SUSPENDED` | the vendor account is suspended |
+| 403 | `AUTH_ROLE_NOT_FOUND` | wrong role for this endpoint. `details: { required, actual }` |
+
+### Everything else
+
+| Status | Code | Meaning |
+|---|---|---|
+| 429 | `RATE_LIMIT_EXCEEDED` | **read the `Retry-After` header** — it is authoritative; `details.retryAfterSeconds` is a convenience copy. Vendor identity ceiling is 900/min, the IP ceiling 1200/min |
+| 503 | `SYSTEM_MAINTENANCE_ACTIVE` | maintenance. **This whole page is unexempted**: in `readonly` only the two `GET`s survive; in `down` everything 503s. Respect `Retry-After` |
+| 400 | `VALIDATION_ERROR` | `details: { fields: [{ path, message, code }] }` — an **object wrapping an array**, keyed `path` |
+| 500 | `INTERNAL_SERVER_ERROR` | message replaced and `details` dropped **in every environment**. `requestId` is your only handle — quote it |
+
+**The error envelope, in full:**
+
+```jsonc
 {
   "success": false,
+  "requestId": "req_abc123",
   "error": {
-    "code": "CATALOG_PRODUCT_VECTORISATION_NOT_ELIGIBLE",
-    "message": "Product is not eligible for vectorisation. Ensure it is active, vectorisation is enabled, and the title/description/category are set."
+    "code": "CATALOG_PRODUCT_INVALID_STATE",
+    "message": "…",
+    "statusCode": 422,
+    "category": "conflict",     // one of nine — see ../errors/README.md
+    "details": { "status": "archived" }   // omitted entirely when absent
   }
 }
 ```
+
+`category` is derived from `(code, statusCode)` and is your default branch when you have no
+specific handling for a code.
 
 ---
 
-## Activation Requirements
+## 8 · The vectorisation lock
 
-Summary of what the backend validates when changing status to `active`. Frontend should pre-validate these before calling the status endpoint.
+`PATCH /:id`, `PATCH /:id/status`, `DELETE /:id` and `POST /:id/duplicate` are all guarded by a
+middleware that refuses while the product's `vectorisationStatus` is `pending`:
 
-**Universal (all product types):**
+```
+409 CATALOG_PRODUCT_VECTORISATION_PENDING
+details: { productId, vectorisationStatus }
+```
 
-| Requirement | Error Code | Description |
-|-------------|------------|-------------|
-| At least one variant | `CATALOG_PRODUCT_NO_VARIANTS` | Create at least one variant first |
-| All active variants have `price > 0` | `CATALOG_PRODUCT_VARIANT_ZERO_PRICE` | Update variant price |
-| `defaultVariantId` points to an active variant | `CATALOG_PRODUCT_NO_DEFAULT_VARIANT` | First variant is auto-set; use `/default-variant` to reassign |
+Two properties to build around:
 
-**Physical products only:**
+- **Duplicate is gated too**, even though it does not modify the source product. Expect the 409
+  on a copy action.
+- **The guard runs before the ownership check.** An id belonging to another vendor whose product
+  happens to be mid-vectorisation returns 409 rather than 404. Do not infer existence from it.
 
-| Requirement | Error Code | Description |
-|-------------|------------|-------------|
-| Vendor has an active default delivery agency, with an active connection | `CATALOG_PRODUCT_NO_DELIVERY_AGENCY` | Set one via `PUT /profile/default-delivery-agency` — see [profile.md](./profile.md) |
-| If set, the product's own `delivery.agencyId` override is independently active, with an active connection | `CATALOG_PRODUCT_NO_DELIVERY_AGENCY` | Clear the override or point it at a working agency via `PATCH /:id` |
-| `delivery.pickupLocation` is set | `CATALOG_PRODUCT_NO_PICKUP_LOCATION` | Set it via `PATCH /:id` — see [Update Product](#update-product) |
-| `delivery.pickupLocation` matches the resolved agency's policy (`pickup_based`/`storage_based`) and, for `vendor_address`, still references an existing business address | `CATALOG_PRODUCT_INVALID_PICKUP_LOCATION` | Re-pick a valid pickup location for the resolved agency |
-| **For `agency_storage` pickup only:** no active variant has `isInfiniteStock: true` | `CATALOG_PRODUCT_AGENCY_STORAGE_INFINITE_STOCK` | Turn off unlimited stock and record a real quantity, or move pickup back to a vendor address. `details.variant` names the offender |
-
-> [!IMPORTANT]
-> **A warehouse cannot hold an unbounded quantity.** An agency that stores your goods
-> bills per SKU against a quantity and reconciles a shelf against a number, so
-> `agency_storage` and `isInfiniteStock` are mutually exclusive.
->
-> The same rule is enforced as a **refusal**, not a blocker, on the two write paths that
-> could otherwise put a *live* product into that state:
-> - `PATCH /api/vendor/products/:id` moving pickup to `agency_storage` while a variant is
->   unlimited → `422`, with `details.variants` listing every offender. The save is
->   rejected rather than accepted-and-silently-unpublished.
-> - a [stock request](./stock-requests.md) asking to go unlimited on a warehoused SKU →
->   `422` at creation, so no approvable request can leave a product failing its own gate.
->
-> Note this is **not** a `stock > 0` rule. A warehoused product may legitimately be at
-> zero, and requiring a positive quantity would silently demote it to `draft` the moment
-> it sold out.
-
-**Digital products only:**
-
-| Requirement | Error Code | Description |
-|-------------|------------|-------------|
-| Every active variant has an uploaded asset | `CATALOG_VARIANT_NO_DIGITAL_ASSET` | Upload a file for each format variant (auto-archives variants without one) |
-| No more than 5 active variants | `CATALOG_DIGITAL_VARIANT_LIMIT_EXCEEDED` | Remove/archive extra variants (max 5) |
-
-**Service products only:**
-
-| Requirement | Error Code | Description |
-|-------------|------------|-------------|
-| The default variant has `serviceConfig.durationMinutes` | `CATALOG_PRODUCT_SERVICE_NO_DURATION` | Create the service variant (with `serviceConfig`) via `POST /products/:id/variants` |
+The two bulk routes are **not** guarded by the middleware; they filter pending products out
+per-row instead and report them in `errors[]`.
 
 ---
 
-## Error Codes
+## 9 · Bulk operations
 
-All errors use this response shape:
+Both cap at **50 ids** (`400 VALIDATION_ERROR` above that) and both return:
 
-```json
+```jsonc
 {
-  "success": false,
-  "error": {
-    "code": "CATALOG_PRODUCT_NOT_FOUND",
-    "message": "Human-readable description",
-    "details": { "...additional context..." }
-  }
+  "success": true,
+  "data": {
+    "success": 12,
+    "failed": 3,
+    "total": 15,
+    "errors": [ { "productId": "66b1…", "reason": "…" } ]   // OMITTED when empty
+  },
+  "message": "Archived 12 of 15 products"
 }
 ```
 
-Validation errors include a `details` array:
+🔴 **`errors.length` does not equal `failed`.** Three separate behaviours:
 
-```json
-{
-  "success": false,
-  "error": {
-    "code": "VALIDATION_ERROR",
-    "message": "Request validation failed",
-    "details": [
-      { "field": "title", "message": "Title must be at least 3 characters" }
-    ]
-  }
-}
-```
+| Route / mode | Rows that fail get an `errors[]` entry? |
+|---|---|
+| `POST /bulk/archive` | **only** vectorisation-pending rows. Wrong status, bad id, foreign product → counted in `failed`, invisible |
+| `POST /bulk/status` with `draft` or `archived` | same — only vectorisation-pending rows are explained |
+| `POST /bulk/status` with **`active`** | **every** failure gets a row, `reason` = the human message |
 
-**Catalog Product Error Codes:**
+So a UI that lists `data.errors` as "what went wrong" under-reports on two of the three paths.
+Show `failed` as the count and `errors` as "details where available".
 
-| Code | HTTP | Description |
-|------|------|-------------|
-| `CATALOG_PRODUCT_NOT_FOUND` | 404 | Product does not exist or is not owned by this vendor |
-| `CATALOG_PRODUCT_ACCESS_DENIED` | 403 | Vendor does not own this product |
-| `CATALOG_PRODUCT_INVALID_TYPE` | 400 | Operation not permitted for this product type |
-| `CATALOG_PRODUCT_INVALID_STATE` | 422 | Product is in a state that does not allow this operation (e.g., updating an archived product) |
-| `CATALOG_PRODUCT_NO_VARIANTS` | 422 | Activation blocked — no variants exist |
-| `CATALOG_PRODUCT_VARIANT_ZERO_PRICE` | 422 | Activation blocked — an active variant has `price = 0` |
-| `CATALOG_PRODUCT_NO_DEFAULT_VARIANT` | 422 | Activation blocked — `defaultVariantId` not set or points to archived variant |
-| `CATALOG_PRODUCT_NO_DELIVERY_AGENCY` | 422 | Activation blocked (or `delivery.pickupLocation` update rejected) — physical product has no resolvable active delivery agency/connection |
-| `CATALOG_PRODUCT_NO_PICKUP_LOCATION` | 422 | Activation blocked — physical product has no `delivery.pickupLocation` set |
-| `CATALOG_PRODUCT_INVALID_PICKUP_LOCATION` | 422 | `delivery.pickupLocation` doesn't match the resolved agency's policy, or its business address no longer exists |
-| `CATALOG_PRODUCT_AGENCY_STORAGE_INFINITE_STOCK` | 422 | Activation blocked, **or** a `PATCH /:id` moving pickup to `agency_storage` rejected — an active variant has `isInfiniteStock: true` |
-| `CATALOG_VARIANT_NO_DIGITAL_ASSET` | 422 | Activation blocked — a digital variant has no uploaded asset |
-| `CATALOG_DIGITAL_VARIANT_LIMIT_EXCEEDED` | 400/422 | Digital product exceeds 5 variants (400 on create, 422 on activation) |
-| `CATALOG_PRODUCT_SERVICE_NO_DURATION` | 422 | Activation blocked — service product has no duration |
-| `CATALOG_DIGITAL_ASSET_ALREADY_EXISTS` | 409 | Attempted `POST` upload when the variant already has an asset; use `PUT` |
-| `CATALOG_DIGITAL_ASSET_MISSING` | 404 | Attempted `PUT`/`DELETE` when the variant has no asset |
-| `CATALOG_DIGITAL_ASSET_MISSING_FILE` | 400 | No file included in the upload request |
-| `CATALOG_FILE_TOO_LARGE` | 400 | Upload exceeds size limit |
-| `CATALOG_FILE_TYPE_INVALID` | 400 | MIME type is not in the allowed list |
-| `VALIDATION_ERROR` | 400 | Zod schema validation failed |
+Also: on the `active` path `reason` is the AppError's **message**, not its code — you cannot
+branch on it programmatically, only display it.
+
+`productIds` entries are **not** ObjectId-validated by the schema. Garbage strings pass Zod and are
+silently dropped inside the query, surfacing only as a higher `failed` count.
+
+---
+
+## 10 · `POST /api/vendor/products/:id/duplicate`
+
+No body. Returns `201` with the **raw** product ([§ 0](#0--read-this-first--two-response-shapes-for-a-product)).
+
+| Copied | Reset |
+|---|---|
+| `mode` (a simple product stays simple) | `status` → `draft` |
+| `descriptionRich`, `tags`, `seo`, `category`, `fileIds` | `title` → `"<original> (copy)"` |
+| variant `bargain` window (simple mode) | `slug` → `"<slug>-copy"`, then `-copy-2`… |
+| | `digitalConfig.isActive` → `false` |
+| | `vectorisationEnabled` → `false`, status → `not_started` |
+
+🔴 **Variants: it depends on `mode`, and the backend's own doc gets this wrong.**
+
+- **`advanced`** — variants are **not** copied. The clone has `hasVariants: false` and no default
+  variant. It cannot be activated until the vendor rebuilds them.
+- **`simple`** — the lone variant **is** cloned. The copy comes back with `hasVariants: true` and a
+  real `defaultVariantId`. The variant's SKU is regenerated; its **images are not carried over**.
+
+Tell the vendor which of these just happened. "Duplicated" means two quite different things.
+
+---
+
+## 11 · Where the backend's own doc is wrong
+
+Filed in `FRONTEND-SYNC/03-FINDINGS-REGISTER.md`. Listed here so you do not re-derive them from
+`jovi-mall/api-doc/vendor/products.md`.
+
+| # | The doc says | Source says |
+|---|---|---|
+| 1 | `FileDetail` is `{id,key,url,mimeType,size,originalName}`, `url` always a string | `access` is present and always has been since Phase 4; `url` is `string \| null` |
+| 2 | list rows have no `mode` | every list row carries `mode` |
+| 3 | `status` filter takes 3 values | it takes 5 |
+| 4 | `vectorisationStatus` has 4 values | it has 5 — `skipped_no_credits` |
+| 5 | create returns `fileIds: []` and `defaultVariantId: null` | it returns `files` + `pickup`, and `defaultVariantId` is **omitted** |
+| 6 | `descriptionRich` is not in the product shape | it is, on every detail/create/update response |
+| 7 | `PATCH /:id/status` and `duplicate` return the full product | they return the **raw** object |
+| 8 | duplicate never copies variants | a **simple** product's variant is copied |
+| 9 | `PATCH /:id` is allowed on `draft` and `active` | `suspended` is editable too |
+| 10 | the activation table lists 11 blockers | there are 15; description, vendor-suspended, service capacity and service availability are missing |
+| 11 | the error envelope has no `requestId` / `statusCode` / `category`, and `details` is an array of `{field,message}` | all three are present, and Zod details are `{ fields: [{ path, message, code }] }` |
+| 12 | `409 CATALOG_PRODUCT_VECTORISATION_PENDING` is only a vectorisation concern | it gates update, status, archive **and duplicate** |
+| 13 | `POST /` raises only two 400s | `403 BILLING_LIMIT_EXCEEDED` is the one that will actually stop a vendor |
+| 14 | `PATCH /:id` cannot raise `CATALOG_PRODUCT_AGENCY_STORAGE_INFINITE_STOCK` | it can |
+| 15 | bulk `errors` always explains a failure | it is omitted when empty, and on two of three paths explains only vectorisation locks |

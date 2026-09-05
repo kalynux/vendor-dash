@@ -1,5 +1,27 @@
 # Service Booking — Frontend Implementation Guide
 
+**Verified against the live route dump on 2026-08-24.**
+
+> ### Scope for this repository — **roughly half of this guide is not yours**
+>
+> This is a **two-app** reading order. Steps 5–7, and the customer half of step 10, belong to
+> the **storefront**, not to the vendor dashboard, and the `customer/*` pages they point at
+> are **not mirrored in this repository** — they live in the backend repo. Those references
+> are printed as plain paths rather than links for that reason.
+>
+> **The vendor dashboard share is steps 1–4, 8, 9 and 11**, and each has a full page here:
+>
+> | Step | Page |
+> |---|---|
+> | 1 · connect calendar | [`vendor/calendar.md`](./vendor/calendar.md) |
+> | 2 · create the service product | [`vendor/products.md`](./vendor/products.md) |
+> | 3 · availability | [`vendor/availability-rules.md`](./vendor/availability-rules.md) |
+> | 4 · activate | [`vendor/products.md`](./vendor/products.md) |
+> | 8–11 · manage bookings | [`vendor/bookings.md`](./vendor/bookings.md) |
+>
+> 🔴 [`vendor/bookings.md`](./vendor/bookings.md) records **F-23** — the vendor booking
+> **reschedule** path is unusable as wired. Read that before building step 10.
+
 This is the **reading order** for implementing the full service-product booking feature. Each step names the doc to open and the endpoints to wire, in the order a frontend should build them. Two audiences are involved: the **vendor** app (set up + manage) and the **customer** app (discover + book + pay).
 
 ```
@@ -43,7 +65,7 @@ Build these in order; each depends on the previous.
 
 ---
 
-## Phase 2 — Customer booking (customer app)  → [customer/bookings.md](./customer/bookings.md)
+## Phase 2 — Customer booking (customer app)  → `customer/bookings.md`
 
 Build the checkout as a short-lived, ordered flow.
 
@@ -79,7 +101,7 @@ These are independent of each other; build as needed.
 
 ---
 
-## Phase 4 — Customer booking management (storefront)  → [customer/bookings.md](./customer/bookings.md#managing-your-bookings)
+## Phase 4 — Customer booking management (storefront)  → `customer/bookings.md`
 
 Everything after the purchase. All under `/api/customer/bookings`, customer role, scoped to the caller.
 
@@ -87,7 +109,7 @@ Everything after the purchase. All under `/api/customer/bookings`, customer role
 - **Step 14** — Cancel: `POST /api/customer/bookings/:id/cancel`. Gated by the vendor's cancellation policy — handle `422 CANCELLATION_NOT_ALLOWED` and show `error.details.deadline`. A paid booking is refunded, or flagged `refund_pending` with a ticket raised.
 - **Step 15** — Reschedule: lock the new slot (Step 6), then `PATCH /api/customer/bookings/:id/reschedule` with `{ newSlotId }`.
 - **Step 16** — Pay an outstanding balance: `GET /api/customer/bookings/:id/balance`, then `POST /api/customer/bookings/:id/pay-balance` with `{ gateway, channel }`.
-- **Step 17** — The notification inbox: `GET /api/customer/notifications` (+ `/unread-count`, `/preferences`). See [customer/notifications.md](./customer/notifications.md).
+- **Step 17** — The notification inbox: `GET /api/customer/notifications` (+ `/unread-count`, `/preferences`). See `customer/notifications.md`.
 
 > **Customers are now notified.** Booking placed, confirmed, moved, cancelled, completed, paid, refunded, balance due — plus a reminder ~24h before the appointment. Money and cancellations cannot be switched off; progress updates and reminders can.
 
@@ -110,6 +132,6 @@ Everything after the purchase. All under `/api/customer/bookings`, customer role
 | Create service product | [vendor/products.md](./vendor/products.md#service-products) |
 | Create the service variant (`serviceConfig` + price) | [vendor/variants.md](./vendor/variants.md) |
 | Weekly availability rules | [vendor/availability-rules.md](./vendor/availability-rules.md) |
-| Customer slot → lock → book → pay | [customer/bookings.md](./customer/bookings.md) |
-| Customer lists / cancels / reschedules | [customer/bookings.md](./customer/bookings.md#managing-your-bookings) |
+| Customer slot → lock → book → pay | `customer/bookings.md` |
+| Customer lists / cancels / reschedules | `customer/bookings.md` |
 | Vendor manages bookings | [vendor/bookings.md](./vendor/bookings.md) |

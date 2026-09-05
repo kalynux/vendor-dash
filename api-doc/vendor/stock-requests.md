@@ -1,235 +1,245 @@
-# Vendor Stock Requests
+# Stock requests
 
-Changing the recorded stock of a product a delivery agency warehouses for you. Every
-change needs both signatures — yours and the agency's.
+**Verified against backend source on 2026-08-24.**
 
-> Related docs: [Agency → Stock requests](../agency/stock-requests.md) (the mirror,
-> and the fuller explanation of the flow) · [Inventory](./inventory.md) (bulk update) ·
-> [Variants](./variants.md) · [Simple products](./simple-products.md) ·
-> [Front-end changelog](../FRONTEND-CHANGELOG-agency-storage.md).
+**Base path:** `/api/vendor/stock-requests` · **Routes: 6**
 
-## Base Path
-```
-/api/vendor/stock-requests
-```
-
-## Authentication
-Bearer token (or cookie session) with the **vendor** role. Identity flows
-token → vendor; there is no `vendorId` in any path. Another party's request returns
-**404**, never 403.
+The two-signature gate on `variant.stock` for a SKU an agency warehouses.
 
 ---
 
-## When this applies to you
+## 0 · 🔴 When is a SKU's stock gated?
 
-Only for a product whose `delivery.pickupLocation.source` is `agency_storage` — one an
-agency physically warehouses. Every other product in your catalogue is unchanged: you
-edit its stock directly, as always.
+There is **no server-side flag** for this. No product or variant read-model exposes "this SKU's
+stock needs approval" or "a request is already open on it". **You must derive it.**
 
-For a warehoused product, **neither side writes the quantity alone.** The agency is the
-party that can go and count the shelf and bills storage per SKU against that figure;
-you own the goods and the catalogue. So one side proposes, the other approves.
+All four conditions must hold:
 
----
+```ts
+const gated =
+  product.type === 'physical' &&
+  product.delivery?.pickupLocation?.source === 'agency_storage' &&
+  (product.delivery?.agencyId ?? vendorProfile.defaultDeliveryAgencyId) != null;
+```
 
-## ⚠️ You may already be using this without calling it
+⚠ **The fourth condition is the one people forget.** A product configured for `agency_storage` whose
+effective agency resolves to `null` is **not gated** — the write goes straight through. If you skip
+that check you will render "pending approval" for a SKU that actually saved.
 
-Your existing stock edits are routed into this flow automatically. For an
-agency-warehoused product, these three **no longer change the quantity**:
+⚠ **Product status is irrelevant.** A `draft` product's stock is gated too.
 
-| Endpoint | Behaviour |
-|---|---|
-| `PATCH /api/vendor/products/:productId/variants/:variantId` | every other field applies; `stock`/`isInfiniteStock` become a request |
-| `PATCH /api/vendor/products/:id/simple` | same |
-| `PATCH /api/vendor/inventory/bulk-update` | non-warehoused rows apply; warehoused rows become requests |
+**Not gated, by design:** creating a variant, creating a simple product, duplicating a product.
+Those write stock directly.
 
-They still return **`200`** — not `202` — with a new `meta.stockAdjustment` block:
+## 0.1 · What a gated write looks like
 
-```json
+There is **no error**. You get a `200` with the old value and the request in `meta`:
+
+```jsonc
 {
   "success": true,
-  "data": { "id": "664d…", "sku": "NIKE-…", "stock": 120 },
-  "meta": {
-    "stockAdjustment": {
-      "status": "pending_agency_approval",
-      "request": { "id": "665a…", "requestedQuantity": 90, "availableActions": ["withdraw"] }
-    }
-  },
+  "data": { /* the variant, with the UNCHANGED stock */ },
+  "meta": { "stockAdjustment": { "status": "pending_agency_approval",
+                                 "request": { /* StockRequest */ } } },
   "message": "Variant updated. The stock change is awaiting the storage agency's approval."
 }
 ```
 
-**`data.stock` is the OLD quantity.** One status code rather than two because you have
-to read the body either way; branching on 200-vs-202 would buy nothing.
-
-Interception rather than a separate endpoint is the point. Leaving those three writing
-directly and adding this surface beside them would make the rule advisory — bypassable
-by simply not using it.
-
-**Not gated, deliberately:** *creating* a variant, creating a simple product, and
-duplicating a product write stock directly. An initial quantity is a declaration, not an
-adjustment; gating it would strand a brand-new SKU at 0 awaiting approval. The agency
-sees the SKU on its roster within a minute and can propose a correction.
-
----
-
-## The state machine
-
-```
-                    ┌──────────── approve ───────────▶ approved  (stock is written)
-                    │
-   raise ──▶ pending ──────────── reject ────────────▶ rejected  (nothing written)
-                    │
-                    └──────────── withdraw ──────────▶ withdrawn (nothing written)
-```
-
-| Verb | From | Who may |
-|---|---|---|
-| raise (`POST /`) | — | either party |
-| `approve` / `reject` | `pending` | **the counterparty only** |
-| `withdraw` | `pending` | **the author only** |
-
-**Do not re-implement this table.** Every response carries `availableActions` — the
-server's verdict for you.
-
-> **At most one open request per SKU.** A second `POST` while one is pending is
-> `409 STOCK_REQUEST_ALREADY_PENDING`, with `details.hint` saying whether to withdraw
-> yours or answer theirs.
-
----
-
-## 1. Raise a request
-
-### POST /api/vendor/stock-requests
-
-```json
-{
-  "productId": "664c1f77bcf86cd799439031",
-  "variantId": "664d1f77bcf86cd799439041",
-  "quantity": 90,
-  "note": "Sold 30 through another channel"
+```ts
+if (res.meta?.stockAdjustment) {
+  // keep the old number visible, show "pending approval", link to the request
 }
 ```
 
-| Field | Type | Required | Notes |
+Three routes can return this: the variant PATCH, the simple-product PATCH, and the inventory bulk
+update.
+
+---
+
+## 1 · Who raises, who approves
+
+**Both parties can raise a request. The counterparty answers it.**
+
+| Verb | From | Who | Vendor-side meaning |
 |---|---|---|---|
-| `productId` | ObjectId | yes | Must be **your** product, and agency-warehoused |
-| `variantId` | ObjectId | yes | An `active` variant of it |
-| `quantity` | integer ≥ 0 | yes | The **absolute** target, never a delta. `0` is valid |
-| `isInfiniteStock` | boolean | no | Accepted only so it can be *refused* — see below |
-| `note` | string ≤ 500 | no | Shown to the agency. Say why |
+| `POST /` | — | either party | you propose a new quantity |
+| `approve` / `reject` | `pending` | **the counterparty** | you answer a request the **agency** raised |
+| `withdraw` | `pending` | **the author** | you retract a request **you** raised |
 
-**Success** — `201 Created`, body is the request (§3).
+**A vendor never approves their own request.**
 
-**Errors**
+🔴 **Do not compute this yourself — every response carries `availableActions`.** Render the buttons
+straight from it:
 
-| Code | HTTP | Meaning |
-|---|---|---|
-| `INVENTORY_PRODUCT_NOT_STORED_HERE` | 404 | Not your product, or it is not agency-warehoused |
-| `CATALOG_VARIANT_NOT_FOUND` | 404 | No such SKU on that product |
-| `CATALOG_VARIANT_ARCHIVED` | 422 | Archived SKUs hold nothing the agency shelves |
-| `STOCK_REQUEST_NO_CHANGE` | 422 | That is already the recorded quantity |
-| `STOCK_REQUEST_ALREADY_PENDING` | 409 | `details: { requestId, requestedByRole, hint }` |
-| `CATALOG_PRODUCT_AGENCY_STORAGE_INFINITE_STOCK` | 422 | See below |
-
-### Unlimited stock cannot be requested
-
-A warehouse holds a countable number of things, so `agency_storage` and
-`isInfiniteStock` are mutually exclusive — it is an activation blocker on the product
-too. The request is refused at **creation** rather than at approval, on purpose: an
-approvable request that broke the product's own activation gate would be a trap, where
-the agency signs off, the write lands, and the product silently stops being publishable.
-
-To sell a warehoused product with no fixed ceiling, move its pickup back to a vendor
-address first.
-
----
-
-## 2. Your inbox
-
-### GET /api/vendor/stock-requests
-
-**Query parameters** (all optional):
-
-| Param | Type | Default | Notes |
-|---|---|---|---|
-| `page` | integer ≥ 1 | `1` | |
-| `limit` | integer 1–100 | `20` | |
-| `status` | `pending` \| `approved` \| `rejected` \| `withdrawn` | — | **No filter returns every status** |
-| `productId` | ObjectId | — | |
-| `variantId` | ObjectId | — | One SKU's whole history |
-| `direction` | `awaiting_me` \| `raised_by_me` | — | |
-
-Unknown query parameters are rejected (`400 VALIDATION_ERROR`).
-
-`direction=awaiting_me` is "pending, and the agency raised it" — your action list.
-`raised_by_me` is the converse, which is also where requests the backend created for you
-out of a variant PATCH show up.
-
-**Success** — `200 OK`, `{ success, data, meta: { total, page, limit, totalPages } }`.
-
-### GET /api/vendor/stock-requests/:id
-
----
-
-## 3. The request object
-
-Identical shape to the agency's — see
-[Agency → Stock requests §3](../agency/stock-requests.md#3-the-request-object) for the
-full field-by-field breakdown. The three points that matter most:
-
-- **Three quantities.** `quantityBefore` is what the proposer saw, `currentQuantity` is
-  what the SKU reads now, `requestedQuantity` is what it will read if approved. The
-  first two differing is *drift*, not an error — show both.
-- **`availableActions`** is the button list. `['withdraw']` if you raised it,
-  `['approve','reject']` if the agency did, `[]` once resolved.
-- **`awaitingMyDecision`** drives your badge count.
-
----
-
-## 4. Answering a request
-
-### POST /api/vendor/stock-requests/:id/approve
-
-No body. **Applies the change**: `variant.stock` is written, a `StockAuditLog` row is
-recorded (`operation: 'adjustment'`, `actorType: 'vendor'`, `metadata.requestId`), and
-the request flips to `approved` — one transaction, so the three cannot come apart.
-
-### POST /api/vendor/stock-requests/:id/reject
-
-```json
-{ "reason": "Our own count says 120" }
+```jsonc
+"availableActions": ["approve", "reject"]   // or ["withdraw"], or [] once resolved
+"awaitingMyDecision": true
 ```
-Optional, shown to the agency. Nothing is written.
 
-### POST /api/vendor/stock-requests/:id/withdraw
+Status enum: `pending` · `approved` · `rejected` · `withdrawn`. **All three exits are terminal** —
+nothing reopens.
 
-No body. Retracts a request **you** raised — including one the backend created from a
-variant PATCH. No notification is sent, matching the connection flow.
-
-### Errors on all three
-
-| Code | HTTP | Meaning |
-|---|---|---|
-| `STOCK_REQUEST_NOT_FOUND` | 404 | Not yours |
-| `STOCK_REQUEST_NOT_PENDING` | 409 | Already resolved. **Reload — do not retry** |
-| `STOCK_REQUEST_NOT_YOURS` | 403 | Wrong verb for your side; `details.availableActions` |
-| `STOCK_REQUEST_STALE` | 409 | The product stopped being warehoused by that agency |
-| `CATALOG_VARIANT_NOT_FOUND` | 404 | The SKU was deleted under the request |
+**At most one open request per SKU**, enforced by a database constraint.
 
 ---
 
-## 5. Notifications
+## 2 · `GET /api/vendor/stock-requests/`
 
-| `type` | When |
+Query — 🔴 **the schema is strict, so an unknown parameter is a `400`**:
+
+| Param | Type | Default |
+|---|---|---|
+| `page` | integer | `1` |
+| `limit` | integer 1–100 | `20` |
+| `status` | the four values | — **no default: every status is returned** |
+| `productId` · `variantId` | 24-hex | — |
+| `direction` | `raised_by_me` · `awaiting_me` | — |
+
+**`direction` is the useful one.** `awaiting_me` returns agency-raised requests **and forces
+`status=pending`**, overriding any `status` you send. That is your "needs my decision" inbox.
+
+```jsonc
+{ "success": true, "data": [ /* … */ ],
+  "meta": { "total": 6, "page": 1, "limit": 20, "totalPages": 1 } }
+```
+
+⚠ **`meta` with `totalPages` here**, while `inventory/history` on the neighbouring page uses `meta`
+with `pages`. Both spellings are live on this surface.
+
+---
+
+## 3 · The request object
+
+```jsonc
+{
+  "id": "…", "productId": "…", "variantId": "…",
+  "vendorId": "…", "agencyId": "…",
+  "requestedByRole": "agency",           // vendor | agency
+  "requestedAt": "…",
+  "quantityBefore": 40, "infiniteBefore": false,
+  "requestedQuantity": 120, "requestedInfinite": false,
+  "status": "pending",
+  "note": "Restock after delivery" | null,
+  "currentQuantity": 40,                 // number | null — LIVE, see below
+  "currentInfinite": false,
+  "awaitingMyDecision": true,
+  "availableActions": ["approve", "reject"],
+  "approval":   { "byRole", "at", "quantityAtApply" } | null,
+  "rejection":  { "byRole", "at", "reason" } | null,
+  "withdrawal": { "byRole", "at" } | null,
+  "statusHistory": [ { "status", "changedAt", "changedByRole", "note" } ],
+  "createdAt": "…", "updatedAt": "…"
+}
+```
+
+**No user ids are ever exposed** — only roles.
+
+### 🔴 `currentQuantity` is `null` on two of the six routes
+
+| Route | `currentQuantity` |
 |---|---|
-| `storage.stock_request.received` | the agency proposed a change — yours to answer |
-| `storage.stock_request.approved` | the agency approved a change **you** proposed |
-| `storage.stock_request.rejected` | the agency rejected a change **you** proposed |
+| list · get-by-id · create · approve | the **live** stock |
+| **reject · withdraw** | **`null`** |
 
-`aggregateType` is `stock_request`. Gated by `preferences.agencyStorageUpdates`
-(default on) on `GET|PATCH /api/vendor/notification-preferences` — the same flag that
-covers the agency's unilateral depot and suspension actions. Distinct from
-`preferences.storageAlert`, which is your media-file quota.
+So a UI that shows "40 → 120" from the response of a reject will render "null → 120". **Fall back to
+`quantityBefore`**, or re-fetch.
 
-Nothing is sent for `withdrawn`.
+`quantityBefore` is the stock at the moment the request was raised; `currentQuantity` is now. **Show
+both when they differ** — that gap is exactly what the approver needs to see.
+
+---
+
+## 4 · `POST /api/vendor/stock-requests/`
+
+Body — **strict**:
+
+| Field | Type | Required |
+|---|---|---|
+| `productId` | 24-hex | ✅ |
+| `variantId` | 24-hex | ✅ |
+| `quantity` | integer ≥ 0 | ✅ — **an absolute target, never a delta** |
+| `isInfiniteStock` | boolean | accepted **only so it can be refused** |
+| `note` | string 1–500 | |
+
+**You never name the agency** — it is derived from the product.
+
+`201` with the request object.
+
+| Status | Code | Meaning |
+|---|---|---|
+| 404 | `INVENTORY_PRODUCT_NOT_STORED_HERE` | not your product, or not agency-warehoused |
+| 404 | `CATALOG_VARIANT_NOT_FOUND` | |
+| 422 | `CATALOG_VARIANT_ARCHIVED` | |
+| **422** | `CATALOG_PRODUCT_AGENCY_STORAGE_INFINITE_STOCK` | `details: { variant }` — **infinite stock is refused at creation** |
+| **422** | `STOCK_REQUEST_NO_CHANGE` | `details: { quantity }` — the target equals the current stock |
+| **409** | `STOCK_REQUEST_ALREADY_PENDING` | `details: { requestId, requestedByRole, hint }` |
+
+🔴 **`STOCK_REQUEST_ALREADY_PENDING` carries a `hint` that differs depending on who raised the open
+request.** Render `details.hint` verbatim and link `details.requestId` — that is the whole recovery
+path, and it tells the vendor whether to wait or to answer.
+
+**`STOCK_REQUEST_NO_CHANGE` is worth pre-empting**: disable Submit when the field equals the current
+stock.
+
+---
+
+## 5 · approve · reject · withdraw
+
+| Route | Body |
+|---|---|
+| `POST /:id/approve` | none |
+| `POST /:id/reject` | `{ "reason"?: string }` — 1–500, **strict**. An empty body is fine |
+| `POST /:id/withdraw` | none |
+
+**Approve** is transactional: it writes the variant's stock, appends an inventory audit row, and
+flips the status in one commit. **Reject and withdraw touch no stock.**
+
+| Status | Code | Meaning |
+|---|---|---|
+| 404 | `STOCK_REQUEST_NOT_FOUND` | not a party to it — **404, never 403** |
+| **409** | `STOCK_REQUEST_NOT_PENDING` | `details: { status }` — **reload, do not retry** |
+| **403** | `STOCK_REQUEST_NOT_YOURS` | `details: { availableActions }` — the wrong verb for your side |
+| **409** | `STOCK_REQUEST_STALE` | approve only — the product left that agency while the request was open |
+| 404 | `CATALOG_VARIANT_NOT_FOUND` | approve only — the SKU was deleted underneath |
+
+🔴 **`STOCK_REQUEST_NOT_YOURS` returns `details.availableActions`** — render the right buttons from
+it rather than showing an error. It usually means your view is stale.
+
+**`STOCK_REQUEST_STALE`** means the pickup arrangement changed. The request is dead; the vendor must
+raise a new one against the new agency.
+
+---
+
+## 6 · Notifications
+
+A vendor receives `storage.stock_request.received` (the agency proposed something),
+`.approved` and `.rejected` — see [notifications.md](./notifications.md).
+
+⚠ **Nothing is emitted on `withdrawn`.** If the agency retracts a request, the vendor's inbox stays
+silent and the row simply leaves `awaiting_me`. Do not build a "withdrawn" notification.
+
+---
+
+## 7 · Auto-created requests carry a machine note
+
+A gated **bulk update** raises requests with `note: "Bulk update <batchId>"`. The vendor did not type
+it, and it appears in the agency's inbox as the justification.
+
+If you surface `note` in a list, consider labelling those rows as automatic rather than presenting
+the string as the vendor's words.
+
+---
+
+## 8 · The agency side is identical
+
+The agency's mirror is endpoint-for-endpoint the same, with byte-identical DTOs — only
+`availableActions` and `awaitingMyDecision` flip. If this codebase ever grows agency screens, the
+types are reusable as-is.
+
+---
+
+## 9 · Where the backend's own doc is wrong
+
+| The doc says | Source says |
+|---|---|
+| show `quantityBefore` and `currentQuantity` together | `currentQuantity` is **`null`** on reject and withdraw |

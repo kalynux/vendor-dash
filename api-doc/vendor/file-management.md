@@ -1,8 +1,45 @@
 # File Management Service API Documentation
 
-**Version:** 1.2  
-**Last Updated:** 2026-06-11  
-**Audience:** Frontend Developers, Backend Engineers, Platform Documentation
+**Version:** 1.2 · **Written:** 2026-06-11 · **Audited against backend source: 2026-08-24**
+
+---
+
+> # 🔴 Read this box before anything else on this page
+>
+> This is a **long-form design reference**, and the most useful thing in the doc set for
+> understanding the upload policy pipeline, reference counting and the deletion lifecycle.
+> **It is also the oldest page here, and parts of it describe a 2026-06 API.** It has not been
+> rewritten — it has been *audited*, and every deviation found is listed below.
+>
+> **The two pages that are current, and win wherever they disagree with this one:**
+>
+> - [`../uploads/README.md`](../uploads/README.md) — the seven live routes, the real query
+>   schema, the real response shapes
+> - [`../files/private-files.md`](../files/private-files.md) — 🔴 `FileDetail.url` is
+>   `string | null` and there is a new `access` field
+>
+> ### The audit result — nine deviations
+>
+> | § of this page | Says | Source says |
+> |---|---|---|
+> | `DELETE /api/files/:id/permanent` | an admin route on this router | 🔴 **gone** — moved to `/api/internal/admin/files`, not browser-reachable |
+> | `GET /api/files/orphans` | an admin route on this router | 🔴 **gone** — same move |
+> | *(throughout)* | this router has admin-only routes | there is **no role guard anywhere** on `file-upload.routes.ts` |
+> | `GET /api/files` response | `data` array + `meta` | `data: { files, storage, pagination }`, **no `meta`** |
+> | `GET /api/files` `limit` | up to 100 | **50** |
+> | `GET /api/files` date filters | `startDate` / `endDate` | **`createdAfter` / `createdBefore`** |
+> | `GET /api/files` sorting | `sort` with a `-` prefix | **`sortBy` + `sortOrder`** |
+> | `GET /api/files/storage` | `usedBytes`, `limitBytes`, `fileCount`, `plan` | `limitBytes`, `usedBytes`, `remainingBytes`, `byCategory` |
+> | *(nothing about it)* | — | 🔴 **`GET /api/files` returns soft-deleted rows** — F-26 |
+>
+> **What is still accurate and worth reading here:** the upload policy pipeline and its eleven
+> violation codes, reference counting and the orphan sweep, the storage-provider abstraction,
+> ownership and linking rules, and the concurrency notes. Those are the reason this page was
+> kept rather than replaced.
+>
+> ⚠ Code fences on this page that reference backend source files were previously **links**
+> into a sibling repository. They are now plain paths — the files are in `jovi-mall/`, not in
+> this repository.
 
 ---
 
@@ -17,7 +54,7 @@
 7. [Storage Provider Abstraction](#storage-provider-abstraction)
 8. [Deletion Semantics](#deletion-semantics)
 9. [Security & Access Control](#security--access-control)
-10. [Error Handling](#error-handling)
+10. [Error Handling](#error-handling--edge-cases)
 11. [Frontend Integration Guide](#frontend-integration-guide)
 
 ---
@@ -52,7 +89,7 @@ The **File Management Service** is an enterprise-grade, multi-tenant file storag
 First-class database entity representing a stored file with provider-agnostic metadata.
 
 **Key Properties:**
-- [id](../../src/core/storage/storage-provider.interface.ts): Unique identifier
+- `id`: Unique identifier
 - `key`: Provider-specific storage key (path or object ID)
 - `provider`: Storage backend type
 - `usageCount`: Reference count for safe cleanup
@@ -600,7 +637,7 @@ Retrieve metadata for a single file by ID.
 **Authentication:** Required
 
 **Path Parameters:**
-- [id](../../src/core/storage/storage-provider.interface.ts): File ID (MongoDB ObjectId)
+- `id`: File ID (MongoDB ObjectId)
 
 **Success Response (200):**
 ```json
@@ -689,7 +726,7 @@ Update file metadata (only `originalName` is editable).
 **Authorization:** Owner or admin only
 
 **Path Parameters:**
-- [id](../../src/core/storage/storage-provider.interface.ts): File ID
+- `id`: File ID
 
 **Request Body:**
 ```json
@@ -736,7 +773,7 @@ Soft delete a file (mark for garbage collection).
 **Authorization:** Owner or admin only
 
 **Path Parameters:**
-- [id](../../src/core/storage/storage-provider.interface.ts): File ID
+- `id`: File ID
 
 **Success Response (200):**
 ```json
@@ -799,13 +836,19 @@ Soft delete a file (mark for garbage collection).
 
 #### DELETE /api/files/:id/permanent
 
+> 🔴 **REMOVED FROM THIS ROUTER — this section describes a route that 404s.**
+> It moved to `/api/internal/admin/files` behind `INTERNAL_SERVICE_TOKEN` and is reachable
+> only by wi-admin, server to server (`src/api/routes/file-upload.routes.ts:16-23`). **No
+> browser session of any role can call it.** A vendor dashboard's only delete is the
+> soft-delete `DELETE /api/files/:id` above. Kept for the lifecycle explanation below it.
+
 Permanently delete a file (admin only).
 
 **Authentication:** Required  
 **Authorization:** Admin only
 
 **Path Parameters:**
-- [id](../../src/core/storage/storage-provider.interface.ts): File ID
+- `id`: File ID
 
 **Success Response (200):**
 ```json
@@ -836,6 +879,12 @@ Permanently delete a file (admin only).
 ### Admin Endpoints
 
 #### GET /api/files/orphans
+
+> 🔴 **REMOVED FROM THIS ROUTER — this section describes a route that 404s.**
+> Same move as `DELETE /:id/permanent` above. `file-upload.routes.ts` states the rule that
+> produced it: *"Do not re-add an admin-only route here: this surface is the one a vendor,
+> agency, agent or customer session reaches, and an `admin` role can no longer arrive on it
+> at all."*
 
 List orphaned files for garbage collection (admin only).
 
@@ -947,7 +996,7 @@ List orphaned files for garbage collection (admin only).
 ### 3. Linking File to Domain Entities
 
 **Domain Services:**
-- [FileAttachService](../../src/modules/catalog/domain/services/media/FileAttachService.ts): Attach file to product or variant
+- `FileAttachService`: Attach file to product or variant
 - `FileDetachService`: Detach file from product or variant (not shown in docs, but inferred)
 
 #### Attach Flow
@@ -1261,7 +1310,7 @@ interface Variant {
 ```
 
 **Linking Process:**
-1. Vendor uploads file → [File](../../src/modules/catalog/models/file.model.ts) created with `ownerType: 'vendor'`, `usageCount: 0`
+1. Vendor uploads file → `File` created with `ownerType: 'vendor'`, `usageCount: 0`
 2. Vendor attaches file to product → `product.fileIds.push(fileId)`, `file.usageCount++`
 3. Vendor detaches file → `product.fileIds.remove(fileId)`, `file.usageCount--`
 
@@ -1376,7 +1425,7 @@ STORAGE_PROVIDER=local  # local, s3, gcs, r2, firebase, cloudinary
 
 ### Provider Switching
 
-**Zero Code Changes:** Business logic uses [IStorageProvider](../../src/core/storage/storage-provider.interface.ts) interface.
+**Zero Code Changes:** Business logic uses `IStorageProvider` interface.
 
 **Steps to Switch:**
 1. Update environment variable: `STORAGE_PROVIDER=s3`
@@ -1555,7 +1604,7 @@ async function reconcileStorage() {
 | Admin    | 2 GB          | System assets, bulk imports       |
 | Customer | 100 MB        | Profile pictures, ticket attachments |
 
-**Enforcement:** Pre-upload validation in [FileUploadController](../../src/api/controllers/file-upload.controller.ts)
+**Enforcement:** Pre-upload validation in `FileUploadController`
 
 ### Who Can Read Files
 
@@ -1730,8 +1779,8 @@ const signedUrl = await api.getSignedUrl(fileId); // Short-lived
 **Scenario:** S3 is down, upload requested.
 
 **Behavior:**
-- Storage provider throws error during [put()](../../src/core/storage/storage-provider.interface.ts)
-- Error caught in [UploadIntakeService](../../src/core/uploads/upload-intake.service.ts)
+- Storage provider throws error during `put()`
+- Error caught in `UploadIntakeService`
 - No database record created
 - 500 response to client
 

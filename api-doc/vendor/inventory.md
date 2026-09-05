@@ -1,508 +1,262 @@
-# Vendor Inventory Management API
+# Inventory
 
-## Base Path
+**Verified against backend source on 2026-08-24.**
 
-```
-/api/vendor/inventory
-```
+**Base path:** `/api/vendor/inventory` · **Routes: 4**
 
-## Authentication
-
-All endpoints require vendor authentication:
-
-```
-Authorization: Bearer <access_token>
-```
+Stock on an agency-warehoused SKU is not directly writable — see
+[stock-requests.md](./stock-requests.md).
 
 ---
 
-## Overview
+## 0 · 🔴 Every response shape on this page differs from the backend's own doc
 
-The inventory API covers three concerns:
+All four are wrapped in the standard envelope. The backend's `inventory.md` shows all four
+**unwrapped**, and two of them under key names that do not exist. If you built from that page,
+everything on this surface is wrong.
 
-| Concern | Endpoint |
-|---------|----------|
-| Proactive stock monitoring | `GET /alerts` |
-| Bulk stock level updates | `PATCH /bulk-update` |
-| Audit trail of all stock changes | `GET /history` |
-| Active order reservations | `GET /reservations` |
+| Route | Actual shape |
+|---|---|
+| `alerts` | `{ success, data: { alerts, total, pagination } }` |
+| `history` | `{ success, data: [...], meta: { total, page, limit, pages } }` |
+| `reservations` | `{ success, data: [...], meta: { …, totalReserved } }` |
+| `bulk-update` | `{ success, data: { success, batchId, updated, variants, requested, notRequested } }` |
 
-> [!NOTE]
-> **Physical products only.** Stock tracking (`stock`, `isInfiniteStock`, `lowStockThreshold`, `allowOversell`) applies exclusively to physical product variants. The bulk-update endpoint explicitly rejects digital and service product variants.
-
----
-
-## Endpoints
-
-### GET /api/vendor/inventory/alerts
-
-Returns a paginated list of variants that are at or below their configured `lowStockThreshold`. Only variants where `lowStockThreshold` is not null are evaluated.
-
-**Query Parameters:**
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `page` | number | `1` | Page number (1-indexed) |
-| `limit` | number | `50` | Max 100 |
-
-**Success Response `200`:**
-
-```json
-{
-  "alerts": [
-    {
-      "variantId": "507f1f77bcf86cd799439060",
-      "productId": "507f1f77bcf86cd799439011",
-      "productTitle": "Blue T-Shirt",
-      "sku": "SHIRT-BLK-M",
-      "currentStock": 3,
-      "activeReservations": 1,
-      "availableStock": 2,
-      "threshold": 5,
-      "stockPercentage": 40
-    },
-    {
-      "variantId": "507f1f77bcf86cd799439061",
-      "productId": "507f1f77bcf86cd799439012",
-      "productTitle": "Leather Jacket",
-      "sku": "JACKET-BR-L",
-      "currentStock": 0,
-      "activeReservations": 0,
-      "availableStock": 0,
-      "threshold": 5,
-      "stockPercentage": 0
-    }
-  ],
-  "total": 2,
-  "pagination": {
-    "page": 1,
-    "limit": 50,
-    "totalPages": 1
-  }
-}
-```
-
-**Alert Object Fields:**
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `variantId` | string | Variant ObjectId |
-| `productId` | string | Parent product ObjectId |
-| `productTitle` | string | Product title for display |
-| `sku` | string | Variant SKU |
-| `currentStock` | number | Raw stock count stored on the variant |
-| `activeReservations` | number | Units currently locked by in-flight orders |
-| `availableStock` | number | `currentStock - activeReservations` (what customers can actually buy) |
-| `threshold` | number | The `lowStockThreshold` value configured on the variant |
-| `stockPercentage` | number \| null | `availableStock / threshold * 100`; null if not calculable |
-
-> **How alerts are triggered**: A variant appears here when `availableStock <= threshold`. There is no separate alert level field — `stockPercentage` and `availableStock === 0` give you the severity. `stockPercentage: 0` means out of stock.
-
-**Business Rules:**
-- Only variants with `lowStockThreshold` set (non-null) are evaluated
-- A variant with `isInfiniteStock: true` will never appear (infinite stock cannot be low)
-- `availableStock` accounts for active reservations — a variant with 5 stock and 5 active reservations shows `availableStock: 0`
+⚠ **There is no `logs` key, no `reservations` key and no top-level `pagination` key.** And note
+`alerts` is the odd one out — its pagination is **inside `data`**, not in `meta`.
 
 ---
 
-### PATCH /api/vendor/inventory/bulk-update
+## 1 · `GET /api/vendor/inventory/alerts`
 
-Set absolute stock levels for multiple physical product variants in a single atomic operation.
+Query: `page` (1), `limit` (50, **max 100**).
 
-> [!IMPORTANT]
-> **All-or-nothing semantics** — for the rows this endpoint actually writes. The batch runs inside a database transaction. If any row fails validation, **no rows are updated** and a `{ "success": false, "errors": [...] }` response is returned. There is no partial success.
-
-> [!WARNING]
-> **Rows on an agency-warehoused product are not written.** A SKU whose product has
-> `delivery.pickupLocation.source === "agency_storage"` is one an agency physically
-> holds, and its quantity now needs that agency's countersignature — see
-> [Stock requests](./stock-requests.md). Such rows are partitioned out before the
-> transaction opens and come back under **`requested`** as pending approvals, never
-> under `variants`.
->
-> They sit outside the transaction on purpose: a proposal is not a stock write, and one
-> SKU already having an open request must not roll back rows that legitimately applied.
-
-**Max rows per request**: 1,000
-
-Supports two input formats: JSON body or CSV file upload.
-
----
-
-#### Option A: JSON Body
-
-```http
-PATCH /api/vendor/inventory/bulk-update
-Authorization: Bearer <token>
-Content-Type: application/json
-
-{
-  "updates": [
-    { "variantId": "507f1f77bcf86cd799439060", "quantity": 50 },
-    { "variantId": "507f1f77bcf86cd799439061", "quantity": 0 }
-  ]
-}
-```
-
-**`updates` array item fields:**
-
-| Field | Type | Required | Notes |
-|-------|------|----------|-------|
-| `variantId` | string | ✅ | Variant ObjectId |
-| `quantity` | number | ✅ | **Absolute** stock level to set (integer). Negative values allowed only if `variant.allowOversell` is true |
-
-> **Absolute values only.** To add 10 units to a variant at 40, send `"quantity": 50`. There is no delta/increment mode.
-
----
-
-#### Option B: CSV File
-
-```http
-PATCH /api/vendor/inventory/bulk-update
-Authorization: Bearer <token>
-Content-Type: multipart/form-data
-
-file: [stock-update.csv]
-```
-
-**Required CSV columns** (exact names, order doesn't matter):
-
-```csv
-variantId,quantity
-507f1f77bcf86cd799439060,50
-507f1f77bcf86cd799439061,0
-507f1f77bcf86cd799439062,200
-```
-
-**CSV Constraints:**
-- Max file size: 5MB
-- Accepted MIME type: `text/csv`
-- File extension must be `.csv`
-- Required columns: `variantId`, `quantity`
-- No extra columns allowed — unknown columns return a 400 error
-- Max 1,000 rows
-
----
-
-#### Success Response `200`
-
-Returned when **all rows** pass validation and are updated:
-
-```json
+```jsonc
 {
   "success": true,
-  "batchId": "a3f5c9d2-1b4e-4f8a-9c2d-7e6b8a1f3d5c",
-  "updated": 3,
-  "variants": [
-    {
-      "variantId": "507f1f77bcf86cd799439060",
-      "sku": "SHIRT-BLK-M",
-      "previousStock": 40,
-      "newStock": 50
-    },
-    {
-      "variantId": "507f1f77bcf86cd799439061",
-      "sku": "JACKET-BR-L",
-      "previousStock": 8,
-      "newStock": 0
-    }
-  ],
-  "requested": [
-    {
-      "variantId": "507f1f77bcf86cd799439062",
-      "sku": "NIKE-AIR-MAX-90-BLK-42",
-      "requestId": "665a1f77bcf86cd799439061",
-      "requestedQuantity": 200
-    }
-  ],
-  "notRequested": []
-}
-```
-
-| Field | Description |
-|-------|-------------|
-| `batchId` | UUID identifying this batch in the audit log |
-| `updated` | Number of variants **written**. Counts `variants` only, never `requested` |
-| `variants` | Rows that applied — previous and new stock |
-| `requested` | Agency-warehoused rows. **Nothing was written for these**; each became a pending [stock request](./stock-requests.md) |
-| `notRequested` | Rows that could neither apply nor be queued — `{ variantId, sku, error, message }` |
-
-> **Report the three groups separately.** A row under `requested` has *not* changed
-> yet; presenting it as updated is the one way to make this response lie.
->
-> `notRequested` is almost always `STOCK_REQUEST_ALREADY_PENDING` — a request is already
-> open on that SKU, and somebody has to resolve it first. It is reported rather than
-> thrown because the `variants` rows have already committed; failing the whole call
-> here would claim a rollback that did not happen.
-
----
-
-#### Validation Failure Response `400`
-
-Returned when **any row** fails validation. No rows are updated.
-
-```json
-{
-  "success": false,
-  "errors": [
-    {
-      "row": 2,
-      "variantId": "507f1f77bcf86cd799439061",
-      "error": "VARIANT_ARCHIVED",
-      "message": "Cannot update stock for archived variant"
-    },
-    {
-      "row": 3,
-      "variantId": "507f1f77bcf86cd799439062",
-      "error": "FORBIDDEN",
-      "message": "Variant does not belong to vendor"
-    }
-  ]
-}
-```
-
-| Field | Description |
-|-------|-------------|
-| `row` | 1-indexed row number of the failing item |
-| `variantId` | The variant that failed |
-| `error` | Machine-readable error code |
-| `message` | Human-readable reason |
-
-**Validation Error Codes:**
-
-| Code | Reason |
-|------|--------|
-| `INVALID_QUANTITY` | `quantity` is not an integer |
-| `INVALID_VARIANT` | Variant not found |
-| `VARIANT_ARCHIVED` | Variant has `status: "archived"` |
-| `FORBIDDEN` | Variant does not belong to this vendor |
-| `INVALID_PRODUCT_TYPE` | Variant belongs to a digital or service product |
-| `OVERSALE_NOT_ALLOWED` | Negative quantity sent but `allowOversell` is false on the variant |
-
-**Other Error Responses:**
-
-| Status | Code | Reason |
-|--------|------|--------|
-| 400 | `CATALOG_INVALID_CSV` | CSV parsing failed or required columns missing |
-| 422 | `CATALOG_BULK_LIMIT_EXCEEDED` | More than 1,000 rows in the batch |
-| 413 | `CATALOG_BULK_TRANSACTION_LIMIT` | Batch too large for a single DB transaction — reduce batch size |
-
----
-
-### GET /api/vendor/inventory/history
-
-Audit log of all stock changes for the vendor's variants. Records are append-only and immutable. Useful for reconciliation and debugging stock discrepancies.
-
-**Query Parameters:**
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `variantId` | string | — | Filter to a specific variant |
-| `startDate` | string | — | ISO 8601 datetime — lower bound on `timestamp` |
-| `endDate` | string | — | ISO 8601 datetime — upper bound on `timestamp` |
-| `page` | number | `1` | Page number |
-| `limit` | number | `50` | Max 100 |
-
-**Success Response `200`:**
-
-```json
-{
-  "logs": [
-    {
-      "id": "507f1f77bcf86cd799439070",
-      "variantId": "507f1f77bcf86cd799439060",
-      "sku": "SHIRT-BLK-M",
-      "previousQuantity": 51,
-      "newQuantity": 50,
-      "delta": -1,
-      "operation": "order",
-      "timestamp": "2026-02-09T23:54:00.000Z",
-      "metadata": {
-        "orderId": "507f1f77bcf86cd799439001"
-      }
-    },
-    {
-      "id": "507f1f77bcf86cd799439071",
-      "variantId": "507f1f77bcf86cd799439060",
-      "sku": "SHIRT-BLK-M",
-      "previousQuantity": 1,
-      "newQuantity": 51,
-      "delta": 50,
-      "operation": "bulk",
-      "timestamp": "2026-02-08T12:00:00.000Z",
-      "metadata": {
-        "batchId": "a3f5c9d2-1b4e-4f8a-9c2d-7e6b8a1f3d5c"
-      }
-    }
-  ],
-  "pagination": {
-    "page": 1,
-    "limit": 50,
+  "data": {
+    "alerts": [{
+      "variantId": "…", "productId": "…", "sku": "ANK-6Y-RED",
+      "productTitle": "Ankara Wax Print",
+      "currentStock": 4,
+      "activeReservations": 2,
+      "availableStock": 2,
+      "threshold": 5,
+      "stockPercentage": 40          // number | null
+    }],
     "total": 2,
-    "totalPages": 1
+    "pagination": { "page": 1, "limit": 50, "totalPages": 1 }
   }
 }
 ```
 
-**Log Object Fields:**
+### What actually triggers an alert
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `id` | string | Log entry ObjectId |
-| `variantId` | string | Variant this log belongs to |
-| `sku` | string | Variant SKU (enriched for display) |
-| `previousQuantity` | number | Stock before the change |
-| `newQuantity` | number | Stock after the change |
-| `delta` | number | `newQuantity - previousQuantity` (negative = stock decreased) |
-| `operation` | string | What caused the change — see operation table below |
-| `timestamp` | string | ISO 8601 datetime when the change occurred |
-| `metadata` | object | Context-specific extras — see below |
+A variant appears when **all** of these hold:
 
-**`operation` Values:**
+1. it belongs to an **`active`** product — ⚠ archived and draft products never alert, which the
+   backend's doc omits
+2. `lowStockThreshold` is **not null**
+3. `availableStock <= threshold`
 
-| Value | Description |
-|-------|-------------|
-| `order` | Stock decremented when an order was fulfilled |
-| `reservation` | Stock locked when a reservation was created |
-| `release` | Stock returned when a reservation was released or order cancelled |
-| `bulk` | Changed via `PATCH /bulk-update` |
-| `manual` | Changed via a direct vendor manual adjustment |
-| `adjustment` | System-level correction |
+where `availableStock = allowOversell ? stock : stock - activeReservations`.
 
-**`metadata` Fields (context-dependent):**
+**`activeReservations` is in units, not rows.**
 
-| Field | Present When | Description |
-|-------|-------------|-------------|
-| `orderId` | `operation: "order"` | The order that triggered the change |
-| `reservationId` | `operation: "reservation"` or `"release"` | The reservation involved |
-| `batchId` | `operation: "bulk"` | The batch UUID from the bulk-update response |
-| `reason` | Various | Free-text reason if provided |
+`stockPercentage` is `null` when the threshold is `null` or `0` — render "—", not "0 %".
+
+### The threshold is per-variant and vendor-set
+
+`lowStockThreshold`, **minimum 1** (`0` is rejected), or `null` to disable. Set it through
+`PATCH /api/vendor/products/:productId/variants/:variantId` or the simple-product PATCH.
+
+🔴 **New variants are created with `null`** — so **a fresh product never alerts until the vendor sets
+a threshold.** That is worth surfacing in the product editor; otherwise low-stock alerts look
+broken.
+
+### ⚠ Infinite-stock variants DO appear
+
+The backend's doc says a variant with `isInfiniteStock: true` "will never appear". Nothing in the
+code reads that flag on this path. An infinite-stock variant with a threshold and a low `stock`
+counter **does** alert. Filter client-side if that is noise.
 
 ---
 
-### GET /api/vendor/inventory/reservations
+## 2 · `GET /api/vendor/inventory/history`
 
-Active stock reservations — units temporarily locked by in-flight orders that have not yet been fulfilled or cancelled.
+Query: `variantId`, `startDate`, `endDate` (**full ISO-8601 with `Z`**), `page` (1), `limit` (50, max
+100). Newest first.
 
-**Query Parameters:**
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `variantId` | string | — | Filter to a specific variant |
-| `status` | string | `active` | Filter: `active`, `expired` |
-| `page` | number | `1` | Page number |
-| `limit` | number | `50` | Max 100 |
-
-**Success Response `200`:**
-
-```json
-{
-  "reservations": [
-    {
-      "reservationId": "res-a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-      "variantId": "507f1f77bcf86cd799439060",
-      "sku": "SHIRT-BLK-M",
-      "productTitle": "Blue T-Shirt",
-      "quantity": 2,
-      "type": "physical",
-      "status": "active",
-      "expiresAt": "2026-02-10T00:54:00.000Z",
-      "createdAt": "2026-02-09T23:54:00.000Z"
-    }
-  ],
-  "totalReserved": 2,
-  "pagination": {
-    "page": 1,
-    "limit": 50,
-    "total": 1,
-    "totalPages": 1
-  }
-}
+```jsonc
+{ "success": true,
+  "data": [{ "id": "…", "variantId": "…", "sku": "ANK-6Y-RED",
+             "previousQuantity": 40, "newQuantity": 35, "delta": -5,
+             "operation": "order",
+             "timestamp": "…",
+             "metadata": { "orderId": "…" } }],
+  "meta": { "total": 120, "page": 1, "limit": 50, "pages": 3 } }
 ```
 
-**Reservation Object Fields:**
+`operation`: `manual` · `bulk` · `reservation` · `release` · `order` · **`adjustment`**.
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `reservationId` | string | Unique idempotency key for this reservation |
-| `variantId` | string | Reserved variant |
-| `sku` | string | Variant SKU (enriched) |
-| `productTitle` | string | Product title (enriched) |
-| `quantity` | number | Units locked |
-| `type` | string | `physical`, `digital`, or `service` |
-| `status` | string | `active`, `released`, `committed`, or `expired` |
-| `expiresAt` | string | ISO 8601 — when the reservation will auto-expire if not fulfilled |
-| `createdAt` | string | ISO 8601 — when the reservation was created |
+⚠ **`adjustment` means "approved through the two-sided stock request"** — not "system correction" as
+the backend's doc says. It is the only operation an agency can cause.
 
-**`status` Values:**
+### 🔴 There is no actor field on the wire
 
-| Value | Description |
-|-------|-------------|
-| `active` | Locked — order is in-flight |
-| `released` | Returned to available pool (order cancelled or timed out) |
-| `committed` | Converted to a fulfilled order |
-| `expired` | TTL elapsed — reservation auto-expired; stock returned |
+The backend stores who made each movement and **the response drops it**. So you cannot show "changed
+by the agency" versus "changed by you".
 
-**`totalReserved`**: Sum of `quantity` across all reservations in the result page. Useful for showing "X units currently locked" in the UI.
+**The one available signal is `metadata.requestId`** — present only on rows that came through a
+stock request. Resolve it via `GET /api/vendor/stock-requests/:id` to learn who approved.
 
-> [!NOTE]
-> Reservations expire automatically via a MongoDB TTL index on `expiresAt`. When a reservation expires, a `release` audit log entry is created and `reservation_expired` stock is returned. The `/alerts` endpoint's `availableStock` already deducts `activeReservations` so the two endpoints are consistent.
+```ts
+const viaAgency = log.operation === 'adjustment' && log.metadata?.requestId;
+```
+
+`metadata` may also carry `orderId`, `reservationId`, `batchId` and `reason`. **`requestId` is
+undocumented on the backend side.**
+
+⚠ `sku` falls back to the literal `"N/A"` when the variant is gone.
+
+⚠ `variantId` is **not** ObjectId-validated — a malformed value produces a generic `404 NOT_FOUND`
+rather than a clean `400`.
+
+The log is immutable — no edit, no delete.
 
 ---
 
-## Error Response Format
+## 3 · `GET /api/vendor/inventory/reservations`
 
-All endpoints use this format for errors:
+Query: `variantId`, `status` (**default `active`**), `page`, `limit` (50, max 100).
 
-```json
-{
-  "success": false,
-  "error": {
-    "code": "ERROR_CODE",
-    "message": "Human-readable description"
-  }
-}
+```jsonc
+{ "success": true,
+  "data": [{ "reservationId": "cart123:66b2…",
+             "variantId": "…", "sku": "…", "productTitle": "…",
+             "quantity": 2, "type": "product", "status": "active",
+             "expiresAt": "…", "createdAt": "…" }],
+  "meta": { "total": 6, "page": 1, "limit": 50, "pages": 1, "totalReserved": 9 } }
 ```
 
-Validation errors from the Zod schema include a `details` array:
+✅ **`meta.totalReserved` is real** — but ⚠ **it sums the current page only**, not the whole result
+set. Do not label it "total units reserved" unless everything fits on one page.
 
-```json
-{
-  "success": false,
-  "error": {
-    "code": "VALIDATION_ERROR",
-    "message": "Request validation failed",
-    "details": [
-      { "field": "quantity", "message": "Quantity must be an integer" }
-    ]
-  }
-}
-```
+### What reserves stock — checkout, not carts
+
+**Adding to a cart reserves nothing.** A reservation is created at **checkout**, holds for
+**30 minutes**, and `variant.stock` is **not decremented** until the payment commits.
+
+`reservationId` is `"<cartId>:<variantId>"` — an idempotency key, not a UUID. Do not parse it.
+
+| Moment | Effect |
+|---|---|
+| commit (payment succeeds, or COD order created) | stock decremented once |
+| release (order cancelled, unpaid sweep) | no stock write |
+| **expiry** | the row is **deleted**. 🔴 **No audit row and no compensating write** |
+
+⚠ The backend's doc claims expiry writes a `release` audit entry and "returns stock". Neither
+happens — stock was never taken. **Do not look for expiry events in the history.**
+
+### 🔴 Both status filters mean something other than they look
+
+| Filter | Actually returns |
+|---|---|
+| `status=active` | rows whose **status field** is active — **including ones already past `expiresAt`** that the cleanup sweep has not removed yet |
+| `status=expired` | everything with `expiresAt < now`, **with the status filter dropped** — so `released` and `committed` rows appear too |
+
+Consequence: this list can **over-report** compared with `activeReservations` in the alerts
+endpoint, which does exclude expired holds. The two disagreeing is not a bug.
+
+**Filter client-side on `expiresAt` if you need a true active count.**
 
 ---
 
-## Notes & Constraints
+## 4 · `PATCH /api/vendor/inventory/bulk-update`
 
-### Stock Semantics
+🔴 **In practice this is `multipart/form-data` with a `.csv` file in a field named `file`.**
 
-- All stock values are **absolute** — the system does not support delta/increment updates. Always send the target quantity, not a change amount.
-- `currentStock` and `availableStock` differ when there are active reservations. Frontend should display `availableStock` as the purchasable quantity and `currentStock` as the physical inventory count.
+A JSON mode exists, and a raw `text/csv` body mode is advertised — but **no body parser is
+registered for `text/csv`**, so that path always fails with `400 CATALOG_INVALID_CSV`. Use multipart.
 
-### Negative Stock (Backorder)
+CSV: exactly the columns `variantId` and `quantity`. **Any other column is rejected.**
+Cap **5 MB**, **max 1000 rows**.
 
-If `variant.allowOversell` is `true`, the bulk-update endpoint accepts negative `quantity` values. This represents a backorder state — the vendor owes stock that doesn't yet exist. The `/alerts` endpoint will show `availableStock < 0` for such variants.
+JSON: `{ "updates": [{ "variantId": "…", "quantity": 35 }] }` — 1–1000 entries.
 
-### CSV File Constraints Summary
+🔴 **`quantity` is an absolute target, never a delta.**
 
-| Constraint | Limit |
-|-----------|-------|
-| Max file size | 5MB |
-| Accepted MIME type | `text/csv` |
-| Required extension | `.csv` |
-| Required columns | `variantId`, `quantity` |
-| Extra columns | Not allowed (400 error) |
-| Max rows | 1,000 |
+### Response
 
-### Audit Log Immutability
+```jsonc
+{ "success": true,
+  "data": {
+    "success": true,           // ← yes, nested. The envelope's `success` is the outer one
+    "batchId": "…",
+    "updated": 12,
+    "variants":     [ { "variantId", "sku", "previousStock", "newStock" } ],
+    "requested":    [ { "variantId", "sku", "requestId", "requestedQuantity" } ],
+    "notRequested": [ { "variantId", "sku", "error", "message" } ]
+  } }
+```
 
-Stock audit logs are **append-only**. The `IStockAuditLog` Mongoose schema blocks `findOneAndUpdate` and `findOneAndDelete` at the pre-hook level. No log entry can ever be modified or deleted. This ensures a trustworthy audit trail.
+- **`variants`** — written directly.
+- **`requested`** — 🔴 **agency-warehoused rows that became stock requests instead.** These did
+  **not** change. Link each `requestId` to [stock-requests.md](./stock-requests.md).
+- **`notRequested`** — gated rows whose request could not be raised, almost always because one is
+  already pending. ⚠ `error` here is a plain string, and the fallback value
+  `STOCK_REQUEST_FAILED` **is not a real error code** — do not try to look it up.
+
+`updated` counts `variants` only.
+
+### 🔴 All-or-nothing for the writable rows
+
+Every row is validated first. **One failure aborts the whole transaction — and discards the gated
+rows too, so no stock requests are raised either.** `requested` and `notRequested` only ever appear
+on an otherwise fully successful batch.
+
+The failure is a **standard error envelope**, not a `{ success: false, errors }` body:
+
+```jsonc
+{ "success": false, "requestId": "…",
+  "error": { "code": "VALIDATION_ERROR", "message": "Bulk update failed",
+             "statusCode": 400, "category": "validation",
+             "details": { "errors": [ { "row": 2, "variantId": "…",
+                                        "error": "VARIANT_ARCHIVED", "message": "…" } ] } } }
+```
+
+🔴 **The rows are at `error.details.errors` — two levels down.** The backend's doc shows them at the
+top level.
+
+Per-row `error` values (plain strings, not registry codes): `INVALID_QUANTITY` ·
+`INVALID_VARIANT` · `VARIANT_ARCHIVED` · `FORBIDDEN` · `INVALID_PRODUCT_TYPE` (non-physical) ·
+`OVERSALE_NOT_ALLOWED` · `VALIDATION_ERROR`. `row` is 1-indexed.
+
+**Show every row error at once** — the vendor fixes their spreadsheet in one pass rather than
+discovering errors one at a time.
+
+Other errors: `400 CATALOG_INVALID_CSV` · `422 CATALOG_BULK_LIMIT_EXCEEDED`
+(`details: { max: 1000, received }`) · `413 CATALOG_BULK_TRANSACTION_LIMIT` ·
+`500 CATALOG_BULK_UPDATE_FAILED`.
+
+⚠ **This is the one upload surface with no virus scan.** The file is parsed in memory and never
+persisted, so the exposure is limited — but the only type gate is a client-controlled MIME/extension
+check.
+
+---
+
+## 5 · Where the backend's own doc is wrong
+
+| The doc says | Source says |
+|---|---|
+| all four responses are unwrapped | all four use the standard envelope |
+| `history` returns `{ logs, pagination }` | `{ data, meta }` — and the field is `pages`, not `totalPages` |
+| `reservations` returns `{ reservations, totalReserved, pagination }` | `{ data, meta }` with `totalReserved` **inside `meta`** |
+| bulk failures are `{ success: false, errors }` | a standard envelope, rows at `error.details.errors` |
+| an infinite-stock variant never alerts | it can |
+| alerts evaluate every thresholded variant | only those on **`active`** products |
+| `adjustment` is a "system-level correction" | it is the **stock-request approval** path |
+| the metadata keys | omits **`requestId`**, the only agency signal available |
+| expiry writes a `release` log and returns stock | **neither happens** |
+| `expired` is a status | it is a date filter with the status filter dropped |
+| the error envelope has no `requestId`/`statusCode`/`category` | all three are present |

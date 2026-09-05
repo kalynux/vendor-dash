@@ -1,232 +1,200 @@
-# Vendor Google Calendar Connection
+# Google Calendar integration
 
-How a vendor connects their Google Calendar, inspects what was granted, and disconnects. This is part of the **service product / booking** setup.
+**Verified against backend source on 2026-08-24.**
 
-> **Booking system docs:** [Implementation guide](../booking-implementation-guide.md) · [Service product setup](./products.md#service-products) · [Availability rules](./availability-rules.md) · **Google Calendar connection** (this doc) · [Vendor booking management](./bookings.md) · [Customer booking flow](../customer/bookings.md)
-
----
-
-## Why connect a calendar?
-
-| Capability | Calendar required? |
-|------------|--------------------|
-| Fetch available slots (`GET /api/products/:id/availability`) | **No** — works from availability rules alone. Without a connected calendar the vendor's external busy times are simply not subtracted, so slots reflect only the configured rules. |
-| Create a booking (`POST /api/products/:id/book`) | **Yes** — booking creation writes an event to the vendor's Google Calendar. Without a connection this step fails. |
-| Accurate availability (busy times blocked) | **Recommended** — connecting lets the system subtract the vendor's existing Google events from offered slots. |
-
-**Bottom line:** connect the calendar during service-product setup, before customers book.
+**Routes: 4** — three under `/api/vendor/calendar`, plus the product-scoped status check.
 
 ---
 
-## Authentication
+## 0 · 🔴 Which connect path to use — it depends on the build
 
-All endpoints require an authenticated vendor session. `requireAuth` accepts either the `access_token` httpOnly cookie (preferred, browser) or `Authorization: Bearer <token>` (API/mobile fallback).
+Two entry points exist, for **two different transports**. The choice is forced, not a preference.
 
-> [!IMPORTANT]
-> The **connect** step is a browser redirect / OAuth flow — not a JSON API call. It must run in the browser so it can carry the session cookie and follow redirects to Google's consent screen. See [Connect](#connect-google-calendar) below.
+| Build | Use | Why |
+|---|---|---|
+| **Browser** | full-page navigation to **`GET /api/integrations/google/connect`** | it is a 302 chain to Google |
+| **Capacitor / WebView** | **`POST /api/integrations/google/connect-url`**, then open the returned URL in a **system browser** | a bearer client has no cookie for `/connect`, and **Google refuses OAuth inside an embedded WebView** (`disallowed_useragent`) |
 
----
+### 🔴 Do not `fetch()` `POST /api/vendor/calendar/connect`
 
-## Requested Permissions (OAuth scopes)
+That route is a **302 redirect** to another 302 to `accounts.google.com`. `fetch` follows it, the
+cross-origin hop to Google is opaque, and **the call appears to do nothing**. It exists purely for
+path symmetry.
 
-When the vendor connects, Google asks them to approve these scopes:
+For a browser:
 
-| Scope | What it allows |
-|-------|----------------|
-| `https://www.googleapis.com/auth/calendar` | Read, create, and delete events on the vendor's Google Calendar (read busy times; write booking events) |
-| `https://www.googleapis.com/auth/userinfo.email` | View the Google account email address |
-| `https://www.googleapis.com/auth/userinfo.profile` | View basic Google profile info |
-
-Offline access is requested (`access_type=offline`, `prompt=consent`) so the backend receives a refresh token and can keep the connection alive.
-
----
-
-## Connect Google Calendar
-
-There are two entry points; both end at the same OAuth flow.
-
-### Recommended: start the OAuth flow
-
-```http
-GET /api/integrations/google/connect
+```ts
+window.location.href = `${BASE_URL}/integrations/google/connect`;
 ```
 
-Navigate the **browser** to this URL (e.g. `window.location.href = '/api/integrations/google/connect'`). The backend generates a signed CSRF `state` and redirects to Google's consent screen. After the vendor approves, Google redirects back to the callback below.
+For Capacitor:
 
-> The vendor convenience wrapper `POST /api/vendor/calendar/connect` simply 302-redirects to `GET /api/integrations/google/connect`. Because it relies on a browser redirect, prefer navigating the browser directly to the `GET` URL rather than calling it with `fetch`.
-
-### OAuth callback (handled by Google → backend → frontend)
-
-```http
-GET /api/integrations/google/callback?code=...&state=...
+```ts
+const { url } = (await api.post('/integrations/google/connect-url',
+                                { returnTo: 'wivendor://services/calendar' })).data;
+await Browser.open({ url });   // SYSTEM browser, not the WebView
 ```
 
-The vendor's browser is redirected here by Google. The backend validates `state`, exchanges the `code`, and stores the encrypted tokens + granted scope against the vendor.
+`returnTo` is optional and **allowlisted** — it must be a registered custom scheme or same-origin
+with the configured frontend URL. A disallowed value is `400 VALIDATION_ERROR` **before** the user
+ever reaches Google.
 
-**Where the browser lands next depends on `GOOGLE_OAUTH_FRONTEND_REDIRECT_URL`:**
+---
 
-When that env var is set (e.g. `http://localhost:5173/dashboard/services`), the backend **302-redirects the browser back to the frontend** with a result query string — so the frontend owns the landing UX:
+## 1 · The callback contract
+
+`GET /api/integrations/google/callback` is **unauthenticated by design** — the signed `state`
+(5-minute lifetime, bound to the user) *is* the credential. The user may land on a different device
+from the one that started the flow.
+
+You learn the outcome from a **query string on your landing route**:
 
 | Outcome | Redirect |
-|---------|----------|
-| Success | `…/dashboard/services?calendar=connected` |
-| Missing `code` | `…?calendar=error&reason=missing_code` |
-| Missing `state` | `…?calendar=error&reason=missing_state` |
-| `state` user mismatch | `…?calendar=error&reason=state_mismatch` |
-| Invalid/expired `state` | `…?calendar=error&reason=invalid_state` |
-| Token exchange failed | `…?calendar=error&reason=connection_failed` |
+|---|---|
+| success | `?calendar=connected` |
+| no state | `?calendar=error&reason=missing_state` |
+| bad or expired state | `?calendar=error&reason=invalid_state` |
+| the user pressed Cancel | **`?calendar=error&reason=access_denied`** |
+| no code | `?calendar=error&reason=missing_code` |
+| exchange failed | `?calendar=error&reason=connection_failed` |
 
-The frontend should read `calendar` / `reason` on its landing route, then call `GET /api/vendor/calendar/status` to refresh the panel.
+**Handle `access_denied` as a non-error** — the vendor changed their mind. Everything else warrants
+"try again".
 
-**Fallback (env var unset):** the callback returns JSON on success (`{ "success": true, "message": "Google Calendar connected successfully" }`) and structured errors on failure — `400 VALIDATION_ERROR` (missing code), `400/403 AUTH_OAUTH_STATE_INVALID` (missing/mismatched state), `403 AUTH_OAUTH_STATE_EXPIRED` (invalid/expired state).
+📌 `state_mismatch` appears in the backend's `vendor/calendar.md`. **Nothing emits it.**
+
+**After landing, call `GET /api/vendor/calendar/status`** to refresh the panel — the redirect carries
+no data.
 
 ---
 
-## Connection Status
+## 2 · `GET /api/vendor/calendar/status`
 
-```http
-GET /api/vendor/calendar/status
-```
-
-Returns whether the vendor has a connected calendar, the connected email, and the permissions they granted. Use this to render the "Calendar connected as …" panel.
-
-**Response — connected:** `200 OK`
-
-```json
-{
-  "success": true,
+```jsonc
+{ "success": true,
   "data": {
     "connected": true,
     "provider": "google",
-    "email": "vendor@gmail.com",
+    "email": "ada@gmail.com",
     "calendarId": "primary",
-    "permissions": [
-      { "scope": "https://www.googleapis.com/auth/calendar", "description": "Read, create, and delete events on your Google Calendar" },
-      { "scope": "https://www.googleapis.com/auth/userinfo.email", "description": "View your Google account email address" },
-      { "scope": "https://www.googleapis.com/auth/userinfo.profile", "description": "View your basic Google profile info" }
-    ],
+    "permissions": [ { "scope": "https://www.googleapis.com/auth/calendar",
+                       "description": "Read, create, and delete events on your Google Calendar" } ],
     "requiresReauth": false,
-    "lastSyncAt": "2026-02-09T23:54:00.000Z",
-    "expiresAt": "2026-02-10T00:54:00.000Z"
-  }
-}
+    "lastSyncAt": "…",
+    "expiresAt": "…"
+  } }
 ```
 
-**Response — not connected:** `200 OK`
+**All eight keys are present in both branches** — `permissions` is `[]` when disconnected, the rest
+`null`.
 
-```json
-{
-  "success": true,
-  "data": {
-    "connected": false,
-    "provider": null,
-    "email": null,
-    "calendarId": null,
-    "permissions": [],
-    "requiresReauth": false,
-    "lastSyncAt": null,
-    "expiresAt": null
-  }
-}
+- **`permissions[].description` is human-readable** — render it directly as the consent summary.
+- ⚠ **`lastSyncAt` is not a sync time** — it is the record's last write. Do not label it "last
+  synced".
+- ⚠ **`expiresAt` is the access-token expiry and is refreshed automatically.** It is *not* a
+  "reconnect by" date. **Watch `requiresReauth` instead** — that is the actionable flag.
+
+## 3 · `POST /api/vendor/calendar/disconnect`
+
+No body. Returns `{ "success": true, "message": "…" }` — **no `data` key at all**. Idempotent.
+
+⚠ **Status reads by vendor and disconnect writes by user.** A vendor whose connection predates their
+vendor role can show `connected: false` on status while disconnect still succeeds. Rare, but it
+explains a "disconnect did nothing" report.
+
+## 4 · `GET /api/vendor/products/:id/service/calendar-status`
+
+Reports the **same vendor-level connection**. The product id only proves the caller owns a **service**
+product before the integration state is disclosed.
+
+🔴 **Its two branches do not carry the same keys:**
+
+```jsonc
+// connected
+{ "connected": true, "provider": "google", "calendarEmail": "…",
+  "lastSyncAt": "…", "expiresAt": "…", "syncStatus": "connected" }
+
+// not connected
+{ "connected": false, "provider": null, "email": null,
+  "lastSyncAt": null, "expiresAt": null, "syncStatus": "not_connected" }
 ```
 
-**Fields:**
+**`calendarEmail` when connected, `email` when not.** Read both.
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `connected` | boolean | Whether a Google Calendar is linked |
-| `provider` | `"google"` \| null | Calendar provider |
-| `email` | string \| null | The Google account the calendar belongs to |
-| `calendarId` | string \| null | Target calendar (defaults to `primary`) |
-| `permissions` | array | Granted OAuth scopes, each with a human-readable `description` |
-| `requiresReauth` | boolean | `true` if access was revoked or token refresh failed — the vendor must reconnect |
-| `lastSyncAt` | ISO datetime \| null | When the connection record was last updated |
-| `expiresAt` | ISO datetime \| null | Current access-token expiry (auto-refreshed using the stored refresh token) |
+It also drops `calendarId`, `permissions` and `requiresReauth`, and adds `syncStatus`, which has
+exactly two values.
 
-> [!NOTE]
-> `expiresAt` is the short-lived access-token expiry and is refreshed automatically; it does **not** mean the connection drops. Watch `requiresReauth` instead — when `true`, prompt the vendor to reconnect.
+Errors: `404 CATALOG_PRODUCT_NOT_FOUND` · `400 CATALOG_BOOKING_INVALID_PRODUCT_TYPE`.
+
+📌 The route still carries a stale `STUB: Returns placeholder response` comment in the backend. It is
+not a stub — it reads the real connection.
+
+**Prefer `/api/vendor/calendar/status`** unless you specifically want the product guards. It has
+more fields and one consistent shape.
 
 ---
 
-## Per-product calendar status
+## 5 · 🔴 A booking does NOT require a connected calendar
 
-```http
-GET /api/vendor/products/:id/service/calendar-status
-```
+The backend's `vendor/calendar.md` says: *"Create a booking … **Without a connection this step
+fails.**"* **It does not.**
 
-The same connection, answered **in the context of one service product**, so a product editor can
-show "this service cannot take bookings until you connect a calendar" without a second lookup of
-which product it is talking about. Auth: `vendor`; the product must belong to the caller.
+Calendar mirroring is **best-effort and runs after the booking is committed**. A "not connected"
+error is caught and logged; the booking succeeds.
 
-**Response — connected:** `200 OK`
+**Never gate the booking flow on a calendar connection.** Present it as an enhancement — "your
+bookings will also appear in Google Calendar" — not a prerequisite.
 
-```json
-{
-  "success": true,
-  "data": {
-    "connected": true,
-    "provider": "google",
-    "calendarEmail": "vendor@gmail.com",
-    "lastSyncAt": "2026-02-09T23:54:00.000Z",
-    "expiresAt": "2026-02-10T00:54:00.000Z",
-    "syncStatus": "connected"
-  }
-}
-```
+The same holds throughout: status changes, reschedules and cancellations all try to update Google
+and none of them fails if it cannot. `BOOKING_CALENDAR_SYNC_FAILED` is raised **nowhere**.
 
-**Response — not connected:** `200 OK`
+### Where a connection *does* change behaviour
 
-```json
-{
-  "success": true,
-  "data": {
-    "connected": false,
-    "provider": null,
-    "email": null,
-    "lastSyncAt": null,
-    "expiresAt": null,
-    "syncStatus": "not_connected"
-  }
-}
-```
-
-> ⚠ **The two branches do not carry the same key.** Connected returns **`calendarEmail`**; not
-> connected returns **`email: null`**. There is no `calendarId` and no `permissions` here — read
-> `GET /api/vendor/calendar/status` above for those. The connection itself is per **vendor**, not
-> per product, so this endpoint's only product-specific behaviour is its two guards.
-
-**Errors:**
-
-| `error.code` | Status | When |
-|---|---|---|
-| `CATALOG_PRODUCT_NOT_FOUND` | 404 | Unknown product, or not this vendor's |
-| `CATALOG_BOOKING_INVALID_PRODUCT_TYPE` | 400 | The product's `type` is not `service` |
+**Availability.** A connected calendar's busy times are subtracted from bookable slots. Without one,
+slots come from availability rules and existing bookings alone — so **an unconnected vendor can be
+double-booked against their personal calendar.** That is the real reason to connect, and the right
+thing to say in the UI.
 
 ---
 
-## Disconnect Google Calendar
+## 6 · What gets written to Google
 
-```http
-POST /api/vendor/calendar/disconnect
-```
+| Event | Effect |
+|---|---|
+| booking created (`calendar` mode) | event created |
+| booking created (`manual` mode) | **nothing** — created when the vendor confirms |
+| `pending → confirmed` | event created |
+| `confirmed → cancelled` | event deleted |
+| reschedule | event updated |
+| capacity bookings | **one shared event**, titled `[2/5] Service name` |
 
-Removes the vendor's stored Google Calendar connection.
-
-**Response:** `200 OK`
-
-```json
-{ "success": true, "message": "Google Calendar disconnected successfully" }
-```
-
-**Error Responses:**
-
-- `401 AUTH_MISSING_TOKEN`: No authenticated user on the request
+⚠ **`metadata.notes` from the booking request is interpolated straight into the event
+description**, and it is entirely unvalidated. If you expose a notes field, treat it as content that
+leaves the platform.
 
 ---
 
-## Recommended setup sequence
+## 7 · Errors and configuration
 
-1. **Connect Google Calendar** — navigate the browser to `GET /api/integrations/google/connect`; confirm with `GET /api/vendor/calendar/status`.
-2. **Create the service product** with `serviceConfig` — see [products.md](./products.md#service-products).
-3. **Add availability rules** and activate them — see [availability-rules.md](./availability-rules.md).
-4. Customers can now fetch slots, lock, book, and pay — see [customer/bookings.md](../customer/bookings.md).
+Requested scopes: calendar, profile, email — with offline access, so a refresh token is stored.
+
+Configuration failures (`GOOGLE_MISSING_CLIENT_ID` and friends) are `500` in the `external_service`
+category, so **the message is masked**. A vendor seeing "Something went wrong" on connect usually
+means the deployment has no Google credentials — not a user error.
+
+⚠ `GET /api/integrations/google/test` **always reports `ok: true` when it answers at all.** Every
+failure, including "not connected", becomes a masked 500. **It is not a usable health check** — use
+`/api/vendor/calendar/status`.
+
+---
+
+## 8 · Where the backend's own doc is wrong
+
+| The doc says | Source says |
+|---|---|
+| booking creation fails without a calendar connection | it is **best-effort**; the booking succeeds |
+| the callback can redirect with `reason=state_mismatch` | **unreachable** |
+| reschedule can return `500 BOOKING_CALENDAR_SYNC_FAILED` | that code is raised nowhere |
+| disconnect returns `{ success, data: null, message }` | there is **no `data` key** |
+| `/test` reports a meaningful `ok` | it is never `false` |
+| the route comment calls the product calendar-status a stub | it reads the real connection |

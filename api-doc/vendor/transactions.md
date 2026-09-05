@@ -1,143 +1,124 @@
-# Vendor Transactions API
+# Transactions
 
-A single, unified feed of every money/credit movement on the vendor's account —
-plan purchases, credit top-ups, credit usage, and sales earnings. **This replaces
-the old separate histories**: `GET /credits/ledger`, `GET /credits/topups`,
-`GET /plan-purchases`, and `GET /earnings/ledger` (all removed). Balance and
-current-state endpoints (`GET /credits`, `GET /plan`, `GET /earnings`) are unchanged
-— see [**Vendor Earnings API**](./earnings.md) for how the `/earnings` balance is computed.
+**Verified against backend source on 2026-08-24.**
 
-## Base Path
-```
-/api/vendor/transactions
-```
+**`GET /api/vendor/transactions/`** — one merged, newest-first history.
 
-## Authentication
-Requires a vendor Bearer token; the feed is scoped to the authenticated vendor.
+It replaces four removed list endpoints: `/plan-purchases`, `/credits/ledger`, `/credits/topups` and
+`/earnings/ledger`. This repository's service layer already notes their removal correctly.
 
 ---
 
-### GET /api/vendor/transactions
+## Query
 
-**Description**: Newest-first, paginated feed merging all transaction categories.
-Top-ups appear **once** (as a `credit` money row) — the duplicate credit-ledger
-entry is filtered out.
+| Param | Type | Default |
+|---|---|---|
+| `page` | integer | `1` |
+| `limit` | integer 1–100 | `20` |
+| `category` | `plan` · `credit` · `earning` · `payout` | — all |
 
-**Query Parameters**:
-- `page` (integer, optional, default `1`).
-- `limit` (integer, optional, default `20`, max `100`).
-- `category` (string, optional) — filter to one of `plan`, `credit`, `earning`, `payout`.
-  Omit for everything. (`payout` is a placeholder — empty until cash-out is built.)
-
-**Success Response** — `200 OK`:
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "id": "66cc01",
-      "category": "plan",
-      "type": "plan_purchase",
-      "status": "paid",
-      "unit": "money",
-      "direction": "out",
-      "amount": 5000,
-      "currency": "XAF",
-      "description": "Plan purchase — growth",
-      "gateway": "STRIPE",
-      "source": { "type": "plan", "id": "growth" },
-      "createdAt": "2026-06-24T14:00:00.000Z"
-    },
-    {
-      "id": "66bb02",
-      "category": "credit",
-      "type": "credit_topup",
-      "status": "paid",
-      "unit": "money",
-      "direction": "out",
-      "amount": 600,
-      "currency": "XAF",
-      "credits": 100,
-      "description": "Credit top-up — 100 credits (pack_100)",
-      "gateway": "NOTCHPAY",
-      "source": { "type": "pack", "id": "pack_100" },
-      "createdAt": "2026-06-24T12:00:00.000Z"
-    },
-    {
-      "id": "66aa01",
-      "category": "credit",
-      "type": "credit_usage",
-      "status": "completed",
-      "unit": "credit",
-      "direction": "out",
-      "amount": 1,
-      "credits": 1,
-      "description": "Product vectorisation",
-      "source": { "type": "credit", "id": "prod_123" },
-      "createdAt": "2026-06-24T11:00:00.000Z"
-    },
-    {
-      "id": "66ee10",
-      "category": "earning",
-      "type": "earning_hold",
-      "status": "hold",
-      "unit": "money",
-      "direction": "in",
-      "amount": 4500,
-      "currency": "XAF",
-      "description": "Earning held from order sale",
-      "source": { "type": "order", "id": "66dd01" },
-      "createdAt": "2026-06-24T10:00:00.000Z"
-    }
-  ],
-  "meta": { "total": 4, "page": 1, "limit": 20, "totalPages": 1 }
-}
+```jsonc
+{ "success": true, "data": [ /* … */ ],
+  "meta": { "total": 240, "page": 1, "limit": 20, "totalPages": 12 } }
 ```
 
-**Field reference** (normalized across all sources):
+## 🔴 `category=payout` returns an empty feed
 
-| Field | Meaning |
-|---|---|
-| `id` | Source document id |
-| `category` | `plan` \| `credit` \| `earning` \| `payout` |
-| `type` | `plan_purchase`, `credit_topup`, `credit_allowance`, `credit_usage`, `credit_adjustment`, `earning_hold`, `earning_release`, `earning_reversal` |
-| `status` | Source status — money txns: `pending`/`paid`/`failed`/`reversed`; earnings: `hold`/`release`/`reversal`; credit moves: `completed` |
-| `unit` | `money` (has `currency`) or `credit` (credit units) |
-| `direction` | `in` (value into the vendor) or `out` (value leaving) |
-| `amount` | Positive magnitude in `unit` — use `direction` for sign |
-| `currency` | Present when `unit === "money"` |
-| `credits` | Credits granted (top-up) or the magnitude of a credit move |
-| `description` | Human-readable label |
-| `gateway` | Payment gateway, for billing rows |
-| `source` | `{ type, id }` of the originating entity (plan code, pack code, order/booking id, `cod_collection` id, etc.) |
-| `createdAt` | ISO timestamp (feed is sorted by this, desc) |
+`{ "data": [], "total": 0, "totalPages": 0 }` — always, even though payout requests exist.
 
-> **Cash-on-delivery earnings** appear as ordinary `earning_hold`/`earning_release` rows, but with
-> `source.type: "cod_collection"` — one per COD **shipment** (the cash handoff), rather than one
-> per order. Their release additionally waits for the physical cash to be remitted up the delivery
-> chain, so COD earnings can sit in `hold` longer than online ones (see
-> [orders.md — Cash-on-delivery orders](./orders.md)).
+The filter was written before cash-out was built and was never connected. It is a **real gap**, not
+a not-yet-built feature.
 
-**How to render a "Transactions" tab:**
-- Group/colour by `category`; show a sign from `direction` (`out` = debit, `in` = credit).
-- For `unit: "money"` rows show `amount` + `currency`; for `unit: "credit"` rows show
-  `±amount` credits.
-- Top-up rows (`type: credit_topup`) carry both the money `amount` and the `credits` granted.
-- `status: reversed` (top-up/plan) or `earning_reversal` rows are chargeback/refund unwinds.
-- Use `?category=` to power sub-tabs (Plans / Credits / Earnings) without separate endpoints.
+**Do not offer a "Payouts" tab driven by this.** Use `GET /api/vendor/earnings/payout` for the
+latest request and the linked ticket for its history. See [earnings.md](./earnings.md).
 
-**Error Responses**: `400 VALIDATION_ERROR` (bad `page`/`limit`/`category`), `401`, `403`.
+## ⚠ `total` and the page can disagree at depth
+
+The feed merges four independent queries in memory and slices the result, while `total` is the sum of
+four separate counts. **At deep offsets `data.length` and `total` do not reconcile.**
+
+Prefer "load more" over a numbered pager, and do not compute "showing X–Y of Z".
 
 ---
 
-## Migration note (frontend)
+## The row
 
-| Removed endpoint | Use instead |
-|---|---|
-| `GET /api/vendor/credits/ledger` | `GET /api/vendor/transactions?category=credit` |
-| `GET /api/vendor/credits/topups` | `GET /api/vendor/transactions?category=credit` |
-| `GET /api/vendor/plan-purchases` | `GET /api/vendor/transactions?category=plan` |
-| `GET /api/vendor/earnings/ledger` | `GET /api/vendor/transactions?category=earning` |
+Every row is camelCase and shares nine keys:
 
-The POST actions (`/credits/topups`, `/plans/:planId/purchase`, the `/verify` routes) and the
-balance endpoints (`/credits`, `/plan`, `/earnings`) are unchanged.
+```jsonc
+{ "id": "…",
+  "category": "credit",
+  "type": "credit_topup",
+  "status": "paid",
+  "unit": "money",              // "money" | "credit"
+  "direction": "out",           // "in" | "out"
+  "amount": 1800,
+  "description": "…",
+  "createdAt": "…",
+  "currency": "XAF",            // optional
+  "credits": 320,               // optional
+  "gateway": "NOTCHPAY",        // optional
+  "source": { "type": "pack", "id": "pack_320" } }   // optional
+```
+
+🔴 **`unit` is the field that decides how to render `amount`.**
+
+```ts
+unit === 'money'  ? formatCurrency(amount, currency)
+                  : `${amount} credits`
+```
+
+A credit row has **no `currency`**. Formatting it as money produces "XAF 320" for 320 credits.
+
+`direction` gives you the sign — `amount` is always positive.
+
+---
+
+## The types, by category
+
+### `plan`
+
+One type, `plan_purchase`. `status`: `pending` · `paid` · `failed` · `reversed`.
+`unit: "money"`, `direction: "out"`, carries `currency`, `gateway`, and
+`source: { type: "plan", id: "<plan code>" }`.
+
+### `credit` — two very different shapes
+
+| `type` | `unit` | Notes |
+|---|---|---|
+| `credit_topup` | **`money`** | the purchase. Has `currency`, `gateway`, and `credits` |
+| `credit_allowance` · `credit_usage` · `credit_adjustment` · `credit_movement` | **`credit`** | wallet movements. **No `currency`, no `gateway`**; `status` is always `"completed"` |
+
+🔴 **So `category=credit` mixes money rows and credit rows in one list.** Branch on `unit`, not on
+`category`.
+
+A top-up appears **once** — the wallet movement it causes is filtered out so it is not
+double-counted.
+
+### `earning`
+
+`earning_hold` · `earning_release` · `earning_reversal` · `earning_reserve_hold` ·
+`earning_reserve_release`.
+
+**`status` equals the underlying entry type**, so it duplicates `type` rather than describing
+success. Do not render it as a state badge.
+
+`direction` is `out` for a reversal, `in` for everything else. `source.type` is
+`order` · `booking` · `cod_collection` · `shipment` — join it to your order data for a useful label.
+
+⚠ The two `reserve` types produce the description **"Earning reversed (refund)"**, which is wrong —
+the description builder covers only three of the five. **Derive your label from `type`, not from
+`description`.** (Reserve rows are agency-only in practice, so a vendor should not see them.)
+
+---
+
+## Suggested tabs
+
+```
+All  |  Plans  |  Credits  |  Earnings
+```
+
+Map to `category` = *(none)* · `plan` · `credit` · `earning`. **Omit Payouts.**
+
+Within Credits, consider splitting on `unit` — "purchases" versus "usage" — since the two are not
+comparable quantities.

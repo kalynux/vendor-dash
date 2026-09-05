@@ -1,3 +1,13 @@
+# Uptime & status widget — an unserved spec
+
+**Re-verified against the live route dump on 2026-08-24: still unserved.** No public status or
+uptime route exists. The only health surfaces are the three on [`health.md`](./health.md), and
+the operator ones behind `/api/internal/admin/system/*`, which no browser can reach.
+
+**Kept, not deleted.** It is a decision record — "we chose not to build this, and here is why"
+— and deleting it would make the next person propose it again. See
+[`README.md`](./README.md).
+
 > ## ⚠ This is an unserved frontend spec. No backend implements it, and that is a decision.
 >
 > Nothing in this document is backed by an endpoint. The three-dot widget below describes what a
@@ -6,7 +16,7 @@
 >
 > The operator-facing equivalent exists and is where this information actually lives:
 >
-> - [`admin/system.md`](./admin/system.md) — dependency health, integration status, queue depth,
+> - `admin/system.md` — dependency health, integration status, queue depth,
 >   cache status, worker state, operational metrics. Service-token only, rendered by wi-admin.
 > - [`health.md`](./health.md) — `/api/health` (frozen), `/api/health/live`, `/api/health/ready`,
 >   and `/metrics`.

@@ -1,11 +1,28 @@
 # Agency Stock Requests
 
+**Verified against backend source on 2026-08-24.**
+
+> ### Why an *agency* page is in the vendor dashboard doc set
+>
+> It is the **mirror** of [`../vendor/stock-requests.md`](../vendor/stock-requests.md), and
+> the DTOs are byte-identical. A vendor dashboard needs it for exactly one thing: knowing what
+> the **counterparty sees** when the vendor raises a request, and which verbs are theirs.
+>
+> **You cannot call any route on this page.** `/api/agency/*` is guarded by the agency role.
+> Build from `vendor/stock-requests.md`; read this one to understand the other half of the
+> handshake.
+>
+> 🔴 **Never re-implement the authority table.** Every request DTO carries
+> `availableActions` — the server verdict for the current viewer. Rendering buttons from
+> anything else is how a client offers a verb the API refuses with
+> `403 STOCK_REQUEST_NOT_YOURS`.
+
 Changing the recorded stock of a SKU you warehouse. Every change needs both
 signatures — yours and the vendor's.
 
-> Related docs: [Inventory](./inventory.md) (where these requests surface per SKU) ·
+> Related docs: `Inventory` (where these requests surface per SKU) ·
 > [Vendor → Stock requests](../vendor/stock-requests.md) (the mirror) ·
-> [Vendor connections](./vendor-connections.md) (the flow this one is modelled on) ·
+> `Vendor connections` (the flow this one is modelled on) ·
 > [Front-end changelog](../FRONTEND-CHANGELOG-agency-storage.md).
 
 ## Base Path
@@ -297,6 +314,6 @@ There is no notification for `withdrawn`.
   propose a correction from there.
 - **Unlimited stock is impossible on a warehoused SKU.** Any request asking for it is
   refused at creation, so no approvable request can leave a product in a state its own
-  activation gate rejects. See [Inventory](./inventory.md).
+  activation gate rejects. See `Inventory`.
 - **A pending request shows on the inventory row** as
   `catalogStock.pendingRequest`, so the SKU list is a viable entry point to this flow.

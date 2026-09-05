@@ -1,5 +1,19 @@
 # API Error Handling Guide
 
+**Verified against backend source on 2026-08-24** — `src/core/error-category.ts`,
+`src/core/error-detail-policy.ts` and `src/api/middlewares/error-handler.middleware.ts`.
+The code registry itself is [`../error-codes.ts`](../error-codes.ts) (**603 codes**).
+
+> ### Scope note for this repository
+>
+> This is the **platform-wide** error reference, so it names code families a vendor dashboard
+> can never trigger. Four sections are here for completeness only and are marked where they
+> start: **COD** (§ 10), **agent ↔ agency contracts**, the *agency* half of **agency storage**,
+> and **blog / editorial**. Everything else applies to you.
+>
+> Cross-role pages are referenced by filename rather than linked when they live only in the
+> backend repository's `api-doc/` — this repo mirrors the vendor surface, not all six.
+
 This guide explains how frontend applications should handle and parse error responses from the Jovi Mall API. By standardizing our error formats, the frontend can reliably display appropriate feedback to users and trigger specific client-side UI flows based on explicit error codes.
 
 ## Standard Error Response Structure
@@ -28,7 +42,7 @@ Whenever an API request fails (e.g., due to validation, business logic violation
 (jovi-mall, wi-admin and geo-tracker emit the same nine strings).
 
 It exists so a client can behave sensibly about an error it has **no specific handling
-for** — which is most of them, since the registry has 547 codes. Branch on `code` when you
+for** — which is most of them, since the registry has 603 codes. Branch on `code` when you
 have something particular to do; fall back to `category` for everything else.
 
 | `category` | Means | What a client should generally do |
@@ -253,18 +267,21 @@ Returned by the [Agency Connections](../vendor/agency-connections.md) API when a
 }
 ```
 
-Other codes in this family — see [Agency Connections](../vendor/agency-connections.md) and
-[Vendor Connections](../agency/vendor-connections.md) for full context, no `details` payload:
+Other codes in this family — see [Agency Connections](../vendor/agency-connections.md) for full context (the agency's
+mirror of that page, `agency/vendor-connections.md`, is not mirrored in this repository), no `details` payload:
 `CONNECTION_NOT_FOUND` (404), `CONNECTION_VENDOR_NOT_FOUND` (404), `CONNECTION_ALREADY_EXISTS`
 (409), `CONNECTION_NOT_PENDING` / `CONNECTION_NOT_PAUSED` / `CONNECTION_NOT_ACTIVE` (422),
 `CONNECTION_NOT_REQUESTER` / `CONNECTION_NOT_APPROVER` / `CONNECTION_WRONG_REAPPROVAL_PARTY` (403).
 
 ### 10. Cash on Delivery (COD) Errors
 
+> 🔵 **Not reachable by a vendor dashboard.** Cash handling is the agent's and the agency's;
+> a vendor sees that an order *is* COD and never touches the cash flow. Listed for reference.
+
 The `COD_` family covers checkout eligibility, delivery-code verification, agent cash exposure,
 deposits, remittances and discrepancies. Role-specific context:
-[customer/orders.md](../customer/orders.md#cod), [agent/cod-cash.md](../agent/cod-cash.md),
-[agency/cod-cash-management.md](../agency/cod-cash-management.md), [admin/cod.md](../admin/cod.md).
+`customer/orders.md` · `agent/cod-cash.md` · `agency/cod-cash-management.md` ·
+`admin/cod.md` — **all in the backend repository's own `api-doc/`, none mirrored here.**
 
 | Code | Status | When | `details` |
 |---|---|---|---|
@@ -301,8 +318,12 @@ deposits, remittances and discrepancies. Role-specific context:
 
 ### Agent ↔ agency contracts
 
-Full documentation: [agency/agent-roster.md](../agency/agent-roster.md) (canonical) and
-[agent/agency-membership.md](../agent/agency-membership.md).
+> 🔵 **Not reachable by a vendor dashboard.** A vendor contracts with an *agency*
+> ([`vendor/agency-connections.md`](../vendor/agency-connections.md)); the agency's contracts
+> with its *agents* are a separate two-party surface a vendor has no route into.
+
+Full documentation: `agency/agent-roster.md` (canonical) and `agent/agency-membership.md`,
+both in the backend repository's own `api-doc/`. Neither is mirrored here.
 
 **The handshake** — request, approve, reject, withdraw:
 
@@ -373,9 +394,8 @@ means "not **active**"; the code predates the status rename), `AGENT_MEMBERSHIP_
 
 ## Agency storage: warehoused products and their stock
 
-The agency-facing product actions
-([Agency → Inventory](../agency/inventory.md)) and the two-sided stock flow
-([Agency](../agency/stock-requests.md) · [Vendor](../vendor/stock-requests.md)).
+The agency-facing product actions (`agency/inventory.md`, backend repo only) and the
+two-sided stock flow ([Agency](../agency/stock-requests.md) · [Vendor](../vendor/stock-requests.md)).
 
 | Code | HTTP | Meaning | `details` |
 |---|---|---|---|
@@ -412,8 +432,12 @@ The agency-facing product actions
 
 ## Blog / editorial
 
-The public reader ([public/articles.md](../public/articles.md)) and the editor
-([admin/articles.md](../admin/articles.md)).
+> 🔵 **Not reachable by a vendor dashboard.** No vendor route reads or writes articles.
+
+The public reader (`public/articles.md`, backend repo only). The editor moved to wi-admin at
+Phase 5 Part A (`admin/docs/api/content.md`) and raises these **same codes** from its own
+registry — deliberately, so a client sees one vocabulary across the cutover. The three below
+that a logged-out visitor can reach are still raised by jovi-mall's public reader.
 
 The first three are reachable by a **logged-out visitor**, so their `message` is written to be shown.
 
@@ -452,7 +476,7 @@ The first three are reachable by a **logged-out visitor**, so their `message` is
 1. **Always default to parsing `error.code`.** Do not write business logic dependent on `statusCode` limits (e.g., `if (statusCode === 400)`) unless parsing a generic networking failure. Use `if (error.code === 'AUTH_TOKEN_EXPIRED') { triggerLogout(); }`.
 2. **Use `error.message` as a fallback.** If your application supports full i18n, map the backend `error.code` directly to a translation key. If the key is missing in your dictionary, display the backend's `error.message` directly to the user.
 3. **Use `error.category` as your default branch.** You will never have specific handling for
-   all 547 codes. The category tells you the four things that actually change client
+   all 603 codes. The category tells you the four things that actually change client
    behaviour: is it worth retrying, should the user re-authenticate, is it their input, or is
    it ours.
 4. **Log the `requestId`.** If the error is an unexpected `INTERNAL_SERVER_ERROR`, present the `requestId` in the UI to help the user report it: *"An unexpected error occurred. If you contact support, please provide this ID: req-1234abc"*.

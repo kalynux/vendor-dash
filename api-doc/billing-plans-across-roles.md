@@ -1,5 +1,16 @@
 # Billing, Plans & Credit — Cross-Dashboard Guide
 
+**Verified against backend source on 2026-08-24** — `scripts/seed/seed-pricing-plans.ts`,
+`src/modules/billing/services/entitlement.service.ts`, and the live route dump.
+
+> **This is a concept page.** The vendor endpoints it summarises are documented in full at
+> [`vendor/billing.md`](./vendor/billing.md) (plans, purchase, verify, credit) and
+> [`vendor/billing-overview.md`](./vendor/billing-overview.md). Read this one for the
+> *shape of the model*; read those two to build a screen.
+>
+> Sections about agency, agent and admin are here because the engine is shared and the
+> vocabulary is identical — **not** because a vendor dashboard can call them.
+
 One billing engine now serves **four dashboards**: vendor, agency, agent, and
 admin. Vendors already had plans + a credit wallet; **agencies and agents now have
 the identical surface** under their own role roots, and admin manages the catalog
@@ -29,13 +40,21 @@ server job). Activating a plan grants its `credit_allowance` once into the role'
 
 | | Vendor | Agency | Agent | Admin |
 |---|---|---|---|---|
-| **Base path** | `/api/vendor` | `/api/agency` | `/api/agent` | `/api/admin` |
-| **Doc** | [vendor/billing.md](./vendor/billing.md) | [agency/billing.md](./agency/billing.md) | [agent/billing.md](./agent/billing.md) | [admin/billing.md](./admin/billing.md) |
+| **Base path** | `/api/vendor` | `/api/agency` | `/api/agent` | `/api/internal/admin/billing` ** |
+| **Doc** | [vendor/billing.md](./vendor/billing.md) | `agency/billing.md` * | `agent/billing.md` * | `admin/docs/api/billing.md` (wi-admin) |
 | **Free tier** | `starter` | `agency_free` | `agent_free` | — |
 | **Plan limit** | products / storage / commission | `max_unterminated_shipments` (**soft**) | `max_unterminated_shipments` (**hard**) | defines all |
 | **Free-tier limit** | 15 products, 1 GB, 7% | **1000** unterminated shipments | **20** concurrent deliveries | — |
 | **Enforcement** | product create blocked at cap (`403 BILLING_LIMIT_EXCEEDED`) | never blocks — alert only | offer-accept blocked at cap (`422 AGENT_AT_CAPACITY`) | — |
 | **Paid tiers today** | active | `is_active:false` (build UI, not yet buyable) | `is_active:false` | manage via catalog |
+
+* not mirrored in this repository — the page lives in the backend's own `api-doc/`.
+** **not browser-reachable.** See [§ Admin](#admin-catalog--assignment) below.
+
+**Vendor figures verified in `scripts/seed/seed-pricing-plans.ts:47-51`:** `starter` —
+15 active products, 1 GB, 7 % commission, 50 credits. All three vendor tiers are
+`is_active: true`; the enforcement throw is `entitlement.service.ts:85`, a **403**
+`BILLING_LIMIT_EXCEEDED` carrying `details: { limit, current }`.
 
 > **Launch state:** for agency and agent, **only the free tier is active** right now
 > (`GET /{role}/plans` returns one plan). The two paid tiers per role are seeded but
@@ -48,7 +67,8 @@ server job). Activating a plan grants its `credit_allowance` once into the role'
 caller, for the marketing site — which prints real prices and previously had to hand-copy them out of
 `seed-pricing-plans.ts` and `credit.config.ts`. Same numbers, a trimmed projection (`id` instead of
 `_id`, no internal timestamps), plus `?role=` / `?includeInactive=true` and a 5-minute
-`Cache-Control`. Contract: [public/README.md](./public/README.md).
+`Cache-Control`. Contract: `public/README.md` in the backend repository's `api-doc/` — not mirrored here,
+because a vendor dashboard always has a session and should call the authenticated route.
 
 **Dashboards should keep using the authenticated `GET /api/{role}/plans`** — it is scoped to the
 caller's role and needs no filtering. The public route exists for pages that have no session at all.
@@ -85,11 +105,34 @@ must be updated.
 
 ## Admin (catalog + assignment)
 
-- `GET /api/admin/plans?role=vendor|agency|agent` — full catalog incl. inactive (omit `role` for all).
-- `POST /api/admin/plans` — create a plan of any role; send only the limit fields that role uses (`max_active_products`/`max_storage_bytes`/`commission_percent` for vendor, `max_unterminated_shipments` for agency/agent, `live_tracking_enabled` for both).
-- `POST /api/admin/{vendors|agencies|agents}/:id/plan` — manually assign/queue a plan (comps/support/migrations), no payment. Assigning an agent plan updates their delivery ceiling immediately.
+> ### 🔴 `/api/admin/*` no longer exists, and none of this is browser-reachable.
+>
+> This section previously listed `GET /api/admin/plans`, `POST /api/admin/plans` and
+> `POST /api/admin/{vendors|agencies|agents}/:id/plan`. **jovi-mall's public `/api/admin`
+> mount was removed** (Phase 5 close-out); the catalog surface moved to
+> `/api/internal/admin/billing/*`, which is guarded by `INTERNAL_SERVICE_TOKEN` and is
+> reachable only by **wi-admin**, server to server. There is no session, cookie or bearer
+> token a browser can present to it.
+>
+> It is kept here, relabelled rather than deleted, for one reason: the field names on this
+> surface are the field names you read. A plan created there with `max_active_products: 150`
+> is the `maxActiveProducts: 150` your entitlement screen renders.
 
-See [admin/billing.md](./admin/billing.md).
+The eight routes, from the live route dump — **for orientation only**:
+
+| Method | Path |
+|---|---|
+| GET · POST | `/api/internal/admin/billing/plans` |
+| PATCH · DELETE | `/api/internal/admin/billing/plans/:id` |
+| POST | `/api/internal/admin/billing/vendors/:vendorId/plan` |
+| POST | `/api/internal/admin/billing/agencies/:agencyId/plan` |
+| POST | `/api/internal/admin/billing/agents/:agentId/plan` |
+| GET | `/api/internal/admin/billing/entitlements/:ownerType/:ownerId` |
+
+Send only the limit fields the target role uses — `max_active_products` /
+`max_storage_bytes` / `commission_percent` for vendor, `max_unterminated_shipments` for
+agency and agent, `live_tracking_enabled` for both. A manual assignment takes no payment;
+assigning an agent plan updates their delivery ceiling immediately.
 
 ## Notifications each dashboard must render
 
@@ -102,7 +145,7 @@ and these situations — build them into the notification UI and preferences scr
 | `plan.expired` | vendor, agency, agent | Plan expired → handover or downgrade to free | `plans` |
 | `shipment.cap.exceeded` | agency only | Crossed the unterminated-shipment soft cap (once per crossing) | `plans` |
 
-- Per-role notification docs: [vendor](./vendor/notifications.md) · [agency](./agency/notifications.md) · [agent](./agent/notifications.md).
+- Per-role notification docs: [vendor](./vendor/notifications.md) · `agency/notifications.md` and `agent/notifications.md` (backend repo only).
 - Each notification is in-app (always) + push + one preference-gated channel, localized.
 - **Deep-link route:** every plan/cap notification's `action.path` is `plans` — each SPA must implement a `plans` route (it's appended to `VENDOR_APP_URL` / `AGENCY_APP_URL` / `AGENT_APP_URL`).
 - WhatsApp needs the `{vendor,agency,agent}_plan_*` and `agency_shipment_cap_exceeded` templates approved in Meta before that channel delivers (in-app/push/email/Telegram work regardless): [whatsapp-templates.md](./notifications/whatsapp-templates.md) §9.
@@ -118,6 +161,21 @@ Every plan carries `live_tracking_enabled` (currently `true` everywhere). Read i
 but **do not gate any tracking UI on it yet** — it exists so a future free-tier
 tracking restriction is a data change, not a frontend release. When it flips, hide
 live tracking where the entitlement is `false`.
+
+## Where the backend's own doc is wrong
+
+Filed as **F-30** in the sync register.
+
+🔴 `jovi-mall/api-doc/billing-plans-across-roles.md:88-90` had been corrected to
+`/api/internal/admin/billing/*`, but its **per-dashboard table still shows the admin base
+path as `/api/admin`** and still links `admin/billing.md` — a page describing a mount that
+no longer exists. Half-updated, the same failure mode as `telegram/README.md`.
+
+🟡 The same table's **`Doc` row links four sibling pages**, three of which this repository
+has never mirrored. That is not a backend defect; it is what makes a cross-role page
+dangerous to copy verbatim into a single-role repo, and why this copy names them instead.
+
+---
 
 ## Payment disputes (all roles)
 

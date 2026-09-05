@@ -1,11 +1,38 @@
 # Vendor Frontend — Stripe Card Payments
 
+**Verified against backend source on 2026-08-24** —
+`src/modules/payments/gateways/stripe.gateway.ts:60-105`,
+`src/modules/payments/gateways/stripe.client.ts:51-89`,
+`src/modules/billing/validators/billing.validators.ts:77,83`.
+
+> ## 🔴 This is the BILLING surface, not `/api/payments`
+>
+> The two are separate systems that both say "payment", and confusing them is the single
+> easiest mistake to make in this doc set.
+>
+> | | This page | [`../payments/README.md`](../payments/README.md) |
+> |---|---|---|
+> | **Paths** | `/api/vendor/plans/:id/purchase` · `/api/vendor/credits/topups` | `/api/payments/*` |
+> | **What is bought** | the **vendor's own** plan or credit pack | a **customer's** order, cart or booking |
+> | **Who pays** | the vendor | the shopper |
+> | **Creates a `PaymentTransaction`** | **no** | yes |
+> | **Verified with** | `POST /api/vendor/{plan-purchases,credits/topups}/:id/verify` | `POST /api/payments/verify` |
+>
+> 🔴 **Never poll a plan purchase with `GET /api/payments/:transactionId`.** There is no
+> transaction row to find; billing talks to the gateway through its own adapter. Use the
+> billing verify routes. See [`../billing-plans-across-roles.md`](../billing-plans-across-roles.md).
+>
+> The Stripe *gateway class* is shared between the two, which is why the `instructions` shape
+> below is identical on both surfaces. Nothing else is.
+
 Stripe card payments are now **live** (previously a stub that returned mock data).
 This doc describes the **frontend changes** required to support Stripe alongside
 the existing mobile-money gateways. It complements [billing.md](./billing.md),
 which documents the endpoints themselves.
 
-Stripe is offered on the two vendor self-serve payment flows:
+The gateway enum is `z.enum(['NOTCHPAY', 'MYCOOLPAY', 'STRIPE'])` on **both** billing
+initiate schemas (`billing.validators.ts:77,83`) — confirmed 2026-08-24. Stripe is offered on
+the two vendor self-serve payment flows:
 
 | Flow | Endpoint (initiate) | Endpoint (verify) |
 |---|---|---|
@@ -65,7 +92,20 @@ New fields on `instructions` (Stripe only):
 |---|---|---|
 | `clientSecret` | PaymentIntent client secret | Pass to Stripe.js to mount the Payment Element & confirm |
 | `chargedAmount` | The exact amount the card will be charged | Show "You'll be charged **$8.33 USD**" |
-| `chargedCurrency` | Presentment currency (always `usd` today) | Currency label / formatting |
+| `chargedCurrency` | Presentment currency (`STRIPE_CHARGE_CURRENCY`, default `usd`) | Currency label / formatting |
+
+**All three verified in `stripe.gateway.ts:92-97`.** The conversion is
+`xafToUsd(amount)` = `amount / STRIPE_XAF_PER_USD`, **default 600**, rounded to two decimals
+(`stripe.client.ts:51-63`). It is a **fixed configured rate, not a live FX quote** — which is
+why `chargedAmount` must be displayed rather than computed: your number and the charge would
+diverge the moment an operator changes the variable.
+
+⚠ **If `STRIPE_SECRET_KEY` is unset the initiate fails with `503`
+`PAYMENT_GATEWAY_NOT_IMPLEMENTED`**, not a validation error — the client is constructed
+lazily on first use (`stripe.client.ts:22-29`). Its category is `business_rule`, deliberately:
+"that gateway is not on offer" is a rule, not a fault. Do not offer the Stripe option if you
+have no way to know it is configured — offer it, and handle the 503 as "card payment is
+unavailable right now, use mobile money".
 
 > Mobile-money gateways (`NOTCHPAY`, `MYCOOLPAY`) are unchanged — they still return
 > `{ ussdCode?, message?, expiresAt? }` and charge the native XAF amount.

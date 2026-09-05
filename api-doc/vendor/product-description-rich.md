@@ -1,5 +1,24 @@
 # Rich Product Descriptions (`descriptionRich`)
 
+**Verified against backend source on 2026-08-24** — `src/core/richtext/{types,schema,limits,doc}.ts`,
+`src/modules/catalog/validators/rich-description.validator.ts`,
+`src/modules/catalog/models/product.model.ts:242,408`.
+
+> ## 🟢 ACTION: the backend has shipped. Your gate is still off.
+>
+> `RICH_DESCRIPTION_WIRE_ENABLED` in [`src/lib/richtext/wire.ts`](../../src/lib/richtext/wire.ts)
+> is **`false`** in this working tree (verified 2026-08-24, line 29). Its own comment says
+> *"Flip this to `true` the day the backend ships the field"*.
+>
+> **That day has passed.** `descriptionRich` is a known key on **all four** product write
+> schemas — including the two `.strict()` quick-add ones — through one shared fragment
+> (`rich-description.validator.ts:39`), so the `.strict()` asymmetry the constant exists to
+> guard against **no longer exists**. Every vendor writing a formatted description today has
+> their bold and italic runs silently discarded on save.
+>
+> Flipping the constant is the only frontend change required. **This documentation does not
+> make that change** — nothing under `src/` was touched.
+
 The structured description a vendor writes in the dashboard's formatting editor, and the source of truth for how a product reads when it is shared into **WhatsApp** or **Telegram**.
 
 > [!IMPORTANT]
@@ -12,11 +31,11 @@ The structured description a vendor writes in the dashboard's formatting editor,
 > data.
 
 > [!NOTE]
-> **Implementation status.** The frontend produces and consumes this field today.
-> Backend persistence is specified in
-> [`docs_requirement.md`](../../docs_requirement.md); until it ships, the field is
-> stripped by the layered endpoints and must not be sent to the `.strict()`
-> simple endpoints. See [Rollout](#rollout).
+> **Implementation status: shipped.** The field is accepted on all four product
+> write endpoints — including the two `.strict()` quick-add ones — persisted,
+> and returned on every vendor-facing product read. The frontend gate
+> (`RICH_DESCRIPTION_WIRE_ENABLED`) can be flipped to `true`. See
+> [Rollout](#rollout).
 
 ## Table of contents
 
@@ -45,6 +64,23 @@ type Block =
 type RichDoc = { version: 1; blocks: Block[] };
 ```
 
+### The vocabulary is exactly two block types and two inline types
+
+Confirmed in `src/core/richtext/types.ts`. **There is no third of either**, and no heading,
+image, quote, table, colour or font-size node — the union in `schema.ts` is a
+`discriminatedUnion` over precisely these:
+
+| | Types |
+|---|---|
+| **Block** | `paragraph` · `list` |
+| **Inline** | `text` · `link` |
+| **Marks** (booleans on either inline type) | `bold` · `italic` · `strike` |
+
+Marks are **flat, not nested** — one span carries `bold: true, italic: true` rather than
+sitting inside two wrappers. Formatters emit a flat marker pair per span anyway, so a tree
+would be flattened again immediately. The nesting order when they *are* rendered is
+`strike` → `bold` → `italic`, outermost first (`INLINE_MARKS`).
+
 | Rule | Why |
 |---|---|
 | `version` must be `1` | A reader that does not recognise it falls back to `description` rather than rendering blocks it cannot interpret |
@@ -52,6 +88,17 @@ type RichDoc = { version: 1; blocks: Block[] };
 | Lists never nest | Neither platform has list markup — both render a literal `• ` / `1. ` prefix |
 | `link.text` is stored apart from `href` | Telegram keeps the label, WhatsApp can only show a bare URL. The channels disagree, so the label stays data |
 | `href` must be `https:`, `http:`, `mailto:` or `tel:` | Enforced at parse time, never at render time |
+| **A relative `href` is REJECTED** | `new URL(href)` with no base throws, and `isAllowedHref` returns `false` (`schema.ts:30-37`). A description is read inside WhatsApp, where there is no origin to resolve against. `/products/x` is a `400`, not a link |
+| At most **200** blocks | `MAX_RICH_DOC_BLOCKS` (`types.ts`). Over that is a `400 VALIDATION_ERROR` |
+
+> **Two length budgets you should enforce in the editor, because the server does not.**
+> `CHAT_LIMITS.MAX` is **4096** characters — WhatsApp's `text.body` and Telegram's
+> `sendMessage.text` both cap there — and `CHAT_LIMITS.CAPTION` is **1024**, the ceiling
+> below which a description can also ride along as an image caption, which is how most
+> product shares actually go out. Neither is a validation rule on the write path: a longer
+> document saves fine and is trimmed **at share time**, by trimming the *document* rather
+> than cutting the rendered string (a severed `*` is a broken send, not a shorter one).
+> Show the vendor a counter against 1024.
 
 ### Example
 
@@ -105,11 +152,12 @@ The matching `description` sent in the same request:
 
 It is returned by `GET /api/vendor/products/:id` and by the write responses. It is **not** included in the trimmed `GET /api/vendor/products` list response.
 
-> [!WARNING]
-> The two `/simple` schemas are `.strict()`. Sending an unknown key to them
-> returns `400 VALIDATION_ERROR` and rejects the **whole** request — not just the
-> field. Until the backend accepts `descriptionRich` there, clients must not send
-> it on those two routes.
+> [!NOTE]
+> The two `/simple` schemas are `.strict()`, so an unknown key there returns
+> `400 VALIDATION_ERROR` and rejects the **whole** request rather than stripping
+> the field. `descriptionRich` is now a known key on all four, so it is safe to
+> send everywhere. Any *other* unknown key on the two `/simple` routes still
+> behaves this way.
 
 ### Example request — `PATCH /api/vendor/products/:id`
 
@@ -202,9 +250,9 @@ Full algorithms, including truncation rules and test vectors, are in
 
 ## Rollout
 
-The frontend gates the field behind a single constant
-(`RICH_DESCRIPTION_WIRE_ENABLED`, `src/lib/richtext/wire.ts`), currently `false`,
-because of the `.strict()` asymmetry above. While it is off:
+**The backend half is live.** The frontend still gates the field behind a single
+constant (`RICH_DESCRIPTION_WIRE_ENABLED`, `src/lib/richtext/wire.ts`), and
+flipping it to `true` is the only frontend change needed. While it stays `false`:
 
 - The editor is fully functional and `description` persists as always.
 - Paragraphs, lists, line breaks, emoji and URLs survive a reload — the frontend
@@ -212,7 +260,45 @@ because of the `.strict()` asymmetry above. While it is off:
 - Inline marks (bold / italic / strikethrough) and link labels do not survive,
   because by design they leave no trace in the projection.
 
-Flipping the constant is the only frontend change needed once the backend ships.
+The rollout is order-independent: the backend accepts the field from clients that
+send it and stores `null` for clients that do not, so the two sides can deploy in
+either order and no product is left in a broken state by the gap.
+
+### Server-side formatting
+
+The document model, its validator and both channel formatters live in
+`src/core/richtext/` — a deliberate mirror of the dashboard's
+`src/lib/richtext/`, file for file, since there is no shared package between the
+two repositories. `npm run test:rich-description` (149 assertions, no DB) asserts
+the backend's WhatsApp and Telegram output against the dashboard's own fixtures
+byte-for-byte, so a change on either side surfaces as a diff rather than as a
+badly-rendered customer message.
+
+Exported from `core/richtext`: `toPlainText`, `toWhatsApp`, `toTelegramHtml`,
+`toTelegramPlain`, `escapeTelegramHtml`, `truncateDoc`, `richDocSchema`,
+`parseRichDoc`.
+
+---
+
+## Where the backend's own doc is wrong
+
+Nothing found on this page. It was **corrected ahead of this repository's copy** — the
+version here previously said the backend had not shipped, which is the drift this page
+existed to have caught. Two of its claims were re-verified rather than trusted:
+
+- *"accepted on all four product write endpoints, including the two `.strict()` ones"* —
+  true; one shared `descriptionRichSchema` is imported by `product.validator.ts:54,90` and
+  `simple-product.validator.ts:51,97`.
+- *"`descriptionRich` is not in the text index"* — true, and deliberate
+  (`product.model.ts:408-414`): `$text` would tokenise the structural keys `paragraph`,
+  `list`, `bold` and every `href` alongside the prose, handing a vendor free relevance for
+  words no customer typed.
+
+One thing to know that neither page states plainly: **the server never derives
+`description` from `descriptionRich`** (`doc.ts:138`), and must not start. Your client
+sends the pair. If you send a `description` that is not the plain-text projection of your
+`descriptionRich`, the platform stores the inconsistency and the storefront shows your
+version while WhatsApp shows the other.
 
 ---
 
@@ -220,8 +306,13 @@ Flipping the constant is the only frontend change needed once the backend ships.
 
 | `error.code` | Status | When |
 |---|---|---|
-| `VALIDATION_ERROR` | 400 | Malformed document, unknown `version`, disallowed `href` scheme, too many blocks — or the field sent to a `.strict()` endpoint that does not yet accept it |
+| `VALIDATION_ERROR` | 400 | Malformed document, unknown `version`, disallowed `href` scheme, or more than 200 blocks |
+| `REQUEST_BODY_TOO_LARGE` | 413 | The whole request exceeded the body-size ceiling. The 200-block cap bounds the document's shape; this bounds its bytes |
 | `CATALOG_PRODUCT_NO_DESCRIPTION` | 422 | `description` is empty at activation — unchanged by this field |
+
+Field-level errors for description *content* are reported against
+`error.details.fields[].path === 'description'`, never `descriptionRich`, so the
+dashboard's existing error projection onto the editor keeps working.
 
 ## Related
 

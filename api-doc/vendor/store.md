@@ -1,725 +1,199 @@
-# Store Profile Management API Documentation
+# Store
 
-## Overview
+**Verified against backend source on 2026-08-24.**
 
-The Store Profile Management API allows vendors to manage their public storefront - the commercial surface of their business on the platform. Each vendor has exactly one store, **auto-created on first access** (and provisioned during onboarding Step 1). Vendors can view and update store details and manage vacation mode, but cannot modify the immutable `slug`.
+**Base path:** `/api/vendor/store` · **Auth:** vendor session · **Routes: 3**
 
-> [!IMPORTANT]
-> **The store carries no address, city, or country of its own.**
-> - Physical locations (which are also pickup locations) are the vendor profile's
->   **`business_addresses`** — geocoded, mappable, and validated against the
->   vendor's registered country. Manage them via
->   [`PATCH /api/vendor/profile`](./profile.md#patch-apivendorprofile).
-> - **`country`** lives on the vendor profile (set once during onboarding,
->   immutable afterwards) and is served **read-only** in store responses.
-
-**Base URL**: `/api/vendor`
-
-**Authentication**: All endpoints require a valid JWT token in the `Authorization` header with vendor role.
-
-**Standard**: Shopify/Etsy/Amazon Storefront service quality.
+The Store is the vendor's **business identity** — the name customers see, the logo, the banner, the
+public shopfront URL. It is a separate document from the vendor profile, with its own version
+counter.
 
 ---
 
-## Endpoints
+## 0 · 🔴 The public store URL — resolved
 
-### GET /api/vendor/store
+Two documents disagreed about `publicUrl`. **This repository's copy was right and the backend's
+own doc was wrong.**
 
-Retrieve the authenticated vendor's store profile.
-
-#### Authentication
-
-- **Required**: Yes
-- **Role**: `vendor`
-
-#### Headers
-
-```http
-Authorization: Bearer <jwt_token>
-```
-
-#### Response
-
-**Success (200 OK)**:
-
-```json
-{
-  "success": true,
-  "data": {
-    "id": "507f1f77bcf86cd799439011",
-    "vendorId": "507f191e810c19729de860ea",
-    "name": "TechSolutions Store",
-    "slug": "techsolutions",
-    "logo": {
-      "id": "507f1f77bcf86cd799439030",
-      "key": "images/2026/07/logo-techsolutions.png",
-      "url": "https://cdn.example.com/logos/techsolutions.png",
-      "mimeType": "image/png",
-      "size": 24576,
-      "originalName": "logo.png"
-    },
-    "banner": {
-      "id": "507f1f77bcf86cd799439031",
-      "key": "images/2026/07/banner-techsolutions.jpg",
-      "url": "https://cdn.example.com/banners/techsolutions.jpg",
-      "mimeType": "image/jpeg",
-      "size": 184320,
-      "originalName": "banner.jpg"
-    },
-    "description": "Your one-stop shop for premium tech solutions and gadgets",
-    "country": "CM",
-    "supportEmail": "support@techsolutions.com",
-    "supportPhone": "+237612345678",
-    "supportWhatsapp": "+237612345678",
-    "isOpen": true,
-    "publicUrl": "https://yourdomain.com/shop/stores/techsolutions",
-    "version": 5,
-    "createdAt": "2024-01-15T10:30:00.000Z",
-    "updatedAt": "2024-01-28T14:22:00.000Z"
-  }
-}
-```
-
-**Field Descriptions**:
-- `slug`: URL-safe store identifier (READ-ONLY, immutable in vendor API)
-- `country`: ISO country code (READ-ONLY) — **sourced from the vendor profile**, not stored on the store. `null` until onboarding Step 1 sets it.
-- `isOpen`: Vacation mode status (true = open, false = on vacation)
-- `publicUrl`: Computed from slug, not editable directly
-- `version`: Optimistic locking counter
-
-**Auto-provisioning**: if the vendor has no store row yet (accounts created before
-store provisioning existed), this endpoint creates it on the fly — name derived
-from the business name given at signup (else the vendor's display name), slug auto-generated and unique.
-
-#### Error Responses
-
-**Unauthorized (401)**:
-
-```json
-{
-  "error": "Unauthorized: Missing token"
-}
-```
-
-**Forbidden (403)**:
-
-```json
-{
-  "error": "Forbidden: Insufficient permissions"
-}
-```
-
-**Not Found (404)**:
-
-> [!WARNING]
-> Should not occur in practice: the store is **auto-created on first access**
-> (get-or-create) and provisioned during onboarding Step 1. A 404 here means the
-> vendor profile itself is missing — a system bug.
-
----
-
-### PATCH /api/vendor/store
-
-Update the authenticated vendor's store profile.
-
-#### Authentication
-
-- **Required**: Yes
-- **Role**: `vendor`
-
-#### Headers
-
-```http
-Authorization: Bearer <jwt_token>
-Content-Type: application/json
-```
-
-#### Request Body
-
-```json
-{
-  "name": "TechSolutions Premium",
-  "logoFileId": "507f1f77bcf86cd799439030",
-  "bannerFileId": "507f1f77bcf86cd799439031",
-  "description": "Updated description with new offerings",
-  "supportEmail": "hello@techsolutions.com",
-  "supportPhone": "+237698765432",
-  "supportWhatsapp": "+237698765432",
-  "version": 5
-}
-```
-
-**Fields** (all optional except `version`):
-
-- `name` (string, 2-100 chars): Store display name — **not clearable** (required field)
-- `logoFileId` (string, MongoDB ObjectId, *clearable*): Id of a logo file previously uploaded via `POST /api/files/upload`. The response returns the resolved `logo` file object (`{ id, key, url, mimeType, size, originalName }` | null). Registers a `file_references` row so the file is not garbage-collected while set.
-- `bannerFileId` (string, MongoDB ObjectId, *clearable*): Id of a banner/hero file uploaded via `POST /api/files/upload`. The response returns the resolved `banner` file object (same shape as `logo`).
-- `description` (string, max 1000 chars, *clearable*): Store description
-- `supportEmail` (string, valid email, lowercased, *clearable*): Support contact email
-- `supportPhone` (string, **E.164** e.g. `+237612345678`, *clearable*): Support contact phone
-- `supportWhatsapp` (string, **E.164**, *clearable*): WhatsApp support number
-
-> Phone and email formats are platform-wide — see [Contact formats](../README.md#contact-formats-phone--email).
-- `version` (**required**, number): Current store version for optimistic locking
-
-> **No `address` / `city` / `country` here.** Physical store locations are the
-> vendor profile's `business_addresses` (with geocoded coordinates for maps);
-> the country is set once during onboarding and served read-only. See
-> [Vendor Profile](./profile.md#patch-apivendorprofile).
-
-**Clearing a field**: every field marked *clearable* accepts three states:
-
-| You send | Effect |
+| | |
 |---|---|
-| key omitted | field left unchanged |
-| `null` or `""` (or whitespace-only) | field **cleared** — stored and returned as `null` |
-| a value | must satisfy the field's constraint (URL, email, length…) |
+| **Env var** | `STORE_PUBLIC_URL_BASE` |
+| **Default when unset** | `https://yourdomain.com/shop/stores` |
+| **Path shape** | **`/shop/stores/{slug}`** |
+| Example | `https://yourdomain.com/shop/stores/techsolutions` |
 
-```json
-{ "version": 5, "logoFileId": null }
-```
-and
-```json
-{ "version": 5, "logoFileId": "" }
-```
-are equivalent: both remove the logo. A non-empty invalid value (e.g. `"logoFileId": "not-an-id"`) is still rejected with `VALIDATION_ERROR`.
+The backend's `api-doc/vendor/store.md` claims `/store/{slug}`. It is wrong, and the source says
+why: the storefront nests stores under `/shop`, and the base *used* to end in `/store` — "which is
+not a route the storefront serves — every `publicUrl` it produced 404'd."
 
-> [!IMPORTANT]
-> **Immutable Fields**: `slug` cannot be updated, and `country` is not stored on the store at all (it lives on the vendor profile, set-once). Attempts to send either are rejected.
+So **do not "fix" this repository's `/shop/stores` to match the backend document.** Filed as a
+correction to F-8: the finding was framed as "the frontend teaches the wrong URL"; source says the
+opposite.
 
-#### Response
+⚠ One stale artefact exists in the backend: a test script still asserts the old `/store` default. It
+is a leftover, not the contract.
 
-**Success (200 OK)**:
+---
 
-```json
+## 1 · Business identity lives here, not on the profile
+
+| Value | Document | Read on | Written by |
+|---|---|---|---|
+| **Business name** | `Store.name` | `GET /api/vendor/store` → `data.name` | `PATCH /api/vendor/store` `{ name }` |
+| **Business logo** | `Store.logo_file_id` | `data.logo` | `PATCH /api/vendor/store` `{ logoFileId }`, or onboarding step 3 |
+| **Business banner** | `Store.banner_file_id` | `data.banner` | `PATCH /api/vendor/store` `{ bannerFileId }`, or onboarding step 3 |
+| Personal display name | `Vendor.display_name` | `GET /api/vendor/profile` → `data.displayName` | `PATCH /api/vendor/profile` |
+| Personal avatar | `Vendor.avatar_file_id` | `data.avatar` | `PATCH /api/vendor/profile` |
+
+**The vendor profile schema carries no business-name, description, logo or banner field at all.**
+If a screen needs the business name, read the store — do not look for it on the profile.
+
+## 2 · What the store does **not** have
+
+Verified against the model, which has exactly these fields: `vendor_id`, `name`, `slug`,
+`logo_file_id`, `banner_file_id`, `description`, `support_email`, `support_phone`,
+`support_whatsapp`, `is_open`, `version`, timestamps.
+
+- ❌ **No address, no city.** Business addresses live on the vendor profile as
+  `business_addresses`.
+- ❌ **No language.** Localisation is `Vendor.timezone` + `Vendor.preferred_language`.
+- ⚠ **`country` IS returned on the store response — but it is a read-only mirror of the vendor's
+  country**, not a stored store field. Do not try to write it.
+
+## 3 · It is auto-provisioned, and reads create it
+
+The store row is created by a get-or-create helper, from whichever of these fires first:
+
+- the first completion of onboarding step 1 (best-effort, failure only logged), or
+- **the first request to any `/api/vendor/store` endpoint — including `GET`.**
+
+🔴 **`GET /api/vendor/store` is not side-effect-free.** A vendor with no store row gets one created
+by reading. That is safe, but it means you cannot use a 404 to detect "no store yet" — there is no
+such state.
+
+Initial name: the vendor's display name, else `"<something> Store"`, truncated to 100 characters.
+The slug is derived from the name and made globally unique with `-2`, `-3`… suffixes.
+
+---
+
+## 4 · `GET /api/vendor/store/`
+
+```jsonc
 {
   "success": true,
   "data": {
-    "id": "507f1f77bcf86cd799439011",
-    "vendorId": "507f191e810c19729de860ea",
-    "name": "TechSolutions Premium",
+    "id": "66b1…",
+    "vendorId": "66a0…",
+    "name": "TechSolutions",
     "slug": "techsolutions",
-    "logo": {
-      "id": "507f1f77bcf86cd799439030",
-      "key": "images/2026/07/new-logo.png",
-      "url": "https://cdn.example.com/logos/new-logo.png",
-      "mimeType": "image/png",
-      "size": 24576,
-      "originalName": "new-logo.png"
-    },
-    "banner": {
-      "id": "507f1f77bcf86cd799439031",
-      "key": "images/2026/07/new-banner.jpg",
-      "url": "https://cdn.example.com/banners/new-banner.jpg",
-      "mimeType": "image/jpeg",
-      "size": 184320,
-      "originalName": "new-banner.jpg"
-    },
-    "description": "Updated description with new offerings",
-    "country": "CM",
-    "supportEmail": "hello@techsolutions.com",
-    "supportPhone": "+237698765432",
-    "supportWhatsapp": "+237698765432",
+    "logo": FileDetail | null,
+    "banner": FileDetail | null,
+    "description": "…|null",
+    "country": "CM",                    // read-only mirror of the vendor's country
+    "supportEmail": "…|null",
+    "supportPhone": "+237…|null",
+    "supportWhatsapp": "+237…|null",
     "isOpen": true,
     "publicUrl": "https://yourdomain.com/shop/stores/techsolutions",
-    "version": 6,
-    "createdAt": "2024-01-15T10:30:00.000Z",
-    "updatedAt": "2024-01-29T09:15:00.000Z"
-  },
-  "message": "Store profile updated successfully"
-}
-```
-
-#### Error Responses
-
-**Validation Error (400)**:
-
-```json
-{
-  "success": false,
-  "error": {
-    "code": "VALIDATION_ERROR",
-    "message": "Request validation failed",
-    "details": [
-      {
-        "field": "name",
-        "message": "Name must be at least 2 characters"
-      },
-      {
-        "field": "logoFileId",
-        "message": "logoFileId must be a valid file id"
-      }
-    ]
+    "version": 4,
+    "createdAt": "…", "updatedAt": "…"
   }
 }
 ```
 
-**Slug Immutability (403)**:
-
-> [!IMPORTANT]
-> Slug is READ-ONLY in vendor API. Only admin can change slugs (future feature with URL redirects). This prevents SEO disasters and support nightmares.
-
-```json
-{
-  "success": false,
-  "error": {
-    "code": "FORBIDDEN",
-    "message": "Slug cannot be modified. Contact support if you need to change your store URL."
-  }
-}
-```
-
-**Country Not Stored Here (403)**:
-
-> [!IMPORTANT]
-> The store has no country field. The country lives on the vendor profile — set once during onboarding, immutable afterwards.
-
-```json
-{
-  "success": false,
-  "error": {
-    "code": "PROFILE_COUNTRY_IMMUTABLE",
-    "message": "Country is not stored on the store. It lives on your vendor profile and is set once during onboarding."
-  }
-}
-```
-
-**Optimistic Locking Conflict (409)**:
-
-> [!IMPORTANT]
-> This error occurs when the store was modified by another request between when you loaded it and when you tried to save it. The client should refresh the store profile and retry the update.
-
-```json
-{
-  "success": false,
-  "error": {
-    "code": "CONFLICT",
-    "message": "Store was modified by another request. Please refresh and try again."
-  }
-}
-```
+`logo` and `banner` are full `FileDetail` objects — **never URL strings**. Both are uploaded to a
+public storage tree, so `access` is `"public"` and `url` is a real string. See
+[files/private-files.md](../files/private-files.md).
 
 ---
 
-### PATCH /api/vendor/store/status
+## 5 · `PATCH /api/vendor/store/`
 
-Toggle store vacation mode (open/close store temporarily).
+### Body
 
-#### Authentication
+| Field | Type | Required | Clearable |
+|---|---|---|---|
+| `name` | string 2–100 | no | ❌ |
+| `logoFileId` | 24-hex file id | no | ✅ |
+| `bannerFileId` | 24-hex file id | no | ✅ |
+| `description` | string ≤ 1000 | no | ✅ |
+| `supportEmail` | RFC email | no | ✅ |
+| `supportPhone` | **strict E.164** | no | ✅ |
+| `supportWhatsapp` | **strict E.164** | no | ✅ |
+| **`version`** | integer ≥ 0 | 🔴 **YES** | — |
 
-- **Required**: Yes
-- **Role**: `vendor`
+**"Clearable" means `null`, `""` or `"   "` all clear the field.** An emptied form input is
+normalised to `null` server-side rather than rejected — so you can bind these directly to text
+inputs. `name` is **not** clearable: an empty name is a validation error.
 
-#### Headers
+**Phone fields are strict E.164** — `+` followed by 7–15 digits, no spaces or dashes. Normalise
+before sending.
 
-```http
-Authorization: Bearer <jwt_token>
-Content-Type: application/json
+`logoFileId` / `bannerFileId` are ids returned by `POST /api/files/upload`. The file is authorised
+against the calling vendor **before** the write, so an unauthorised id fails the whole request with
+nothing persisted.
+
+### 🔴 `version` is required, and the conflict code is misnamed
+
+Every store write needs the `version` you last read. On a mismatch you get **`409`** — but the code
+string is **`STORE_SLUG_TAKEN`**:
+
+```jsonc
+{ "success": false, "requestId": "…",
+  "error": { "code": "STORE_SLUG_TAKEN", "statusCode": 409, "category": "conflict",
+             "message": "Store was modified by another request. Please refresh and try again." } }
 ```
 
-#### Request Body
+The message is correct; the code is a backend bug that cannot be fixed without a wire change.
+**Branch on `statusCode === 409 && category === "conflict"`, not on the code string** — and
+certainly not on `"CONFLICT"`, which is what the backend's doc claims and which never appears.
 
-```json
-{
-  "isOpen": false,
-  "version": 6
-}
-```
+Same code, same situation, on `PATCH /store/status`.
 
-**Fields**:
+⚠ **Always re-read `version` from the response.** Never increment it locally.
 
-- `isOpen` (**required**, boolean):
-  - `true` = Open for business
-  - `false` = On vacation (store temporarily closed)
-- `version` (**required**, number): Current store version for optimistic locking
+### `slug` is immutable — and sending it is silently ignored
 
-#### Response
+There is an intended `403` refusal for `slug` and `country` in the backend, but **it is dead code**:
+the validator strips unknown keys before the check runs. So `{"slug": "new-slug", "version": 4}`
+returns **`200`** and quietly does nothing.
 
-**Success (200 OK)** - Store Opened:
-
-```json
-{
-  "success": true,
-  "data": {
-    "id": "507f1f77bcf86cd799439011",
-    "vendorId": "507f191e810c19729de860ea",
-    "name": "TechSolutions Premium",
-    "slug": "techsolutions",
-    "isOpen": true,
-    "publicUrl": "https://yourdomain.com/shop/stores/techsolutions",
-    "version": 7,
-    ...
-  },
-  "message": "Store opened successfully"
-}
-```
-
-**Success (200 OK)** - Vacation Mode Enabled:
-
-```json
-{
-  "success": true,
-  "data": {
-    "id": "507f1f77bcf86cd799439011",
-    "vendorId": "507f191e810c19729de860ea",
-    "name": "TechSolutions Premium",
-    "slug": "techsolutions",
-    "isOpen": false,
-    "publicUrl": "https://yourdomain.com/shop/stores/techsolutions",
-    "version": 7,
-    ...
-  },
-  "message": "Store closed (vacation mode enabled)"
-}
-```
-
-#### Error Responses
-
-**Validation Error (400)**:
-
-```json
-{
-  "success": false,
-  "error": {
-    "code": "VALIDATION_ERROR",
-    "message": "Request validation failed",
-    "details": [
-      {
-        "field": "isOpen",
-        "message": "isOpen must be a boolean"
-      }
-    ]
-  }
-}
-```
-
-**Optimistic Locking Conflict (409)**:
-
-```json
-{
-  "success": false,
-  "error": {
-    "code": "CONFLICT",
-    "message": "Store was modified by another request. Please refresh and try again."
-  }
-}
-```
-
-#### Notes
-
-**Vacation Mode Behavior**:
-- When `isOpen: false`, the store is marked as "on vacation"
-- Customers may see a notice on the storefront
-- New orders may be disabled (implementation-dependent)
-- Future implementation may add admin suspension (`is_suspended`), with effective state: `isOperational = isOpen && !isSuspended`
+**Do not send `slug`.** And do not build a UI around an error that never arrives — if a vendor needs
+their URL changed, that is a support request.
 
 ---
 
-## Optimistic Locking
+## 6 · `PATCH /api/vendor/store/status`
 
-All store updates use **optimistic locking** to prevent data loss from concurrent modifications.
+Body: `{ "isOpen": boolean, "version": number }` — **both required**.
 
-### How It Works
+This is vacation mode. `200` with the full store object and a message of either
+`"Store opened successfully"` or `"Store closed (vacation mode enabled)"`.
 
-1. Client fetches store: `GET /api/vendor/store` → receives `version: 5`
-2. Client modifies fields locally
-3. Client sends update: `PATCH /api/vendor/store` with `version: 5`
-4. Server checks if current version is still `5`
-   - **Match**: Update succeeds, version incremented to `6`
-   - **Mismatch**: Returns 409 Conflict error
-5. On conflict, client refreshes store and retries
-
-### Best Practices
-
-- Always include the `version` field in update requests
-- Handle 409 Conflict errors by refreshing data and prompting user to retry
-- Display clear message: "Store was updated elsewhere. Please refresh and try again."
+Same `409 STORE_SLUG_TAKEN` on a version mismatch.
 
 ---
 
-## Immutable Fields
+## 7 · The two version counters
 
-### Slug
+The **vendor** and the **store** have separate, independent `version` fields. Do not share one
+value between `PATCH /api/vendor/profile` and `PATCH /api/vendor/store`.
 
-**Status**: READ-ONLY in vendor API
-
-**Rationale**:
-- Changing slugs breaks SEO rankings
-- Breaks marketing campaigns, social shares, external links
-- Creates support nightmares
-
-**Future**: Admin-only slug changes with automatic URL redirects
-
-**Error if attempted**:
-```json
-{
-  "code": "FORBIDDEN",
-  "message": "Slug cannot be modified. Contact support if you need to change your store URL."
-}
-```
-
-### Country
-
-**Status**: NOT STORED ON THE STORE — read-only mirror of the vendor profile's country
-
-**Rationale**:
-- One canonical country per vendor (set once during onboarding Step 1, immutable after)
-- Locked for tax compliance and shipping calculation
-- Anchors the business-address policy: every geocoded business address must resolve inside it
-
-**Error if attempted here**:
-```json
-{
-  "code": "PROFILE_COUNTRY_IMMUTABLE",
-  "message": "Country is not stored on the store. It lives on your vendor profile and is set once during onboarding."
-}
-```
+⚠ And note that onboarding step 3 (`branding`) writes to **both documents** — the vendor half with
+your supplied version, the store half with a freshly-read one. A concurrent store edit makes the
+branding half a **silent no-op** while the vendor half succeeds. After a branding step, re-fetch the
+store rather than trusting that the logo landed.
 
 ---
 
-## Public URL
+## 8 · Where the backend's own doc is wrong
 
-The `publicUrl` field is **computed, not stored**:
-
-```typescript
-publicUrl = `${STORE_PUBLIC_URL_BASE}/${encodeURIComponent(slug)}`
-```
-
-**Configuration**:
-```env
-STORE_PUBLIC_URL_BASE=https://yourdomain.com/shop/stores
-```
-
-**Example**:
-- Slug: `techsolutions`
-- Public URL: `https://yourdomain.com/shop/stores/techsolutions`
-
-**Future enhancements**:
-- Custom domains (`https://store.techsolutions.com`)
-- Custom subdomains (`https://techsolutions.yourdomain.com`)
-
----
-
-## Domain Events & Audit Logging
-
-### Events Emitted
-
-**Store Profile Updated**:
-```javascript
-eventBus.publish('store.profile.updated', {
-  eventType: 'store.profile.updated',
-  aggregateId: storeId,
-  payload: {
-    vendorId,
-    storeId,
-    changes: {
-      name: { from: 'Old Name', to: 'New Name' },
-      description: { from: 'Old Desc', to: 'New Desc' }
-    }
-  },
-  occurredAt: new Date()
-});
-```
-
-**Store Status Changed**:
-```javascript
-eventBus.publish('store.status.changed', {
-  eventType: 'store.status.changed',
-  aggregateId: storeId,
-  payload: {
-    vendorId,
-    storeId,
-    isOpen: false,
-    reason: 'vacation_mode'
-  },
-  occurredAt: new Date()
-});
-```
-
-**Store Slug Changed** (Admin-only, future):
-```javascript
-eventBus.publish('store.slug.changed', {
-  eventType: 'store.slug.changed',
-  aggregateId: storeId,
-  payload: {
-    vendorId,
-    oldSlug: 'old-store',
-    newSlug: 'new-store',
-    redirectUrl: 'https://yourdomain.com/store/new-store'
-  },
-  occurredAt: new Date()
-});
-```
-
-### Audit Logs
-
-All store updates and status changes are logged for compliance:
-
-```javascript
-auditLogger.log({
-  actor: { userId: vendorId, role: 'vendor' },
-  action: 'STORE_PROFILE_UPDATED',
-  resource: { type: 'Store', id: storeId },
-  changes: { name: { from: 'Old', to: 'New' } },
-  timestamp: new Date()
-});
-```
-
----
-
-## Future Enhancements
-
-### Multiple Stores Per Vendor
-
-The system is designed for future multi-store support:
-
-- Remove `vendor_id` unique constraint
-- Add store selection UI
-- Filter by `vendorId` in queries
-- Introduce `is_primary: boolean` flag
-
-### Custom Domains
-
-```typescript
-{
-  custom_domain: "store.vendor.com",
-  dns_verified: true,
-  ssl_enabled: true
-}
-```
-
-### Store Themes
-
-```typescript
-{
-  theme_id: "minimal-dark",
-  primary_color: "#2a9d8f",
-  secondary_color: "#e76f51"
-}
-```
-
-### SEO Settings
-
-```typescript
-{
-  meta_title: "Premium Tech Solutions | TechSol",
-  meta_description: "Shop the latest gadgets...",
-  og_image: "https://cdn.example.com/og/store.jpg"
-}
-```
-
-### Admin Suspension
-
-```typescript
-{
-  is_open: true,        // Vendor-controlled
-  is_suspended: false,  // Admin-controlled
-  // Effective state: isOperational = is_open && !is_suspended
-}
-```
-
----
-
-## Error Codes Reference
-
-| Code | HTTP Status | Description |
-|------|-------------|-------------|
-| `VALIDATION_ERROR` | 400 | Request body failed validation |
-| `UNAUTHORIZED` | 401 | Missing or invalid JWT token |
-| `FORBIDDEN` | 403 | Business rule violation (immutable field modification) |
-| `NOT_FOUND` | 404 | Store not found (system bug) |
-| `CONFLICT` | 409 | Optimistic locking version mismatch |
-| `INTERNAL_ERROR` | 500 | Unexpected server error |
-
----
-
-## Security Best Practices
-
-1. **Always use HTTPS** in production
-2. **Store JWT tokens securely** (httpOnly cookies or secure storage)
-3. **Never expose storeId** in vendor-facing routes (vendor-ID-only access)
-4. **Implement rate limiting** on update endpoints
-5. **Monitor for suspicious patterns** (rapid updates, abuse)
-6. **Validate file uploads** for logo/banner (prevent malicious content)
-7. **Sanitize HTML** in description field (prevent XSS)
-
----
-
-## Example Workflows
-
-### Update Store Name and Description
-
-```bash
-# 1. Get current store
-curl -X GET https://api.example.com/api/vendor/store \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN"
-
-# Response: { "data": { "version": 5, ... } }
-
-# 2. Update store
-curl -X PATCH https://api.example.com/api/vendor/store \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "My Awesome Store",
-    "description": "We sell amazing products",
-    "version": 5
-  }'
-```
-
-### Enable Vacation Mode
-
-```bash
-curl -X PATCH https://api.example.com/api/vendor/store/status \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "isOpen": false,
-    "version": 6
-  }'
-```
-
-### Re-open Store After Vacation
-
-```bash
-curl -X PATCH https://api.example.com/api/vendor/store/status \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "isOpen": true,
-    "version": 7
-  }'
-```
-
----
-
-## Architectural Notes
-
-### Vendor-ID-Only Access
-
-Vendors **never** operate by storeId. Identity flow:
-
-```
-JWT Token → User → Vendor → Store
-```
-
-Repository methods:
-- `findByVendorId(vendorId)` ← Vendor-facing
-- `findById(storeId)` ← Internal/Admin-only
-
-This enforces strong tenant isolation.
-
-### One Store Per Vendor
-
-**Current architecture**: `vendor_id` unique constraint.
-
-**Future**: Multi-store support by removing unique constraint and adding store management UI.
-
-### Provisioning (get-or-create)
-
-Every vendor must have a store. It is created by `StoreProvisioningService` from
-two paths: a best-effort hook when onboarding Step 1 completes, and get-or-create
-on first access to any `/api/vendor/store` endpoint (which also heals accounts
-that predate provisioning). Creation is race-safe via the unique `vendor_id`
-index. A 404 can therefore only mean the **vendor profile** is missing — a
-system bug.
+| The doc says | Source says |
+|---|---|
+| `publicUrl` is `https://yourdomain.com/store/{slug}` | it is **`/shop/stores/{slug}`** — this repo's copy was correct |
+| sending `slug` or `country` is rejected with `403` | both are **silently stripped**; the request returns `200` |
+| a version conflict returns `"code": "CONFLICT"` | it returns **`"STORE_SLUG_TAKEN"`** |
+| 401/403 bodies look like `{ "error": "Unauthorized: Missing token" }` | nothing ever emits that shape — every error uses the full envelope |
+| `FileDetail` is `{id,key,url,mimeType,size,originalName}` | `access` is a seventh field and `url` is `string \| null` |
+| validation `details` is an array of `{field, message}` | it is `{ fields: [{ path, message, code }] }` |
+| errors are `FORBIDDEN` / `UNAUTHORIZED` / `NOT_FOUND` / `CONFLICT` | none of those strings exists in the registry — the real codes are `AUTH_*` prefixed |

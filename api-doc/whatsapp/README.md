@@ -1,147 +1,113 @@
-# WhatsApp API
+# WhatsApp — the bot bridge
 
-These are the core endpoints implemented in the WhatsApp module. The router is mounted at
-**`/api/webhooks/whatsapp`** (`src/api/index.ts`) — the module lives in
-`src/modules/whatsapp/`, but there is no `/api/whatsapp` prefix.
+**Verified against backend source on 2026-08-24.**
 
-| Endpoint | Auth |
+> ## 🔴 Nothing on this page is a frontend endpoint.
+>
+> **Account linking is at [`../connections/README.md`](../connections/README.md)** —
+> `/api/me/connections`, one mechanism for WhatsApp and Telegram alike.
+>
+> `GET /api/webhooks/whatsapp/link/status` and `DELETE /api/webhooks/whatsapp/link` are
+> **deleted**, and this repository's
+> [`src/services/notification-channels.service.ts`](../MIGRATION-2026-08.md#1--seven-dead-calls)
+> still calls both. They return 404 today.
+
+---
+
+## 0 · What is left
+
+**One route.** Verified in `src/modules/whatsapp/whatsapp.routes.ts:23` — the only
+`router.post` in the file.
+
+| Method | Path | Auth | Caller |
+|---|---|---|---|
+| `POST` | `/api/webhooks/whatsapp/` | `X-Webhook-Secret` | the automation layer (n8n) — **never a browser** |
+
+The two authenticated link routes that used to share this prefix moved to
+`/api/me/connections`; `whatsapp.routes.ts:9-11` records the move.
+
+### Why a vendor dashboard should know it exists at all
+
+Because it is the **other half of the connection flow you do build a UI for.** When a vendor
+follows your "send `/connect` to our WhatsApp bot" instruction, this is the endpoint that mints
+the 6-character code they bring back to your input box. If connections stop working
+platform-wide, this is the pipe — not your code.
+
+---
+
+## 1 · The shape, for context only
+
+Receives messages sent to the Jovi Mall WhatsApp business number, relayed by n8n. It records
+the inbound message against the 24-hour service window, then dispatches any `/`-command
+through the internal CommandBus.
+
+```jsonc
+// what n8n POSTs — NOT a shape you produce
+{
+  "reply_to": "1234567890",
+  "wa_phone_id": "1234567890",
+  "user_id": "optional, if the bridge already resolved one",
+  "is_command": true,
+  "command": "connect",
+  "payload": { }
+}
+```
+
+`reply_to` and `wa_phone_id` are the WhatsApp-assigned sender identifiers Meta puts on an
+inbound webhook — digits with no leading `+`. They are **deliberately exempt** from the
+platform's E.164 rule (`core/validation/phone`): they are not contact fields anybody typed, and
+holding them to E.164 would reject every real webhook.
+
+It answers the automation layer, not a frontend, so it is one of the deliberate exceptions to
+the `{ success, data }` envelope — the body is sent verbatim, plus whatever the dispatched
+command returned.
+
+---
+
+## 2 · `X-Webhook-Secret`, and the one thing it can break for you
+
+Source: `src/api/middlewares/bot-webhook.middleware.ts`.
+
+When `BOT_WEBHOOK_SECRET` is configured, every request to this endpoint must carry it as an
+`X-Webhook-Secret` header; mismatch or absence → **`401 WEBHOOK_SECRET_INVALID`**. The compare
+is constant-time.
+
+**Unset behaves differently by environment, deliberately** (`bot-webhook.middleware.ts:64-83`):
+
+| `NODE_ENV` | `BOT_WEBHOOK_SECRET` unset |
 |---|---|
-| `POST /api/webhooks/whatsapp/` | none (public webhook) |
-| `GET /api/webhooks/whatsapp/link/status` | required |
-| `DELETE /api/webhooks/whatsapp/link` | required |
+| `production` | the webhook **refuses every request** — `/connect` does not work |
+| anything else | the webhook stays **open**, with a warning at boot |
 
-Because it lives under `/api/webhooks`, the whole prefix — including the two authenticated link
-routes — is **exempt from rate limiting** ([rate-limits.md](../rate-limits.md)) and stays
-reachable during a maintenance window unless the operator set `blockWebhooks` on that window.
+The guard became load-bearing when `/connect` arrived, because the endpoint now *mints* a
+credential for whatever identity the request names. Left open, anyone who can reach the host
+can mint a connection code against a stranger's number, read it out of the response, and bind
+that number to their own account. Not a platform-account takeover — but it redirects the real
+owner's notifications and, because `(channel, external_id)` is unique, **locks them out of ever
+connecting**.
 
-## 1. Webhook (Inbound Messages)
-
-This endpoint receives inbound messages sent to the Jovi Mall WhatsApp business number. It is intended to be called by an automation layer (like n8n) rather than directly by frontend applications.
-
-- **Endpoint:** `POST /api/webhooks/whatsapp/`
-- **Authentication:** None (Public)
-- **Role Requirements:** None
-- **Content-Type:** `application/json`
-
-### Request Body
-
-```json
-{
-  "reply_to": "1234567890", // The WhatsApp Phone ID of the user sending the message
-  "wa_phone_id": "1234567890", // (Optional) Additional Phone ID
-  "user_id": "abc123xyz...", // (Optional) Known user_id if already resolved by n8n
-  "is_command": true, // Set to true if a /command was detected
-  "command": "link", // The detected command name (without the slash)
-  "payload": {
-    "code": "A1B2C3D4",
-    // Handlers may require injected payload structures, for example:
-    "wa_data": { 
-      "wa_phone_id": "1234567890", 
-      "name": "John Doe" 
-    }
-  } // (Optional) Command payload
-}
-```
-
-### Response `200`
-A dynamic result object returned by the internal CommandBus (or a generic success if no command was present).
-
-> ⚠ This endpoint answers the automation layer, not a frontend, so it is one of the deliberate
-> exceptions to the `{ success, data }` envelope — the body below is sent verbatim.
-
-```json
-{
-  "message": "Inbound recorded",
-  // additional keys returned by the specific command handler
-}
-```
+> ### 🟡 What this means for your UI
+>
+> If a vendor reports "I sent `/connect` and the bot never replied", the first question is
+> whether `BOT_WEBHOOK_SECRET` matches on both sides — not whether your code is wrong.
+> **Your dashboard receives no signal either way.** The platform is entirely passive between
+> "we told them to message the bot" and "they typed a code into your input box"; see
+> [`../connections/README.md` § 1](../connections/README.md). Surface the failure as
+> *"we haven't seen a code yet"* with a retry, never as a spinner.
 
 ---
 
-## 2. Get Link Status
+## 3 · Where the backend's own doc is wrong
 
-Retrieves the current WhatsApp linking status for the authenticated user and their currently selected role.
-
-- **Endpoint:** `GET /api/webhooks/whatsapp/link/status`
-- **Authentication:** Required (cookie or Bearer token)
-- **Role Requirements:** Any (`vendor`, `customer`, `agency`, `agent`)
-- **Content-Type:** `application/json`
-
-### Response `200` (Linked)
-
-```json
-{
-  "success": true,
-  "data": {
-    "linked": true,
-    "wa_phone_id": "1234567890",
-    "name": "John Doe",
-    "bound_at": "2024-03-01T12:00:00.000Z"
-  }
-}
-```
-
-### Response `200` (Not Linked)
-
-```json
-{
-  "success": true,
-  "data": { "linked": false }
-}
-```
+Nothing found. `jovi-mall/api-doc/whatsapp/README.md` matches source, including the environment
+split and the E.164 exemption. (Its sibling `telegram/README.md` does **not** — see
+[`../telegram/README.md` § 2](../telegram/README.md).)
 
 ---
 
-## 3. Unlink Account
+## 4 · Related
 
-Unlinks the WhatsApp account from the authenticated user for their currently selected role. This acts on a _per-role_ basis, stopping only that specific role from utilizing the WhatsApp integration.
-
-- **Endpoint:** `DELETE /api/webhooks/whatsapp/link`
-- **Authentication:** Required (cookie or Bearer token)
-- **Role Requirements:** Any string matched to a supported role
-- **Content-Type:** `application/json`
-
-### Response `200`
-
-```json
-{
-  "success": true,
-  "data": null,
-  "message": "WhatsApp account unlinked"
-}
-```
-
-### Error Responses
-
-**`404 Not Found`** - Account is not currently linked.
-
-```json
-{
-  "success": false,
-  "requestId": "req-1234abc",
-  "error": {
-    "code": "WHATSAPP_NOT_LINKED",
-    "message": "No WhatsApp account linked",
-    "statusCode": 404,
-    "category": "not_found"
-  }
-}
-```
-
-**`400 Bad Request`** - The active role does not support WhatsApp linking (e.g., `admin`).
-
-```json
-{
-  "success": false,
-  "requestId": "req-1234abc",
-  "error": {
-    "code": "WHATSAPP_ROLE_NOT_SUPPORTED",
-    "message": "This role does not support WhatsApp linking",
-    "statusCode": 400,
-    "category": "validation",
-    "details": {
-      "role": "admin"
-    }
-  }
-}
-```
+- [`../connections/README.md`](../connections/README.md) — **the page you actually want**
+- [`../telegram/README.md`](../telegram/README.md) — the sibling bot bridge
+- [`../notifications/whatsapp-templates.md`](../notifications/whatsapp-templates.md) — the 24-hour service window and the template catalogue
+- [`../vendor/notifications.md`](../vendor/notifications.md) — per-vendor notification preferences

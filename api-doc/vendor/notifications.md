@@ -1,519 +1,282 @@
-# Vendor Notifications
+# Notifications, preferences and push devices
 
-## Base Path
+**Verified against backend source on 2026-08-24.**
 
-```
-/api/vendor
-```
+**Routes: 7** · `/api/vendor/notifications` (3) · `/api/vendor/notification-preferences` (2) ·
+`/api/vendor/devices` (2)
 
-## Authentication
-
-**Authorization**: Vendor access required. All requests must include a valid Bearer token with the vendor role:
-
-```
-Authorization: Bearer <access_token>
-```
+🔴 **Channel *linking* is not on this page.** The endpoints here only *enable* an already-linked
+channel. Linking WhatsApp and Telegram moved to [connections/README.md](../connections/README.md),
+and the old per-channel endpoints this dashboard still calls are **dead** — see
+[MIGRATION-2026-08.md](../MIGRATION-2026-08.md).
 
 ---
 
-## Notification Settings (build the settings UI from this)
+## 0 · Three traps, all of which look like backend bugs and are not fixed
 
-A vendor's notification settings — the values the backend reads when deciding **whether**, **where**, and **in what language** to notify a vendor — are made up of three parts:
+### 🔴 1. `GET /api/vendor/notifications` returns **unread only** by default
 
-1. **Event subscriptions** (`preferences.*`) — per-event on/off. Read/written via the **notification-preferences** endpoints below.
-2. **Delivery channel** (`*Enabled` + `*Verified`) — which secondary channel receives messages. Read/written via the **notification-preferences** endpoints below.
-3. **Language** (`preferred_language`) — the language every notification is rendered in. Lives on the **vendor profile** (see [Notification language](#notification-language)).
+The `isRead` query parameter is transformed with `v => v === 'true'`, which runs on `undefined` too
+and yields **`false`**. The repository then treats that as an active filter.
 
-### How delivery is decided (so the UI matches backend behaviour)
+| Request | Returns |
+|---|---|
+| `GET /notifications` | **unread only** |
+| `GET /notifications?isRead=false` | unread only |
+| `GET /notifications?isRead=true` | read only |
+| *(anything)* | **there is no way to fetch both in one call** |
 
-- **In-app is always on** and cannot be disabled. Every notification is stored and returned by `GET /notifications` regardless of channel settings.
-- **At most ONE secondary channel** is active at a time (email **or** telegram **or** whatsapp). Enabling one **auto-disables** the others.
-- A secondary channel only delivers if it is **both enabled AND verified**. The platform picks the first available secondary channel in priority order **telegram → email → whatsapp**.
-- An event only notifies if its toggle in `preferences` is `true`.
-- The message is rendered in the vendor's `preferred_language`.
+`meta.total` counts the filtered set. To render a combined inbox you must make two calls and merge.
 
-> UI implication: present the three channels as a **single choice** (radio group: In-app only / Telegram / Email / WhatsApp), and **disable a channel option until it is verified** (`*Verified: true`). Attempting to enable an unverified channel is rejected by the API (see below).
+### 🔴 2. You cannot disable one secondary channel
+
+`PATCH /notification-preferences` resolves the three secondary channels through a
+priority chain, and a lone `false` **matches no branch and writes nothing**:
+
+```jsonc
+{ "telegramEnabled": false }              // ❌ silently does nothing — 200, telegram stays on
+{ "telegramEnabled": false, "emailEnabled": false, "whatsappEnabled": false }   // ✅ all off
+{ "emailEnabled": true }                  // ✅ email on, telegram AND whatsapp forced off
+```
+
+**Enabling one always disables the other two.** The priority is **telegram > email > whatsapp**.
+So there is exactly one secondary channel active at a time, and the only way to reach "none" is to
+send all three as `false`.
+
+Build the UI as a **radio group with a "none" option**, not three switches. Three switches cannot
+express what this endpoint accepts.
+
+### 🔴 3. `planUpdates` is read-only over HTTP
+
+It is returned by `GET`, honoured at send time, and **absent from the update schema**. Sending it
+is silently stripped — you get a `200` and nothing changes. Render it as a disabled row, or omit it.
 
 ---
 
-## Endpoints
+## 1 · `GET /api/vendor/notifications`
 
-### GET /api/vendor/notification-preferences
+Query: `isRead` (see above), `page` (1), `limit` (20, **max 50**).
 
-**Description**: Retrieve the vendor's notification settings: channel enablement, live verification status, and per-event subscriptions.
+**There is no `type` filter, no date filter and no sort control.** Always newest first.
 
-**Success Response** — `200 OK`:
-```json
+```jsonc
+{
+  "success": true,
+  "data": [{
+    "id": "66b1…",
+    "type": "order.created",
+    "title": "New order JVM-4821",
+    "message": "…",
+    "aggregateType": "order",
+    "aggregateId": "66c2…",
+    "action": { "label": "View order", "path": "/dashboard/orders/66c2…", "url": "https://…" } | null,
+    "isRead": false,
+    "deliveredVia": ["in-app", "push"],
+    "createdAt": "…"
+  }],
+  "unreadCount": 5,
+  "meta": { "total": 5, "page": 1, "limit": 20, "pages": 1 }
+}
+```
+
+⚠ **`unreadCount` is a top-level sibling of `data`, not inside `meta`.** It is an independent
+unfiltered count, so it is correct regardless of `isRead`, `page` or `limit` — use it for the badge.
+
+`action.url` appears only when the backend has an app URL configured; the whole `action` is `null`
+when the notification has none. Prefer `action.path` for in-app routing.
+
+### The 23 notification types
+
+```
+order.created · order.cancelled
+booking.created · booking.cancelled
+payment.received.partial · payment.received.full
+storage.alert
+connection.request_received · connection.approved · connection.rejected · connection.reapproval_needed
+payout.requested · payout.paid · payout.rejected
+shipment.rejected
+plan.expiring · plan.expired
+storage.stock_request.received · storage.stock_request.approved · storage.stock_request.rejected
+storage.depot_changed · storage.product_suspended · storage.product_unsuspended
+```
+
+`aggregateType` is one of: `order` · `booking` · `payment` · `storage` · `connection` · `payout` ·
+`plan` · `stock_request` · `product`. Pair it with `aggregateId` to deep-link.
+
+`deliveredVia` values: `in-app` · `email` · `telegram` · `whatsapp` · `push`. **`in-app` is always
+present** — it is force-prepended.
+
+---
+
+## 2 · `PATCH /api/vendor/notifications/:id/read`
+
+`:id` must be 24-hex or you get `400 VALIDATION_ERROR`.
+
+Returns the notification with an **extra `readAt` field** the list does not have.
+
+⚠ **Not idempotent in `readAt`** — calling it on an already-read notification resets `readAt` to
+now. Do not call it on scroll-into-view for items already marked read.
+
+`404 VENDOR_NOTIFICATION_NOT_FOUND` covers both "no such id" and "not yours".
+
+## 3 · `POST /api/vendor/notifications/read-all`
+
+No body. Returns `{ "success": true, "data": { "count": 12 }, "message": "…" }`.
+
+`count` is the number of rows that **were** unread — `0` when there was nothing to do.
+
+**There is no delete route.** Notifications are immutable apart from `isRead`/`readAt`.
+
+---
+
+## 4 · `GET /api/vendor/notification-preferences`
+
+```jsonc
 {
   "success": true,
   "data": {
-    "inAppEnabled": true,
+    "inAppEnabled": true,          // always true — not writable
     "emailEnabled": false,
-    "telegramEnabled": true,
+    "telegramEnabled": false,
     "whatsappEnabled": false,
     "emailVerified": true,
-    "telegramVerified": true,
+    "telegramVerified": false,
     "whatsappVerified": false,
     "preferences": {
-      "orderCreated": true,
-      "orderCancelled": true,
-      "bookingCreated": true,
-      "bookingCancelled": true,
-      "paymentReceivedPartial": true,
-      "paymentReceivedFull": true,
+      "orderCreated": true, "orderCancelled": true,
+      "bookingCreated": true, "bookingCancelled": true,
+      "paymentReceivedPartial": true, "paymentReceivedFull": true,
       "storageAlert": true,
       "connectionUpdated": true,
       "payoutUpdates": true,
       "shipmentRejected": true,
-      "planUpdates": true
+      "planUpdates": true,              // 🔴 read-only — see § 0.3
+      "agencyStorageUpdates": true
     }
   }
 }
 ```
 
-**Field reference**:
+**Twelve stored keys, eleven writable.** The backend's own doc lists eleven and omits
+`agencyStorageUpdates` — it is real and it is returned.
 
-| Field | Type | Writable | Meaning |
-|---|---|---|---|
-| `inAppEnabled` | boolean | No (always `true`) | In-app notifications; cannot be turned off |
-| `emailEnabled` | boolean | Yes | Email is the active secondary channel |
-| `telegramEnabled` | boolean | Yes | Telegram is the active secondary channel |
-| `whatsappEnabled` | boolean | Yes | WhatsApp is the active secondary channel |
-| `emailVerified` | boolean | **No (read-only, live)** | Vendor's email is verified |
-| `telegramVerified` | boolean | **No (read-only, live)** | Vendor has an active Telegram link |
-| `whatsappVerified` | boolean | **No (read-only, live)** | Vendor has a verified WhatsApp number |
-| `preferences.*` | boolean | Yes | Per-event subscription (see [Events](#events)) |
+`inAppEnabled` is forced to `true` on every save. It is not a toggle; do not render one.
 
-The `*Verified` flags are **computed live** from the vendor's account (email verification, Telegram link, WhatsApp link) — they are not stored toggles and are ignored on write. Use them to enable/disable channel options in the UI.
+### What `*Verified` actually means
+
+These are **recomputed live on every read**, overriding whatever is stored:
+
+| Field | True when |
+|---|---|
+| `emailVerified` | the vendor's email is verified |
+| `telegramVerified` | **a Telegram connection exists** |
+| `whatsappVerified` | **a WhatsApp connection exists** |
+
+Note the last two are *existence*, not "active" or "enabled". There is no per-channel enable/disable
+on the connection itself — that concept is gone. See
+[connections/README.md](../connections/README.md).
+
+They are resolved from the **user's** connections, not the vendor profile's — so linking Telegram
+once serves every role the person holds.
 
 ---
 
-### PATCH /api/vendor/notification-preferences
+## 5 · `PATCH /api/vendor/notification-preferences`
 
-**Description**: Update notification settings. All fields optional; send only what changes.
+Body — all optional, `{}` accepted:
 
-**Request Headers**: `Authorization: Bearer <token>`, `Content-Type: application/json`
-
-**Request Body** (all optional):
-```json
+```jsonc
 {
-  "emailEnabled": false,
-  "telegramEnabled": true,
+  "emailEnabled": true,
+  "telegramEnabled": false,
   "whatsappEnabled": false,
-  "preferences": {
-    "orderCreated": true,
-    "orderCancelled": true,
-    "bookingCreated": false,
-    "bookingCancelled": false,
-    "paymentReceivedPartial": true,
-    "paymentReceivedFull": true,
-    "storageAlert": true,
-    "connectionUpdated": true,
-    "payoutUpdates": true,
-    "shipmentRejected": true,
-    "planUpdates": true
-  }
+  "preferences": { "orderCreated": false, "payoutUpdates": true /* …any of the 11 */ }
 }
 ```
 
-**Behaviour**:
-- Setting one of `emailEnabled` / `telegramEnabled` / `whatsappEnabled` to `true` **auto-disables the other two** (single secondary channel). To turn off all secondary channels, send the relevant flag(s) as `false`.
-- Enabling a channel that is **not verified** is **rejected** with `400 VENDOR_NOTIFICATION_CHANNEL_NOT_VERIFIED` — the vendor must verify/link that channel first.
-- `preferences` fields not included are left unchanged.
+Read [§ 0.2](#-2-you-cannot-disable-one-secondary-channel) before wiring this up.
 
-**Success Response** — `200 OK`: same shape as `GET`, plus `"message": "Preferences updated successfully"`.
+`inAppEnabled`, the three `*Verified` fields and `planUpdates` are silently stripped.
 
-**Error Responses**:
-- `400` – `VALIDATION_ERROR` – Invalid request body
-- `400` – `VENDOR_NOTIFICATION_CHANNEL_NOT_VERIFIED` – Tried to enable a channel that isn't verified. `details.channel` is `email` \| `telegram` \| `whatsapp`.
+### The one error
 
----
+**`400 VENDOR_NOTIFICATION_CHANNEL_NOT_VERIFIED`**, `details: { channel }` where `channel` is
+`email` \| `telegram` \| `whatsapp`.
 
-### GET /api/vendor/notifications
+Raised when you enable a channel that is not linked. **Gate the control on the matching
+`*Verified` flag** and route the vendor to the connections screen rather than letting them hit this.
 
-**Description**: List notifications (newest first), with optional filtering and pagination.
-
-**Query Parameters**:
-- `isRead` (string, optional) — `true` or `false`
-- `page` (integer, optional, default `1`)
-- `limit` (integer, optional, default `20`, max `50`)
-
-**Success Response** — `200 OK`:
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "id": "string",
-      "type": "order.created",
-      "title": "New order received",
-      "message": "You received a new order #ORD-12345 for XAF 25,000.",
-      "aggregateType": "order",
-      "aggregateId": "665f0c2a…",
-      "action": {
-        "label": "View order",
-        "path": "orders/665f0c2a…",
-        "url": "https://dashboard.example.com/orders/665f0c2a…"
-      },
-      "isRead": false,
-      "deliveredVia": ["in-app", "push", "telegram"],
-      "createdAt": "2026-06-26T23:54:00.000Z"
-    }
-  ],
-  "unreadCount": 5,
-  "meta": { "total": 50, "page": 1, "limit": 20, "pages": 3 }
-}
-```
-
-**The `action` object (notification click target).** Use it to make each notification clickable — e.g. clicking a "new order" notification opens that order's detail page. It is **localized** in the vendor's language and is the same action surfaced as a button on the secondary channels.
-
-| Field | Type | Meaning |
-|---|---|---|
-| `action.label` | string | Localized button text, e.g. `"View order"` |
-| `action.path` | string | **Relative** deep-link for your SPA router, e.g. `"orders/665f0c2a…"`. Prefer this for in-app navigation. |
-| `action.url` | string \| absent | **Absolute** deep-link. Present only when the backend has `VENDOR_APP_URL` configured. |
-
-`action` is `null` only for the rare case a notification type has no associated screen. `aggregateType` + `aggregateId` are also returned if you prefer to build routes yourself (see [Aggregate references](#aggregate-references-deeplinks)) — but `action.path` already encodes the correct destination for each type.
-
-**Error Responses**: `400` – `VALIDATION_ERROR` – Invalid query parameters.
+Only the `preferences` keys you send are considered; unsent ones keep their current value. But the
+key must be **present** — `preferences` absent means no per-event change at all.
 
 ---
 
-### PATCH /api/vendor/notifications/:id/read
+## 6 · Delivery channels — how a notification actually reaches the vendor
 
-**Description**: Mark a single notification as read. Idempotent.
+| Channel | Governed by |
+|---|---|
+| **in-app** | always, unconditionally. The persisted row is the source of truth |
+| **push (FCM)** | automatic, **governed by no preference key**. Fires whenever the user has ≥ 1 registered device |
+| **telegram / email / whatsapp** | **at most ONE per notification**, picked in the order telegram → email → whatsapp, each requiring *enabled AND verified* |
 
-**Path Parameters**: `id` (24-char hex ObjectId, required)
+🔴 **Push cannot be turned off from this surface.** The only lever is unregistering the device
+(§ 7). If a vendor asks "how do I stop the phone notifications", that is the answer — there is no
+preference for it.
 
-**Success Response** — `200 OK`:
-```json
-{
-  "success": true,
-  "data": {
-    "id": "string",
-    "type": "order.created",
-    "title": "New order received",
-    "message": "You received a new order #ORD-12345 for XAF 25,000.",
-    "aggregateType": "order",
-    "aggregateId": "string",
-    "action": { "label": "View order", "path": "orders/665f0c2a…", "url": "https://dashboard.example.com/orders/665f0c2a…" },
-    "deliveredVia": ["in-app", "telegram"],
-    "isRead": true,
-    "readAt": "2026-06-26T23:55:00.000Z",
-    "createdAt": "2026-06-26T23:54:00.000Z"
-  },
-  "message": "Notification marked as read"
-}
-```
-
-**Error Responses**:
-- `404` – `VENDOR_NOTIFICATION_NOT_FOUND` – Not found or not owned by the vendor
-- `400` – `VALIDATION_ERROR` – Invalid notification ID format
+The per-event `preferences` keys gate the **secondary** channel only; the in-app row is written
+regardless.
 
 ---
 
-### POST /api/vendor/notifications/read-all
+## 7 · Push devices
 
-**Description**: Mark all of the vendor's notifications as read (bulk).
+### `POST /api/vendor/devices`
 
-**Success Response** — `200 OK`:
-```json
-{
-  "success": true,
-  "data": { "count": 12 },
-  "message": "Marked 12 notification(s) as read"
-}
+```jsonc
+{ "token": "<FCM token>", "platform": "web" | "android" | "ios", "userAgent": "…" }
 ```
+
+Returns **`200`** (not 201): `{ "success": true, "data": { "id", "platform", "lastUsedAt" }, "message": "…" }`.
+The token is not echoed back.
+
+**Idempotent** — keyed on the token itself, so re-registering never duplicates.
+
+⚠ **`platform` is not cosmetic.** It selects which credential the backend signs the send with — a
+device registered as `web` will not receive a native push. Pass the runtime's own answer, never a
+literal.
+
+⚠ Registering a token that currently belongs to another user **silently reassigns it**. Not a
+concern in normal use (the token is a device secret) but worth knowing when testing with shared
+devices.
+
+### `DELETE /api/vendor/devices`
+
+🔴 **Takes a JSON body, not a query parameter:**
+
+```http
+DELETE /api/vendor/devices
+Content-Type: application/json
+
+{ "token": "<FCM token>" }
+```
+
+Many HTTP clients need explicit configuration to send a body on `DELETE`. If yours strips it you
+will get `400 VALIDATION_ERROR` and it will look like the token was wrong.
+
+Returns `200` with `message` only, no `data`. Idempotent — an unknown token still returns `200`.
+
+Both routes are scoped to the **user**, not the vendor, so one registration covers every role the
+person holds.
 
 ---
 
-### POST /api/vendor/devices
-
-**Description**: Register (or refresh) the current browser/device's FCM token so it receives push notifications. Call this after the user grants notification permission and you obtain an FCM token. Calling it again with the same token is safe (idempotent upsert) — do so whenever the token is refreshed.
-
-**Request Headers**: `Authorization: Bearer <token>`, `Content-Type: application/json`
-
-**Request Body**:
-```json
-{
-  "token": "fcm-registration-token-from-getToken()",
-  "platform": "web",
-  "userAgent": "Mozilla/5.0 ... (optional)"
-}
-```
-
-| Field | Type | Required | Notes |
-|---|---|---|---|
-| `token` | string | Yes | The FCM registration token from the Firebase Web SDK `getToken()` |
-| `platform` | string | Yes | One of `web` \| `android` \| `ios`. Use `web` for the dashboard. |
-| `userAgent` | string | No | Optional free-text, for your own device-management UX |
-
-**Success Response** — `200 OK`:
-```json
-{
-  "success": true,
-  "data": { "id": "string", "platform": "web", "lastUsedAt": "2026-06-27T10:00:00.000Z" },
-  "message": "Device registered for push notifications"
-}
-```
-
-**Error Responses**: `400` – `VALIDATION_ERROR` – Invalid body (missing token / bad platform).
-
----
-
-### DELETE /api/vendor/devices
-
-**Description**: Unregister an FCM token so the device stops receiving push. **Call this on logout** (and before clearing the FCM token client-side). Idempotent — unknown tokens return success.
-
-**Request Headers**: `Authorization: Bearer <token>`, `Content-Type: application/json`
-
-**Request Body**:
-```json
-{ "token": "fcm-registration-token" }
-```
-
-**Success Response** — `200 OK`:
-```json
-{ "success": true, "message": "Device unregistered from push notifications" }
-```
-
-> Self-healing: the backend automatically removes tokens that FCM reports as expired/invalid during a send, so stale tokens are pruned even if the client never calls DELETE. You should still call DELETE on logout to stop pushing to a device the user signed out of.
-
----
-
-## Notification language
-
-Notifications are sent in the vendor's preferred language. This is **not** part of the notification-preferences payload — it lives on the vendor profile.
-
-- **Field**: `preferredLanguage` (read) / `preferred_language` (write)
-- **Allowed values**: `en`, `fr`, `pt`, `es`, `ar` (default `en`)
-- **Read**: `GET /api/vendor/profile` → `data.preferredLanguage`
-- **Write**: `PATCH /api/vendor/profile` → `{ "preferred_language": "fr" }`
-- Invalid values are rejected with `400 VALIDATION_ERROR`.
-
-The settings UI should include a language selector wired to the vendor profile endpoint.
-
----
-
-## Push notifications (FCM)
-
-Real-time notifications are delivered to the vendor dashboard via **Firebase Cloud Messaging (FCM) web push**. The moment a notification-worthy event occurs (new order, payment, etc.), the backend pushes it to every device the vendor has registered — no polling required. Push works even when the dashboard tab is in the background or closed (via a service worker).
-
-### Mental model (read this first)
-
-- **In-app is the source of truth.** Every notification is persisted and returned by `GET /notifications` **regardless of push outcome**.
-- **Push is a best-effort companion**, not a replacement. A push can fail to arrive (permission denied, device offline, no token yet, transient FCM error). Those notifications are **not lost** — they are still in `GET /notifications`.
-- Therefore the frontend needs **two paths**, and both are required:
-  1. **On load / on reconnect** → call `GET /notifications` to render history + unread badge (this is your fallback for any push that didn't arrive).
-  2. **While the app is open / in the background** → receive live pushes via FCM and prepend them to the list / bump the unread badge.
-
-### What the dashboard frontend dev must implement
-
-This is a **client-side Firebase Web SDK** integration. The backend only needs the FCM **token** (registered via `POST /api/vendor/devices`). Steps:
-
-**1. Get the FCM Web project config.** Ask the backend/dev-ops team for the **messaging** Firebase project's web config and the **VAPID public key** (Web Push certificate). Note this is a *separate* Firebase project from file storage — use the credentials given for messaging.
-
-```js
-// firebase config (from the messaging Firebase project → Project settings → General → Web app)
-const firebaseConfig = {
-  apiKey: "…",
-  authDomain: "<project>.firebaseapp.com",
-  projectId: "<messaging-project-id>",
-  messagingSenderId: "…",
-  appId: "…",
-};
-const VAPID_KEY = "<Web Push certificate key pair — public key>";
-```
-
-**2. Add a service worker** at the site root: `public/firebase-messaging-sw.js`. It must be served from the origin root (`/firebase-messaging-sw.js`) so FCM can use it for background messages.
-
-```js
-// firebase-messaging-sw.js
-importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js');
-importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js');
-
-firebase.initializeApp({ /* same firebaseConfig as above */ });
-const messaging = firebase.messaging();
-
-// Background messages (tab not focused / closed). Renders the OS notification.
-messaging.onBackgroundMessage(({ notification, data }) => {
-  self.registration.showNotification(notification.title, {
-    body: notification.body,
-    data, // contains type, aggregateType, aggregateId, url
-  });
-});
-
-// Deep-link when the user clicks the OS notification.
-self.addEventListener('notificationclick', (event) => {
-  event.notification.close();
-  const url = event.notification.data?.url || '/';
-  event.waitUntil(clients.openWindow(url));
-});
-```
-
-**3. Request permission + register the token** (after the vendor logs in):
-
-```js
-import { initializeApp } from 'firebase/app';
-import { getMessaging, getToken, onMessage } from 'firebase/messaging';
-
-const app = initializeApp(firebaseConfig);
-const messaging = getMessaging(app);
-
-async function enablePush() {
-  const permission = await Notification.requestPermission();
-  if (permission !== 'granted') return;
-
-  const token = await getToken(messaging, { vapidKey: VAPID_KEY });
-  if (!token) return;
-
-  // Send the token to the backend so this device starts receiving push.
-  await fetch('/api/vendor/devices', {
-    method: 'POST',
-    credentials: 'include', // cookie auth; or send Authorization: Bearer
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ token, platform: 'web', userAgent: navigator.userAgent }),
-  });
-}
-```
-
-**4. Handle foreground messages** (tab focused — `onBackgroundMessage` does *not* fire here, so render your own in-app toast and update the list/badge):
-
-```js
-onMessage(messaging, ({ notification, data }) => {
-  // e.g. show a toast and prepend to the in-app notification list
-  showToast(notification.title, notification.body);
-  prependNotification({
-    type: data.type,
-    aggregateType: data.aggregateType,
-    aggregateId: data.aggregateId,
-    title: notification.title,
-    message: notification.body,
-  });
-  incrementUnreadBadge();
-});
-```
-
-**5. On logout**, unregister so the signed-out device stops receiving push:
-
-```js
-import { getToken, deleteToken } from 'firebase/messaging';
-const token = await getToken(messaging, { vapidKey: VAPID_KEY });
-await fetch('/api/vendor/devices', {
-  method: 'DELETE',
-  credentials: 'include',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ token }),
-});
-await deleteToken(messaging);
-```
-
-### Push message payload
-
-Every push carries a `notification` block (for display) and a `data` block (for routing/deep-linking). All `data` values are **strings**.
-
-| Block | Field | Example | Use |
-|---|---|---|---|
-| `notification` | `title` | `"New order received"` | Toast/OS title (already localized in the vendor's language) |
-| `notification` | `body` | `"You received a new order #ORD-12345 for XAF 25,000."` | Toast/OS body |
-| `data` | `type` | `"order.created"` | The notification `type` (see [Events](#events)) |
-| `data` | `aggregateType` | `"order"` | Entity kind for deep-linking |
-| `data` | `aggregateId` | `"665f…"` | Entity id for deep-linking |
-| `data` | `path` | `"orders/665f…"` | **Relative** deep-link for the SPA router — same value as `action.path` |
-| `data` | `url` | `"https://dashboard…/orders/665f…"` | Absolute deep-link (present when `VENDOR_APP_URL` is configured server-side) |
-
-> The push `data.path`/`data.url` mirror the in-app notification's `action`, so clicking an OS notification and clicking the in-app item navigate to the same place. In the service worker's `notificationclick` handler, prefer `data.url` (you need an absolute URL there); inside the app (foreground `onMessage` / in-app list) prefer `data.path` / `action.path` for client-side routing.
-
-The push title/body are the **same** localized copy as the corresponding in-app notification, so foreground toasts and the in-app list stay consistent.
-
-### Reconciliation pattern (so missed pushes always show)
-
-```
-on app load / tab regains focus / socket-or-network reconnect:
-  GET /api/vendor/notifications?page=1&limit=20   → render list + unreadCount
-
-while app open:
-  onMessage (foreground)        → toast + prepend + bump badge
-  onBackgroundMessage (SW)      → OS notification; on click, deep-link via data.url
-
-on click of an in-app item:     PATCH /notifications/:id/read
-```
-
-Because `GET /notifications` returns everything regardless of push success, a vendor who had no device registered, denied permission, or was offline still sees all their notifications on next load. **Do not** rely on push alone for correctness — always hydrate from `GET /notifications`.
-
-### Notes & gotchas
-
-- **No backend change is required to "serve missed pushes"** — `GET /notifications` already does this. Push is purely additive.
-- `getToken()` requires the service worker to be registered and `Notification.requestPermission()` to be granted; on insecure origins (non-HTTPS, except `localhost`) it will fail.
-- Re-`POST /api/vendor/devices` whenever the SDK rotates the token (listen for token refresh) — the backend upserts, so duplicates are not created.
-- If the vendor uses multiple browsers/devices, each registers its own token and all receive push.
-
----
-
-## Reference
-
-### Events
-
-The subscribable events (`preferences.*` key → notification `type`):
-
-| Preference key | Notification `type` | `aggregateType` | Fires when |
-|---|---|---|---|
-| `orderCreated` | `order.created` | `order` | A new order is received |
-| `orderCancelled` | `order.cancelled` | `order` | An order is cancelled |
-| `bookingCreated` | `booking.created` | `booking` | A new service booking is received |
-| `bookingCancelled` | `booking.cancelled` | `booking` | A service booking is cancelled |
-| `paymentReceivedPartial` | `payment.received.partial` | `payment` | A partial payment is received |
-| `paymentReceivedFull` | `payment.received.full` | `payment` | A full payment is received |
-| `storageAlert` | `storage.alert` | `storage` | Media storage crosses a threshold (80% / 90% / 100%). `aggregateId` is the vendor id. See [Storage](./storage.md). |
-| `connectionUpdated` | `connection.request_received`, `connection.approved`, `connection.rejected`, `connection.reapproval_needed` | `connection` | An agency connection request/approval/rejection/reapproval-needed happens where the **agency** was the actor. See [Agency connections](./agency-connections.md). The symmetric agency-side events (fired when the **vendor** is the actor) are documented in [Agency Notifications — Events](../agency/notifications.md#events). |
-| `payoutUpdates` | `payout.requested`, `payout.paid`, `payout.rejected` | `payout` | Your own payout request is created, paid, or rejected. `aggregateId` is the `PayoutRequest` id; `action.path` deep-links to `tickets/{ticketId}` — the request is tracked as a ticket, see [Earnings — Requesting a payout](./earnings.md#requesting-a-payout). |
-| `shipmentRejected` | `shipment.rejected` | `order` | A delivery agency declined a shipment; its items move to `pending_agency_reassignment` and you must route them to another agency. `aggregateId` is the order id; `action.path` deep-links to `orders/{orderId}`. The specific reason + note are shown on the order's per-item delivery detail (see [Orders](./orders.md)), not in the notification text. |
-| `planUpdates` | `plan.expiring`, `plan.expired` | `plan` | **Billing.** Your subscription plan is nearing expiry, or has expired (handed over to a queued plan, or downgraded to the free `starter` tier). `aggregateId` is the vendor id; `action.path` deep-links to `plans`. See [Billing](./billing.md). |
-| `agencyStorageUpdates` | `storage.stock_request.received`, `storage.stock_request.approved`, `storage.stock_request.rejected` | `stock_request` | A **stock adjustment** on a SKU an agency warehouses for you: the agency proposed a quantity (yours to answer), or answered one you proposed. `aggregateId` is the `StockAdjustmentRequest` id; `action.path` deep-links to `stock-requests/{requestId}`. See [Stock requests](./stock-requests.md). Nothing fires for `withdrawn`. |
-| `agencyStorageUpdates` | `storage.depot_changed`, `storage.product_suspended`, `storage.product_unsuspended` | `product` | Things your **storage agency did alone** to a product it warehouses: moved it to a different depot, or suspended / unsuspended it. There is nothing for you to approve — its warehouse layout and its rent are its own business — but a suspension takes the product **off the storefront**, and the agency's note is the only explanation you get. `aggregateId` is the product id; `action.path` deep-links to `products/{productId}`. See [Agency → Inventory](../agency/inventory.md). |
-
-> [!IMPORTANT]
-> **`storageAlert` and `agencyStorageUpdates` are unrelated despite sharing a word.** The
-> first is your **media-file quota** (product images). The second is **product
-> warehousing** — physical goods sitting in an agency's building. Label the two toggles
-> distinctly.
->
-> `storage.product_suspended` is the one to surface prominently: the product has stopped
-> selling, and nothing else on the platform will tell you why.
-
-### Delivery channels
-
-| Channel value (`deliveredVia`) | Configurable | Requires verification |
-|---|---|---|
-| `in-app` | No (always present) | No |
-| `push` | No (auto, when devices are registered) | No |
-| `telegram` | Yes | Yes (active Telegram link) |
-| `email` | Yes | Yes (verified email) |
-| `whatsapp` | Yes | Yes (verified WhatsApp number) |
-
-Priority when choosing the **secondary** channel: **telegram → email → whatsapp**. Only one secondary channel is ever used per notification, and it must be enabled **and** verified. On every channel the message includes a localized action button (e.g. "View order") deep-linking into the dashboard.
-
-`push` is **not** a secondary channel and does **not** compete with the single-secondary-channel rule. It is an always-on **companion** to `in-app`: whenever the vendor has one or more registered devices (see [Push notifications (FCM)](#push-notifications-fcm)), every in-app notification is also pushed to those devices. `deliveredVia` includes `"push"` only when at least one device was targeted.
-
-### Verifying a channel
-
-The `*Verified` flags reflect account state, set by the relevant linking/verification flow (email verification, Telegram account linking, WhatsApp number linking). The notification-preferences endpoints do **not** verify channels — direct the vendor to the corresponding flow, then re-read preferences to see the updated `*Verified` value.
-
-**Full linking flows and endpoints:** see [Linking Notification Channels](./notification-channels.md).
-
-### Aggregate references (deeplinks)
-
-Each notification carries `aggregateType` + `aggregateId` for frontend deeplinks: `order` / `booking` / `payment` → the respective entity; `storage` → the storage/usage screen with `aggregateId` = vendor id.
-
-### Other behaviour
-
-- Notification IDs are 24-char hex (MongoDB ObjectId); invalid formats return `VALIDATION_ERROR`.
-- Marking as read sets `isRead: true` and `readAt`; repeating it is idempotent.
-- `unreadCount` reflects only unread notifications; list `limit` max is `50`.
-- Notifications are immutable except for `isRead`. They cannot be deleted.
-
-### Error envelope
-
-```json
-{ "success": false, "error": { "code": "ERROR_CODE", "message": "Human-readable description" } }
-```
+## 8 · Where the backend's own doc is wrong
+
+| The doc says | Source says |
+|---|---|
+| `preferences` has 11 keys | it has **12** — `agencyStorageUpdates` is missing from the doc |
+| you can `PATCH` `planUpdates` | it is stripped — **read-only over HTTP** |
+| "to turn off a secondary channel, send that flag as `false`" | only **all three at once** works |
+| `isRead` is an optional filter | absent means **`false`** — the default call returns unread only |
+| errors are `{ code, message }` or `{ code, message, statusCode }` | every error carries `requestId` and `category` too |
+| `avatar` is `{id,key,url,mimeType,size,originalName}` | `access` is a seventh field and `url` is nullable |

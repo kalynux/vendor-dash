@@ -1,5 +1,20 @@
 # Ticket entity pickers — `reference/*`
 
+**Verified against backend source on 2026-08-24** —
+`src/modules/tickets/services/ticket-reference.service.ts`, and the live route dump.
+
+> **This is the UI companion to [`tickets.md`](./tickets.md).** That page is the endpoint
+> reference (14 vendor routes); this one is the record of *why* the two `reference/*`
+> endpoints carry the fields they do.
+>
+> 🔴 Before building any ticket screen, read [`tickets.md`](./tickets.md) on **F-14** and
+> **F-15**: five vendor ticket routes perform **no follower check**, and the administrator
+> `tier` **leaks to vendors** on every ticket response — against an explicit written
+> guarantee in the backend own doc. Both are documented around, not built on.
+>
+> ⚠ Ticket lists use **`pagination`, not `meta`** — `GET /api/vendor/tickets` and **both**
+> `reference/*` lookups.
+
 > **Status: DONE.** Every field and query parameter requested below has been implemented in
 > `src/modules/tickets/services/ticket-reference.service.ts`. The frontend can drive both
 > pickers from these two endpoints alone — no fallback to `/vendor/orders` + `/vendor/products`,

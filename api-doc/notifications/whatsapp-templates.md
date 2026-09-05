@@ -1,5 +1,22 @@
 # WhatsApp Templates
 
+**Verified against backend source on 2026-08-24** —
+`src/modules/whatsapp/handlers/template/template-registry.ts` (61 registrations),
+`src/modules/whatsapp/handlers/template/template-validator.ts:44`, and the four
+notification catalogs under `src/modules/notifications/catalog/`.
+
+> ### Scope for this repository
+>
+> **This is an operations page, not an API contract.** Nothing here is a route, a request or a
+> response — it is the specification an operator uses to create templates in Meta Business
+> Manager. A vendor dashboard developer needs it for exactly one thing: understanding **why a
+> vendor says they got an in-app notification but no WhatsApp message**. The answer is almost
+> always "that template is not approved in Meta yet", and it is not a bug in your code.
+>
+> What you *do* build is the **preference** UI — [`../vendor/notifications.md`](../vendor/notifications.md)
+> — and the **channel connection** — [`../connections/README.md`](../connections/README.md).
+> A vendor must have WhatsApp *connected* **and** *enabled* before any of this runs at all.
+
 This is the source-of-truth for the WhatsApp Business templates used by the
 platform — vendor notifications (§1–7), the customer-facing COD delivery
 code (§8), the cross-role **billing / plan-lifecycle** templates (§9), and the
@@ -10,14 +27,29 @@ sends for that event will fail — for role notifications the failure is recorde
 the notification's `deliveryErrors` (never breaking the flow: in-app, push, email
 and Telegram still deliver); for the COD code it is logged and the code simply
 stays available in the customer's own order view (see
-[customer/orders.md](../customer/orders.md#cod)).
+`customer/orders.md`).
 
-Every template listed here is registered in
-[template-registry.ts](../../src/modules/whatsapp/handlers/template/template-registry.ts)
-with its name, the 5 language codes, and its expected body-param count — that
-registry is the code-side checklist for this page, not an approval status. A
-template registered here but not yet approved in Business Manager still fails on
-send; approval is a Meta-side step.
+Most templates listed here are registered in `template-registry.ts` with their name, the 5
+language codes, and their expected body-param count — that registry is the code-side checklist
+for this page, not an approval status. A template registered there but not yet approved in
+Business Manager still fails on send; approval is a Meta-side step.
+
+> ### 🔴 "Every template listed here is registered" is not true — 30 are not
+>
+> Filed as **F-31**. The registry holds **61** names
+> (`template-registry.ts`, one `[name, paramCount, hasButton, description]` row each).
+> The four notification catalogs reference **90**. **Thirty are referenced and never
+> registered**, and **eight of those are vendor templates that this page does not document
+> at all** — see [§ 13](#13--eight-vendor-templates-missing-from-this-page).
+>
+> **What an unregistered template actually costs.** `template-validator.ts:44` treats a
+> registry miss as a `console.warn`, not a refusal — so the send still goes out. What is
+> skipped is `validateAgainstRegistry`, i.e. **the body-param count check**. The registry's
+> own header says the counts *"MUST match each situation's `whatsapp.template.bodyParams` in
+> the notification catalogs — that is what the send path actually fills in, and a mismatch is
+> what this registry exists to surface."* For those thirty, it surfaces nothing. A template
+> approved in Meta with three placeholders and filled from a catalog entry with two fails
+> **at Meta**, at send time, per message.
 
 > The button URL base is `VENDOR_APP_URL` for vendor templates. Agency and agent
 > templates use `AGENCY_APP_URL` / `AGENT_APP_URL` respectively as their button
@@ -36,14 +68,14 @@ send; approval is a Meta-side step.
   `orders/ORDER_ID`) as the button parameter.
 - In-window sends use the same copy as **free-form text / interactive CTA** (no
   approval needed); the localized strings live in
-  [notification-catalog.ts](../../src/modules/notifications/catalog/notification-catalog.ts).
+  `notification-catalog.ts`.
 - **Field limits:** Meta caps button labels at 20 chars, header/footer at 60,
   body at 1024. The backend also hard-caps every field to these limits
-  ([whatsapp-limits.ts](../../src/modules/whatsapp/constants/whatsapp-limits.ts)),
+  (`whatsapp-limits.ts`),
   but keep the template copy within them so nothing is truncated.
 
 Languages are kept in sync with `SUPPORTED_LANGUAGES`
-([core/constants/languages.ts](../../src/core/constants/languages.ts)).
+(`core/constants/languages.ts`).
 
 ---
 
@@ -140,7 +172,7 @@ Languages are kept in sync with `SUPPORTED_LANGUAGES`
 
 ## 8. `cod_delivery_code` (customer-facing, no button)
 
-Sent by [`DeliveryCodeService`](../../src/modules/cod/services/delivery-code.service.ts)
+Sent by `DeliveryCodeService`
 **only as a fallback**: it always tries a free-form text message first (free,
 same copy as below); this template is used only when that specific send fails
 because the customer is outside Meta's 24h customer-service window. Cost is
@@ -167,9 +199,9 @@ own button base). All use a single dynamic **URL** button → static suffix `pla
 label **"Manage plan"** (fr *Gérer le forfait* · pt_PT *Gerir plano* · es *Gestionar
 plan* · ar *إدارة الباقة*). Category `UTILITY`. The full 5-language body copy is the
 source-of-truth in the catalogs — copy it verbatim when creating the templates:
-[notification-catalog.ts](../../src/modules/notifications/catalog/notification-catalog.ts)
-(vendor), [agency-notification-catalog.ts](../../src/modules/notifications/catalog/agency-notification-catalog.ts),
-[agent-notification-catalog.ts](../../src/modules/notifications/catalog/agent-notification-catalog.ts).
+`notification-catalog.ts`
+(vendor), `agency-notification-catalog.ts`,
+`agent-notification-catalog.ts`.
 
 | Template name | Role | Body params | English body (en) |
 |---|---|---|---|
@@ -203,7 +235,7 @@ Soft-cap monitoring alert (deliveries are never blocked). Header **"Shipment lim
 Button base: **`AGENCY_APP_URL`**. Category `UTILITY`, 5 languages, single dynamic
 URL button unless stated. The **full 5-language body + button copy is the
 source-of-truth in
-[agency-notification-catalog.ts](../../src/modules/notifications/catalog/agency-notification-catalog.ts)** —
+`agency-notification-catalog.ts`** —
 copy it verbatim when creating each template; the English body below is the
 reference for what the params mean. Plan templates (`agency_plan_expiring`,
 `agency_plan_expired`) and `agency_shipment_cap_exceeded` are specified in §9.
@@ -227,7 +259,7 @@ reference for what the params mean. Plan templates (`agency_plan_expiring`,
 ### 10a. Agent-contract templates (agency side)
 
 The agency's half of the agent↔agency contract. Button suffix is `agents/{{contractId}}` · **View
-contract** for all eight. See [Agent roster](../agency/agent-roster.md#notifications).
+contract** for all eight. See `Agent roster`.
 
 | Template name | Body params | English body |
 |---|---|---|
@@ -252,7 +284,7 @@ Headers are static `TEXT` — use the situation's `subject` from the catalog
 ## 11. Agent templates
 
 Button base: **`AGENT_APP_URL`**. Same conventions as §10; source-of-truth copy in
-[agent-notification-catalog.ts](../../src/modules/notifications/catalog/agent-notification-catalog.ts).
+`agent-notification-catalog.ts`.
 Plan templates (`agent_plan_expiring`, `agent_plan_expired`) are in §9.
 
 | Template name | Body params | Button suffix · label (en) | English body |
@@ -270,7 +302,7 @@ Plan templates (`agent_plan_expiring`, `agent_plan_expired`) are in §9.
 
 The agent's half — the mirror of §10a with the agency named instead. Button suffix is
 `memberships/{{contractId}}` · **View contract** for all eight. See
-[Agency membership](../agent/agency-membership.md#notifications).
+`Agency membership`.
 
 | Template name | Body params | English body |
 |---|---|---|
@@ -361,6 +393,39 @@ of truth, and the in-app bodies and the template bodies must read the same.
 > **Suspension copy must state the consequence plainly.** `storage.product_suspended`
 > says "so customers can no longer buy it" in every language. A vendor who reads it as an
 > administrative note will not act, and the product stays unsellable.
+
+---
+
+## 13 · Eight vendor templates missing from this page
+
+**Verified 2026-08-24** by diffing `notification-catalog.ts`'s `template.name` values against
+`template-registry.ts`. All eight are referenced by live vendor notification situations, are
+absent from the registry, **and are absent from every section above** — so an operator working
+from this page alone would never create them, and the vendor would silently receive no
+WhatsApp message for any of these events.
+
+`bodyParams` are the catalog's, verbatim, in order.
+
+| Template | Body params | Situation |
+|---|---|---|
+| `vendor_connection_request_received` | `{{agencyName}}` | an agency asked to connect |
+| `vendor_connection_approved` | `{{agencyName}}` | the connection was approved |
+| `vendor_connection_rejected` | `{{agencyName}}` | the connection was declined |
+| `vendor_connection_reapproval_needed` | `{{agencyName}}` | a policy change needs re-approval |
+| `vendor_payout_requested` | `{{currency}}`, `{{amountFormatted}}` | payout requested |
+| `vendor_payout_paid` | `{{currency}}`, `{{amountFormatted}}` | payout paid |
+| `vendor_payout_rejected` | `{{currency}}`, `{{amountFormatted}}` | payout rejected |
+| `vendor_shipment_rejected` | `{{agencyName}}`, `{{orderNumber}}` | an agency refused a shipment |
+
+Source lines: `notification-catalog.ts:302, 317, 332, 347, 362, 377, 392, 410`.
+
+The other twenty-two unregistered names are the agent↔agency contract family (16), the four
+`agency_shipment_agent_*` transitions, and `vendor_plan_expiring` / `vendor_plan_expired` —
+which **are** documented above, in § 9, but are still absent from the registry.
+
+> **This does not break your UI.** In-app always delivers, and a WhatsApp failure is recorded
+> on the notification's `deliveryErrors` without breaking the flow. It is filed so the gap is
+> visible to whoever owns the Meta account.
 
 ---
 

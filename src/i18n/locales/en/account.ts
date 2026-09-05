@@ -118,18 +118,8 @@ export const account = {
         pendingExpires: 'Expires {{when}}.',
         pendingExpired: 'This request has expired. Cancel it and start again.',
 
-        confirmPage: {
-            title: 'Confirm your new email address',
-            subtitle: 'Press the button below to finish the change.',
-            confirm: 'Confirm email change',
-            /** The link is a page, not the confirmation — see the page's docblock. */
-            missingToken:
-                "This link is missing its confirmation code. Open the link from the email again, or start the change over from Account › Security.",
-            doneTitle: 'Email address changed',
-            doneSubtitle: 'You now sign in with {{email}}.',
-            doneHint: 'Everywhere you are already signed in stays signed in.',
-            backToAccount: 'Go to account settings',
-        },
+        // `confirmPage` is GONE with the page it belonged to — the main site
+        // serves /account/confirm-email for all four apps now. See App.tsx.
 
         errors: {
             loadFailed: "We couldn't load your sign-in details. Please try again.",

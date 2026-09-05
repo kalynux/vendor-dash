@@ -1,1001 +1,456 @@
-# Vendor Tickets
+# Support tickets
 
-## Base Path
+**Verified against backend source on 2026-08-24.** Read out of `jovi-mall/src/modules/tickets/`,
+not out of a document. The backend's own `api-doc/vendor/tickets.md` disagrees with source in
+**twenty** places, several of them load-bearing — see [§ 11](#11--where-the-backends-own-doc-is-wrong).
 
-All endpoints in this document share this base path:
-
-```
-/api/vendor/tickets
-```
-
-## Authentication
-
-**Authorization**: Vendor access required.
-
-All requests must include a valid Bearer token with vendor role:
-
-```
-Authorization: Bearer <access_token>
-```
-
-## Endpoints
-
-### POST /api/vendor/tickets
-
-**Description**: Create a new support ticket as a vendor.
-
-**Authorization**: Vendor access required.
-
-**Request Headers**:
-- `Authorization: Bearer <token>`
-- `Content-Type: application/json`
-
-**Path Parameters**: None
-
-**Query Parameters**: None
-
-**Request Body**:
-```json
-{
-  "subject": "string (required, min 1, max 200 chars) - Ticket subject/title",
-  "description": "string (required, min 1, max 700 chars) - Detailed description",
-  "type": "string (required) - Ticket type. One of the 44 UPPERCASE TicketType values — see ../ticket_types.txt",
-  "importance": "string (required) - Importance level. Enum: low, medium, high, critical",
-  "entityType": "string (required) - Related entity type. UPPERCASE. Enum: ORDER, PRODUCT, BOOKING, SHIPMENT, DELIVERY, USER, VENDOR, CUSTOMER, AGENT, AGENCY, OTHER",
-  "entityId": "string (optional for `OTHER`, required otherwise) - ID of the related entity (e.g., order ID). For `OTHER`, defaults to the requester's own id.",
-  "trackingNumber": "string (optional, max 120) - Required only for ORDER tickets when the vendor's support policy lists `tracking_number`",
-  "attachments": "string[] (optional, max 5) - File ids previously uploaded via POST /api/files/upload; required for ORDER/PRODUCT tickets when the vendor's support policy lists `product_photo_video`"
-}
-```
-
-> **Attachments provided at creation are persisted.** Each file id in `attachments`
-> is attached to the new ticket exactly as if posted to
-> `POST /api/vendor/tickets/:ticketId/attachments` — an attachment record is
-> created and a `file_references` row registered (so the file is not
-> garbage-collected). They are returned by
-> `GET /api/vendor/tickets/:ticketId/attachments`, not inline in the create
-> response. Each must be a file you own (or a system file); the 5-attachment cap
-> applies. (Previously, attachments sent at creation were silently dropped.)
-
-> **Entity validation.** When `entityType` is `order`/`booking`/`product`, the `entityId`
-> must exist or the request returns `404 TICKET_ENTITY_NOT_FOUND`. For `other` (general or
-> policy questions) `entityId` is optional and defaults to the requester's own id.
->
-> **Support policy `required_info`.** If the entity's vendor has a support policy with
-> `required_info`, creation is rejected with `400 TICKET_REQUIRED_INFO_MISSING`
-> (`details.missing[]` lists what's absent). These items are order/product-centric and are
-> **only** enforced on the relevant ticket contexts — never on booking or `other` tickets
-> (e.g. a billing/payout question is never asked for a tracking number):
-> - `order_number` → satisfied implicitly by filing under an `order` entity.
-> - `tracking_number` → required for `order` tickets only.
-> - `product_photo_video` → required for `order` or `product` tickets (≥ 1 attachment).
-
-**Success Response**:
-
-Status: `201 Created`
-
-Body:
-```json
-{
-  "success": true,
-  "data": {
-    "_id": "string",
-    "subject": "Payment integration issue",
-    "description": "Customers are unable to complete checkout...",
-    "type": "PAYMENT_ISSUE",
-    "importance": "urgent",
-    "priority": "normal",
-    "status": "open",
-    "entity_type": "ORDER",
-    "entity_id": "string",
-    "tracking_number": "FS-1234567890",
-    "entity": {
-      "type": "ORDER",
-      "id": "string",
-      "label": "Order ORD-2026-001003",
-      "reference": "ORD-2026-001003"
-    },
-    "created_by_user_id": "string",
-    "created_by_role": "vendor",
-    "created_by": {
-      "user_id": "string",
-      "role": "vendor",
-      "name": "Acme Store",
-      "avatar": null
-    },
-    "assigned_to_role": null,
-    "assigned_to": null,
-    "assigned_admin_id": null,
-    "assigned_admin": null,
-    "priority_locked": false,
-    "followers": [
-      {
-        "user_id": "string",
-        "role": "vendor",
-        "name": "Acme Store",
-        "avatar": null
-      }
-    ],
-    "createdAt": "2026-02-11T19:00:00.000Z",
-    "updatedAt": "2026-02-11T19:00:00.000Z"
-  },
-  "message": "Ticket created successfully"
-}
-```
-
-> **Tracking number.** When provided, `trackingNumber` is stored on the ticket and returned
-> as `tracking_number` on all ticket responses. It is `null` when omitted (e.g. an ORDER ticket
-> filed before the order is dispatched, when the vendor policy does not require it).
-
-**Error Responses**:
-- `400` – `VALIDATION_ERROR` – Invalid request body (missing required fields, invalid enum values)
+**Base path:** `/api/vendor/tickets` · **Auth:** vendor session · **Routes: 14**
 
 ---
 
-### GET /api/vendor/tickets/reference/orders
+## 0 · The five things that will cost you a day
 
-**Description**: Cheap, read-only list of orders the requester can reference when creating a
-ticket — used to populate `entityId` (order id) and `trackingNumber`. Role-scoped: each actor
-sees only their own orders (customer → own orders, vendor → own orders, agency → orders with an
-item assigned to them, agent → orders with a shipment assigned to them).
-
-> This endpoint is mounted under **every** ticket namespace, scoped to the caller's role:
-> `/api/customer/tickets/reference/orders`, `/api/vendor/...`, `/api/agency/...`, `/api/agent/...`,
-> `/api/admin/...` (admin is unscoped).
-
-**Query Parameters**:
-- `page` (integer, optional, default 1)
-- `limit` (integer, optional, default 20, max 50)
-- `q` (string, optional) — server-side search over **order number**, **customer name**, and **tracking number** (case-insensitive).
-
-**Success Response** (`200 OK`):
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "id": "507f1f77bcf86cd799439010",
-      "orderNumber": "ORD-2026-001003",
-      "orderType": "physical",
-      "fulfillmentStatus": "processing",
-      "createdAt": "2026-02-09T23:54:00.000Z",
-      "customerName": "Jane Doe",
-      "customerAvatar": {
-        "id": "664file...", "key": "images/2026/07/664file....png",
-        "url": "https://.../avatar.png", "mimeType": "image/png",
-        "size": 24576, "originalName": "avatar.png"
-      },
-      "shipments": [
-        {
-          "shipmentId": "507f1f77bcf86cd799439100",
-          "agencyId": "507f1f77bcf86cd799439099",
-          "agencyName": "FastShip Logistics",
-          "agentId": null,
-          "trackingNumber": "FS-1234567890",
-          "status": "assigned"
-        }
-      ]
-    }
-  ],
-  "pagination": { "total": 1, "page": 1, "limit": 20, "pages": 1 }
-}
-```
-
-> - `customerName` / `customerAvatar` are the picker's primary row label and thumbnail; both `null` when the customer profile cannot be resolved. **`customerAvatar` is a resolved FileDetail object** (`{ id, key, url, mimeType, size, originalName }`), never a URL string — the platform-wide convention.
-> - `shipments[].agencyName` labels each tracking number with the agency in charge of that shipment.
-> - `shipments[].trackingNumber` is `null` until the agency/agent records one (order not yet dispatched). An order split across agencies lists multiple shipments — each with its own agency + tracking number.
+1. **Pagination is keyed `pagination`, not `meta`** — on all three list endpoints. And the *inner*
+   key differs between them: the ticket list says **`totalPages`**, both `reference/*` say
+   **`pages`**. [§ 1.1](#11-the-pagination-block)
+2. **Two different serialisations.** Reads return `_id` **and** `id`; the five write routes return
+   `id` and **no `_id`**. Key on **`id`** — it is present on both. [§ 9](#9--two-response-shapes)
+3. **There are 39 ticket types, not 44**, and no free-text search on the list.
+4. **There is no status state machine.** Every transition is legal except setting the status it
+   already has. The flow diagram in the old docs is descriptive, not enforced. [§ 5](#5--status)
+5. **Attachments are JSON + a file id**, not multipart. [§ 7](#7--attachments)
 
 ---
 
-### GET /api/vendor/tickets/reference/products
+## 1 · `GET /api/vendor/tickets/`
 
-**Description**: Cheap, read-only list of products the requester can reference when creating a
-ticket — used to populate `entityId` (product id). Role-scoped: vendor → own catalogue; admin →
-all products; customer/agency/agent → products appearing in the orders they can see.
+Lists **every ticket the vendor follows** — not only ones they created. Being assigned a ticket, or
+being added as a follower, puts it in this list.
 
-> Mounted under every ticket namespace, scoped to the caller's role (same pattern as
-> `reference/orders`).
+### Query parameters
 
-**Query Parameters**:
-- `page` (integer, optional, default 1)
-- `limit` (integer, optional, default 20, max 50)
-- `q` (string, optional) — server-side search over **title**, **category**, and **tags** (case-insensitive).
+| Param | Type | Default | Notes |
+|---|---|---|---|
+| `type` | string | — | **not enum-validated** — a typo returns an empty page, not a 400 |
+| `status` | enum | — | the 9 statuses in [§ 5](#5--status) |
+| `priority` | enum | — | `low` · `normal` · `high` · `urgent` |
+| `entityType` | enum | — | the 11 `EntityType` values, UPPERCASE |
+| `entityId` | string | — | |
+| `createdByUserId` | string | — | |
+| `assignedToRole` | enum | — | `admin` · `vendor` · `customer` · `agency` · `agent` |
+| `assignedToUserId` | string | — | |
+| `page` | integer | `1` | ≥ 1 |
+| `limit` | integer | `20` | 1–100 |
+| `sortBy` | enum | `createdAt` | `createdAt` · `updatedAt` · `priority` · `status` |
+| `sortOrder` | enum | `desc` | `asc` · `desc` |
 
-**Success Response** (`200 OK`):
-```json
+🔴 **There is no `q` / `search` parameter.** The schema is non-strict, so sending one is *silently
+stripped* — you get an unfiltered page and no error. If you need search on tickets, filter
+client-side within a page or file a backend request. (The backend's own doc documents a `q`
+parameter that does not exist.)
+
+### 1.1 The pagination block
+
+```jsonc
 {
   "success": true,
-  "data": [
-    {
-      "id": "507f1f77bcf86cd799439200",
-      "title": "Wireless Headphones",
-      "slug": "wireless-headphones",
-      "category": "Electronics",
-      "tags": ["audio", "bluetooth"],
-      "firstFileUrl": "https://.../headphones-1.jpg"
-    }
-  ],
-  "pagination": { "total": 1, "page": 1, "limit": 20, "pages": 1 }
+  "data": [ /* … */ ],
+  "pagination": { "total": 84, "page": 1, "limit": 20, "totalPages": 5 }
 }
 ```
 
-> `firstFileUrl` is the URL of the product's first image (row thumbnail), or `null` when the
-> product has no files. `category` is `null` and `tags` is `[]` when unset.
+**`pagination`, not `meta`** — this is one of only three endpoints on the whole platform that does
+this. And note `totalPages` here versus `pages` on the two `reference/*` endpoints
+([§ 8](#8--reference-lookups)). Read defensively:
+
+```ts
+const p = res.pagination ?? res.meta;
+const pageCount = p?.totalPages ?? p?.pages ?? 0;
+```
+
+### The ticket object
+
+```jsonc
+{
+  "_id": "66b1…",            // present on READS only
+  "id": "66b1…",             // present on reads AND writes — key on this
+  "__v": 0,
+  "subject": "Order 4821 never arrived",
+  "description": "…",
+  "type": "ORDER_ISSUE",
+  "status": "waiting_on_admin",
+  "priority": "high",
+  "importance": "critical",           // immutable after creation
+  "priority_locked": false,
+  "entity_type": "ORDER",
+  "entity_id": "66c2…",
+  "tracking_number": "JVM-8841-CM",
+  "created_by_role": "vendor",
+  "created_by_user_id": "66a0…",
+  "assigned_to_role": "admin",
+  "assigned_to_user_id": null,
+  "created_by":  { "user_id": "…", "role": "vendor", "name": "…", "avatar": FileDetail|null },
+  "assigned_to": { "user_id": "…", "role": "admin",  "name": "…", "avatar": FileDetail|null },
+  "assigned_admin": { "name": "…", "job_title": "…", "department": "…", "avatar_url": "…" },
+  "entity": { "type": "ORDER", "id": "…", "label": "…", "reference": "…" },
+  "updated_by": ["66a0…"],
+  "terminalAt": null,
+  "createdAt": "…", "updatedAt": "…", "deletedAt": null, "purgeAt": null
+}
+```
+
+`followers` is **absent from the list** and present on create and detail.
+
+> ⚠ **Do not render `admin_assignment`.** It is serialised on every ticket response and contains
+> the administrator's internal `tier` and `id` — which the backend's own documentation states are
+> "deliberately not disclosed to a ticket follower". Use **`assigned_admin`**, which is the
+> deliberately-projected public snapshot (`name`, `job_title`, `department`, `avatar_url`).
+> Reported to the backend team; treat `admin_assignment` as if it were not there.
 
 ---
 
-### GET /api/vendor/tickets
+## 2 · `POST /api/vendor/tickets/`
 
-**Description**: List all tickets created by the vendor with filters, search, sorting, and pagination.
+### Body
 
-**Authorization**: Vendor access required.
+| Field | Type | Required | Constraint |
+|---|---|---|---|
+| `subject` | string | **yes** | 1–200 |
+| `description` | string | **yes** | **1–700** ← note, not 10 000 |
+| `type` | enum | **yes** | one of the 39 in [§ 10](#10--ticket-types) |
+| `importance` | enum | **yes** | `low` · `medium` · `high` · `critical` — **immutable afterwards** |
+| `entityType` | enum | **yes** | the 11 UPPERCASE values |
+| `entityId` | string | conditional | required unless `entityType` is `OTHER`; omitted → defaults to the vendor's own id |
+| `trackingNumber` | string | no | 1–120, trimmed |
+| `attachments` | string[] | no | file ids, **max 5** |
 
-**Request Headers**:
-- `Authorization: Bearer <token>`
+🔴 **`description` is capped at 700 on create and 10 000 on update.** That asymmetry is real and in
+source. A form with one character counter will let a vendor write a 2 000-character first message
+and then reject it. Cap the create field at 700.
 
-**Path Parameters**: None
+**`importance` cannot be changed after creation** — there is no route for it. `priority` is the
+mutable one. Make the create form say so.
 
-**Query Parameters**:
-- `status` (string, optional) - Filter by status. Enum: `open`, `in_progress`, `waiting_on_admin`, `waiting_on_vendor`, `waiting_on_customer`, `waiting_on_agency`, `waiting_on_agent`, `resolved`, `closed`
-- `priority` (string, optional) - Filter by priority. Enum: `low`, `normal`, `high`, `urgent`
-- `type` (string, optional) - Filter by type. Any `TicketType` value (UPPERCASE) — see [../ticket_types.txt](../ticket_types.txt)
-- `entityType` (string, optional) - Filter by entity type. UPPERCASE: `ORDER`, `PRODUCT`, `BOOKING`, `SHIPMENT`, `DELIVERY`, `USER`, `VENDOR`, `CUSTOMER`, `AGENT`, `AGENCY`, `OTHER`
-- `q` (string, optional, max 100 chars) - Search query (subject, description)
-- `page` (integer, optional, default: 1) - Page number (1-indexed)
-- `limit` (integer, optional, default: 20, max: 100) - Items per page
-- `sortBy` (string, optional, default: `createdAt`) - Sort field. Enum: `createdAt`, `updatedAt`, `priority`, `status`
-- `sortOrder` (string, optional, default: `desc`) - Sort order. Enum: `asc`, `desc`
+### Errors specific to create
 
-**Request Body**: None
+| Status | Code | When |
+|---|---|---|
+| 400 / 404 | `TICKET_ENTITY_NOT_FOUND` | `entityId` is not a valid ObjectId, or the row does not exist |
+| **400** | **`TICKET_REQUIRED_INFO_MISSING`** | the vendor's own support policy demands more. `details: { missing: string[] }` |
+| 404 | `TICKET_ATTACHMENT_MISSING` | an `attachments[]` id does not exist |
+| 403 | `TICKET_ACCESS_DENIED` | an attachment belongs to somebody else |
+| 422 | `TICKET_ATTACHMENT_LIMIT_EXCEEDED` | more than 5 |
 
-**Success Response**:
+**`TICKET_REQUIRED_INFO_MISSING` is the one to build for.** The vendor's `support_policy` can
+require a tracking number (on `ORDER` tickets) or at least one photo (on `ORDER` or `PRODUCT`).
+`details.missing` names which. Render it inline against the relevant field rather than as a toast.
 
-Status: `200 OK`
+**Only `ORDER`, `BOOKING` and `PRODUCT` entity ids are checked for existence.** The other eight
+types — including `SHIPMENT`, `USER`, `VENDOR`, `AGENT` — are accepted unvalidated. And **there is
+no ownership check on any of them**: an id belonging to another vendor's order is accepted.
 
-Body:
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "_id": "string",
-      "subject": "Payment integration fails at checkout for WhatsApp orders",
-      "description": "Several customers report that the 'Pay now' button...",
-      "status": "in_progress",
-      "priority": "high",
-      "importance": "urgent",
-      "type": "PAYMENT_ISSUE",
-      "entity_type": "ORDER",
-      "entity_id": "string",
-      "tracking_number": "FS-1234567890",
-      "entity": {
-        "type": "ORDER",
-        "id": "string",
-        "label": "Order ORD-2026-001003",
-        "reference": "ORD-2026-001003"
-      },
-      "created_by_user_id": "string",
-      "created_by_role": "vendor",
-      "created_by": {
-        "user_id": "string",
-        "role": "vendor",
-        "name": "Acme Store",
-        "avatar": null
-      },
-      "assigned_to_role": "admin",
-      "assigned_to": null,
-      "assigned_admin_id": "string",
-      "assigned_admin": {
-        "user_id": "string",
-        "role": "admin",
-        "name": "Kofi Mensah",
-        "avatar": null
-      },
-      "priority_locked": true,
-      "createdAt": "2026-02-11T19:00:00.000Z",
-      "updatedAt": "2026-02-11T19:00:00.000Z"
-    }
-  ],
-  "pagination": {
-    "total": 25,
-    "page": 1,
-    "limit": 20,
-    "totalPages": 2
-  }
-}
-```
+### Response `201`
 
-**Error Responses**:
-- `400` – `VALIDATION_ERROR` – Invalid query parameters
+`{ "success": true, "data": <ticket with followers[]> }` — **there is no `message` key.**
+(The backend's doc shows one on seven different routes. None of them exists.)
 
 ---
 
-### GET /api/vendor/tickets/:id
+## 3 · `GET /api/vendor/tickets/:id`
 
-**Description**: Get detailed information for a specific ticket.
-
-**Authorization**: Vendor access required. Only tickets created by the vendor are accessible.
-
-**Request Headers**:
-- `Authorization: Bearer <token>`
-
-**Path Parameters**:
-- `id` (string, required) - Ticket ID
-
-**Query Parameters**: None
-
-**Request Body**: None
-
-**Success Response**:
-
-Status: `200 OK`
-
-Body:
-```json
-{
-  "success": true,
-  "data": {
-    "_id": "string",
-    "subject": "Payment integration fails at checkout for WhatsApp orders",
-    "description": "Several customers report that the 'Pay now' button...",
-    "type": "PAYMENT_ISSUE",
-    "importance": "urgent",
-    "priority": "high",
-    "status": "in_progress",
-    "entity_type": "ORDER",
-    "entity_id": "string",
-    "entity": {
-      "type": "ORDER",
-      "id": "string",
-      "label": "Order ORD-2026-001003",
-      "reference": "ORD-2026-001003"
-    },
-    "created_by_user_id": "string",
-    "created_by_role": "vendor",
-    "created_by": {
-      "user_id": "string",
-      "role": "vendor",
-      "name": "Acme Store",
-      "avatar": null
-    },
-    "assigned_to_role": "admin",
-    "assigned_to": null,
-    "assigned_admin_id": "string",
-    "assigned_admin": {
-      "user_id": "string",
-      "role": "admin",
-      "name": "Kofi Mensah",
-      "avatar": { "id": "…", "key": "…", "url": "https://.../kofi.png", "mimeType": "image/png", "size": 15360, "originalName": "kofi.png" }
-    },
-    "priority_locked": true,
-    "followers": [
-      {
-        "user_id": "string",
-        "role": "vendor",
-        "name": "Acme Store",
-        "avatar": null
-      },
-      {
-        "user_id": "string",
-        "role": "agent",
-        "name": "Lena Park",
-        "avatar": null
-      }
-    ],
-    "createdAt": "2026-02-11T19:00:00.000Z",
-    "updatedAt": "2026-02-11T19:00:00.000Z"
-  }
-}
-```
-
-**Error Responses**:
-- `404` – `NOT_FOUND` – Ticket not found or does not belong to vendor
+Follower-checked: `404 TICKET_NOT_FOUND` then `403 TICKET_ACCESS_DENIED`. Returns the ticket with
+`followers: ActorSummary[]`.
 
 ---
 
-### PATCH /api/vendor/tickets/:id
+## 4 · `PATCH /api/vendor/tickets/:id`
 
-**Description**: Update ticket subject and/or description. Only the ticket creator can update these fields.
+Body: `subject` (1–200) and/or `description` (**1–10 000**). At least one required, else `400`.
 
-**Authorization**: Vendor access required.
+**Any follower may edit — not just the creator.** There is no closed-ticket guard here: a closed
+ticket's subject and description are still editable.
 
-**Request Headers**:
-- `Authorization: Bearer <token>`
-- `Content-Type: application/json`
-
-**Path Parameters**:
-- `id` (string, required) - Ticket ID
-
-**Query Parameters**: None
-
-**Request Body**:
-```json
-{
-  "subject": "string (optional, min 1, max 200 chars) - New subject",
-  "description": "string (optional, min 1, max 10000 chars) - New description"
-}
-```
-
-> ⚠ **The two description limits differ, in the code, and this is not a typo in the doc.**
-> Create caps `description` at **700** characters; this update endpoint caps it at **10000**.
-> At least one of `subject` / `description` must be present.
-
-**Success Response**:
-
-Status: `200 OK`
-
-Body:
-```json
-{
-  "success": true,
-  "data": {
-    "_id": "string",
-    "subject": "Updated subject",
-    "description": "Updated description...",
-    "updatedAt": "2026-02-11T19:30:00.000Z"
-  },
-  "message": "Ticket updated successfully"
-}
-```
-
-**Error Responses**:
-- `404` – `NOT_FOUND` – Ticket not found
-- `403` – `FORBIDDEN` – Only ticket creator can update ticket details
-- `400` – `VALIDATION_ERROR` – Invalid request body
+Returns the raw document ([§ 9](#9--two-response-shapes)). No system note, no event.
 
 ---
 
-### PATCH /api/vendor/tickets/:id/status
+## 5 · Status
 
-**Description**: Update ticket status. Vendors can update status of their own tickets (must be a follower).
+### The enum — 9 values, lowercase
 
-**Authorization**: Vendor access required.
+`open` · `in_progress` · `waiting_on_admin` · `waiting_on_vendor` · `waiting_on_customer` ·
+`waiting_on_agency` · `waiting_on_agent` · `resolved` · `closed`
 
-**Request Headers**:
-- `Authorization: Bearer <token>`
-- `Content-Type: application/json`
+### 🔴 There is no state machine
 
-**Path Parameters**:
-- `id` (string, required) - Ticket ID
+`PATCH /api/vendor/tickets/:id/status` accepts **every** transition. The only rejection is setting
+the status a ticket already holds (`400 TICKET_INVALID_STATUS_TRANSITION`, "Status is already set
+to this value"). A vendor can drive `closed → open`, `resolved → in_progress`, anything.
 
-**Query Parameters**: None
+Any flow diagram you have seen for this is **descriptive**. If your UI should constrain the
+choices, that constraint lives in your UI — the backend will not enforce it.
 
-**Request Body**:
-```json
-{
-  "status": "string (required) - New status. Enum: open, in_progress, waiting_on_admin, waiting_on_vendor, waiting_on_customer, waiting_on_agency, waiting_on_agent, resolved, closed"
-}
-```
+Two real rules do apply:
 
-**Success Response**:
+- **`waiting_on_<role>`** (other than `waiting_on_admin`) requires a follower holding that role,
+  else `400 TICKET_WAITING_TARGET_NOT_PARTICIPANT`. So "waiting on customer" is only selectable
+  once the customer is actually on the ticket.
+- Entering `resolved` or `closed` stamps `terminalAt`, which starts the attachment-cleanup grace
+  clock. Moving back out clears it.
 
-Status: `200 OK`
+Guard: **follower**, not creator. `403 TICKET_ACCESS_DENIED`.
 
-Body:
-```json
-{
-  "success": true,
-  "data": {
-    "_id": "string",
-    "status": "waiting_on_admin",
-    "updatedAt": "2026-02-11T19:30:00.000Z"
-  },
-  "message": "Status updated successfully"
-}
-```
+### What `closed` actually blocks
 
-**Error Responses**:
-- `404` – `NOT_FOUND` – Ticket not found
-- `403` – `FORBIDDEN` – Only ticket followers can update status
-- `400` – `VALIDATION_ERROR` – Invalid status value or invalid state transition
-- `400` – `TICKET_WAITING_TARGET_NOT_PARTICIPANT` – A `waiting_on_<role>` status was requested but no participant with that role is on the ticket (does not apply to `waiting_on_admin`)
+Three hard `409 TICKET_CLOSED` refusals — and all three key on **`closed` only, never `resolved`**:
+
+| Action | Blocked when closed? |
+|---|---|
+| `POST /:ticketId/notes` | **yes** |
+| `PATCH /:id/priority` | **yes** |
+| `POST /:ticketId/attachments` | no — attachments still accepted |
+| `PATCH /:id` (subject/description) | no |
+| `PATCH /:id/status` | no — this is how you reopen |
+
+**A `resolved` ticket accepts notes and priority changes.** Do not grey those out on `resolved`.
 
 ---
 
-### PATCH /api/vendor/tickets/:id/assign
+## 6 · `POST /:id/close`, `PATCH /:id/priority`, `PATCH /:id/assign`
 
-**Description**: Assign ticket to a role or specific user. Vendor users cannot assign tickets.
+### `POST /api/vendor/tickets/:id/close`
 
-**Authorization**: Vendor access required.
+No body. **Creator-only** — a follower who did not create the ticket gets `403 TICKET_ACCESS_DENIED`.
+Idempotent: closing an already-closed ticket succeeds. Writes a `"Ticket closed"` system note and
+publishes **no** event.
 
-**Request Headers**:
-- `Authorization: Bearer <token>`
-- `Content-Type: application/json`
+**There is no `/reopen` on the vendor surface** (it exists but is admin-only and unmounted). To
+reopen, use `PATCH /:id/status` with `open`.
 
-**Path Parameters**:
-- `id` (string, required) - Ticket ID
+### `PATCH /api/vendor/tickets/:id/priority`
 
-**Query Parameters**: None
+Body: `{ "priority": "low" | "normal" | "high" | "urgent" }`.
 
-**Request Body**:
-```json
-{
-  "targetRole": "string (required) - Role to assign to. Enum: admin, vendor, customer, agency, agent",
-  "targetUserId": "string (optional) - Specific user ID. Required for non-admin roles"
-}
-```
+| Status | Code | When |
+|---|---|---|
+| 409 | `TICKET_CLOSED` | closed (not `resolved`) |
+| 403 | `TICKET_PRIORITY_LOCKED` | an admin has locked it — a vendor can never unlock |
 
-**Success Response**:
+A vendor **never** sets the lock; only an admin does. Setting the same priority twice is allowed.
 
-Status: `200 OK`
+### `PATCH /api/vendor/tickets/:id/assign`
 
-Body:
-```json
-{
-  "success": true,
-  "data": {
-    "_id": "string",
-    "assigned_to_role": "admin",
-    "assigned_admin_id": null,
-    "updatedAt": "2026-02-11T19:30:00.000Z"
-  },
-  "message": "Ticket assigned successfully"
-}
-```
+Body: `{ "targetRole", "targetUserId?" }`.
 
-**Error Responses**:
-- `404` – `NOT_FOUND` – Ticket not found
-- `400` – `VALIDATION_ERROR` – Invalid assignment parameters
+- `targetRole: "admin"` with no `targetUserId` → assigns to the **admin pool**. This is the normal
+  vendor action: "escalate to support".
+- Any other role → `targetUserId` is **mandatory**, else `400 TICKET_ASSIGN_FAILED`.
+
+Side effects: the target is silently added as a follower (subject to a lifetime cap of 5
+non-admin followers → `422 TICKET_FOLLOWER_LIMIT_EXCEEDED`), and a **public** system note is
+written naming the role and the raw user id.
+
+> ⚠ This route has **no follower check and no ownership check**. That is a backend defect, not a
+> capability to build on. Offer "escalate to support" (`targetRole: "admin"`, no id) and nothing
+> else.
 
 ---
 
-### PATCH /api/vendor/tickets/:id/priority
+## 7 · Attachments
 
-**Description**: Update ticket priority. Non-admin users can update priority, but if an admin updates it, the priority becomes locked permanently.
+### 🔴 It is JSON with a file id — not multipart
 
-**Authorization**: Vendor access required.
+```http
+POST /api/vendor/tickets/:ticketId/attachments
+Content-Type: application/json
 
-**Request Headers**:
-- `Authorization: Bearer <token>`
-- `Content-Type: application/json`
+{ "fileId": "66d1…", "visibility": "PUBLIC", "visibleToUserIds": ["66a0…"] }
+```
 
-**Path Parameters**:
-- `id` (string, required) - Ticket ID
+Two steps: upload to `POST /api/files/upload` first ([uploads/README.md](../uploads/README.md)),
+then attach the returned id here.
 
-**Query Parameters**: None
+**`visibility` is UPPERCASE here — `PUBLIC` / `PRIVATE`.** Note visibility is **lowercase**
+`public` / `private` ([§ 7.2](#72-notes)). The two validators genuinely disagree, both are
+`z.enum`, and the wrong casing is a `400 VALIDATION_ERROR`. This is the most reliable way to waste
+an afternoon on this page.
 
-**Request Body**:
-```json
+`visibleToUserIds` must be **non-empty if provided** (an empty array is a validation error), but —
+unlike notes — its members are **not** required to be followers.
+
+| Status | Code | When |
+|---|---|---|
+| 422 | `TICKET_ATTACHMENT_LIMIT_EXCEEDED` | 5 per ticket |
+| 404 | `TICKET_ATTACHMENT_MISSING` | no such file |
+| 403 | `TICKET_ACCESS_DENIED` | the file was uploaded by someone else |
+
+You may attach a file you own, or a `system`-owned file. Nothing else.
+
+### The attachment object
+
+```jsonc
 {
-  "priority": "string (required) - New priority. Enum: low, normal, high, urgent"
+  "id": "66e1…",
+  "fileName": "receipt.pdf",
+  "fileSize": 184222,
+  "mimeType": "application/pdf",
+  "url": "https://api.example.com/api/files/documents/…",
+  "uploadedBy": "66a0…",
+  "uploadedByRole": "vendor",
+  "uploadedByActor": { "user_id": "…", "role": "vendor", "name": "…", "avatar": FileDetail|null }
 }
 ```
 
-**Success Response**:
+Three absences to design around:
 
-Status: `200 OK`
+- 🔴 **`createdAt` is not on the wire.** The backend reads a field name that does not exist on the
+  model, so it serialises as `undefined` and JSON drops it. **Do not render an upload timestamp
+  for attachments** — you do not have one. (The backend's doc shows one.)
+- **`visibility` is never returned.** You cannot tell a `PRIVATE` row from a `PUBLIC` one after
+  the fact, so you cannot render a privacy badge.
+- **`access` is not returned** either — this object does **not** go through the standard
+  `FileDetail` resolver. `url` is always a plain string. In practice a ticket attachment today is
+  **public**: it lands in the general `documents/` or `images/` tree, which is not private. See
+  [files/private-files.md](../files/private-files.md) for why that is worth knowing.
 
-Body:
-```json
-{
-  "success": true,
-  "data": {
-    "_id": "string",
-    "priority": "high",
-    "priority_locked": false,
-    "updatedAt": "2026-02-11T19:30:00.000Z"
-  },
-  "message": "Priority updated successfully"
-}
+`GET /:ticketId/attachments` returns `{ success, data: [...] }` with **no pagination block at all**.
+
+### 7.2 Notes
+
+Notes **are** the conversation thread. There is no message model, no message route, no unread
+count and no note pagination — `GET /:ticketId/notes` returns every visible note in chronological
+order, system notes interleaved.
+
+```http
+POST /api/vendor/tickets/:ticketId/notes
+{ "content": "…", "visibility": "public", "visibleToUserIds": [] }
 ```
 
-**Error Responses**:
-- `404` – `NOT_FOUND` – Ticket not found
-- `403` – `PRIORITY_LOCKED` – Priority is locked by admin and cannot be modified
-- `400` – `VALIDATION_ERROR` – Invalid priority value
+| Field | Constraint |
+|---|---|
+| `content` | **1–300 characters** — much shorter than the ticket description |
+| `visibility` | **lowercase** `public` \| `private`, default `public` |
+| `visibleToUserIds` | default `[]`; every member **must already be a follower**, else `403` |
+
+- **`public`** — every follower, the customer included. This is the customer-visible channel.
+- **`private`** — the author, every admin follower, plus the named ids. The backend expands that
+  list at write time; you cannot retract it later (notes are **append-only** — no edit, no delete).
+
+A vendor may author both. Guards: `404` → `409 TICKET_CLOSED` → follower check → the
+`visibleToUserIds` check.
+
+**System notes** appear in the same feed with `is_system_note: true` and an author of
+`{"user_id": "000000000000000000000000", "role": "admin", "name": "Admin", "avatar": null}`.
+They are emitted on status change, assignment, priority change, close and follower changes.
+Render them as timeline events, not as messages — and note they can contain a raw user id.
+
+The note object has **no `updated_at`** (the model disables it) and, like the ticket reads, carries
+both `_id` and `id`.
 
 ---
 
-### POST /api/vendor/tickets/:id/close
+## 8 · Reference lookups
 
-**Description**: Close a ticket. Only the ticket creator or an admin can close a ticket.
+Two pickers for the create form. Both mounted above `/:id`, so `reference` is never read as an id.
 
-**Authorization**: Vendor access required.
+| Route | Returns |
+|---|---|
+| `GET /api/vendor/tickets/reference/orders` | the vendor's orders, for `entityId` + `trackingNumber` |
+| `GET /api/vendor/tickets/reference/products` | the vendor's products, for `entityId` |
 
-**Request Headers**:
-- `Authorization: Bearer <token>`
+Query: `page` (default 1), `limit` (default 20, **max 50**), `q`.
 
-**Path Parameters**:
-- `id` (string, required) - Ticket ID
+**These are parsed by hand, not by Zod.** Out-of-range values are **clamped, never rejected** —
+`?limit=999` gives you 50 and `?page=abc` gives you page 1. There is no `400` path here, which
+differs from the list route.
 
-**Query Parameters**: None
+`q` on orders searches order number, customer name, and shipment tracking number. On products it
+searches title, category and tags.
 
-**Request Body**: None
+Both respond with `pagination: { total, page, limit, pages }` — **`pages`, not `totalPages`.**
 
-**Success Response**:
+```jsonc
+// reference/orders
+{ "id": "…", "orderNumber": "…", "orderType": "…", "fulfillmentStatus": "…", "createdAt": "…",
+  "customerName": "…|null",
+  "customerAvatar": FileDetail|null,
+  "shipments": [ { "shipmentId","agencyId","agencyName","agentId","trackingNumber","status" } ] }
 
-Status: `200 OK`
-
-Body:
-```json
-{
-  "success": true,
-  "data": {
-    "_id": "string",
-    "status": "closed",
-    "updatedAt": "2026-02-11T19:30:00.000Z"
-  },
-  "message": "Ticket closed successfully"
-}
+// reference/products
+{ "id": "…", "title": "…", "slug": "…", "category": "…|null", "tags": [],
+  "firstFileUrl": "https://…|null" }
 ```
 
-**Error Responses**:
-- `404` – `NOT_FOUND` – Ticket not found
-- `403` – `FORBIDDEN` – Only ticket creator or admin can close tickets
+⚠ **`firstFileUrl` is a bare URL string**, not a `FileDetail` — the one file field on this surface
+that breaks the platform convention. It has no `access` and no null-safety for private trees.
+`customerAvatar`, two fields away, *is* a proper `FileDetail`.
 
 ---
 
-### POST /api/vendor/tickets/:ticketId/notes
+## 9 · Two response shapes
 
-**Description**: Create a note on a ticket. Vendors can create PUBLIC notes or PRIVATE notes visible to specific users.
+| Routes | `_id` | `id` | `__v` | Enriched (`created_by`, `entity`, `followers`…) |
+|---|---|---|---|---|
+| `GET /`, `POST /`, `GET /:id` | ✅ | ✅ | ✅ | ✅ |
+| `PATCH /:id`, `/:id/status`, `/:id/assign`, `/:id/priority`, `POST /:id/close` | ❌ | ✅ | ❌ | ❌ |
 
-**Authorization**: Vendor access required.
+**Key on `id`.** It is the only field present in both shapes.
 
-**Request Headers**:
-- `Authorization: Bearer <token>`
-- `Content-Type: application/json`
-
-**Path Parameters**:
-- `ticketId` (string, required) - Ticket ID
-
-**Query Parameters**: None
-
-**Request Body**:
-```json
-{
-  "content": "string (required, min 1, max 300 chars) - Note content",
-  "visibility": "string (optional, default: public) - Enum: public, private",
-  "visibleToUserIds": "array of strings (optional, default []) - User IDs who can see a private note"
-}
-```
-
-> ⚠ **The field is `content`, not `message`**, and note visibility is **lowercase**
-> (`public` / `private`) — while **attachment** visibility on
-> `POST /api/vendor/tickets/:ticketId/attachments` is **UPPERCASE** (`PUBLIC` / `PRIVATE`).
-> The two validators genuinely disagree; send each exactly as written here.
-
-**Success Response**:
-
-Status: `201 Created`
-
-Body:
-```json
-{
-  "success": true,
-  "data": {
-    "_id": "string",
-    "ticket_id": "string",
-    "content": "Working on resolving this issue",
-    "visibility": "public",
-    "is_system_note": false,
-    "author_user_id": "string",
-    "author_role": "vendor",
-    "author": {
-      "user_id": "string",
-      "role": "vendor",
-      "name": "Acme Store",
-      "avatar": null
-    },
-    "visible_to_user_ids": [],
-    "created_at": "2026-02-11T19:30:00.000Z"
-  },
-  "message": "Note created successfully"
-}
-```
-
-**Error Responses**:
-- `404` – `NOT_FOUND` – Ticket not found
-- `400` – `VALIDATION_ERROR` – Invalid message or visibility parameters
+And note the second row is *unenriched*: after a status change you get `assigned_to_user_id` but
+not `assigned_to`, `entity_id` but not `entity`. **Do not merge a write response into your
+list-item store** — re-fetch, or patch only the scalar fields you know changed.
 
 ---
 
-### GET /api/vendor/tickets/:ticketId/notes
+## 10 · Ticket types
 
-**Description**: Get all notes for a ticket. Vendors see PUBLIC notes + their own PRIVATE notes + PRIVATE notes they're included in.
+**39 values**, UPPERCASE_SNAKE. The `ticket_types.txt` file in this folder is current and lists
+exactly these, in this order.
 
-**Authorization**: Vendor access required.
-
-**Request Headers**:
-- `Authorization: Bearer <token>`
-
-**Path Parameters**:
-- `ticketId` (string, required) - Ticket ID
-
-**Query Parameters**: None
-
-**Request Body**: None
-
-**Success Response**:
-
-Status: `200 OK`
-
-Body:
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "_id": "string",
-      "ticket_id": "string",
-      "content": "Thanks for flagging — I can reproduce on the staging gateway.",
-      "visibility": "public",
-      "is_system_note": false,
-      "author_user_id": "string",
-      "author_role": "admin",
-      "author": {
-        "user_id": "string",
-        "role": "admin",
-        "name": "Kofi Mensah",
-        "avatar": { "id": "…", "key": "…", "url": "https://.../kofi.png", "mimeType": "image/png", "size": 15360, "originalName": "kofi.png" }
-      },
-      "visible_to_user_ids": [],
-      "created_at": "2026-02-11T19:30:00.000Z"
-    },
-    {
-      "_id": "string",
-      "ticket_id": "string",
-      "content": "Internal note for admins",
-      "visibility": "private",
-      "is_system_note": false,
-      "author_user_id": "string",
-      "author_role": "admin",
-      "author": {
-        "user_id": "string",
-        "role": "admin",
-        "name": "Kofi Mensah",
-        "avatar": { "id": "…", "key": "…", "url": "https://.../kofi.png", "mimeType": "image/png", "size": 15360, "originalName": "kofi.png" }
-      },
-      "visible_to_user_ids": ["admin1", "admin2"],
-      "created_at": "2026-02-11T19:31:00.000Z"
-    }
-  ]
-}
+```
+GENERAL_SUPPORT  ACCOUNT_ACCESS  ACCOUNT_VERIFICATION  PROFILE_UPDATE  SECURITY_ISSUE
+ORDER_ISSUE  ORDER_CANCELLATION  ORDER_REFUND  ORDER_DISPUTE  ORDER_FULFILLMENT
+PAYMENT_ISSUE  PAYMENT_FAILED  PAYMENT_CONFIRMATION  CHARGEBACK  INVOICE_REQUEST
+PAYOUT_REQUEST  PAYOUT_DELAY  PAYOUT_DISPUTE  COMMISSION_QUESTION
+BOOKING_ISSUE  BOOKING_CANCELLATION  BOOKING_RESCHEDULE  AVAILABILITY_PROBLEM
+PRODUCT_ISSUE  INVENTORY_PROBLEM  PRICING_ISSUE  VARIANT_ISSUE
+SHIPPING_ISSUE  DELIVERY_DELAY  DELIVERY_CONFIRMATION  ADDRESS_CHANGE
+TECHNICAL_ISSUE  BUG_REPORT  INTEGRATION_ISSUE  API_ACCESS
+POLICY_QUESTION  COMPLIANCE  LEGAL_REQUEST
+OTHER
 ```
 
-**Error Responses**:
-- `404` – `NOT_FOUND` – Ticket not found
+**`PAYOUT_REQUEST` is not a support category you should offer in the ticket form** — it is the type
+the platform opens automatically when a vendor requests a withdrawal. See
+[earnings.md](./earnings.md).
 
 ---
 
-### POST /api/vendor/tickets/:ticketId/attachments
+## 11 · Where the backend's own doc is wrong
 
-**Description**: Attach an already-uploaded file to a ticket. The file is **not**
-uploaded here — first upload it via `POST /api/files/upload` (images, documents,
-archives, audio) **or, for videos, `POST /api/files/upload/video`** (mp4/mov/webm,
-70 MB max — see [file-management.md](./file-management.md#post-apifilesuploadvideo)),
-then send the returned `fileId` to this route to link it to the ticket. This
-mirrors how product images are attached. Attachments can be PUBLIC (visible to
-all followers) or PRIVATE (visible to uploader, admins, and specific users).
-Max 5 attachments per ticket.
+Twenty confirmed contradictions, filed in `FRONTEND-SYNC/03-FINDINGS-REGISTER.md`. The ones that
+would change what you build:
 
-**Authorization**: Vendor access required. The file must be owned by the caller
-or be system-owned (admins can attach any file).
+| The doc says | Source says |
+|---|---|
+| 44 ticket types | **39** |
+| every write returns `message: "… successfully"` | **no `message` key on any of the seven** |
+| responses carry `assigned_admin_id` | that field is **deleted**; it is `admin_assignment` now |
+| `GET /` supports a `q` search parameter | **there is none** — it is silently stripped |
+| the five write routes return `{_id, status, updatedAt}` | they return the **whole document**, with `id` and **no `_id`** |
+| only the ticket **creator** may update | **any follower** may |
+| only tickets **created by** the vendor are readable | **any ticket they follow** is |
+| invalid status transitions are rejected | **every transition is legal** except same-status |
+| there is an "Exclusive Admin Locking" mechanism | it was **deleted**; nothing implements it |
+| attachment responses carry `createdAt` | the key is **not on the wire** |
+| `POST /attachments` can return `404 TICKET_NOT_FOUND` | **unreachable** — there is no ticket lookup on that route |
+| `FileDetail` is `{id,key,url,mimeType,size,originalName}` | **`access` is missing from the doc** |
+| vendor name falls back to `business_name`, agency to `agency_name` | `Store.name` and `Magazin.name` respectively |
+| entity types are `order, product, booking, account, other` | 11 **UPPERCASE** values, and `account` is not one |
+| "no `tier`, no `id` — deliberately not disclosed" | **`admin_assignment` carries both.** A promise the source does not keep |
 
-**Request Headers**:
-- `Authorization: Bearer <token>`
-- `Content-Type: application/json`
-
-**Path Parameters**:
-- `ticketId` (string, required) - Ticket ID
-
-**Query Parameters**: None
-
-**Request Body** (application/json):
-```json
-{
-  "fileId": "string (required) - ID returned by POST /api/files/upload",
-  "visibility": "string (optional, default: PUBLIC) - Enum: PUBLIC, PRIVATE",
-  "visibleToUserIds": ["string (optional) - user IDs for private attachment visibility"]
-}
-```
-
-**Success Response**:
-
-Status: `201 Created`
-
-Body:
-```json
-{
-  "success": true,
-  "data": {
-    "id": "string",
-    "fileName": "checkout-error.png",
-    "fileSize": 245678,
-    "mimeType": "image/png",
-    "url": "http://localhost:3000/storage/ticket-attachments/...",
-    "uploadedBy": "string",
-    "uploadedByRole": "vendor",
-    "uploadedByActor": {
-      "user_id": "string",
-      "role": "vendor",
-      "name": "Acme Store",
-      "avatar": null
-    },
-    "createdAt": "2026-02-11T19:30:00.000Z"
-  }
-}
-```
-
-**Error Responses**:
-- `404` – `TICKET_NOT_FOUND` – Ticket not found
-- `404` – `TICKET_ATTACHMENT_MISSING` – `fileId` does not reference an existing file
-- `403` – `TICKET_ACCESS_DENIED` – The file belongs to another user (only the file owner or an admin can attach it)
-- `422` – `TICKET_ATTACHMENT_LIMIT_EXCEEDED` – Maximum 5 attachments per ticket reached
-- `400` – `VALIDATION_ERROR` – Missing/invalid `fileId` or visibility parameters
-
----
-
-### GET /api/vendor/tickets/:ticketId/attachments
-
-**Description**: List all attachments for a ticket. Vendors see PUBLIC attachments + their own PRIVATE attachments + PRIVATE attachments they're included in.
-
-**Authorization**: Vendor access required.
-
-**Request Headers**:
-- `Authorization: Bearer <token>`
-
-**Path Parameters**:
-- `ticketId` (string, required) - Ticket ID
-
-**Query Parameters**: None
-
-**Request Body**: None
-
-**Success Response**:
-
-Status: `200 OK`
-
-Body:
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "id": "string",
-      "fileName": "checkout-error.png",
-      "fileSize": 245678,
-      "mimeType": "image/png",
-      "url": "http://localhost:3000/storage/ticket-attachments/...",
-      "uploadedBy": "string",
-      "uploadedByRole": "vendor",
-      "uploadedByActor": {
-        "user_id": "string",
-        "role": "vendor",
-        "name": "Acme Store",
-        "avatar": null
-      },
-      "createdAt": "2026-02-11T19:30:00.000Z"
-    }
-  ]
-}
-```
-
-**Error Responses**:
-- `404` – `NOT_FOUND` – Ticket not found
-
----
-
-## Notes & Constraints
-
-### Populated / Enriched References
-
-Every endpoint that returns a ticket, note or attachment also resolves the raw
-ObjectId references into ready-to-render summary objects. The original `*_id`
-fields are **kept** for backward compatibility; the populated objects are added
-alongside them, so the frontend never has to issue follow-up lookups to display
-a name, avatar or entity label.
-
-**Actor summary** — used for `created_by`, `assigned_to`, `assigned_admin`,
-each entry in `followers`, the note `author`, and the attachment
-`uploadedByActor`:
-
-```json
-{
-  "user_id": "string",
-  "role": "vendor",
-  "name": "Acme Store",
-  "avatar": { "id": "…", "key": "…", "url": "https://.../logo.png", "mimeType": "image/png", "size": 24576, "originalName": "logo.png" }
-}
-```
-
-- `name` is resolved from the role-specific profile: admin/customer/agent → `name`, vendor → `display_name` (falls back to `business_name`), agency → `agency_name`.
-- `avatar` is the profile photo / logo where one exists — a resolved **file object** (`{ id, key, url, mimeType, size, originalName }`, the same shape product images use) — otherwise `null`.
-- If a reference cannot be resolved (deleted profile, etc.), `name` falls back to the capitalised role (e.g. `"Vendor"`) and `avatar` is `null`.
-- A `null` value (e.g. `assigned_to: null`, `assigned_admin: null`) means the corresponding `*_id` is unset.
-
-**Entity summary** — used for the ticket `entity` field:
-
-```json
-{
-  "type": "ORDER",
-  "id": "string",
-  "label": "Order ORD-2026-001003",
-  "reference": "ORD-2026-001003"
-}
-```
-
-- `label` is a display-ready string (e.g. `Order ORD-2026-001003`, the product title, `Booking on 2026-02-11`).
-- `reference` is the human reference where one exists (order number, product slug) or the entity id as a fallback.
-- `ORDER`, `PRODUCT` and `BOOKING` are fully resolved; other entity types degrade to a generic label built from the type and a short id suffix.
-- `entity` is `null` only when the ticket has no linked entity.
-
-### Ticket Status Values
-
-Valid status values and typical flow:
-
-```
-open → in_progress → waiting_on_<role> → resolved → closed
-                     (admin | vendor | customer | agency | agent)
-```
-
-| Status | Description |
-|--------|-------------|
-| `open` | Ticket created, awaiting action |
-| `in_progress` | Actively being worked on |
-| `waiting_on_admin` | Waiting for admin action |
-| `waiting_on_vendor` | Waiting for vendor response |
-| `waiting_on_customer` | Waiting for customer response |
-| `waiting_on_agency` | Waiting for delivery agency response |
-| `waiting_on_agent` | Waiting for delivery agent response |
-| `resolved` | Issue resolved, awaiting confirmation |
-| `closed` | Ticket closed, no further action |
-
-**Waiting status rule**: a `waiting_on_<role>` status can only be set when a
-participant (follower) with that role is on the ticket — you cannot wait on a
-party that is not involved. The ticket creator and assignee count as
-participants. `waiting_on_admin` is the exception: it is always allowed because
-platform admin support is implicit. Violations return
-`400 TICKET_WAITING_TARGET_NOT_PARTICIPANT`.
-
-### Priority Locking
-
-- When an **admin** updates priority, it becomes **locked permanently**
-- Locked priorities cannot be changed by non-admin users
-- The active admin (who locked the ticket) can re-update a locked priority
-
-### Exclusive Admin Locking
-
-- When an admin performs the **first action** on a ticket, they become the **active admin**
-- While locked, **only the active admin** can perform actions on the ticket
-- Other admins can view metadata but cannot perform actions
-- Auto-unlocks when ticket is **closed** or **resolved**
-
-### Visibility Controls
-
-**Notes:**
-- `PUBLIC` - Visible to all ticket followers
-- `PRIVATE` - Visible to author, all admins, and explicit user list
-
-**Attachments:**
-- `PUBLIC` - Visible to all ticket followers (default)
-- `PRIVATE` - Visible to uploader, all admin followers, and explicit user list
-- Admins are auto-included in all private attachments
-
-### Attachment Limits
-
-- Maximum **5 attachments** per ticket
-- Attachments are immutable after upload
-- Only admins can delete attachments
-
-### Follower System
-
-- Ticket creator is automatically added as a follower
-- Maximum **5 non-admin users** can follow a ticket (lifetime limit)
-- Admins don't count toward the 5-user limit
-- Only admins can remove followers
-
-### Entity References
-
-Tickets must be associated with a related entity:
-- `order` - Order-related issues
-- `product` - Product-related issues
-- `booking` - Booking-related issues
-- `account` - Account-related issues
-- `other` - General issues
-
-### Timestamps
-
-All timestamp fields are returned in ISO 8601 format:
-```
-2026-02-11T19:00:00.000Z
-```
+Two further items are backend defects rather than doc drift, and are filed as such: five routes on
+this surface perform **no follower check** (`GET`/`POST /:ticketId/attachments`,
+`GET /:ticketId/notes`, `PATCH /:id/priority`, `PATCH /:id/assign`), and the administrator `tier`
+leak above. **Do not build features that depend on either behaviour** — both are expected to be
+fixed.

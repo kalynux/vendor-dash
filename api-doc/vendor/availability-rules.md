@@ -1,439 +1,223 @@
-# Availability Rules
+# Service products — availability rules and variant config
 
-> **Booking system docs:** [Implementation guide](../booking-implementation-guide.md) · [Service product setup](./products.md#service-products) · **Availability rules** (this doc) · [Google Calendar](./calendar.md) · [Customer booking flow](../customer/bookings.md) · [Vendor booking management](./bookings.md)
+**Verified against backend source on 2026-08-24.**
 
-## Base Path
+**Routes: 6** — five rule endpoints plus the service variant configuration.
 
-All endpoints in this document share this base path:
+| Method | Path |
+|---|---|
+| `GET` | `/api/vendor/products/:id/availability-rules` |
+| `POST` | `/api/vendor/products/:id/availability-rules` |
+| `PATCH` | `/api/vendor/products/availability-rules/:ruleId` |
+| `PATCH` | `/api/vendor/products/availability-rules/:ruleId/toggle` |
+| `DELETE` | `/api/vendor/products/availability-rules/:ruleId` |
+| `PATCH` | `/api/vendor/products/:productId/variants/:variantId/service/config` |
 
-```
-/api/vendor/products
-```
-
-All availability-rule endpoints live under `/api/vendor/products`. They come in two shapes:
-- **Product-scoped** (create / list): `/api/vendor/products/:id/availability-rules`
-- **Rule-scoped** (update / toggle / delete): `/api/vendor/products/availability-rules/:ruleId`
-
-## Authentication
-
-**Authorization**: Vendor access required.
-
-All requests must include a valid Bearer token with vendor role:
-
-```
-Authorization: Bearer <access_token>
-```
-
-## Endpoints
-
-### POST /api/vendor/products/:id/availability-rules
-
-**Description**: Create one or more availability rules for a service product in a single request. Rules start as drafts (`isActive: false`) by default.
-
-A whole weekly schedule can be submitted at once by sending an **array** of rules — there is no need to fire one request per day. The endpoint also still accepts a single rule object for backward compatibility.
-
-**Authorization**: Vendor access required.
-
-**Request Headers**:
-- `Authorization: Bearer <token>`
-- `Content-Type: application/json`
-
-**Path Parameters**:
-- `id` (string, required) - Product ID
-
-**Query Parameters**: None
-
-**Request Body**:
-
-Each rule has the following shape:
-```json
-{
-  "dayOfWeek": "number (required, integer, 0-6) - 0=Sunday, 6=Saturday",
-  "startTime": "string (required, format: HH:mm) - Start time in 24-hour format",
-  "endTime": "string (required, format: HH:mm) - End time in 24-hour format",
-  "timezone": "string (optional) - IANA zone; omit to inherit your vendor profile's timezone",
-  "isActive": "boolean (optional, default: false) - Whether rule is active"
-}
-```
-
-The body may be sent in any of these three forms:
-
-1. **Array of rules** (recommended — define the full week in one call):
-```json
-[
-  { "dayOfWeek": 1, "startTime": "09:00", "endTime": "18:00", "timezone": "Africa/Douala" },
-  { "dayOfWeek": 2, "startTime": "09:00", "endTime": "18:00", "timezone": "Africa/Douala" },
-  { "dayOfWeek": 3, "startTime": "09:00", "endTime": "18:00", "timezone": "Africa/Douala" }
-]
-```
-
-2. **Wrapped array** (`rules` key):
-```json
-{
-  "rules": [
-    { "dayOfWeek": 1, "startTime": "09:00", "endTime": "18:00" },
-    { "dayOfWeek": 2, "startTime": "09:00", "endTime": "18:00" }
-  ]
-}
-```
-
-3. **Single rule object** (backward compatible):
-```json
-{ "dayOfWeek": 1, "startTime": "09:00", "endTime": "17:00", "timezone": "UTC" }
-```
-
-> **Atomic validation**: every rule in the request is validated before anything is persisted. If any rule has an invalid time range, or overlaps an existing rule **or another rule in the same request** (same `dayOfWeek`, overlapping hours), the entire request is rejected with a `400`/`409` and **no** rules are created.
-
-**Success Response**:
-
-Status: `201 Created`
-
-`data` is always an **array** of the created rules (even when a single rule object was sent):
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "_id": "string",
-      "productId": "string",
-      "vendorId": "string",
-      "dayOfWeek": 1,
-      "startTime": "09:00",
-      "endTime": "18:00",
-      "timezone": "Africa/Douala",
-      "isActive": false,
-      "deletedAt": null,
-      "createdAt": "2026-02-09T23:54:00.000Z",
-      "updatedAt": "2026-02-09T23:54:00.000Z"
-    },
-    {
-      "_id": "string",
-      "productId": "string",
-      "vendorId": "string",
-      "dayOfWeek": 2,
-      "startTime": "09:00",
-      "endTime": "18:00",
-      "timezone": "Africa/Douala",
-      "isActive": false,
-      "deletedAt": null,
-      "createdAt": "2026-02-09T23:54:00.000Z",
-      "updatedAt": "2026-02-09T23:54:00.000Z"
-    }
-  ],
-  "message": "2 availability rules created"
-}
-```
-
-**Error Responses**:
-- `404` – `AVAILABILITY_PRODUCT_NOT_FOUND` – Product not found or does not belong to vendor
-- `400` – `AVAILABILITY_INVALID_PRODUCT_TYPE` – Only service products can have availability rules
-- `400` – `AVAILABILITY_INVALID_TIME_RANGE` – A rule's start time is not before its end time (message names the `dayOfWeek`)
-- `400` – `VALIDATION_ERROR` – Invalid input (e.g., empty array, invalid time format, invalid day of week)
-- `409` – `AVAILABILITY_TIME_OVERLAP` – A rule overlaps an existing rule, or two rules in the request overlap, for the same day
+⚠ Note the rule-scoped routes hang off `/api/vendor/products/availability-rules/...`, **not**
+`/api/vendor/availability-rules/...`. An older comment in the backend advertised the latter; it
+404s.
 
 ---
 
-### GET /api/vendor/products/:id/availability-rules
+## 0 · What a rule is
 
-**Description**: List all availability rules for a service product, sorted by day and time.
+🔴 **Weekly recurrence only.** One rule = **one weekday + one wall-clock window**.
 
-**Authorization**: Vendor access required.
+**There are no date ranges, no exceptions and no blackout dates in this model.** A vendor who wants
+to be closed next Tuesday cannot express that here — they must deactivate the Tuesday rule and
+remember to re-activate it. Say so, or your UI will imply a calendar that does not exist.
 
-**Request Headers**:
-- `Authorization: Bearer <token>`
-
-**Path Parameters**:
-- `id` (string, required) - Product ID
-
-**Query Parameters**: None
-
-**Request Body**: None
-
-**Success Response**:
-
-Status: `200 OK`
-
-Body:
-```json
+```jsonc
 {
-  "success": true,
-  "data": [
-    {
-      "_id": "string",
-      "productId": "string",
-      "vendorId": "string",
-      "dayOfWeek": 1,
-      "startTime": "09:00",
-      "endTime": "17:00",
-      "timezone": "UTC",
-      "isActive": true,
-      "createdAt": "2026-02-09T23:54:00.000Z",
-      "updatedAt": "2026-02-09T23:54:00.000Z"
-    }
-  ]
+  "id": "66f1…",                 // 🔴 `id`, not `_id`
+  "productId": "66b1…",
+  "vendorId": "66a0…",
+  "dayOfWeek": 5,                // 0 = Sunday … 6 = Saturday
+  "startTime": "18:00",          // HH:mm, 24-hour
+  "endTime": "22:00",
+  "timezone": "Africa/Douala",   // OMITTED when unset
+  "isActive": true,
+  "deletedAt": null, "purgeAt": null,
+  "createdAt": "…", "updatedAt": "…"
 }
 ```
 
-**Error Responses**:
-- `404` – `AVAILABILITY_PRODUCT_NOT_FOUND` – Product not found or does not belong to vendor
+**`timezone` is absent, not null, when unset** — and absent means "inherit the vendor's timezone".
+Use `'timezone' in rule`, not a null check.
 
 ---
 
-### PATCH /api/vendor/products/availability-rules/:ruleId
+## 1 · `POST /:id/availability-rules`
 
-**Description**: Update an availability rule. All fields are optional. Note: `isActive` cannot be changed here — use the `/toggle` endpoint instead.
+**Service products only.**
 
-**Authorization**: Vendor access required.
+Accepts **three body shapes**: a bare array, `{ "rules": [...] }`, or a single object. Pick one and
+stay consistent; a bare array is the clearest.
 
-**Request Headers**:
-- `Authorization: Bearer <token>`
-- `Content-Type: application/json`
+| Field | Type | Required | Default |
+|---|---|---|---|
+| `dayOfWeek` | integer 0–6 | ✅ | |
+| `startTime` | `HH:mm` | ✅ | |
+| `endTime` | `HH:mm` | ✅ | |
+| `timezone` | IANA name | | inherit |
+| `isActive` | boolean | | 🔴 **`false`** |
 
-**Path Parameters**:
-- `ruleId` (string, required) - Availability rule ID
+🔴 **Rules are created INACTIVE.** A vendor who adds their opening hours and expects the product to
+become bookable will find nothing happened. **Either send `isActive: true` explicitly, or call
+`/toggle` afterwards, and tell them either way** — only active rules satisfy the
+`CATALOG_PRODUCT_SERVICE_NO_AVAILABILITY` activation blocker.
 
-**Query Parameters**: None
+`201` returns **always an array**, even for a single rule, with
+`"N availability rule(s) created"`.
 
-**Request Body**:
-```json
-{
-  "dayOfWeek": "number (optional, integer, 0-6)",
-  "startTime": "string (optional, format: HH:mm)",
-  "endTime": "string (optional, format: HH:mm)",
-  "timezone": "string (optional)"
-}
-```
+### Errors
 
-**Success Response**:
+| Status | Code |
+|---|---|
+| 404 | `AVAILABILITY_PRODUCT_NOT_FOUND` |
+| 400 | `AVAILABILITY_INVALID_PRODUCT_TYPE` — not a service product |
+| 400 | `AVAILABILITY_INVALID_TIME_RANGE` — the message names the `dayOfWeek` |
+| **409** | `AVAILABILITY_TIME_OVERLAP` — within the batch **and** against existing rules |
 
-Status: `200 OK`
-
-Body:
-```json
-{
-  "success": true,
-  "data": {
-    "_id": "string",
-    "productId": "string",
-    "vendorId": "string",
-    "dayOfWeek": 1,
-    "startTime": "09:00",
-    "endTime": "17:00",
-    "timezone": "UTC",
-    "isActive": true,
-    "createdAt": "2026-02-09T23:54:00.000Z",
-    "updatedAt": "2026-02-09T23:54:00.000Z"
-  },
-  "message": "Availability rule updated"
-}
-```
-
-**Error Responses**:
-- `404` – `AVAILABILITY_RULE_NOT_FOUND` – Availability rule not found
-- `403` – `AVAILABILITY_FORBIDDEN` – Rule does not belong to vendor
-- `400` – `AVAILABILITY_INVALID_TIME_RANGE` – Start time must be before end time (when both are provided)
-- `400` – `VALIDATION_ERROR` – Invalid input
+**All-or-nothing**: every rule is validated before anything is written. A batch with one bad entry
+persists none.
 
 ---
 
-### PATCH /api/vendor/products/availability-rules/:ruleId/toggle
+## 2 · `GET /:id/availability-rules`
 
-**Description**: Set the active state of an availability rule explicitly from the `isActive` flag in the request body. Pass `true` to activate (publish) the rule or `false` to deactivate it (return to draft). This does **not** flip the current state — the resulting state always matches the value sent.
+`{ "success": true, "data": [ /* rules */ ] }` — **no pagination, no `meta`**. Sorted by
+`dayOfWeek` then `startTime`.
 
-**Authorization**: Vendor access required.
-
-**Request Headers**:
-- `Authorization: Bearer <token>`
-- `Content-Type: application/json`
-
-**Path Parameters**:
-- `ruleId` (string, required) - Availability rule ID
-
-**Query Parameters**: None
-
-**Request Body**:
-```json
-{
-  "isActive": "boolean (required) - true to activate the rule, false to deactivate it"
-}
-```
-
-**Success Response**:
-
-Status: `200 OK`
-
-Body:
-```json
-{
-  "success": true,
-  "data": {
-    "_id": "string",
-    "productId": "string",
-    "vendorId": "string",
-    "dayOfWeek": 1,
-    "startTime": "09:00",
-    "endTime": "17:00",
-    "timezone": "UTC",
-    "isActive": false,
-    "createdAt": "2026-02-09T23:54:00.000Z",
-    "updatedAt": "2026-02-09T23:54:00.000Z"
-  },
-  "message": "Availability rule deactivated"
-}
-```
-
-> The `message` is `"Availability rule activated"` or `"Availability rule deactivated"` depending on the `isActive` value sent.
-
-**Error Responses**:
-- `404` – `AVAILABILITY_RULE_NOT_FOUND` – Availability rule not found
-- `403` – `AVAILABILITY_FORBIDDEN` – Rule does not belong to vendor
-- `400` – `VALIDATION_ERROR` – Invalid input (e.g., missing or non-boolean `isActive`)
+Does not check the product type, so it returns `[]` for a physical product rather than erroring.
 
 ---
 
-### DELETE /api/vendor/products/availability-rules/:ruleId
+## 3 · `PATCH /availability-rules/:ruleId`
 
-**Description**: Delete an availability rule (soft delete). Sets `deletedAt` timestamp.
+Body: `dayOfWeek?`, `startTime?`, `endTime?`, `timezone?`.
 
-**Authorization**: Vendor access required.
+🔴 **`isActive` is NOT accepted here** — it is silently stripped. Use `/toggle`.
 
-**Request Headers**:
-- `Authorization: Bearer <token>`
+### Two source gaps to work around
 
-**Path Parameters**:
-- `ruleId` (string, required) - Availability rule ID
+1. 🔴 **There is no overlap check on update.** You can `PATCH` a rule into overlapping another, which
+   `POST` refuses. **Validate overlap client-side** before sending, or the vendor ends up with a
+   schedule the create route would never have allowed.
+2. 🔴 **A partial time edit is never range-validated.** `AVAILABILITY_INVALID_TIME_RANGE` fires only
+   when **both** `startTime` and `endTime` are in the body. Sending `startTime` alone can produce a
+   rule where the start is after the stored end. **Always send both times together.**
 
-**Query Parameters**: None
+Also: `timezone` cannot be cleared — no `null` is accepted.
 
-**Request Body**: None
-
-**Success Response**:
-
-Status: `200 OK`
-
-Body:
-```json
-{
-  "success": true,
-  "message": "Availability rule deleted"
-}
-```
-
-**Error Responses**:
-- `404` – `AVAILABILITY_RULE_NOT_FOUND` – Availability rule not found
-- `403` – `AVAILABILITY_FORBIDDEN` – Rule does not belong to vendor
+⚠ **Ownership here is `403 AVAILABILITY_FORBIDDEN`, not the 404 used across the rest of the
+catalog.** This surface discloses that the rule exists.
 
 ---
 
-## Error Responses
+## 4 · `PATCH /availability-rules/:ruleId/toggle`
 
-All error responses follow this format:
+Body: `{ "isActive": boolean }` — **required**.
 
-```json
-{
-  "success": false,
-  "requestId": "f3a1...",
-  "error": {
-    "code": "ERROR_CODE",
-    "message": "Human-readable error description",
-    "statusCode": 400
-  }
+🔴 **It is an absolute set, not a flip.** The resulting state equals the value you send. There is no
+`enabled` field anywhere on this surface — `isActive` is the only name.
+
+This is the draft→publish switch for a rule. `200` with
+`"Availability rule activated"` / `"…deactivated"`.
+
+---
+
+## 5 · `DELETE /availability-rules/:ruleId`
+
+`{ "success": true, "message": "Availability rule deleted" }` — **no `data`**. Soft delete.
+
+---
+
+## 6 · `PATCH /:productId/variants/:variantId/service/config`
+
+🔴 **This endpoint is documented nowhere on the backend side** — no request table, no response
+example, no error list. This section is source only.
+
+Every field optional; at least one required.
+
+| Field | Type | Notes |
+|---|---|---|
+| `durationMinutes` | integer ≥ 1 | |
+| `bufferBeforeMinutes` | integer ≥ 0 | |
+| `bufferAfterMinutes` | integer ≥ 0 | |
+| `bookingMode` | `calendar` · `manual` · `capacity` | |
+| **`maxBookings`** | integer ≥ 1 | **accepted** — the backend's route comment omits it |
+| `peakHours` | object \| **`null`** | `null` clears the surcharge |
+
+```jsonc
+"peakHours": {
+  "daysOfWeek": [5, 6],
+  "startTime": "18:00", "endTime": "22:00",
+  "priceType": "percentage",       // fixed | percentage
+  "value": 20
 }
 ```
 
-For validation errors (`VALIDATION_ERROR`), `details.fields` lists each offending field:
+### 🔴 The merge is a whole-object set with fallbacks — and it has a trap
 
-```json
-{
-  "success": false,
-  "requestId": "f3a1...",
-  "error": {
-    "code": "VALIDATION_ERROR",
-    "message": "Validation failed",
-    "statusCode": 400,
-    "details": {
-      "fields": [
-        { "path": "startTime", "message": "Invalid time format (HH:mm)", "code": "invalid_string" }
-      ]
-    }
-  }
-}
+The backend merges your patch over the stored config with `??` defaults. On a variant that has **no
+stored service config**, that produces:
+
+```
+durationMinutes: 0     ← from the ?? 0 fallback
 ```
 
-## Notes & Constraints
+**Zod cannot catch it** because you never sent the field. The variant then silently fails activation
+with `CATALOG_PRODUCT_SERVICE_NO_DURATION`, and nothing points at the cause.
 
-### Product Type Restriction
+**Always send `durationMinutes` on the first configuration of a variant.**
 
-Only **service products** can have availability rules. Attempting to create rules for `physical` or `digital` products returns:
+Other merge notes:
 
-```json
-{
-  "success": false,
-  "error": {
-    "code": "AVAILABILITY_INVALID_PRODUCT_TYPE",
-    "message": "Only service products can have availability rules"
-  }
-}
-```
+- `bookingMode` falls back to `calendar`.
+- **`maxBookings` cannot be cleared** — `null` is not accepted.
+- `peakHours: null` is the only clear signal.
 
-### Time Format
+### The capacity invariant is not enforced here
 
-All time fields must use 24-hour format with leading zeros:
-- **Valid**: `09:00`, `14:30`, `23:59`
-- **Invalid**: `9:00`, `2:30 PM`, `25:00`
+`bookingMode: "capacity"` requires `maxBookings ≥ 1`, but **this endpoint does not check it**. The
+failure surfaces much later as the `CATALOG_PRODUCT_SERVICE_NO_CAPACITY` activation blocker.
+**Enforce it in your form.**
 
-### Timezone Expectations
+### Response
 
-`startTime` and `endTime` are **wall-clock** times — "09:00" means nine o'clock *somewhere*, and `timezone` is what says where.
+`200` with the full enriched variant and `"Service config updated"`.
 
-- **`timezone` is optional. Omit it and the rule uses your vendor profile's `timezone`** (set during onboarding, e.g. `Africa/Douala`). That is the normal case — set it only to give one rule a different zone from the rest of your schedule.
-- Use IANA identifiers (`Africa/Douala`, `America/New_York`, `Europe/Paris`). Abbreviations like `WAT` or `EST` are not accepted.
-- An unrecognised zone is rejected with `400 VALIDATION_ERROR`.
-- Daylight-saving transitions are handled for you: a rule reading `09:00` stays at nine o'clock local across the change.
+`bargainable` is always `false` on a service variant — bargain windows are refused on service
+products.
 
-> **Changed:** `timezone` used to default to the literal `'UTC'`, was never validated, and — more importantly — **was never read**. Rule hours were resolved against the *server's* clock, so a vendor's working day shifted whenever the server moved. Rules are now resolved in the zone above. Existing rows carrying the old `'UTC'` default are cleared to "inherit the vendor's timezone" by `npm run migrate:booking-rule-timezones` (run it with `--dry-run` first — it reports every rule whose effective hours move).
+### Errors
 
-### Day of Week Values
+`404 CATALOG_PRODUCT_NOT_FOUND` · `400 CATALOG_PRODUCT_INVALID_TYPE` ·
+`404 CATALOG_VARIANT_NOT_FOUND` · `409 CATALOG_PRODUCT_VECTORISATION_PENDING`.
 
-| Value | Day |
-|-------|-----|
-| 0 | Sunday |
-| 1 | Monday |
-| 2 | Tuesday |
-| 3 | Wednesday |
-| 4 | Thursday |
-| 5 | Friday |
-| 6 | Saturday |
+⚠ The schema is **not** strict, so a typo like `durationMins` is silently stripped — and if it was
+your only field, you get `400` for "at least one field required" rather than a useful message.
 
-### Time Overlap Validation
+---
 
-The system prevents creating overlapping rules for the same day. Overlapping is determined by:
-- Same `dayOfWeek`
-- Overlapping time ranges (`startTime` to `endTime`)
+## 7 · How this feeds bookings
 
-> Overlap is checked against **all non-deleted rules** for the product on that day, including inactive (draft) rules — not just active ones. A draft rule will still block creation of an overlapping rule.
->
-> When submitting an array of rules, the rules in the request are also checked against **each other** — two rules in the same batch that overlap on the same day are rejected before anything is saved.
+A bookable slot is what survives: **active rules** (expanded in the rule's timezone, else the
+vendor's) **minus** external calendar busy time **minus** existing bookings, padded by the buffers
+and sliced into `durationMinutes` chunks.
 
-Example of overlap:
-- Existing rule: Monday 09:00-17:00
-- New rule: Monday 15:00-20:00 ❌ (overlaps)
-- New rule: Monday 17:00-20:00 ✅ (no overlap, assuming end time is exclusive)
+**No connected calendar is not an error** — it degrades to rules plus own bookings.
+**No active rules gives an empty slot list**, not an error.
 
-### Draft/Active Workflow
+See [bookings.md](./bookings.md) and [calendar.md](./calendar.md).
 
-- Rules are created with `isActive: false` by default (draft)
-- Inactive rules are not used for booking slot generation
-- Use the `PATCH .../toggle` endpoint with `{ "isActive": true }` to publish a rule or `{ "isActive": false }` to return it to draft
-- The plain `PATCH .../:ruleId` update endpoint ignores `isActive` — change activation only via `/toggle`
+---
 
-### Buffer Time
+## 8 · Where the backend's own doc is wrong
 
-- Buffer time is **not** configured on availability rules. It lives on the service variant's
-  `serviceConfig` (`bufferBeforeMinutes` / `bufferAfterMinutes`) — see [variants.md](./variants.md#service-config).
-- Those buffers pad each busy slot when computing availability, preventing back-to-back bookings
-  and allowing setup/cleanup time across the whole service.
-
-### Soft Delete Behavior
-
-Deleted rules have `deletedAt` timestamp set and are excluded from list operations. There is no restore endpoint.
+| The doc says | Source says |
+|---|---|
+| rules carry `_id` | the wire key is **`id`** |
+| the rule object's field list | omits `purgeAt` (and `vendorId`) |
+| `PATCH …/service/config` | **not documented at all**, and the route comment omits `maxBookings` |

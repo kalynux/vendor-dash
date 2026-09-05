@@ -1,973 +1,328 @@
-# Variant Management API
+# Variants
 
-> Bargainable pricing (`bargain` / `bargainable`) is new. Dashboard hand-off:
-> [Front-end changelog](../FRONTEND-CHANGELOG-bargainable-pricing.md).
+**Verified against backend source on 2026-08-24.**
 
-## Overview
+**Base path:** `/api/vendor/products` · **Routes: 7**
 
-Variants are the SKU-level entities that hold **price**, **stock**, **physical attributes**, and (for services) **booking configuration** for a product. Every product — physical, digital, or service — must have at least one variant before it can be activated.
-
-**Key rules:**
-- **Physical products**: Support full variant features — option-based matrix (Size × Color), dimensions, delivery agency assignment
-- **Digital products**: Support **1–5 variants**, each representing a downloadable **format** (PDF, ZIP, EPUB, …) with its own asset, price, SKU, name, and download limits. No option values, no dimensions, no delivery agency. A digital variant is `active` only when it has an uploaded asset — see [Digital Products Guide](./digital-products.md).
-- **Service products**: Have **exactly one** variant that carries the service's **price** and **`serviceConfig`** (slot duration, buffers, booking mode, and optional peak-hours surcharge). No option values, no dimensions, no delivery agency, no `digitalConfig`. `price` is the base price **per `serviceConfig.durationMinutes`** (e.g. `5000` for a 60-min unit); the booking price is prorated by the actual elapsed duration. Attempting to create a second variant returns `409 CATALOG_SERVICE_VARIANT_EXISTS`.
-
-**Default Variant Auto-assignment:**
-When the **first** variant is created for any product, the backend automatically sets `product.defaultVariantId` to that variant's ID and sets `product.hasVariants = true`. Use `PATCH /products/:id/default-variant` to manually reassign afterward.
-
-**Default Variant on Archive:**
-When the current `defaultVariantId` variant is archived, the backend automatically reassigns `defaultVariantId` to the next active variant (ordered by creation), or clears it if none remain.
-
----
-
-## Authentication
-
-All endpoints require:
-```
-Authorization: Bearer <vendor_jwt>
-Content-Type: application/json
-```
-
-Vendors can only manage variants for their own products.
-
----
-
-## Base Path
-
-```
-/api/vendor/products
-```
-
----
-
-## Variant Object Shape
-
-This is the full shape of a variant object returned by all read endpoints:
-
-```json
-{
-  "id": "507f1f77bcf86cd799439015",
-  "productId": "507f1f77bcf86cd799439011",
-  "sku": "TSHIRT-RED-M",
-  "name": "Red / Medium",
-  "status": "active",
-  "optionSignature": "507f1f77bcf86cd799439030|507f1f77bcf86cd799439031",
-  "price": 29.99,
-  "compareAtPrice": 39.99,
-  "bargain": { "minPrice": 29.99, "maxPrice": 45.00 },
-  "bargainable": true,
-  "stock": 100,
-  "isInfiniteStock": false,
-  "lowStockThreshold": 10,
-  "allowOversell": false,
-  "weight": 200,
-  "length": 30,
-  "width": 20,
-  "height": 2,
-  "optionValueIds": ["507f1f77bcf86cd799439030", "507f1f77bcf86cd799439031"],
-  "files": [
-    {
-      "id": "507f1f77bcf86cd799439040",
-      "key": "products/variant-img.jpg",
-      "url": "https://storage.example.com/products/variant-img.jpg",
-      "mimeType": "image/jpeg",
-      "size": 123456,
-      "originalName": "red-medium.jpg"
-    }
-  ],
-  "deliveryAgencyId": "507f1f77bcf86cd799439050",
-  "createdAt": "2026-01-29T10:00:00.000Z",
-  "updatedAt": "2026-01-29T10:00:00.000Z",
-  "deletedAt": null,
-  "purgeAt": null
-}
-```
-
-**Digital variant — additional fields:**
-
-For variants of a `type: "digital"` product, read endpoints also return a `displayName` and a `digital` block:
-
-```json
-{
-  "name": null,
-  "displayName": "js-course.pdf - pdf - 12 MB",
-  "status": "active",
-  "digital": {
-    "asset": {
-      "id": "507f1f77bcf86cd799439030",
-      "originalName": "js-course.pdf",
-      "mimeType": "application/pdf",
-      "size": 12582912
-    },
-    "maxDownloads": 5,
-    "expiresAfterDays": 365
-  }
-}
-```
-
-**Service variant — additional fields:**
-
-For the single variant of a `type: "service"` product, read endpoints also return a `serviceConfig` block. `price` is the base price per `serviceConfig.durationMinutes`.
-
-```json
-{
-  "name": "Booking",
-  "price": 5000,
-  "optionSignature": "default",
-  "serviceConfig": {
-    "durationMinutes": 60,
-    "bufferBeforeMinutes": 0,
-    "bufferAfterMinutes": 0,
-    "bookingMode": "calendar",
-    "peakHours": {
-      "daysOfWeek": [0, 6],
-      "startTime": "18:00",
-      "endTime": "21:00",
-      "priceType": "percentage",
-      "value": 20
-    }
-  }
-}
-```
-
-`peakHours` is optional. When present, the surcharge applies **only to the minutes of a booking that overlap `[startTime, endTime)` on the listed `daysOfWeek`** (empty `daysOfWeek` = every day). `priceType: "percentage"` scales the peak-portion price by `value` percent; `priceType: "fixed"` adds a flat `value` when any peak overlap exists.
-
-**Field reference:**
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `id` | string | Variant ObjectId |
-| `productId` | string | Parent product ObjectId |
-| `sku` | string | Globally unique SKU identifier |
-| `name` | string \| null | Human-readable variant name (optional) |
-| `displayName` | string | Computed label, always present. Fallback: `name` → `"<asset> - <format> - <size>"` → product title → sku |
-| `status` | `"active"` \| `"archived"` | Archived variants are excluded from listings. For digital variants, `active` requires an uploaded asset |
-| `digital` | object \| undefined | Digital variants only. `{ asset?, maxDownloads, expiresAfterDays }`. `asset` is `{ id, originalName, mimeType, size }` once uploaded; the raw download URL is never exposed here |
-| `serviceConfig` | object \| undefined | Service variant only. `{ durationMinutes, bufferBeforeMinutes, bufferAfterMinutes, bookingMode, maxBookings?, peakHours? }`. `price` is the base price per `durationMinutes`. `maxBookings` is the seats-per-slot, present only for capacity mode |
-| `optionSignature` | string | System-generated — pipe-joined sorted optionValueIds. Empty string `""` for variants with no options |
-| `price` | number | Selling price |
-| `compareAtPrice` | number \| undefined | Original/MSRP price — show as "was" price if > price |
-| `bargain` | object \| undefined | The haggling window, `{ minPrice, maxPrice }`. Absent when not configured. **`minPrice` always equals `price`** — it is not a second price. `maxPrice` is the ceiling bargaining may reach and is unrelated to `compareAtPrice`. Still returned when `bargainable` is `false`. See [Bargainable pricing](#bargainable-pricing) |
-| `bargainable` | boolean | **Always present.** `true` only when a `bargain` window is configured **and** the parent product has `vectorisationEnabled: true`. Never infer "is this live?" from the mere presence of `bargain` |
-| `stock` | number | Current inventory count |
-| `isInfiniteStock` | boolean | If `true`, stock is unlimited; `stock` field is ignored |
-| `lowStockThreshold` | number \| null | Alert threshold. `null` = no alerts |
-| `allowOversell` | boolean | If `true`, orders allowed even when `stock <= 0` (backorder) |
-| `weight` | number \| undefined | Weight in grams (physical products only) |
-| `length` | number \| undefined | Length in cm (physical products only) |
-| `width` | number \| undefined | Width in cm (physical products only) |
-| `height` | number \| undefined | Height in cm (physical products only) |
-| `optionValueIds` | string[] | Option value ObjectIds this variant represents (physical products only) |
-| `files` | FileDetail[] | Variant-specific image/media files, fully populated. Each entry: `{ id, key, url, mimeType, size, originalName? }` |
-| `deliveryAgencyId` | string \| undefined | Override delivery agency for this variant (physical products only) |
-
----
-
-## Endpoints
-
-### POST /api/vendor/products/:id/variants
-
-Create a new variant for a product.
-
-**Path Parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `id` | string | Product ObjectId |
-
-**Request Body — Physical Product:**
-
-```json
-{
-  "sku": "TSHIRT-RED-M",
-  "name": "Red / Medium",
-  "price": 29.99,
-  "compareAtPrice": 39.99,
-  "bargain": { "maxPrice": 45.00 },
-  "stock": 100,
-  "isInfiniteStock": false,
-  "weight": 200,
-  "length": 30,
-  "width": 20,
-  "height": 2,
-  "optionValueIds": ["507f1f77bcf86cd799439030", "507f1f77bcf86cd799439031"],
-  "deliveryAgencyId": "507f1f77bcf86cd799439050",
-  "fileIds": ["507f1f77bcf86cd799439040"]
-}
-```
-
-**Request Body — Digital Product:**
-
-```json
-{
-  "sku": "JS-COURSE-PDF",
-  "name": "PDF Edition",
-  "price": 29.99,
-  "bargain": { "maxPrice": 45.00 },
-  "isInfiniteStock": true,
-  "stock": 0,
-  "digitalConfig": {
-    "maxDownloads": 5,
-    "expiresAfterDays": 365
-  }
-}
-```
-
-**Request Body — Service Product:**
-
-```json
-{
-  "sku": "svc-haircut-001",
-  "name": "Booking",
-  "price": 5000,
-  "serviceConfig": {
-    "durationMinutes": 60,
-    "bufferBeforeMinutes": 0,
-    "bufferAfterMinutes": 0,
-    "bookingMode": "calendar",
-    "peakHours": {
-      "daysOfWeek": [0, 6],
-      "startTime": "18:00",
-      "endTime": "21:00",
-      "priceType": "percentage",
-      "value": 20
-    }
-  }
-}
-```
-
-> [!IMPORTANT]
-> **Service products have exactly one variant**, which carries `serviceConfig` + `price`. Key rules:
-> - `serviceConfig` is **required** for the service variant. `price` is the base price **per `durationMinutes`** — the booking price is prorated by the actual elapsed duration.
-> - Creating a **second** variant returns `409 CATALOG_SERVICE_VARIANT_EXISTS`.
-> - `optionValueIds`, `deliveryAgencyId`, dimensions (`weight`/`length`/`width`/`height`), and `digitalConfig` are **rejected** (`400 CATALOG_PRODUCT_INVALID_TYPE`).
-> - `bargain` is **rejected** (`400 CATALOG_VARIANT_BARGAIN_NOT_SUPPORTED`) — a flat range cannot describe a price the booking engine prorates and peak-surcharges.
-> - `peakHours` is optional; the surcharge applies only to booking minutes overlapping the window on the listed `daysOfWeek`.
-> - Update the scheduling/peak config later via `PATCH /products/:productId/variants/:variantId/service/config`, or the price via the variant `PATCH` endpoint.
-
-> [!IMPORTANT]
-> **Digital variants** represent downloadable formats (1–5 per product). Key rules:
-> - The created variant comes back with `status: "archived"` — it flips to `"active"` only after you **upload its asset** via `POST /products/:productId/variants/:variantId/digital/asset` (see [Digital Products Guide](./digital-products.md)).
-> - Creating a 6th variant returns `400 CATALOG_DIGITAL_VARIANT_LIMIT_EXCEEDED`.
-> - `digitalConfig` (optional) sets per-variant download limits: `{ maxDownloads?, expiresAfterDays? }`. `assetId` is **not** accepted here — it's set by the upload endpoint.
->
-> The following fields are **rejected** (400 `CATALOG_PRODUCT_INVALID_TYPE`) for `type: "digital"`:
-> - `optionValueIds` — digital variants cannot be option-based
-> - `deliveryAgencyId` — delivery agencies only apply to physical products
-> - `weight`, `length`, `width`, `height` — physical dimensions only
-
-**Request Fields:**
-
-| Field | Type | Required | Validation | Applicable To |
-|-------|------|----------|------------|---------------|
-| `sku` | string | ✅ | 1–100 chars; globally unique across all variants | All |
-| `price` | number | ✅ | >= 0 | All |
-| `name` | string | No | 1–100 chars | All |
-| `compareAtPrice` | number | No | >= 0 | All |
-| `bargain` | object | No | `{ minPrice?, maxPrice }`, both >= 0. `minPrice` defaults to `price`; sending one that differs → `422`. `maxPrice < price` → `422`. See [Bargainable pricing](#bargainable-pricing) | Physical + digital (**rejected** on service, `400`) |
-| `stock` | number | No | Integer >= 0; default `0` | All |
-| `isInfiniteStock` | boolean | No | Default `false` | All |
-| `optionValueIds` | string[] | No | Array of valid ObjectIds; default `[]` | Physical only |
-| `weight` | number | No | >= 0 (grams) | Physical only |
-| `length` | number | No | >= 0 (cm) | Physical only |
-| `width` | number | No | >= 0 (cm) | Physical only |
-| `height` | number | No | >= 0 (cm) | Physical only |
-| `deliveryAgencyId` | string | No | Valid 24-char ObjectId | Physical only |
-| `fileIds` | string[] | No | Variant images. Array of valid 24-char ObjectIds; **must be unique**. Capped per parent product type (physical **3**, digital **1**) | All |
-| `digitalConfig` | object | No | `{ maxDownloads?, expiresAfterDays? }` (each integer >= 1 or `null`) | Digital only |
-| `serviceConfig` | object | ✅ (service) | `{ durationMinutes (int ≥ 1), bufferBeforeMinutes?, bufferAfterMinutes?, bookingMode ('calendar'\|'manual'\|'capacity'), maxBookings? (int ≥ 1, required when bookingMode='capacity'), peakHours? }` | Service only |
-| `serviceConfig.peakHours` | object | No | `{ daysOfWeek (int[0–6]), startTime ('HH:mm'), endTime ('HH:mm' > startTime), priceType ('fixed'\|'percentage'), value (≥ 0) }` | Service only |
-
-> [!IMPORTANT]
-> **Variant images can be set at creation time** (and via PATCH). The flow mirrors product media: the referenced files must be owned by the vendor (or be system files) or the request is rejected `403`. Caps: a **physical** variant allows **3** images, a **digital** variant allows **1**. Exceeding the cap → `400 CATALOG_IMAGE_LIMIT_EXCEEDED`; duplicate IDs → `400 VALIDATION_ERROR`. The create response returns fully populated `files` (not bare `fileIds`), same as the GET/PATCH endpoints.
-
-> [!NOTE]
-> **Digital variants are created `archived`.** They have no asset yet, and a digital variant can only be `active` with an asset. After creation, upload the file to flip it to `active`. Physical/service variants are created `active`. (Variant `fileIds` are display images — distinct from the downloadable **asset**, which is managed via the `…/digital/asset` endpoints.)
-
-**Success Response `201`:**
-
-```json
-{
-  "success": true,
-  "data": {
-    "id": "507f1f77bcf86cd799439015",
-    "productId": "507f1f77bcf86cd799439011",
-    "sku": "TSHIRT-RED-M",
-    "name": "Red / Medium",
-    "status": "active",
-    "optionSignature": "507f1f77bcf86cd799439030|507f1f77bcf86cd799439031",
-    "price": 29.99,
-    "compareAtPrice": 39.99,
-    "stock": 100,
-    "isInfiniteStock": false,
-    "lowStockThreshold": null,
-    "allowOversell": false,
-    "weight": 200,
-    "length": 30,
-    "width": 20,
-    "height": 2,
-    "optionValueIds": ["507f1f77bcf86cd799439030", "507f1f77bcf86cd799439031"],
-    "files": [],
-    "deliveryAgencyId": "507f1f77bcf86cd799439050",
-    "createdAt": "2026-01-29T10:00:00.000Z",
-    "updatedAt": "2026-01-29T10:00:00.000Z",
-    "deletedAt": null,
-    "purgeAt": null
-  },
-  "message": "Variant created successfully"
-}
-```
-
-> If this is the **first variant** for this product, the response creates a side effect: `product.hasVariants` becomes `true` and `product.defaultVariantId` is set to this variant's `id`. Subsequent `GET /products/:id` calls will reflect this.
-
-**Error Responses:**
-
-| Status | Code | Reason |
-|--------|------|--------|
-| 404 | `CATALOG_PRODUCT_NOT_FOUND` | Product not found or not owned by vendor |
-| 400 | `CATALOG_PRODUCT_INVALID_TYPE` | Type restriction violated (e.g. service variant missing `serviceConfig`, or service/digital variant given physical-only fields) |
-| 409 | `CATALOG_SERVICE_VARIANT_EXISTS` | Service product already has its single variant |
-| 400 | `CATALOG_DIGITAL_VARIANT_LIMIT_EXCEEDED` | Digital product already has 5 variants (max) |
-| 400 | `CATALOG_IMAGE_LIMIT_EXCEEDED` | More images than the per-type cap (physical 3, digital 1) |
-| 403 | `CATALOG_PRODUCT_ACCESS_DENIED` | A `fileId` is not owned by this vendor |
-| 404 | `CATALOG_FILE_NOT_FOUND` | A referenced `fileId` does not exist |
-| 409 | `CATALOG_VARIANT_SKU_EXISTS` | SKU already in use by another variant globally |
-| 400 | `VALIDATION_ERROR` | Request body fails schema validation (includes duplicate `fileIds`) |
-
----
-
-### GET /api/vendor/products/:id/variants
-
-List all variants for a product.
-
-**Path Parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `id` | string | Product ObjectId |
-
-**Query Parameters:**
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `status` | string | — | Filter: `active`, `archived` |
-| `page` | number | `1` | Page number (1-indexed) |
-| `limit` | number | `20` | Max 100 |
-
-**Success Response `200`:**
-
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "id": "507f1f77bcf86cd799439015",
-      "productId": "507f1f77bcf86cd799439011",
-      "sku": "TSHIRT-RED-M",
-      "name": "Red / Medium",
-      "status": "active",
-      "optionSignature": "507f1f77bcf86cd799439030|507f1f77bcf86cd799439031",
-      "price": 29.99,
-      "compareAtPrice": 39.99,
-      "stock": 100,
-      "isInfiniteStock": false,
-      "lowStockThreshold": 10,
-      "allowOversell": false,
-      "weight": 200,
-      "length": 30,
-      "width": 20,
-      "height": 2,
-      "optionValueIds": ["507f1f77bcf86cd799439030", "507f1f77bcf86cd799439031"],
-      "files": [],
-      "deliveryAgencyId": "507f1f77bcf86cd799439050",
-      "createdAt": "2026-01-29T10:00:00.000Z",
-      "updatedAt": "2026-01-29T10:00:00.000Z"
-    }
-  ],
-  "meta": {
-    "total": 4,
-    "page": 1,
-    "limit": 20,
-    "totalPages": 1
-  }
-}
-```
-
-**Error Responses:**
-- `404 CATALOG_PRODUCT_NOT_FOUND` — Product not found
-
----
-
-### GET /api/vendor/products/:productId/variants/:variantId
-
-Get a single variant by ID.
-
-**Path Parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `productId` | string | Product ObjectId |
-| `variantId` | string | Variant ObjectId |
-
-**Success Response `200`:**
-
-```json
-{
-  "success": true,
-  "data": {
-    "id": "507f1f77bcf86cd799439015",
-    "productId": "507f1f77bcf86cd799439011",
-    "sku": "TSHIRT-RED-M",
-    "status": "active",
-    "price": 29.99,
-    "stock": 100,
-    "isInfiniteStock": false,
-    "lowStockThreshold": 10,
-    "allowOversell": false,
-    "weight": 200,
-    "length": 30,
-    "width": 20,
-    "height": 2,
-    "optionSignature": "...",
-    "optionValueIds": ["..."],
-    "files": [],
-    "createdAt": "2026-01-29T10:00:00.000Z",
-    "updatedAt": "2026-01-29T10:00:00.000Z"
-  }
-}
-```
-
-**Error Responses:**
-- `404 CATALOG_VARIANT_NOT_FOUND` — Variant not found, or does not belong to the specified product
-
----
-
-### PATCH /api/vendor/products/:productId/variants/:variantId
-
-Update a variant. All fields are optional — only provided fields are changed.
-
-**Path Parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `productId` | string | Product ObjectId |
-| `variantId` | string | Variant ObjectId |
-
-**Request Body:**
-
-```json
-{
-  "sku": "TSHIRT-RED-M-V2",
-  "name": "Red / Medium",
-  "price": 34.99,
-  "compareAtPrice": 39.99,
-  "bargain": { "maxPrice": 45.00 },
-  "stock": 80,
-  "isInfiniteStock": false,
-  "lowStockThreshold": 10,
-  "allowOversell": false,
-  "weight": 210,
-  "length": 30,
-  "width": 20,
-  "height": 2,
-  "deliveryAgencyId": "507f1f77bcf86cd799439050",
-  "fileIds": ["507f1f77bcf86cd799439040"]
-}
-```
-
-**Fields:**
-
-| Field | Type | Required | Validation | Applicable To |
-|-------|------|----------|------------|---------------|
-| `sku` | string | No | 1–100 chars; globally unique | All |
-| `name` | string | No | 1–100 chars | All |
-| `price` | number | No | >= 0. **On a bargainable variant this also moves `bargain.minPrice`** — see the auto-sync in [Bargainable pricing](#bargainable-pricing) | All |
-| `compareAtPrice` | number | No | >= 0 | All |
-| `bargain` | object \| null | No | `{ minPrice?, maxPrice }`, both >= 0. **`null` clears the window.** `minPrice` defaults to the effective price (this request's `price` if present, else the stored one) | Physical + digital (**rejected** on service, `400` — except `null`, always allowed) |
-| `stock` | number | No | Integer >= 0 | All |
-| `isInfiniteStock` | boolean | No | — | All |
-| `lowStockThreshold` | number \| null | No | Integer >= 1, or `null` to disable alerts | All |
-| `allowOversell` | boolean | No | — | All |
-| `fileIds` | string[] | No | Array of valid 24-char ObjectIds; **full replacement**; must be unique; capped per type (physical **3**, digital **1**) | All |
-| `weight` | number | No | >= 0 (grams) | Physical only |
-| `length` | number | No | >= 0 (cm) | Physical only |
-| `width` | number | No | >= 0 (cm) | Physical only |
-| `height` | number | No | >= 0 (cm) | Physical only |
-| `deliveryAgencyId` | string | No | Valid 24-char ObjectId | Physical only |
-| `digitalConfig` | object | No | `{ maxDownloads?, expiresAfterDays? }` — partial; only sent fields change. `assetId` is not accepted | Digital only |
-
-> [!WARNING]
-> ## `stock` and `isInfiniteStock` are NOT written for an agency-warehoused product
->
-> If this variant's product has `delivery.pickupLocation.source === "agency_storage"`,
-> an agency physically holds the goods and the quantity needs its countersignature.
-> Those two fields are **stripped from this write** and become a pending
-> [stock request](./stock-requests.md) instead. **Every other field in the same PATCH
-> applies normally** — edit a price and a quantity in one call and the price lands
-> immediately while the quantity queues.
->
-> The response is still **`200`** (not `202`), `data.stock` still shows the **old**
-> quantity, and a new `meta.stockAdjustment` block says what is pending:
->
-> ```json
-> {
->   "success": true,
->   "data": { "…": "…", "stock": 120 },
->   "meta": {
->     "stockAdjustment": {
->       "status": "pending_agency_approval",
->       "request": { "id": "665a…", "requestedQuantity": 90, "availableActions": ["withdraw"] }
->     }
->   },
->   "message": "Variant updated. The stock change is awaiting the storage agency's approval."
-> }
-> ```
->
-> One status code, deliberately — you have to read the body either way, so branching on
-> 200-vs-202 would buy nothing. **If your UI optimistically renders what was typed, it
-> will now be wrong**: render `data` as returned, and show a "120 → 90 pending" badge
-> when `meta.stockAdjustment` is present.
->
-> `isInfiniteStock: true` on such a product is **refused outright**
-> (`422 CATALOG_PRODUCT_AGENCY_STORAGE_INFINITE_STOCK`) — a warehouse cannot hold an
-> unbounded quantity, and it is an activation blocker on the product too.
-
-> [!IMPORTANT]
-> **`fileIds` is a full array replacement** — send the complete desired array. To add an image, fetch the current `fileIds`, append the new id, and send the merged array. IDs must be **unique**, and the total must not exceed the per-type cap (physical **3**, digital **1**) → otherwise `400 CATALOG_IMAGE_LIMIT_EXCEEDED`.
->
-> **`digitalConfig` is a partial update** — sending `{ maxDownloads: 3 }` changes only `maxDownloads` and leaves `expiresAfterDays` and the asset untouched. There is also a dedicated convenience endpoint: `PATCH /products/:productId/variants/:variantId/digital/config`.
->
-> **Digital product restrictions** — the following fields are **rejected** with a 400 error if sent for `type: "digital"` products:
-> - `deliveryAgencyId`
-> - `weight`, `length`, `width`, `height`
->
-> Conversely, `digitalConfig` is rejected (400) on non-digital variants.
-
-**Cannot be modified:** `productId`, `optionSignature`, `optionValueIds` (changing options requires re-creating the variant)
-
-**Success Response `200`:**
-
-```json
-{
-  "success": true,
-  "data": {
-    "id": "507f1f77bcf86cd799439015",
-    "productId": "507f1f77bcf86cd799439011",
-    "sku": "TSHIRT-RED-M-V2",
-    "status": "active",
-    "price": 34.99,
-    "stock": 80,
-    "isInfiniteStock": false,
-    "lowStockThreshold": 10,
-    "allowOversell": false,
-    "weight": 210,
-    "length": 30,
-    "width": 20,
-    "height": 2,
-    "files": [
-      {
-        "id": "507f1f77bcf86cd799439040",
-        "key": "products/variant-img.jpg",
-        "url": "https://storage.example.com/products/variant-img.jpg",
-        "mimeType": "image/jpeg",
-        "size": 123456,
-        "originalName": "red-medium.jpg"
-      }
-    ],
-    "updatedAt": "2026-01-29T11:00:00.000Z"
-  },
-  "message": "Variant updated successfully"
-}
-
-> **Note:** The PATCH response and all GET endpoints return fully populated `files` objects. The `fileIds` field is only used as **input** when sending a PATCH request to update file associations.
-```
-
-**Error Responses:**
-
-| Status | Code | Reason |
-|--------|------|--------|
-| 404 | `CATALOG_VARIANT_NOT_FOUND` | Variant not found or does not belong to specified product |
-| 400 | `CATALOG_PRODUCT_INVALID_TYPE` | Physical-only field sent for digital product |
-| 400 | `CATALOG_IMAGE_LIMIT_EXCEEDED` | More images than the per-type cap (physical 3, digital 1) |
-| 403 | `CATALOG_PRODUCT_ACCESS_DENIED` | A `fileId` is not owned by this vendor |
-| 404 | `CATALOG_FILE_NOT_FOUND` | A referenced `fileId` does not exist |
-| 409 | `CATALOG_VARIANT_SKU_EXISTS` | New SKU is already in use by another variant |
-| 400 | `VALIDATION_ERROR` | Body schema invalid (includes duplicate `fileIds`) |
-
----
-
-### PATCH /api/vendor/products/:productId/variants/:variantId/status
-
-Toggle a variant between `"active"` and `"archived"`. Designed for the **frontend toggle switch** — vendors use this to temporarily disable a variant they're short on (or no longer need for the moment) without losing the SKU, pricing, options, or asset, and to re-enable it later.
-
-**Path Parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `productId` | string | Product ObjectId |
-| `variantId` | string | Variant ObjectId |
-
-**Request Body:**
-
-```json
-{
-  "status": "archived"
-}
-```
-
-| Field | Type | Required | Validation |
-|-------|------|----------|------------|
-| `status` | string | ✅ | One of `"active"`, `"archived"` |
-
-**Activation rules** (enforced when `status: "active"`):
-
-- The variant's `price` must be `> 0`. A variant priced at `0` cannot be activated → `422 CATALOG_PRODUCT_VARIANT_ZERO_PRICE`.
-- For a **digital** product, the variant must already have an uploaded asset (`digitalConfig.assetId`) → otherwise `422 CATALOG_VARIANT_NO_DIGITAL_ASSET`. Upload the asset via `POST /products/:productId/variants/:variantId/digital/asset` first.
-- For a **service** product, the variant must have a `serviceConfig` with a `durationMinutes` → otherwise `422 CATALOG_PRODUCT_SERVICE_NO_DURATION`.
-
-Sending the variant's **current** status is a no-op and returns `200` with `"Variant is already <status>"`.
-
-> [!NOTE]
-> Both responses of this endpoint return the **full enriched variant** — the same shape as
-> the GET and PATCH endpoints, including `files`, `displayName`, `digital`, `bargain` and
-> `bargainable`. It previously returned the bare stored record; the enriched shape is a
-> superset, so no field was removed.
->
-> Archiving does not clear a bargain window. An archived variant keeps its configuration and
-> is never sent to the AI index, so `bargainable` describes the parent product's opt-in, not
-> whether the variant is on sale.
-
-**Side Effects:**
-
-- **Archiving:** If the archived variant was `product.defaultVariantId`, the backend reassigns `defaultVariantId` to the next active variant (lowest `createdAt`) or clears it if none remain. `product.hasVariants` is updated accordingly.
-- **Both transitions:** The parent product is re-validated against its activation gate. If the product was `active` and the change leaves it without a valid default variant (or otherwise breaks the activation invariant), the product is demoted to `draft`.
-
-**Success Response `200`:**
-
-```json
-{
-  "success": true,
-  "data": {
-    "id": "507f1f77bcf86cd799439015",
-    "productId": "507f1f77bcf86cd799439011",
-    "sku": "TSHIRT-RED-M",
-    "status": "archived",
-    "price": 29.99,
-    "stock": 0,
-    "bargainable": false,
-    "...": "...other variant fields"
-  },
-  "message": "Variant status changed to archived"
-}
-```
-
-**Error Responses:**
-
-| Status | Code | Reason |
-|--------|------|--------|
-| 404 | `CATALOG_PRODUCT_NOT_FOUND` | Product not found or not owned by vendor |
-| 404 | `CATALOG_VARIANT_NOT_FOUND` | Variant not found, or does not belong to the specified product |
-| 422 | `CATALOG_PRODUCT_VARIANT_ZERO_PRICE` | Cannot activate a variant whose price is `0` |
-| 422 | `CATALOG_VARIANT_NO_DIGITAL_ASSET` | Cannot activate a digital variant without an uploaded asset |
-| 422 | `CATALOG_PRODUCT_SERVICE_NO_DURATION` | Cannot activate a service variant without a `serviceConfig.durationMinutes` |
-| 409 | `CATALOG_PRODUCT_VECTORISATION_PENDING` | Product is currently being vectorised; retry after it completes |
-| 400 | `VALIDATION_ERROR` | Body missing `status` or value is not `"active"` / `"archived"` |
-
-> [!NOTE]
-> This endpoint is the one to wire to a single toggle/switch UI. Use `DELETE` only when you want the same archive behaviour without explicitly stating the new status.
-
----
-
-### DELETE /api/vendor/products/:productId/variants/:variantId
-
-Archive a variant (soft delete). Sets `status` to `"archived"`. Data is preserved.
-
-**Path Parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `productId` | string | Product ObjectId |
-| `variantId` | string | Variant ObjectId |
-
-**Side Effects:**
-- If the archived variant was `product.defaultVariantId`, the backend automatically reassigns `defaultVariantId` to the next active variant (lowest `createdAt`), or clears it if no other active variants remain
-- `product.hasVariants` is set to `false` if no active variants remain after archiving
-
-> [!NOTE]
-> For digital variants, archiving does **not** delete the uploaded asset — it remains linked. To free the asset (and the file), use `DELETE /products/:productId/variants/:variantId/digital/asset` instead, which also archives the variant.
-
-**Success Response `200`:**
-
-```json
-{
-  "success": true,
-  "message": "Variant archived successfully"
-}
-```
-
-**Error Responses:**
-- `404 CATALOG_VARIANT_NOT_FOUND` — Variant not found or does not belong to specified product
-
----
-
-## Notes & Constraints
-
-### Product Type Support Matrix
-
-| Feature | Physical | Digital | Service |
-|---------|----------|---------|---------|
-| Variants supported | ✅ | ✅ (1–5) | ✅ (exactly 1) |
-| `optionValueIds` | ✅ | ❌ | ❌ |
-| Dimensions (`weight`, `length`, `width`, `height`) | ✅ | ❌ | ❌ |
-| `deliveryAgencyId` | ✅ | ❌ | ❌ |
-| `digitalConfig` (per-variant asset/limits) | ❌ | ✅ | ❌ |
-| `serviceConfig` (duration/buffers/bookingMode/peakHours) | ❌ | ❌ | ✅ (required) |
-| `bargain` (bargainable pricing) | ✅ | ✅ | ❌ (clear-only) |
-| Max variants | unlimited | **5** | **1** |
-| Max images per variant | **3** | **1** | **0** (use product media) |
-| Images settable on create | ✅ | ✅ | ❌ |
-| Created as | `active` | `archived` (until asset uploaded) | `active` |
-| `isInfiniteStock` | ✅ | ✅ (typically `true`) | ✅ (typically `true`) |
-| `stock` tracking | ✅ | No (ignored if `isInfiniteStock`) | No |
-
-### Service `bookingMode`
-
-`serviceConfig.bookingMode` controls what happens when a customer books a slot on this service product:
-
-| Mode | Behavior |
-|------|----------|
-| `calendar` | **Default.** Single-occupancy. Booking is created `confirmed` and a Google Calendar event is created immediately. This is the standard slot-based flow. |
-| `manual` | Single-occupancy. Booking is created `pending` with **no** calendar event. The vendor must accept it (`PATCH /api/vendor/bookings/:id/status` → `confirmed`), which then creates the calendar event. Use this when the vendor wants to approve each request before committing. |
-| `capacity` | **Multi-occupancy.** Up to `maxBookings` customers can book the same slot (e.g. a class with N seats). Each booking is `confirmed` immediately. All seats for a slot share **one** Google Calendar event whose title shows the fill level, e.g. `[3/10] Yoga`. The slot stays bookable until full; the `(N+1)`th booking is rejected with `409 BOOKING_SLOT_FULL`. Requires `serviceConfig.maxBookings` (≥ 1). |
-
-`maxBookings` (integer ≥ 1) is **required when `bookingMode` is `capacity`** and ignored otherwise. It is enforced at variant creation and again at product activation.
-
-Slot discovery, pricing, and payment are identical across all modes. What differs: booking `status` on create (`manual` → `pending`), calendar-event timing/sharing, and whether a slot is single- or multi-occupancy.
-
-### Digital Variants (Formats)
-
-Digital variants model the downloadable **formats** of a digital product (PDF, ZIP, EPUB, MP4, …). Each owns its own asset, price, SKU, name, and download limits.
-
-- **1–5 per product.** Creating a 6th returns `400 CATALOG_DIGITAL_VARIANT_LIMIT_EXCEEDED`.
-- **Status follows the asset:** created `archived` → upload asset → `active` → remove asset → `archived`. You cannot directly flip a digital variant to `active` without an asset.
-- **Asset management is via dedicated endpoints**, not the variant create/update body:
-
-| Action | Endpoint |
-|--------|----------|
-| Upload (→ active) | `POST /products/:productId/variants/:variantId/digital/asset` (`multipart/form-data`, field `file`) |
-| Replace | `PUT /products/:productId/variants/:variantId/digital/asset` |
-| Remove (→ archived) | `DELETE /products/:productId/variants/:variantId/digital/asset` |
-| Update limits | `PATCH /products/:productId/variants/:variantId/digital/config` — `{ maxDownloads?, expiresAfterDays? }` |
-
-Full details, request/response shapes, the state machine, activation rules, and UI guidance: **[Digital Products — Multi-Variant Guide](./digital-products.md)**.
-
-### SKU Uniqueness
-
-SKU values must be **globally unique across all variants in the system** — not just variants of the same product. A `409 CATALOG_VARIANT_SKU_EXISTS` error is returned if the SKU is already in use.
-
-### `optionSignature` (Read-Only)
-
-The `optionSignature` field is auto-generated by the backend. It is a pipe-joined (`|`) string of sorted `optionValueIds`. It is used to prevent duplicate option combinations for the same product. **Frontend must never send this field.** It exists solely for the backend to detect and reject duplicate variants within a product.
-
-Examples:
-- Variant with no options: `optionSignature = ""`
-- Variant with options `["id-A", "id-B"]`: `optionSignature = "id-A|id-B"` (sorted alphabetically)
-
-### Stock Management
-
-| Scenario | Behavior |
-|----------|----------|
-| `isInfiniteStock: true` | Stock is unlimited; `stock` field is irrelevant |
-| `isInfiniteStock: false`, `stock > 0` | Can purchase; stock is decremented on order |
-| `isInfiniteStock: false`, `stock <= 0`, `allowOversell: false` | Cannot purchase |
-| `isInfiniteStock: false`, `stock <= 0`, `allowOversell: true` | Can purchase (backorder); stock goes negative |
-| `stock <= lowStockThreshold` | Vendor receives low-stock notification |
-
-### `lowStockThreshold` and `allowOversell`
-
-These fields are not available on variant creation. Set them via the `PATCH` update endpoint after the variant exists:
-
-```json
-PATCH /api/vendor/products/:productId/variants/:variantId
-{
-  "lowStockThreshold": 5,
-  "allowOversell": false
-}
-```
-
-### Delivery Agency Resolution (Physical Products)
-
-When an order is placed for a physical variant, the fulfillment agency is resolved as:
-1. `variant.deliveryAgencyId` → use this agency if set
-2. `vendor.default_delivery_agency_id` → fallback to vendor default
-3. Neither set → order cannot be fulfilled (blocking)
-
-Frontend should warn the vendor if no agency is configured for a variant and the vendor has no default set.
-
-### Bargainable pricing
-
-A variant may carry a **bargain window** — the price range a buyer is allowed to haggle
-within. It is optional; a variant with no window is simply not bargainable.
-
-```json
-"bargain": { "minPrice": 29.99, "maxPrice": 45.00 }
-```
-
-**`minPrice` is the variant's actual selling price.** It is not a second price field: the
-backend keeps `bargain.minPrice === price` on every write path, so there is exactly one
-number a buyer pays before any negotiation. `maxPrice` is the ceiling negotiation may
-reach. Neither has anything to do with `compareAtPrice`, which sits *above* the selling
-price as a "was" price for a completely different reason.
-
-#### Writing it
-
-Accepted on `POST /:id/variants`, `PATCH /:productId/variants/:variantId`,
-`POST /api/vendor/products/simple` and `PATCH /api/vendor/products/:id/simple`.
-
-| Body | Effect |
+| Method | Path |
 |---|---|
-| `"bargain": { "maxPrice": 45.00 }` | Window set. `minPrice` **defaults to the effective price** — the `price` in the same request if there is one, otherwise the stored price |
-| `"bargain": { "minPrice": 29.99, "maxPrice": 45.00 }` | Same, but `minPrice` must equal that effective price |
-| `"bargain": null` | **Clears** the window. Update endpoints only — the field is removed, not set to null |
-| `bargain` omitted | Untouched. But see the auto-sync below |
-| `"price": 32.00` alone, window configured | **`minPrice` auto-syncs to 32.00**; `maxPrice` is unchanged. A client that knows nothing about bargaining cannot break the invariant |
+| `GET` | `/:id/variants` |
+| `POST` | `/:id/variants` |
+| `PATCH` | `/:id/default-variant` |
+| `GET` | `/:productId/variants/:variantId` |
+| `PATCH` | `/:productId/variants/:variantId` |
+| `DELETE` | `/:productId/variants/:variantId` |
+| `PATCH` | `/:productId/variants/:variantId/status` |
 
-`maxPrice` is required whenever a `bargain` object is present — it is the only number a
-vendor genuinely has to choose. `maxPrice === minPrice` is allowed and means "bargainable,
-no headroom yet".
+Options live in [option-variant-management.md](./option-variant-management.md) · digital assets in
+[digital-products.md](./digital-products.md) · the service (`bookable`) variant config in
+[availability-rules.md](./availability-rules.md).
 
-**Raising a price above the ceiling is refused** rather than silently lifting the ceiling.
-Send both fields in one body:
+---
+
+## 0 · The variant object
 
 ```jsonc
-// 422 — 50.00 is above the stored maxPrice of 45.00
-{ "price": 50.00 }
-
-// 200 — the vendor decides the new ceiling explicitly
-{ "price": 50.00, "bargain": { "maxPrice": 65.00 } }
+{
+  "id": "66b2…", "productId": "66b1…",
+  "sku": "ANK-6Y-RED",
+  "name": "Red",                    // optional
+  "displayName": "Red",             // ALWAYS present — use this for labels
+  "status": "active",               // active | archived — only two values
+  "optionSignature": "66c1…|66c2…",
+  "price": 22500,
+  "compareAtPrice": 27000,          // optional
+  "stock": 40,
+  "isInfiniteStock": false,
+  "lowStockThreshold": 5,           // number | null — null disables alerts
+  "allowOversell": false,
+  "weight": 0.6, "length": 30, "width": 20, "height": 4,   // all optional
+  "optionValueIds": ["66c1…", "66c2…"],
+  "deliveryAgencyId": "66d1…",      // optional
+  "files": [ /* FileDetail[] */ ],
+  "digital": {                      // digital products only
+    "asset": { "id": "…", "originalName": "…", "mimeType": "…", "size": 10241 },
+    "maxDownloads": 3, "expiresAfterDays": 30
+  },
+  "bargain": { "minPrice": 22500, "maxPrice": 27000 },   // present only when configured
+  "bargainable": true,              // ALWAYS present
+  "serviceConfig": { /* service products only */ },
+  "createdAt": "…", "updatedAt": "…", "deletedAt": null, "purgeAt": null
+}
 ```
 
-#### When it is in effect — `bargainable`
+- **`fileIds` and `digitalConfig` are removed on the wire** — they become `files` and `digital`.
+- **`displayName` is always present**; `name` is not. Label from `displayName`.
+- **`status` has exactly two members**, both lowercase: `active`, `archived`.
 
-Bargaining is gated on the parent product's **vectorisation** opt-in
-(`PATCH /api/vendor/products/:id/vectorisation`), because the agent that negotiates reads
-its catalogue from the AI index. So the read models return two things, and they answer
-different questions:
+### `bargainable` vs `bargain`
 
-- `bargain` — what the vendor configured.
-- `bargainable` — whether it is live right now: `product.vectorisationEnabled && bargain != null`.
+`bargainable = product.vectorisationEnabled === true && bargain != null`.
 
-A window may be **configured on any product at any time**, whether or not vectorisation is
-on; it is fully price-validated either way. It is simply inert until the flag is on. Three
-consequences worth designing for:
+So a configured bargain window on a product with vectorisation off comes back with `bargain`
+populated and **`bargainable: false`** — the window is kept but inert, never deleted. Show the
+configured range greyed out with "enable image vectorisation to activate", rather than hiding it.
 
-- **Turning vectorisation off never deletes a window.** `bargainable` flips to `false` and
-  the range stays visible and editable.
-- **The flag can turn itself off.** A product that stops being eligible for vectorisation
-  (demoted from `active`, or its title/description/category emptied) has
-  `vectorisationEnabled` reset to `false` by the indexing pipeline. `bargainable` will flip
-  with no pricing edit having taken place — re-read rather than caching it.
-- **`PATCH /api/vendor/products/:id` responds before the toggle is applied.** A body
-  flipping `vectorisationEnabled` returns data built *before* the flip, so `bargainable` is
-  eventually consistent there. Use `PATCH /:id/vectorisation`, which awaits the toggle, when
-  you need the flag and the flag's effect in one round trip. Note also that while
-  `vectorisationStatus` is `pending`, every variant write returns
-  `409 CATALOG_PRODUCT_VECTORISATION_PENDING` — do not reveal a bargain editor on the
-  strength of the flag alone without handling that window.
+### `optionSignature`
 
-#### Not supported on service products
+The variant's identity within its product, and the target of a unique index. It is **not** what you
+might expect for an option-less variant:
 
-`type: "service"` variants refuse a bargain window with
-`400 CATALOG_VARIANT_BARGAIN_NOT_SUPPORTED`. Their `price` is a base rate per
-`serviceConfig.durationMinutes` that the booking engine prorates and peak-surcharges, so a
-flat range would not describe what a customer is charged. Clearing (`"bargain": null`) is
-always allowed, on every type.
+| Case | Value |
+|---|---|
+| service product | the literal `"default"` |
+| has `optionValueIds` | the ids, sorted lexicographically, joined with `\|` |
+| **no options** | 🔴 **the SKU** — never `""` |
 
-#### Errors
+The empty string is impossible because it would collide on the unique index. If you display or
+parse this field, handle all three shapes.
 
-| Code | Status | Raised when |
+---
+
+## 1 · `GET /:id/variants`
+
+Query: `status` (`active` \| `archived`), `page` (1), `limit` (20, max 100).
+
+```jsonc
+{ "success": true, "data": [ /* Variant[] */ ],
+  "meta": { "total": 6, "page": 1, "limit": 20, "totalPages": 1 } }
+```
+
+**`meta` with `totalPages`** — note this differs from the products list, which uses `meta` with
+`pages`. Both spellings are live.
+
+⚠ Filtering and pagination happen **in memory after loading every variant**. `total` is the count
+*after* the status filter. Fine at realistic variant counts; do not build an infinite scroll
+expecting server-side efficiency.
+
+---
+
+## 2 · `POST /:id/variants`
+
+### Body
+
+| Field | Type | Required | Default |
+|---|---|---|---|
+| `sku` | string 1–100 | **yes** | |
+| `price` | number ≥ 0 | **yes** | |
+| `name` | string 1–100 | no | |
+| `compareAtPrice` | number ≥ 0 | no | |
+| `bargain` | `{ minPrice?, maxPrice }` — **strict** | no | |
+| `stock` | integer ≥ 0 | no | `0` |
+| `isInfiniteStock` | boolean | no | `false` |
+| `weight` / `length` / `width` / `height` | number ≥ 0 | no | |
+| `optionValueIds` | string[] | no | `[]` |
+| `deliveryAgencyId` | 24-hex | no | |
+| `fileIds` | string[] 24-hex, unique | no | |
+| `digitalConfig` | `{ maxDownloads?, expiresAfterDays? }` | no | |
+| `serviceConfig` | see below | **yes, for service products** | |
+
+**`lowStockThreshold` and `allowOversell` cannot be set on create.** They are written as `null` and
+`false`; use `PATCH` afterwards.
+
+⚠ **`optionValueIds` is not ObjectId-validated.** An arbitrary string passes Zod, then fails the
+Mongoose cast and surfaces as a misleading **`404 NOT_FOUND`**. Validate the ids client-side.
+
+### `serviceConfig`
+
+```jsonc
+{
+  "durationMinutes": 60,            // required, ≥ 1
+  "bufferBeforeMinutes": 0,         // default 0
+  "bufferAfterMinutes": 0,          // default 0
+  "bookingMode": "calendar",        // calendar | manual | capacity
+  "maxBookings": 4,                 // REQUIRED iff bookingMode === "capacity"
+  "peakHours": [{
+    "daysOfWeek": [5, 6],           // 0–6, unique
+    "startTime": "18:00", "endTime": "22:00",   // HH:mm, end > start
+    "priceType": "percentage",      // fixed | percentage
+    "value": 20
+  }]
+}
+```
+
+### Status on creation
+
+🔴 **A digital variant is created `archived`; everything else is created `active`.** That is
+deliberate — a digital variant cannot be active without an asset — but it means the vendor's new
+digital variant does not appear in an `?status=active` list. Upload the asset, then activate.
+
+### Image caps
+
+Physical **3** · digital **1** · **service 0** — a service variant may carry no images at all.
+Exceeding gives `400 CATALOG_IMAGE_LIMIT_EXCEEDED` with
+`details: { scope: "variant", type, limit, received }`.
+
+### Errors
+
+| Status | Code | When |
 |---|---|---|
-| `CATALOG_VARIANT_BARGAIN_NOT_SUPPORTED` | 400 | A window was sent for a service product's variant |
-| `CATALOG_VARIANT_BARGAIN_PRICE_MISMATCH` | 422 | An explicit `minPrice` disagrees with the effective price |
-| `CATALOG_VARIANT_BARGAIN_RANGE_INVALID` | 422 | `maxPrice` is below the effective price (including a bare price edit that would rise above the stored ceiling) |
-| `VALIDATION_ERROR` | 400 | Shape problems: `maxPrice` missing, a negative or non-numeric bound, an unknown key inside `bargain`, or `bargain: null` on a create endpoint |
+| 409 | `CATALOG_PRODUCT_VECTORISATION_PENDING` | product mid-vectorisation |
+| **409** | **`CATALOG_PRODUCT_SIMPLE_MODE_LOCKED`** | simple-mode product. `details.convertEndpoint` names the fix |
+| 400 | `CATALOG_PRODUCT_INVALID_TYPE` | a field that does not belong to this product type |
+| 409 | `CATALOG_SERVICE_VARIANT_EXISTS` | a service product may have exactly one variant |
+| 400 | `CATALOG_DIGITAL_VARIANT_LIMIT_EXCEEDED` | digital products cap at 5 |
+| 409 | `CATALOG_VARIANT_SKU_EXISTS` | **SKU uniqueness is global, not per product**. `details: { sku }` |
+| 409 | `DATABASE_UNIQUE_CONSTRAINT_VIOLATION` | duplicate `optionSignature` within the product |
+| 400/422 | `CATALOG_VARIANT_BARGAIN_*` | see [products.md](./products.md) |
 
-All three carry `details.variant` (the variant's `name` or `sku`) plus the numbers involved.
+**SKU uniqueness is platform-global.** A vendor cannot reuse a SKU another vendor already holds.
+Surface that clearly — "SKU already in use" without "by someone else" reads as a bug.
 
-> ⚠ **Typos behave differently on the two editors.** `PATCH /:productId/variants/:variantId`
-> does not reject unknown body keys, so `{"bargin": {...}}` returns **200 with nothing
-> written**. The simple-product endpoints are strict and **400** the same typo. A silently
-> swallowed price ceiling is worth guarding against client-side.
+### Side effect
 
-#### Concurrency
+Creating the **first** variant sets the product's `hasVariants: true` and makes it the default.
 
-Two simultaneous PATCHes — one setting `price`, one setting `bargain.maxPrice` — each
-validate against the stored state and both commit, which can leave `price` above
-`maxPrice`. There is no version check on variant writes (the same is true of
-`compareAtPrice` vs `price`). Serialise writes to one variant client-side if this matters.
+**Stock is written directly on create** — the two-sided stock gate does not apply here. It applies
+only to `PATCH`.
 
-### Pricing Display (Frontend Guidance)
+---
 
-`maxPrice` is a **negotiation ceiling, not a "was" price** — never render it as a
-strikethrough or a discount reference. Only `compareAtPrice` means that.
+## 3 · `PATCH /:productId/variants/:variantId`
 
-```javascript
-// Show discount badge when compareAtPrice is greater than price
-if (variant.compareAtPrice && variant.compareAtPrice > variant.price) {
-  const discountPct = Math.round(
-    ((variant.compareAtPrice - variant.price) / variant.compareAtPrice) * 100
-  );
-  // Display: "$29.99  ~~$39.99~~  (25% off)"
+Every field optional. An empty `{}` body is **accepted** and is a no-op (unlike the product PATCH,
+which 400s).
+
+Additional fields available here but not on create: `lowStockThreshold` (integer ≥ 1, or `null` to
+disable alerts) and `allowOversell` (boolean).
+
+Clear signals: `bargain: null` removes the window; `serviceConfig.peakHours: null` clears peak
+hours. **No field on this route uses `clearable()`** — `''` is not a clear signal anywhere here.
+
+⚠ `optionValueIds` **is** writable on this route, and **`optionSignature` is not recomputed** when
+you change it. The two silently desynchronise. Do not send `optionValueIds` on a PATCH; archive
+the variant and create a replacement instead.
+
+⚠ `deliveryAgencyId: ""` slips past the digital/service type guard (which tests truthiness) while
+`weight: 0` is refused (which tests `!== undefined`). Omit fields rather than sending empty values.
+
+### 🔴 The stock gate
+
+`stock` and `isInfiniteStock` are **not always yours to write.** They are diverted into a
+two-signature approval request when **all four** of these hold:
+
+1. the body contains `stock` or `isInfiniteStock`; **and**
+2. `product.type === "physical"`; **and**
+3. `product.delivery.pickupLocation.source === "agency_storage"`; **and**
+4. an effective agency resolves — `product.delivery.agencyId ?? vendor.defaultDeliveryAgencyId` is
+   non-null.
+
+**Product status is irrelevant** — a draft product's stock is gated too.
+
+When the gate fires you still get `200`, but:
+
+```jsonc
+{
+  "success": true,
+  "data": { /* variant with the UNCHANGED stock */ },
+  "meta": { "stockAdjustment": { "status": "pending_agency_approval",
+                                 "request": { /* StockRequest */ } } },
+  "message": "Variant updated. The stock change is awaiting the storage agency's approval."
+}
+```
+
+🔴 **`data.stock` shows the old quantity.** If you optimistically render what you sent, the number
+will be wrong. **Branch on `meta.stockAdjustment`:**
+
+```ts
+if (res.meta?.stockAdjustment) {
+  // show "pending agency approval", keep the old number, link to stock-requests
 } else {
-  // Display: "$29.99"
+  // the write landed
 }
 ```
 
-### Error Response Format
+Predict which control to render from the four conditions above — the product's
+`delivery.pickupLocation.source` is the one that actually varies. See
+[stock-requests.md](./stock-requests.md).
 
-All error responses:
+Gate errors: `422 CATALOG_PRODUCT_AGENCY_STORAGE_INFINITE_STOCK` ·
+`422 STOCK_REQUEST_NO_CHANGE` · `409 STOCK_REQUEST_ALREADY_PENDING`
+(`details: { requestId, requestedByRole, hint }`) · `422 CATALOG_VARIANT_ARCHIVED` ·
+`404 INVENTORY_PRODUCT_NOT_STORED_HERE`.
 
-```json
-{
-  "success": false,
-  "error": {
-    "code": "CATALOG_VARIANT_SKU_EXISTS",
-    "message": "A variant with this SKU already exists",
-    "details": { "sku": "TSHIRT-RED-M" }
-  }
-}
+**This route is not simple-mode gated** — a simple product's single variant is editable here.
+
+---
+
+## 4 · `PATCH /:id/default-variant`
+
+Body: `{ "variantId": "<24-hex>" }` — required.
+
+The target must exist, belong to this product, **and be `active`**. Otherwise
+`404 CATALOG_VARIANT_NOT_FOUND` with the message "Variant not found, archived, or does not belong
+to this product".
+
+Response is `200` with **`message` only — no `data`.** Re-fetch the product.
+
+🔴 **It cannot be cleared.** There is no route or value that unsets `defaultVariantId`.
+
+---
+
+## 5 · Archiving — and the two bugs to work around
+
+`DELETE /:productId/variants/:variantId` and
+`PATCH /:productId/variants/:variantId/status` with `{"status": "archived"}` both archive.
+
+**Archiving is a status change, not a delete** — `deletedAt` is untouched and the variant remains
+readable under `?status=archived`.
+
+Both refuse simple-mode products with `409 CATALOG_PRODUCT_SIMPLE_MODE_LOCKED` ("archiving its only
+variant").
+
+`DELETE` responds with `message` only, no `data`. The status route responds with the variant.
+
+### 🔴 Archiving the default variant leaves a dangling pointer
+
+When you archive the variant that is currently the default, the backend tries to reassign to
+another active one. Two source defects make that unreliable:
+
+1. **The replacement is arbitrary.** It picks the first row from an **unsorted** query — not the
+   oldest, despite what the backend's doc says. You cannot predict which variant becomes default.
+2. 🔴 **When no active variant remains, the pointer is NOT cleared.** The backend writes
+   `undefined`, which Mongoose strips from the update — so `defaultVariantId` keeps pointing at the
+   archived variant while `hasVariants` correctly goes `false`.
+
+The visible consequence: the product is demoted to `draft` with
+`CATALOG_PRODUCT_NO_DEFAULT_VARIANT`, and **re-activating a variant does not fix it** — the status
+route never writes `hasVariants` or `defaultVariantId` back.
+
+**Work around it explicitly.** After re-activating a variant on a product that had all of them
+archived, call `PATCH /:id/default-variant` yourself:
+
+```ts
+await activateVariant(productId, variantId);
+await setDefaultVariant(productId, variantId);   // required — the backend will not do it
 ```
 
-Validation errors include a `details` array:
+### Re-activating: `{"status": "active"}`
 
-```json
-{
-  "success": false,
-  "error": {
-    "code": "VALIDATION_ERROR",
-    "message": "Request validation failed",
-    "details": [
-      { "field": "price", "message": "Price must be a positive number" }
-    ]
-  }
-}
-```
+Not simple-mode gated. Validated against:
 
-**Variant-specific error codes:**
+| Status | Code | When |
+|---|---|---|
+| 422 | `CATALOG_PRODUCT_VARIANT_ZERO_PRICE` | `price <= 0` |
+| 422 | `CATALOG_VARIANT_NO_DIGITAL_ASSET` | digital variant with no asset |
+| 422 | `CATALOG_PRODUCT_SERVICE_NO_DURATION` | service variant with no `durationMinutes` |
+| 422 | `CATALOG_PRODUCT_SERVICE_NO_CAPACITY` | capacity mode with `maxBookings < 1` |
 
-| Code | HTTP | Description |
-|------|------|-------------|
-| `CATALOG_VARIANT_NOT_FOUND` | 404 | Variant not found, not active, or does not belong to specified product |
-| `CATALOG_VARIANT_SKU_EXISTS` | 409 | SKU already in use globally |
-| `CATALOG_PRODUCT_NOT_FOUND` | 404 | Parent product not found or not owned by vendor |
-| `CATALOG_PRODUCT_INVALID_TYPE` | 400 | Type restriction violated — service variant missing `serviceConfig`; physical-only field sent for digital/service; `digitalConfig`/`serviceConfig` sent for the wrong type |
-| `CATALOG_SERVICE_VARIANT_EXISTS` | 409 | Service product already has its single variant |
-| `CATALOG_DIGITAL_VARIANT_LIMIT_EXCEEDED` | 400 | Digital product already has 5 variants (max) |
-| `CATALOG_IMAGE_LIMIT_EXCEEDED` | 400 | Too many variant images — physical max 3, digital max 1, service 0 |
-| `CATALOG_PRODUCT_VARIANT_ZERO_PRICE` | 422 | Status change rejected — cannot activate a variant with `price = 0` |
-| `CATALOG_VARIANT_NO_DIGITAL_ASSET` | 422 | Status change rejected — digital variant has no uploaded asset |
-| `CATALOG_PRODUCT_SERVICE_NO_DURATION` | 422 | Status change rejected — service variant has no `serviceConfig.durationMinutes` |
-| `CATALOG_VARIANT_BARGAIN_NOT_SUPPORTED` | 400 | A `bargain` window was sent for a **service** product's variant. Clearing with `null` is still allowed |
-| `CATALOG_VARIANT_BARGAIN_PRICE_MISMATCH` | 422 | An explicit `bargain.minPrice` disagrees with the effective price. `details`: `{ variant, price, minPrice }` |
-| `CATALOG_VARIANT_BARGAIN_RANGE_INVALID` | 422 | `bargain.maxPrice` is below the effective price — including a bare `price` edit that would rise above the stored ceiling. `details`: `{ variant, price, minPrice, maxPrice }` |
-| `VALIDATION_ERROR` | 400 | Zod schema validation failed |
+All carry `details: { variant }`. Note the first three of those messages are developer placeholders
+— map the codes to your own copy.
+
+**Setting a variant to the status it already has is a `200` no-op** with
+`message: "Variant is already <status>"`. That short-circuit runs *before* the simple-mode guard,
+so archiving an already-archived variant of a simple product succeeds rather than 409ing.
+
+---
+
+## 6 · Where the backend's own doc is wrong
+
+| The doc says | Source says |
+|---|---|
+| max 1 000 variants per product, `CATALOG_VARIANT_LIMIT_EXCEEDED` | **no cap for physical products** — that code is unreachable. (The backend's `variants.md` says "unlimited"; its `option-variant-management.md` says 1 000. They contradict each other) |
+| `optionSignature` is `""` when there are no options | it is the **SKU** |
+| archiving reassigns the default to the variant with the **lowest `createdAt`** | the query is **unsorted** — the replacement is arbitrary |
+| "…or clears it if none remain" | it is **never cleared** — the pointer dangles |
+| `optionValueIds` is ignored on PATCH | it **is** written, and `optionSignature` is not recomputed |
+| several error tables | omit `CATALOG_PRODUCT_SIMPLE_MODE_LOCKED`, `CATALOG_PRODUCT_VECTORISATION_PENDING`, `CATALOG_PRODUCT_SERVICE_NO_CAPACITY` and every stock-gate error |
+| the endpoint list has five variant routes | there are **seven** — `/status` and `/default-variant` are missing |

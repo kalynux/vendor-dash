@@ -1,1120 +1,361 @@
-# Vendor Profile Management API Documentation
+# Vendor profile
 
-## Overview
+**Verified against backend source on 2026-08-24.**
 
-The Vendor Profile Management API allows vendors to view and update their profile information, manage notification preferences, and change their password. All endpoints require authentication and are restricted to vendor accounts only.
+**Base path:** `/api/vendor/profile` (plus `/api/vendor/delivery-agencies`) · **Routes: 11**
 
-> [!IMPORTANT]
-> **The business name, description, logo and banner live on the [Store](./store.md), not on this profile.** This profile carries the vendor's **personal** surface (`displayName`, personal `avatar`) plus operational data (addresses, payout, policies, country/timezone). `GET /api/vendor/profile` no longer returns `businessName`, `businessDescription`, or a `branding` block — read/patch those via [`GET`/`PATCH /api/vendor/store`](./store.md). The onboarding **Branding** step still accepts `branding` (logo/cover), but it is persisted to the Store.
-
-**Base URL**: `/api/vendor`
-
-**Authentication**: All endpoints require a valid JWT token in the `Authorization` header.
+Business identity — name, logo, banner — lives on the **Store**, not here. See
+[store.md](./store.md).
 
 ---
 
-## Endpoints
+## 0 · Four things to get right first
 
-### GET /api/vendor/profile
+### 🔴 1. `version` is required on `PATCH /api/vendor/profile`, and the conflict code is misnamed
 
-Retrieve the authenticated vendor's profile.
-
-#### Authentication
-
-- **Required**: Yes
-- **Role**: `vendor`
-
-#### Headers
-
-```http
-Authorization: Bearer <jwt_token>
+```jsonc
+{ "success": false, "requestId": "…",
+  "error": { "code": "VENDOR_FISCAL_CALENDAR_INVALID",   // ← yes, really
+             "statusCode": 409, "category": "conflict",
+             "message": "Profile was modified by another request. Please refresh and try again." } }
 ```
 
-#### Response
+The message is right; the code is a backend bug that cannot be fixed without a wire change.
+**Branch on `statusCode === 409 && category === "conflict"`**, never on the code string — and never
+on `"CONFLICT"`, which the backend's doc claims and which never appears.
 
-**Success (200 OK)**:
+### 🔴 2. A successful `PATCH` can advance `version` by **2**
 
-```json
+The profile write increments it, and if the onboarding step is recalculated that increments it
+again.
+
+**Always re-read `version` from the response. Never `version + 1`.**
+
+### 🔴 3. Editing `policies` pauses every agency connection
+
+Any change to `policies` — through this route or onboarding step 4 — bumps the vendor's policy
+version and drives **every active agency connection into `paused_reapproval`**. The agency must
+re-approve before it is usable again.
+
+This is not documented anywhere on the backend side and it is a significant user-visible
+consequence of a profile save. **Warn before saving policy changes.**
+
+⚠ And the change detection is a plain deep-equality of the serialised object, so a **reordered but
+equivalent** `policies` object triggers the pause. **Do not re-send `policies` when nothing
+changed** — omit the key.
+
+### 4. Country is set once
+
+`PATCH /api/vendor/profile` refuses a change with **`403 PROFILE_COUNTRY_IMMUTABLE`**,
+`details: { currentCountry }`. Sending the same value again is an accepted no-op.
+
+**It effectively locks when onboarding completes** — during onboarding, step 1 can still correct it;
+after completion step 1 returns 409 and this route returns 403.
+
+---
+
+## 1 · `GET /api/vendor/profile`
+
+```jsonc
 {
   "success": true,
   "data": {
-    "id": "507f1f77bcf86cd799439011",
-    "email": "vendor@example.com",
-    "emailVerified": true,
-    "phone": "+237612345678",
-    "phoneVerified": false,
-    "displayName": "TechSol",
-    "avatar": {
-      "id": "507f1f77bcf86cd799439040",
-      "key": "vendors/avatar-xyz789.png",
-      "url": "https://cdn.example.com/vendors/avatar-xyz789.png",
-      "mimeType": "image/png",
-      "size": 15360,
-      "originalName": "me.png"
-    },
-    "businessAddresses": [
-      {
-        "_id": "683abc1234567890abcdef02",
-        "label": "Main Office",
-        "address_line1": "123 Commerce Ave, Akwa",
-        "address_line2": "Suite 4B",
-        "city": "Douala",
-        "state": "Littoral",
-        "location": null
-      }
-    ],
-    "payoutDetails": {
-      "method": "mobile_money",
-      "mobile_money": {
-        "provider": "MTN Mobile Money",
-        "phone_number_masked": "••••••0000",
-        "account_name": "Tech Solutions Sarl"
-      },
-      "bank": null,
-      "card": null
-    },
-    "notificationPreferences": {
-      "email": true,
-      "whatsapp": false,
-      "phone": false
-    },
+    "id": "66a0…",
+    "email": "", "emailVerified": false,
+    "phone": "", "phoneVerified": false,
+    "displayName": "Ada N.",
+    "country": "CM",
+    "avatar": FileDetail | null,
+    "businessAddresses": [ /* snake_case inside — see below */ ],
+    "operatingHours": [ { "day": 1, "open_time": "08:00",
+                          "close_time": "18:00", "is_closed": false } ],
+    "payoutDetails": { /* masked, preferred only — see § 4 */ } | null,
+    "kycVerified": false,
+    "socialLinks": { "instagram": null, "facebook": null, "twitter": null },
+    "policies": { "return_policy": {…}|null, "cancellation_policy": {…}|null,
+                  "support_policy": {…}|null, "documents": ["https://…"] } | null,
+    "notificationPreferences": { "email": true, "whatsapp": false, "phone": false },
     "twoFactorEnabled": false,
+    "preferredLanguage": "fr",
     "status": "active",
-    "version": 3,
-    "createdAt": "2024-01-15T10:30:00.000Z",
-    "updatedAt": "2024-01-20T14:22:00.000Z"
+    "onboardingStep": 0,
+    "version": 7,
+    "createdAt": "…", "updatedAt": "…"
   }
 }
 ```
 
-> [!NOTE]
-> **`payoutDetails` is the PREFERRED method only** — a single object (or `null`), not the array you
-> sent. You store an ordered list of up to 3; this read returns index 0, the one payouts actually
-> use. It is **masked**: `mobile_money.phone_number` → `phone_number_masked`,
-> `bank.account_number` → `account_number_masked`. A `card` block is not redacted because nothing
-> sensitive is stored for it in the first place — no card number, no CVV, ever.
->
-> Only `mobile_money` can be **configured** right now (🚧 `bank` and `card` are switched off), but a
-> `bank` or `card` entry stored before the switch still reads back here exactly as shown above, with
-> its own block populated. Full contract: **[Payout methods](./payout-methods.md)**.
+`email` and `phone` are `""` when unset, **not `null`**.
 
-> [!IMPORTANT]
-> **Each `businessAddresses[]` entry is identified by `_id`, not `id`.** Unlike the outer profile
-> object (which is remapped to `id`), address subdocuments are passed through as-is, so they keep
-> Mongoose's default `_id` key. Use this `_id` value as `vendorAddressId` when setting a physical
-> product's pickup location (`PATCH /api/vendor/products/:id`, `delivery.pickupLocation.vendorAddressId`
-> — see [Vendor Products — Update Product](./products.md#update-product)).
->
-> **UX guidance**: don't show this `_id` to the vendor. Render the address picker using `label`
-> (and `address_line1`/`city` for disambiguation if two addresses share a label), and submit the
-> matching `_id` as the value under the hood — the same pattern as any labeled-option/select
-> control (display text ≠ submitted value).
+### 🔴 Casing is asymmetric — request vs response
 
-> [!IMPORTANT]
-> **`avatar` is a populated file object, not a URL.** This mirrors product media (see
-> [Vendor Product Upload Reference — Media Handling](./product-upload-flow.md#media-handling)):
-> the vendor uploads the image via `POST /api/files/upload` and gets back a file `id`; that `id` is
-> what gets submitted as `avatarFileId` via `PATCH /api/vendor/profile`. Reads always resolve the
-> stored file reference into `{ id, key, url, mimeType, size, originalName }`, or `null` if unset.
->
-> **`avatar` is the vendor's personal profile picture**, distinct from the **business** logo/banner,
-> which live on the [Store](./store.md). Like any file reference, while set it counts as *in use*
-> (it appears under `usage.references` on `GET /api/files/:id` with `entityType: "vendor", field: "avatar"`)
-> and cannot be deleted until you detach it (send `avatarFileId: null`). See
-> [File Management — the `usage` object](./file-management.md#get-apifilesid).
+| You send | You read back |
+|---|---|
+| `preferred_language` | `preferredLanguage` |
+| `business_addresses` | `businessAddresses` |
+| `operating_hours` | `operatingHours` |
+| `payout_details` | `payoutDetails` |
+| `social_links` | `socialLinks` |
+| `kyc_details` | `kycVerified` — a *different value*, not a rename |
 
-#### Error Responses
+And **everything nested inside `policies`, `businessAddresses` and `operatingHours` stays snake_case
+in both directions**: `address_line1`, `open_time`, `return_window_days`, and so on.
 
-**Unauthorized (401)**:
+A business address:
 
-```json
-{
-  "error": "Unauthorized: Missing token"
-}
+```jsonc
+{ "_id": "…", "label": "Warehouse", "address_line1": "…", "address_line2": null,
+  "city": "Douala", "state": null, "geo": { /* GeoAddress */ } }
 ```
 
-**Forbidden (403)**:
-
-```json
-{
-  "error": "Forbidden: Insufficient permissions"
-}
-```
-
-**Not Found (404)**:
-
-```json
-{
-  "success": false,
-  "error": {
-    "code": "NOT_FOUND",
-    "message": "Vendor profile not found"
-  }
-}
-```
+`kycVerified` is a boolean. **`national_id_number` is never returned.**
 
 ---
 
-### PATCH /api/vendor/profile
+## 2 · `PATCH /api/vendor/profile`
 
-Update the authenticated vendor's profile. **This is the endpoint to use for all post-onboarding edits** — including fields the vendor originally set during onboarding (payout details, branding, policies, country/timezone, etc.).
+### Body
 
-> [!IMPORTANT]
-> **When to use this vs. the onboarding endpoints.**
-> The `PUT /api/vendor/onboarding/*` step endpoints are for the **first-time onboarding flow only**. Once onboarding is complete (`onboarding_step === 0`) they all return `409 VENDOR_ONBOARDING_ALREADY_COMPLETED`.
-> To let a vendor change a previously-entered onboarding value from the **Settings UI**, send it here instead. See [Onboarding docs](./onboarding.md) for the original first-time flow.
->
-> **One exception:** the default delivery agency (onboarding Step 2) is **not** editable through this endpoint — use the dedicated [`PUT /api/vendor/profile/default-delivery-agency`](#put-apivendorprofiledefault-delivery-agency) route documented below. There is no route to clear it — vendors can only change it to a different agency (see that section for why).
+| Field | Type | Clearable |
+|---|---|---|
+| `displayName` | string 2–100 | ❌ |
+| `email` | RFC email | ❌ — `''` is rejected |
+| `phone` | strict E.164 | ❌ — `''` is rejected |
+| `timezone` | string | ❌ |
+| `preferred_language` | `en` `fr` `pt` `es` `ar` | ❌ |
+| `country` | 2 letters, uppercased | ❌ set-once |
+| `avatarFileId` | 24-hex file id | ✅ |
+| `business_addresses` | array — **full replace** | inner ✅ |
+| `operating_hours` | array — full replace | ❌ |
+| `payout_details` | array, **1–3** — full replace | ❌ |
+| `kyc_details.national_id_number` | string | ✅ |
+| `social_links.{instagram,facebook,twitter}` | URL | ✅ ×3 |
+| `policies` | object, nullable | inner ✅ ×3 |
+| `notificationPreferences` | `{ email?, whatsapp?, phone? }` | ❌ |
+| **`version`** | integer | 🔴 **REQUIRED** |
 
-#### Authentication
+### The complete `clearable()` list
 
-- **Required**: Yes
-- **Role**: `vendor`
+Ten fields, and **only** these accept `null` / `""` / `"   "` as "clear":
 
-#### Headers
-
-```http
-Authorization: Bearer <jwt_token>
-Content-Type: application/json
+```
+avatarFileId
+kyc_details.national_id_number
+social_links.instagram · .facebook · .twitter
+business_addresses[].address_line2 · [].state
+policies.return_policy.return_condition_notes
+policies.support_policy.eligibility_notes · .availability_description
 ```
 
-#### How to send
+**`email` and `phone` are NOT clearable here** — an emptied input is a validation error, not a
+clear. Bind them to fields that omit rather than blank.
 
-- **Partial update**: send **only** the fields you want to change. Omitted fields are left untouched.
-- **`version` is always required** (optimistic locking — see [Optimistic Locking](#optimistic-locking)). Read it from `GET /api/vendor/profile` first.
-- **Object/array fields are a full replace, not a merge.** When you send `payout_details`, `business_addresses`, `operating_hours`, `social_links`, or `policies`, the value you send **replaces** the entire stored value. To edit one entry, send the complete desired array/object (including the parts you want to keep). Omitting a field entirely leaves it unchanged — sending it with a partial value overwrites the rest.
+### Errors
 
-#### Request Body (example — edit several fields at once)
+| Status | Code | When |
+|---|---|---|
+| **403** | `AUTH_FORBIDDEN` | `email` sent while email changes are disabled — **use [me/contact-change.md](../me/contact-change.md) instead** |
+| **403** | `AUTH_FORBIDDEN` | `notificationPreferences.phone: true` — not available on the plan |
+| **403** | `PROFILE_COUNTRY_IMMUTABLE` | `details: { currentCountry }` |
+| 400 | `ADDRESS_COUNTRY_MISMATCH` | an address sits outside the vendor's country. `details: { index, label, addressCountryCode, requiredCountry }` |
+| **400** | `ADDRESS_GEO_REQUIRED` | a new or edited address has no geocode. `details: { index, label }` |
+| **409** | `VENDOR_BUSINESS_ADDRESS_IN_USE` | `details: { blockedAddresses: [{ addressId, label, productCount }] }` |
+| 409 | *(misnamed — see § 0.1)* | version mismatch |
 
-```json
-{
-  "displayName": "TechSolutions",
-  "phone": "+237698765432",
-  "timezone": "Africa/Douala",
-  "preferred_language": "fr",
-  "avatarFileId": "507f1f77bcf86cd799439040",
-  "payout_details": [
-    {
-      "method": "mobile_money",
-      "mobile_money": {
-        "provider": "MTN Mobile Money",
-        "phone_number": "+237670000000",
-        "account_name": "Tech Solutions Sarl"
-      },
-      "bank": null
-    }
-  ],
-  "notificationPreferences": { "email": true, "whatsapp": false, "phone": false },
-  "version": 3
-}
-```
+⚠ **`whatsapp: true` is accepted** even though the backend's doc says it is feature-gated. Only
+`phone` is actually gated.
 
-> **Business name/description/logo/banner are not editable here** — they live on the [Store](./store.md) (`PATCH /api/vendor/store`).
+### 🔴 The business-address identity trap
 
-#### Field Reference
+`business_addresses` is a **full replace**, and an entry **without its `_id` is treated as a new
+address — which means the old one counts as removed.** If any physical product's pickup location
+points at it, the whole update is rejected with `409 VENDOR_BUSINESS_ADDRESS_IN_USE` and **nothing
+partially saves**.
 
-All fields are **optional except `version`**. Every field below maps to a profile/onboarding concept; send only what changed.
+**Always echo `_id` back on entries the vendor did not touch.**
 
-| Field | Type | Validation | Onboarding step it maps to | Notes |
-|-------|------|------------|----------------------------|-------|
-| `displayName` | `string` | 2–100 chars | — (general) | The vendor's **personal/display** name. The **business** name is on the [Store](./store.md), not here. |
-| `email` | `string` | Valid email, lowercased ([Contact formats](../README.md#contact-formats-phone--email)) | — (general) | **Feature-gated** — rejected with `403` when `ALLOW_EMAIL_CHANGE=false`. |
-| `phone` | `string` | **E.164**, e.g. `+237670000000` ([Contact formats](../README.md#contact-formats-phone--email)) | — (general) | Contact phone. |
-| `country` | `string` | Exactly 2 chars, ISO-2 (auto-uppercased) | Step 1 (Basic Setup) | **SET-ONCE / IMMUTABLE.** Chosen during onboarding Step 1 and locked afterwards — sending a *different* value is rejected with `403 PROFILE_COUNTRY_IMMUTABLE`. Echoing the current value back is accepted (idempotent no-op). It anchors the business-address policy below. |
-| `timezone` | `string` | Min 1 char, IANA tz | Step 1 (Basic Setup) | E.g. `"Africa/Douala"`. Freely editable — this (plus `preferred_language`) is the profile's localization surface. |
-| `preferred_language` | `string` | One of `en`, `fr`, `pt`, `es`, `ar` | — (general) | The vendor's language, stored on this profile and used for **all notifications** (in-app, email, WhatsApp templates). There is no separate "notification language" — this is it. Defaults to `en`. |
-| `avatarFileId` | `string \| null` | MongoDB ObjectId of a file uploaded via `POST /api/files/upload`, or `null` | — (general) | The vendor's **personal profile avatar** (distinct from the business logo/banner, which live on the [Store](./store.md)). A **file reference**: registers the file as *in use* (`entityType: "vendor", field: "avatar"`) and blocks its deletion until detached. *Clearable*: `null` or `""` detaches it. Read back as the populated `avatar` file object. |
-| `payout_details` | `object[]` | 1–3 entries, ordered (index 0 = preferred). **`method` must be `"mobile_money"` today** — `"bank"` and `"card"` are 🚧 switched off | Step 1 (Basic Setup) | Full replace. Sub-schema is identical to onboarding — see [Step 1 field reference](./onboarding.md#step-1-basic-setup-required), or **[Payout methods](./payout-methods.md)** for the full reference. Entries stored before the switch still read back and are still paid; you just cannot re-send one. |
-| `business_addresses` | `object[]` | See onboarding sub-schema | Step 3 (Branding) | Full replace — **include each existing address's `_id`** (from the `GET` response) to preserve its identity, or a fresh id is generated (and the "old" one is treated as removed — see below). These are the vendor's **physical store locations and pickup points**, so every **new or edited** entry must carry a `geo` (selected `/api/geo/search` result; see [Geospatial addresses](../geo/README.md)) that resolves **inside the profile's `country`** — otherwise `400 ADDRESS_GEO_REQUIRED` / `400 ADDRESS_COUNTRY_MISMATCH`. Entries echoed back byte-identical (same loose fields, same `geo`) are grandfathered, so legacy plain-text addresses keep working until next touched. Because it is a full replace, echo `geo` back on unchanged entries or it counts as an edit. See [Step 3 field reference](./onboarding.md#step-3-branding-optional--skippable). |
-| `operating_hours` | `object[]` | Per-day `{ day, open_time "HH:MM", close_time "HH:MM", is_closed }` | — (general) | Full replace. |
-| `policies` | `object \| null` | `{ return_policy?, cancellation_policy?, support_policy?, documents? }` (sub-policies nullable) | Step 4 (Policy Setup) | Full replace of the **whole** `policies` object — include every sub-policy you want to keep. `documents` (max 2 URLs) is cleared if omitted. See [Step 4 field reference](./onboarding.md#step-4-policy-setup-optional--skippable). |
-| `kyc_details` | `object` | `{ national_id_number }` | — (general) | `legit_verified` is **admin-only** and ignored if sent. |
-| `social_links` | `object` | `instagram`, `facebook`, `twitter` — valid URLs or `null` | — (general) | Full replace. |
-| `notificationPreferences` | `object` | `{ email?, whatsapp?, phone? }` booleans | — (general) | `whatsapp`/`phone` are feature-flagged (see below). |
-| `version` | `number` (integer) | **Required**, must match current profile `version` | — | Optimistic-locking guard. Mismatch → `409`. |
-
-> **Not editable here:** `default_delivery_agency_id` (onboarding Step 2). Use the dedicated delivery-agency routes below. `legit_verified`, `status`, and `onboarding_step` are server/admin-controlled.
-
-> **Clearable fields**: every nullable string above (`avatarFileId`,
-> `social_links.*`, `kyc_details.national_id_number`, address
-> `address_line2`/`state`, policy `return_condition_notes`/`eligibility_notes`/`availability_description`)
-> accepts `null` **or `""`** to clear — both are stored and returned as `null`. Omit a key to leave it
-> unchanged. See [Conventions](../README.md#conventions).
-
-#### Response
-
-**Success (200 OK)**:
-
-```json
-{
-  "success": true,
-  "data": {
-    "id": "507f1f77bcf86cd799439011",
-    "email": "newemail@example.com",
-    "emailVerified": false,
-    "phone": "+237698765432",
-    "phoneVerified": false,
-    "displayName": "TechSolutions",
-    "avatar": {
-      "id": "507f1f77bcf86cd799439040",
-      "key": "vendors/avatar-xyz789.png",
-      "url": "https://cdn.example.com/vendors/avatar-xyz789.png",
-      "mimeType": "image/png",
-      "size": 15360,
-      "originalName": "me.png"
-    },
-    "notificationPreferences": {
-      "email": true,
-      "whatsapp": false,
-      "phone": false
-    },
-    "twoFactorEnabled": false,
-    "status": "active",
-    "version": 4,
-    "createdAt": "2024-01-15T10:30:00.000Z",
-    "updatedAt": "2024-01-21T09:15:00.000Z"
-  },
-  "message": "Profile updated successfully"
-}
-```
-
-#### Error Responses
-
-**Validation Error (400)**:
-
-```json
-{
-  "success": false,
-  "error": {
-    "code": "VALIDATION_ERROR",
-    "message": "Request validation failed",
-    "details": [
-      {
-        "field": "displayName",
-        "message": "String must contain at least 2 character(s)"
-      }
-    ]
-  }
-}
-```
-
-**Email Change Locked (403)**:
-
-> [!NOTE]
-> Email changes are controlled by the `ALLOW_EMAIL_CHANGE` configuration flag. When set to `false`, this error is returned.
-
-```json
-{
-  "success": false,
-  "error": {
-    "code": "FORBIDDEN",
-    "message": "Email changes are not allowed. Please contact support if you need to update your email address."
-  }
-}
-```
-
-**Feature Not Available (403)**:
-
-> [!NOTE]
-> WhatsApp and phone notifications are feature-flagged OFF in the initial release. This creates an upgrade path for premium plans.
-
-```json
-{
-  "success": false,
-  "error": {
-    "code": "FORBIDDEN",
-    "message": "WhatsApp notifications are not available on your current plan. Please upgrade to enable this feature."
-  }
-}
-```
-
-**Country Change Rejected (403)**:
-
-> [!IMPORTANT]
-> `country` is set once (onboarding Step 1) and immutable afterwards. Echoing the current value back is accepted; sending a different one is rejected.
-
-```json
-{
-  "success": false,
-  "error": {
-    "code": "PROFILE_COUNTRY_IMMUTABLE",
-    "message": "Country cannot be changed once set. It was fixed during onboarding for tax, shipping and address policy.",
-    "details": { "currentCountry": "CM" }
-  }
-}
-```
-
-**Business Address Without Geo (400)**:
-
-> [!IMPORTANT]
-> Every **new or edited** business address must include a geocoded `geo` (a selected `/api/geo/search` result). Untouched entries echoed back unchanged are exempt.
-
-```json
-{
-  "success": false,
-  "error": {
-    "code": "ADDRESS_GEO_REQUIRED",
-    "message": "New or edited addresses must include a geocoded location (`geo`) selected from /api/geo/search.",
-    "details": { "index": 1, "label": "Warehouse" }
-  }
-}
-```
-
-**Business Address Outside Country (400)**:
-
-```json
-{
-  "success": false,
-  "error": {
-    "code": "ADDRESS_COUNTRY_MISMATCH",
-    "message": "Addresses must be located in your registered country (CM). Pick the address again from /api/geo/search within that country.",
-    "details": { "index": 1, "label": "Warehouse", "addressCountryCode": "NG", "requiredCountry": "CM" }
-  }
-}
-```
-
-**Optimistic Locking Conflict (409)**:
-
-> [!IMPORTANT]
-> This error occurs when the profile was modified by another request between when you loaded it and when you tried to save it. The client should refresh the profile and retry the update.
-
-```json
-{
-  "success": false,
-  "error": {
-    "code": "CONFLICT",
-    "message": "Profile was modified by another request. Please refresh the page and try again."
-  }
-}
-```
-
-#### Notes
-
-- **Editing onboarding fields**: After onboarding completes, this endpoint is the **only** way to change values originally captured in the onboarding flow (payout, branding, policies, timezone). The onboarding step endpoints are locked (`409`). Exceptions: **`country` is immutable after onboarding** (`403 PROFILE_COUNTRY_IMMUTABLE`), and the default delivery agency has its own dedicated routes.
-- **Localization lives here, not on the store.** `timezone` and `preferred_language` are profile fields; `preferred_language` drives the language of every notification (there is no separate notification-language setting). The store has no language, address, or country of its own — see [Store Profile](./store.md).
-- **Full-replace semantics**: `payout_details`, `business_addresses`, `operating_hours`, `social_links`, and `policies` overwrite the stored value wholesale. Always send the complete desired value, not a delta. For `business_addresses` specifically, echo back each entry's `_id` to preserve its identity — see the note above and [Update Product](./products.md#update-product) for why this matters to pickup locations.
-- **Removing an in-use business address is blocked, not applied.** If the array you send omits (or regenerates the id of) an address that's still set as one or more physical products' `delivery.pickupLocation`, the **entire** `business_addresses` update is rejected with `409 VENDOR_BUSINESS_ADDRESS_IN_USE` — nothing is partially saved. `error.details.blockedAddresses` lists each such address with how many products reference it:
-  ```json
-  {
-    "success": false,
-    "error": {
-      "code": "VENDOR_BUSINESS_ADDRESS_IN_USE",
-      "message": "One or more business addresses you removed are still set as a pickup location on a product. Reassign or remove that pickup location first.",
-      "details": {
-        "blockedAddresses": [
-          { "addressId": "683abc1234567890abcdef02", "label": "Main Shop", "productCount": 3 }
-        ]
-      }
-    }
-  }
-  ```
-  Reassign or clear those products' `delivery.pickupLocation` first (`PATCH /api/vendor/products/:id` — see [Update Product](./products.md#update-product)), then retry the address removal.
-- **Optimistic Locking**: The `version` field prevents concurrent update conflicts. Always include the current version number from the GET response.
-- **Email Changes**: If `ALLOW_EMAIL_CHANGE=false`, email updates are rejected. Contact support to change email.
-- **Notification Preferences**: Only `email` notifications are available. `whatsapp` and `phone` are feature-flagged for future pricing tiers.
+And echo `geo` back **byte-identical**, or the entry counts as edited and must pass the
+country check. Equality is over `provider`, `provider_place_id`, `formatted_address` and both
+coordinates — `resolved_at` is ignored.
 
 ---
 
-### PATCH /api/vendor/profile/password
+## 3 · The other profile routes
 
-> [!WARNING]
-> **Deprecated alias.** Password change is now a shared, role-agnostic endpoint: **`PATCH /api/me/password`** — same body, same responses, works for every role. See [me/password.md](../me/password.md). This vendor path routes to the same handler and is kept only so existing frontends don't break.
+| Route | Body | Returns |
+|---|---|---|
+| `GET /profile/completion-status` | — | `{ onboardingStep, isComplete, missingFields, stepLabel }` |
+| `PATCH /profile/password` | `{ oldPassword, newPassword }` | deprecated alias of `PATCH /api/me/password` |
+| `GET`/`PUT /profile/default-delivery-agency` | `{ agencyId }` | see below |
+| `GET`/`PUT /profile/auto-redirect-orders` | `{ enabled, thresholdAmount? }` | `{ autoRedirectOrdersToAgency, autoRedirectThresholdAmount }` |
+| `GET`/`PUT /profile/auto-cancel-unpaid-days` | `{ days }` — **1–90** | `{ autoCancelUnpaidDays }` (default 3) |
+| `POST /profile/policy-documents` | multipart | see § 5 |
 
-Change the authenticated vendor's password.
+⚠ **`missingFields` only ever contains `country` and/or `payout_details`.** `timezone` is never
+reported missing even though it is required at step 1.
 
-#### Authentication
+⚠ **The two `GET` settings routes create a settings row on read.** They are not side-effect-free.
 
-- **Required**: Yes
-- **Role**: `vendor`
+**None of the four settings routes takes a `version`** — no optimistic locking there.
 
-#### Headers
+### `PATCH /profile/password` — the one behavioural difference
 
-```http
-Authorization: Bearer <jwt_token>
-Content-Type: application/json
+Identical to `PATCH /api/me/password` in every respect except that it sits behind the vendor role
+guard, so a non-vendor token gets `403 AUTH_ROLE_NOT_FOUND` here and succeeds there. **Prefer
+`/api/me/password`.**
+
+🔴 It re-issues credentials **as cookies only** — a Capacitor client that changes its password is
+signed out on its next request. See [auth/README.md § 7](../auth/README.md#7--password-change-signs-out-other-devices).
+
+### Default delivery agency
+
+`PUT` body: `{ "agencyId": "<24-hex>" }`.
+
+| Status | Code |
+|---|---|
+| 404 | `DELIVERY_AGENCY_NOT_FOUND` — missing, inactive, or not onboarded |
+| **422** | `CONNECTION_NOT_ACTIVE` — no active connection |
+
+🔴 **It cannot be cleared.** There is no route or value that unsets it; only an admin deactivation
+cascade does. Sending `null` is a `400 VALIDATION_ERROR`, not a dedicated refusal.
+
+The response carries **`meta`**:
+
+```jsonc
+{ "success": true, "data": { /* agency */ },
+  "meta": { "reassignedOrderItems": 4,
+            "skippedOrderItems": [ { "orderId", "itemId", "reason" } ] },
+  "message": "Default delivery agency updated successfully. 4 pending order item(s) reassigned…" }
 ```
 
-#### Request Body
+**Show `meta`.** Changing the default silently moves pending order items to the new agency, and
+`skippedOrderItems` names the ones it could not move.
 
-```json
-{
-  "oldPassword": "CurrentPassword123!",
-  "newPassword": "NewSecureP@ssw0rd"
-}
-```
+Setting it also **restores products** suspended for `default_delivery_agency_removed`. Refresh the
+product list afterwards.
 
-**Fields**:
+### `auto-redirect-orders`
 
-- `oldPassword` (**required**, string): Current password
-- `newPassword` (**required**, string): New password
+`{ "enabled": boolean, "thresholdAmount": number | null }`.
 
-**Password Requirements**:
-- Minimum 8 characters
-- At least one uppercase letter
-- At least one lowercase letter
-- At least one number
-- At least one special character
+🔴 **`thresholdAmount` is three-valued**: omitted leaves it unchanged, `null` clears the cap, a
+number sets it. It is **not** `clearable()` — `""` is rejected.
 
-#### Response
-
-**Success (200 OK)**:
-
-```json
-{
-  "success": true,
-  "message": "Password updated successfully. All other sessions have been signed out."
-}
-```
-
-Also sets fresh `access_token` and `refresh_token` cookies — see the session note below.
-
-#### Error Responses
-
-**Validation Error (400)**:
-
-```json
-{
-  "success": false,
-  "error": {
-    "code": "VALIDATION_ERROR",
-    "message": "Request validation failed",
-    "details": [
-      {
-        "field": "newPassword",
-        "message": "Password must contain at least one uppercase letter"
-      }
-    ]
-  }
-}
-```
-
-**Incorrect Old Password (403)**:
-
-```json
-{
-  "success": false,
-  "error": {
-    "code": "FORBIDDEN",
-    "message": "Current password is incorrect"
-  }
-}
-```
-
-#### Notes
-
-- **Password Verification**: The old password must be correct before the new password is set.
-- **Session Invalidation**: **Implemented.** Every session issued under the old password ends
-  — any access or refresh token minted before the change is refused with
-  `401 AUTH_PASSWORD_CHANGED`. The caller's own pair is replaced via `Set-Cookie` on this
-  response, so this session survives and no other one does. Full description in
-  [me/password.md](../me/password.md).
+When enabled, a paid physical order auto-dispatches to its agency, **except** when its total exceeds
+the threshold. See [orders.md § 4](./orders.md#4--post-apivendorordersiddispatch) — the manual
+dispatch button ignores the cap, which makes it the escape hatch for capped orders.
 
 ---
 
-### GET /api/vendor/profile/default-delivery-agency
+## 4 · 🔴 Payout details — read is lossy, write is a full replace
 
-Retrieve the authenticated vendor's currently-configured default delivery agency details.
+**There is no `/api/vendor/payout-methods` route.** The payout destination lives here, on the
+profile.
 
-> [!NOTE]
-> This may return a non-null agency **even if you never called the `PUT` endpoint below** —
-> the vendor's first-ever approved [agency connection](./agency-connections.md) is automatically
-> set as their default. Onboarding Step 2 (`PUT /api/vendor/onboarding/delivery-linking`) no
-> longer sets this directly; see [Onboarding](./onboarding.md#step-2-delivery-linking-optional--skippable).
+### Writing
 
-#### Authentication
+`payout_details` is an **ordered array of 1–3 entries. Index 0 is the preferred one and the only one
+a payout ever uses.** Reordering the array *is* the "change my preferred destination" operation —
+there is no default flag.
 
-- **Required**: Yes
-- **Role**: `vendor`
+### 🔴 Reading gives you back one entry, masked
 
-#### Headers
-
-```http
-Authorization: Bearer <jwt_token>
-```
-
-#### Response
-
-**Success (200 OK)**:
-Returns the agency details as a vendor-safe `VendorAgencyListItemDto`. Returns `null` if no default is configured.
-
-```json
-{
-  "success": true,
-  "data": {
-    "id": "683abc1234567890abcdef01",
-    "agencyName": "Swift Deliveries Cameroon",
-    "logo": { "id": "507f1f77bcf86cd799439030", "key": "images/2026/07/swift-logo.png", "url": "https://cdn.example.com/logos/swift-deliveries.png", "mimeType": "image/png", "size": 24576, "originalName": "logo.png" },
-    "kycVerified": true,
-    "headquartersAddress": {
-      "region": "Littoral",
-      "city": "Douala",
-      "address_description": "4th Floor, Immeuble Ndokotti, Akwa"
-    },
-    "coverageAreas": ["littoral", "centre", "west"],
-    "rating": null,
-    "policies": {
-      "pricing": {
-        "storage_based_enabled": true,
-        "pickup_based_enabled": true,
-        "notes": null
-      },
-      "returns": {
-        "payer": "vendor",
-        "return_window_days": 7,
-        "notes": "Returns must include original packaging."
-      },
-      "damage": {
-        "claim_deadline_days": 5,
-        "max_refund_per_item": 50000,
-        "notes": null
-      }
-    }
-  }
+```jsonc
+"payoutDetails": {
+  "method": "mobile_money",
+  "mobile_money": { "provider": "MTN",
+                    "phone_number_masked": "••••0000",
+                    "account_name": "Ada N." },
+  "bank": null,
+  "card": null
 }
 ```
 
-Or when no default is set:
-```json
-{
-  "success": true,
-  "data": null
-}
+**You cannot read back entries 1 and 2, and you cannot read back any unmasked number.**
+
+🔴 **A round-trip of the GET response into a PATCH will fail validation.** The read shape is not the
+write shape. Keep the vendor's input in your own form state; never rehydrate the payout form from
+`GET /api/vendor/profile`.
+
+### 🔴 Bank and card payouts are switched off — mobile money only
+
+The schema still validates all three shapes, and stored bank/card entries still read back. But a
+**write** naming `bank` or `card` is refused:
+
+```jsonc
+{ "error": { "code": "VALIDATION_ERROR", "statusCode": 400, "category": "validation",
+  "details": { "fields": [ {
+    "path": "payout_details.0.method",
+    "message": "Bank transfer payouts are not available right now. Currently accepted: mobile money.",
+    "code": "custom" } ] } } }
 ```
 
-#### Error Responses
+**There is no dedicated `PAYOUT_METHOD_*` error code** — it is a field-level validation issue with a
+human-readable message. **Show that message**; it names what *is* accepted.
 
-Same as `GET /api/vendor/profile`.
+⚠ **Because writes are a full replace, a vendor whose stored list contains a legacy bank entry
+cannot re-send the list unchanged.** Omit `payout_details` entirely unless they are editing it.
+
+Card-specific rules that survive while card is disabled: a field named `number`, `card_number`,
+`pan`, `account_number`, `cvv`, `cvc`, `cvn` or `security_code` is **refused, not stripped**. Never
+send a PAN — none is stored.
 
 ---
 
-### PUT /api/vendor/profile/default-delivery-agency
+## 5 · `POST /profile/policy-documents`
 
-Set or update the authenticated vendor's default delivery agency outside the onboarding flow. Not
-needed for your very first agency — see the auto-assignment note below.
+`multipart/form-data`, field name **`documents`**, **max 2 files, 5 MB each, PDF only**.
 
-> [!IMPORTANT]
-> **You don't need to call this for your first agency.** The vendor's first-ever approved
-> [connection](./agency-connections.md) is set as the default automatically, no call needed. Use
-> this endpoint to *switch* between multiple active contracts afterward.
->
-> **Vendors can change their default agency but can never clear it to null.** There is no `DELETE` route. A vendor's default only becomes unset if the underlying agency itself is deactivated by an admin — see [Admin: Delivery Agencies](../admin/delivery-agencies.md).
->
-> **Switching to an active agency restores suspended products.** If the vendor's physical products were suspended because their previous default agency was deactivated, switching to a different **active** agency here immediately restores every one of those products to its own saved prior status (draft → draft, active → active, etc.). Switching to a `pending_verification` agency is accepted as a valid choice but does **not** restore anything yet, since a pending agency doesn't satisfy the physical-product activation gate.
->
-> **Also auto-reassigns in-flight orders.** Any of the vendor's order items that are still `pending`/`assigned` (not yet picked up) and were riding on the *old* default agency are automatically moved to the new one — same effect as calling the item-level reassignment endpoint for each. An item is skipped (left on the old agency) if its **product** has its own explicit delivery-agency override, since that item was never really "on the default" in the first place. Items already `picked_up` or later are never touched. See `meta.reassignedOrderItems` / `meta.skippedOrderItems` in the response below.
->
-> **Requires an active, approved connection with the agency.** You can no longer set any active agency as your default — only one you've sent (or received and accepted) a connection request with, and which is currently `active` (not pending, rejected, or paused for reapproval). Browse agencies and send/manage requests via [Agency Connections](./agency-connections.md). Attempting to set an agency without an active connection returns `422 CONNECTION_NOT_ACTIVE`.
-
-#### Authentication
-
-- **Required**: Yes
-- **Role**: `vendor`
-
-#### Headers
-
-```http
-Authorization: Bearer <jwt_token>
-Content-Type: application/json
+```jsonc
+{ "success": true, "data": { "urls": ["https://…"] }, "message": "Uploaded 1 document(s)" }
 ```
 
-#### Request Body
+🔴 **It returns URLs, not file ids** — unlike every other upload on the platform. Submit them back as
+`policies.documents` (here) or top-level `documents` (onboarding step 4).
 
-```json
-{
-  "agencyId": "683abc1234567890abcdef01"
-}
-```
+🔴 **They are public.** The policy-document tree is served statically, so anyone with the URL can
+fetch it forever. That is the design — the vendor republishes them to counterparties — but say so
+before a vendor uploads something they consider private.
 
-**Fields**:
-- `agencyId` (**required**, string, valid MongoDB ObjectId): The ID of the delivery agency.
+| Status | Code |
+|---|---|
+| 400 | `VENDOR_POLICY_DOCUMENT_MISSING` — no files |
+| 400 | `VENDOR_POLICY_DOCUMENT_TYPE_INVALID` — the *claimed* type is not PDF |
+| **400** | `UPLOAD_POLICY_VIOLATION` — the **sniffed** type is not PDF, or the storage quota is exceeded. `details.violations[]` |
+| **413** | `CATALOG_FILE_TOO_LARGE` — over 5 MB |
 
-#### Response
+**Two type gates, and the doc only mentions one.** A `.pdf` that is not really a PDF passes the
+first and fails the second.
 
-**Success (200 OK)**:
-Returns the configured agency details as a vendor-safe `VendorAgencyListItemDto`.
-
-```json
-{
-  "success": true,
-  "data": {
-    "id": "683abc1234567890abcdef01",
-    "agencyName": "Swift Deliveries Cameroon",
-    "logo": { "id": "507f1f77bcf86cd799439030", "key": "images/2026/07/swift-logo.png", "url": "https://cdn.example.com/logos/swift-deliveries.png", "mimeType": "image/png", "size": 24576, "originalName": "logo.png" },
-    "kycVerified": true,
-    "headquartersAddress": {
-      "region": "Littoral",
-      "city": "Douala",
-      "address_description": "4th Floor, Immeuble Ndokotti, Akwa"
-    },
-    "coverageAreas": ["littoral", "centre", "west"],
-    "rating": null,
-    "policies": {
-      "pricing": {
-        "storage_based_enabled": true,
-        "pickup_based_enabled": true,
-        "notes": null
-      },
-      "returns": {
-        "payer": "vendor",
-        "return_window_days": 7,
-        "notes": "Returns must include original packaging."
-      },
-      "damage": {
-        "claim_deadline_days": 5,
-        "max_refund_per_item": 50000,
-        "notes": null
-      }
-    }
-  },
-  "meta": {
-    "reassignedOrderItems": 2,
-    "skippedOrderItems": [
-      {
-        "orderId": "665f000000000000000000aa",
-        "itemId": "665f000000000000000000bb",
-        "reason": "Product has its own delivery agency override"
-      }
-    ]
-  },
-  "message": "Default delivery agency updated successfully. 2 pending order item(s) reassigned to the new agency."
-}
-```
-
-#### Error Responses
-
-**Validation Error (400)**:
-```json
-{
-  "success": false,
-  "error": {
-    "code": "VALIDATION_ERROR",
-    "message": "Request validation failed",
-    "details": [
-      {
-        "field": "agencyId",
-        "message": "Invalid input: Must be a valid agency ID"
-      }
-    ]
-  }
-}
-```
-
-**Agency Not Found / Ineligible (400 / 404)**:
-Returned if the agency does not exist, is inactive, or has not completed onboarding.
-```json
-{
-  "success": false,
-  "error": {
-    "code": "DELIVERY_AGENCY_NOT_FOUND",
-    "message": "The selected delivery agency does not exist."
-  }
-}
-```
-
-**No Active Connection (422)**:
-Returned if you don't have an `active` connection with this agency (never requested, still `pending`, `rejected`, or `paused_reapproval`).
-```json
-{
-  "success": false,
-  "error": {
-    "code": "CONNECTION_NOT_ACTIVE",
-    "message": "You need an active, approved connection with this agency before setting it as your default. Send or check your connection request first."
-  }
-}
-```
+⚠ An uploaded-but-never-submitted document is retained forever — it is referenced at upload time so
+the orphan sweep spares it.
 
 ---
 
-## Order Automation Settings
+## 6 · `documents` sits at two different depths
 
-Per-vendor automation toggles stored on the vendor settings document. Created lazily
-on first read/write, so defaults apply until a vendor changes them.
+| Route | Path |
+|---|---|
+| `PUT /api/vendor/onboarding/policy-setup` | **top-level** `documents` |
+| `PATCH /api/vendor/profile` | **`policies.documents`** |
 
-### GET /api/vendor/profile/auto-redirect-orders
-
-Returns whether paid physical orders auto-dispatch to the agency in charge, plus the
-optional max-order-total cap.
-
-#### Authentication
-
-- **Required**: Yes
-- **Role**: `vendor`
-
-#### Response
-
-**Success (200 OK)**:
-```json
-{
-  "success": true,
-  "data": {
-    "autoRedirectOrdersToAgency": false,
-    "autoRedirectThresholdAmount": null
-  }
-}
-```
-
-- `autoRedirectOrdersToAgency` *(boolean)* — when `true`, a paid physical order's
-  shipments advance `pending → assigned` automatically. Default `false`.
-- `autoRedirectThresholdAmount` *(number | null)* — max order `total_amount` (in the
-  order's own currency) for which auto-redirect applies. Orders above this cap stay
-  `pending` for manual dispatch even when the toggle is on. `null` (default) = no cap.
-
-### PUT /api/vendor/profile/auto-redirect-orders
-
-Enable/disable auto-dispatch and optionally set the cap.
-
-#### Request Body
-
-```json
-{
-  "enabled": true,
-  "thresholdAmount": 50000
-}
-```
-
-- `enabled` *(boolean, required)*.
-- `thresholdAmount` *(number ≥ 0 | null, optional)* — omit to leave the existing cap
-  unchanged; send `null` to clear it (no cap); send a number to set the cap.
-
-#### Response
-
-**Success (200 OK)**:
-```json
-{
-  "success": true,
-  "data": {
-    "autoRedirectOrdersToAgency": true,
-    "autoRedirectThresholdAmount": 50000
-  },
-  "message": "Auto-redirect orders setting updated"
-}
-```
-
-### GET /api/vendor/profile/auto-cancel-unpaid-days
-
-Returns the number of days an order may remain unpaid before a daily background sweep
-auto-cancels it (sets `fulfillment_status='cancelled'`, `payment_status='failed'`, and
-notifies via the `order.cancelled` event).
-
-#### Response
-
-**Success (200 OK)**:
-```json
-{
-  "success": true,
-  "data": { "autoCancelUnpaidDays": 3 }
-}
-```
-
-- `autoCancelUnpaidDays` *(number)* — default `3`.
-
-### PUT /api/vendor/profile/auto-cancel-unpaid-days
-
-Set the unpaid-order auto-cancel window.
-
-#### Request Body
-
-```json
-{ "days": 5 }
-```
-
-- `days` *(integer, required)* — minimum `1` (cannot be `0`), maximum `90`.
-
-#### Response
-
-**Success (200 OK)**:
-```json
-{
-  "success": true,
-  "data": { "autoCancelUnpaidDays": 5 },
-  "message": "Auto-cancel unpaid orders setting updated"
-}
-```
+Both are `string[]`, max 2, each a URL. Easy to get wrong when sharing a form component.
 
 ---
 
-## Feature Flags & Configuration
+## 7 · Where the backend's own doc is wrong
 
-### Email Change Lock
-
-**Environment Variable**: `ALLOW_EMAIL_CHANGE`
-
-- `true`: Vendors can update their email address
-- `false` (default): Email changes are disabled, returns error with support contact message
-
-**Use Cases**:
-- Prevent spam/abuse
-- Maintain email verification integrity
-- Enforce business rules
-
-### Notification Channels
-
-**WhatsApp Notifications**:
-- **Status**: Feature-flagged OFF (hardcoded)
-- **Future**: Enable for premium plans
-
-**Phone Notifications**:
-- **Status**: Feature-flagged OFF (hardcoded)
-- **Future**: Enable for premium plans
-
-**Email Notifications**:
-- **Status**: Always available
-- **Default**: Enabled
-
----
-
-## Optimistic Locking
-
-All profile updates use **optimistic locking** to prevent data loss from concurrent modifications.
-
-### How It Works
-
-1. Client fetches profile: `GET /api/vendor/profile` → receives `version: 3`
-2. Client modifies fields locally
-3. Client sends update: `PATCH /api/vendor/profile` with `version: 3`
-4. Server checks if current version is still `3`
-   - **Match**: Update succeeds, version incremented to `4`
-   - **Mismatch**: Returns 409 Conflict error
-5. On conflict, client refreshes profile and retries
-
-### Best Practices
-
-- Always include the `version` field in update requests
-- Handle 409 Conflict errors by refreshing data and prompting user to retry
-- Display clear message: "Profile was updated elsewhere. Please refresh and try again."
-
----
-
-## Domain Events & Audit Logging
-
-### Events Emitted
-
-**Profile Updated**:
-```javascript
-eventBus.publish('vendor.profile.updated', {
-  eventType: 'vendor.profile.updated',
-  aggregateId: vendorId,
-  payload: {
-    vendorId,
-    changes: { email: { from: 'old@example.com', to: 'new@example.com' } }
-  },
-  occurredAt: new Date()
-});
-```
-
-**Password Changed**:
-```javascript
-eventBus.publish('user.password.changed', {
-  eventType: 'user.password.changed',
-  aggregateId: userId,
-  payload: { userId, role: 'vendor', roleEntityId: vendorId },
-  occurredAt: new Date()
-});
-```
-
-### Audit Logs
-
-All profile updates and password changes are logged for compliance:
-
-```javascript
-auditLogger.log({
-  actor: { userId, role: 'vendor' },
-  action: 'VENDOR_PROFILE_UPDATED',
-  resource: { type: 'Vendor', id: vendorId },
-  changes: { displayName: { from: 'OldName', to: 'NewName' } },
-  timestamp: new Date()
-});
-```
-
----
-
-## Future Enhancements
-
-### Two-Factor Authentication (2FA)
-
-The system is designed for future 2FA integration:
-
-- `twoFactorEnabled` field exists in response
-- When implemented, sensitive operations (password change, email change) will require 2FA verification
-- Extension point ready in service layer
-
-### Pricing Plans
-
-Notification preferences are already structured for plan-based enablement:
-
-```typescript
-if (vendor.plan === 'pro' || vendor.plan === 'enterprise') {
-  VendorConfig.ENABLE_WHATSAPP_NOTIFICATIONS = true;
-}
-```
-
-### Session Management
-
-A password change invalidates every session issued under the old password. There is **no**
-session store, and deliberately so: tokens here are stateless JWTs, so the revocation is a
-per-account instant (`password_changed_at`) written in the same update as the new hash, and
-both credential paths — every authenticated request and every refresh — refuse a token whose
-`iat` predates it with `401 AUTH_PASSWORD_CHANGED`.
-
-- No Redis key per vendor, no session list to delete, nothing to keep in step with the token.
-- Revocation is account-wide, not vendor-wide: the password lives on the **User**, so every
-  role the account holds is signed out together.
-- The caller performing the change receives a replacement cookie pair on the response and
-  keeps working.
-
----
-
-## Error Codes Reference
-
-| Code | HTTP Status | Description |
-|------|-------------|-------------|
-| `VALIDATION_ERROR` | 400 | Request body failed validation |
-| `UNAUTHORIZED` | 401 | Missing or invalid JWT token |
-| `FORBIDDEN` | 403 | Insufficient permissions or business rule violation |
-| `NOT_FOUND` | 404 | Vendor profile not found |
-| `CONFLICT` | 409 | Optimistic locking version mismatch |
-| `INTERNAL_ERROR` | 500 | Unexpected server error |
-
----
-
-## Security Best Practices
-
-1. **Always use HTTPS** in production
-2. **Store JWT tokens securely** (httpOnly cookies or secure storage)
-3. **Never log sensitive data** (passwords, tokens)
-4. **Implement rate limiting** on password change endpoint
-5. **Monitor for suspicious patterns** (rapid email changes, failed password attempts)
-6. **Rotate JWT secrets** periodically
-7. **Implement session timeout** for inactive users
-
----
-
-## Example Workflows
-
-### Update Display Name
-
-```bash
-# 1. Get current profile
-curl -X GET https://api.example.com/api/vendor/profile \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN"
-
-# Response: { "data": { "version": 5, ... } }
-
-# 2. Update display name
-curl -X PATCH https://api.example.com/api/vendor/profile \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "displayName": "My New Business Name",
-    "version": 5
-  }'
-```
-
-### Change Password
-
-```bash
-curl -X PATCH https://api.example.com/api/vendor/profile/password \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "oldPassword": "OldSecureP@ss123",
-    "newPassword": "NewSecureP@ss456!"
-  }'
-```
-
-### Enable Email Notifications
-
-```bash
-curl -X PATCH https://api.example.com/api/vendor/profile \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "notificationPreferences": 
-    {
-      "email": true
-    },
-    "version": 5
-  }'
-```
-
-### Change Payout Details (post-onboarding, from Settings)
-
-Onboarding is already complete, so `PUT /onboarding/basic-setup` would return `409`. Edit via the profile endpoint instead. Send the **complete** payout array (full replace):
-
-> 🚧 Only `mobile_money` can be configured right now — `bank` and `card` are switched off. See
-> [Payout methods](./payout-methods.md#availability).
-
-```bash
-# 1. Read current version
-curl -X GET https://api.example.com/api/vendor/profile \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN"
-# Response: { "data": { "version": 7, ... } }
-
-# 2. Replace payout details
-curl -X PATCH https://api.example.com/api/vendor/profile \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "payout_details": [
-      {
-        "method": "mobile_money",
-        "mobile_money": {
-          "provider": "MTN Mobile Money",
-          "phone_number": "+237670000000",
-          "account_name": "Tech Solutions Sarl"
-        },
-        "bank": null
-      }
-    ],
-    "version": 7
-  }'
-```
-
-### Add a card as your payout destination — 🚧 switched off
-
-> **Not available right now.** `bank` and `card` are switched off at the write path; only
-> `mobile_money` can be configured today, and sending anything else returns `400 VALIDATION_ERROR`
-> on `payout_details[n].method`. See
-> [Payout methods](./payout-methods.md#availability). The recipe below
-> is kept for when the switch flips back.
-
-Same endpoint, same full-replace rule — `"method": "card"` with a `card` sub-object. Here the card
-is made the **preferred** destination (index 0) and an existing mobile-money entry is kept as the
-fallback:
-
-```bash
-curl -X PATCH https://api.example.com/api/vendor/profile \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "payout_details": [
-      {
-        "method": "card",
-        "card": {
-          "brand": "visa",
-          "last4": "4242",
-          "card_holder_name": "JEAN DUPONT",
-          "expiry_month": 8,
-          "expiry_year": 2029,
-          "country": "CM",
-          "issuing_bank": "Afriland First Bank"
-        }
-      },
-      {
-        "method": "mobile_money",
-        "mobile_money": {
-          "provider": "MTN Mobile Money",
-          "phone_number": "+237670000000",
-          "account_name": "Tech Solutions Sarl"
-        }
-      }
-    ],
-    "version": 8
-  }'
-```
-
-> **Never send the card number or CVV.** There is no field for them and the request is **rejected**
-> if you include one (`400 VALIDATION_ERROR` naming the offending key) — deliberately, so a `200`
-> can never be mistaken for "the number is stored". Read
-> **[Payout methods → card](./payout-methods.md#card)** before you build the form; it covers the
-> refused field names, the optional `gateway_token`, and how a card payout is settled today.
+| The doc says | Source says |
+|---|---|
+| a version conflict returns `"CONFLICT"` | it returns **`VENDOR_FISCAL_CALENDAR_INVALID`** |
+| `whatsapp` notifications are feature-gated | only `phone` is; `whatsapp: true` is accepted |
+| the `GET /profile` response has 12 keys | it has **22** — `country`, `operatingHours`, `kycVerified`, `socialLinks`, `policies`, `preferredLanguage` and `onboardingStep` are all missing from the example |
+| business addresses have no `geo` | `geo` is always present |
+| errors are `FORBIDDEN` / `UNAUTHORIZED` / `NOT_FOUND` / `CONFLICT` | none of those strings exists — the real codes are `AUTH_*` prefixed |
+| 401/403 bodies are `{ "error": "Unauthorized: Missing token" }` | nothing emits that shape |
+| validation `details` is `[{field, message}]` | it is `{ fields: [{ path, message, code }] }` |
+| payout methods include bank and card | **mobile money only** right now |
+| `FileDetail` has six fields | `access` is a seventh, and `url` is nullable |
+| `ADDRESS_GEO_REQUIRED` | mentioned in prose, **missing from every error table** |
+| the policy-document gate is the declared MIME | there are **two** gates, and the second sniffs |
+| `PATCH /profile/password` is fully equivalent to `/api/me/password` | it additionally requires the vendor role |
