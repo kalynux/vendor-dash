@@ -1,6 +1,7 @@
 # Billing settings
 
 **Verified against backend source on 2026-08-24.**
+**Re-verified against source on 2026-09-08** — the one-key shape, the 0–90 range, the required-field PATCH and the two routes, against `jovi-mall/src/modules/billing/{validators/billing.validators.ts:95, controllers/vendor-billing.controller.ts:85-92}`.
 
 **Routes: 2** — `GET` and `PATCH /api/vendor/settings`
 

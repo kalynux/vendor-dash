@@ -1,6 +1,8 @@
 # Simple products
 
 **Verified against backend source on 2026-08-24.**
+**Partially re-verified against source on 2026-09-08** — the `BILLING_LIMIT_EXCEEDED` `details` shape only, against `services/entitlement.service.ts:100-113`. The rest of the page still carries
+its 2026-08-24 verification and was not re-read.
 
 **Routes: 3** — `POST /api/vendor/products/simple` · `PATCH /api/vendor/products/:id/simple` ·
 `POST /api/vendor/products/:id/convert-to-advanced`
@@ -131,7 +133,7 @@ route them to [profile.md](./profile.md).
 
 ### Errors
 
-`403 BILLING_LIMIT_EXCEEDED` (`details: { limit, current }`) · `400 CATALOG_IMAGE_LIMIT_EXCEEDED`
+`403 BILLING_LIMIT_EXCEEDED` (`details: { limit, current, requested, available }`) · `400 CATALOG_IMAGE_LIMIT_EXCEEDED`
 (7 for physical) · `409 CATALOG_VARIANT_SKU_EXISTS` — **SKU uniqueness is platform-global** ·
 `422 CATALOG_VARIANT_BARGAIN_*`.
 

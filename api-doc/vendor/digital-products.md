@@ -1,6 +1,7 @@
 # Digital products
 
 **Verified against backend source on 2026-08-24.**
+**Re-verified against source on 2026-09-08** — § 0 only — the "no vendor preview or download" claim, against `AssetDetail` (`read-models/product-detail.read-model.ts:64-71`, which has no `url` field) and the live `/api/digital/*` route list. The rest of the page carries its 2026-08-24 verification.
 
 **Routes: 7** — four asset/config routes on a variant, plus three entitlement routes.
 

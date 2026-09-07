@@ -27,7 +27,7 @@ inverted**: the bot mints a 6-character code that the user carries back to your 
 rather than the platform minting a token the user carries to the bot.
 
 🔴 **Six of the endpoints this page used to document are called by
-[`src/services/notification-channels.service.ts`](../MIGRATION-2026-08.md#1---seven-dead-calls--broken-today)
+[`src/services/notification-channels.service.ts`](../MIGRATION-2026-08.md#1---the-seven-dead-calls-are-fixed--nothing-here-is-broken-today)
 right now, and all six 404.** That file is the single largest concentration of dead calls in
 this repository. This page is not the fix — it is the reason the fix is needed.
 

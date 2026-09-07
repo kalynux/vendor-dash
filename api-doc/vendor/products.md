@@ -6,6 +6,16 @@ disagreed, source won — and **every filed disagreement was fixed at source on 
 (DOC-PROGRAM § 24), so that page now carries a *Verified against source* stamp. The worklist
 section that tracked them has been deleted.
 
+**Partially re-verified against source on 2026-09-08** — the plan-quota half: the three newly
+gated endpoints and the `BILLING_LIMIT_EXCEEDED` `details` shape
+(`controllers/vendor-product.controller.ts:183-185, 322-324, 369-371`,
+`domain/services/ProductBulkOperationsService.ts:56-72`,
+`services/entitlement.service.ts:96-113`), what counts against the cap
+(`repositories/mongo/product.repository.mongo.ts:86-93`), the `plan_quota_exceeded` suspension
+reason (`models/product.model.ts:72-101`), and the third `FileDetail.access` value
+(`read-models/file-detail.resolver.ts:67-77`, `read-models/product-image.resolver.ts:42`). The
+rest of the page still carries its 2026-08-24 verification and was not re-read.
+
 **Base path:** `/api/vendor/products` · **Auth:** vendor session · **Routes on this page: 8**
 
 | Method | Path | Purpose |
@@ -120,14 +130,15 @@ The schema is **not** `.strict()`, so an unknown query key is silently dropped r
 
 ### ⚠ Two source-level cautions
 
-- **`q` is interpolated into a MongoDB `$regex` without escaping**
-  (`src/modules/catalog/repositories/product.repository.mongo.ts:205-210`). A term containing
+- **`q` is interpolated into a MongoDB `$regex` without escaping** — re-verified 2026-09-08 at
+  `src/modules/catalog/repositories/mongo/product.repository.mongo.ts:219-220` **and 269-270**
+  (four sites, two query paths; the path and line numbers on this bullet were both stale). A term containing
   regex metacharacters behaves unpredictably, and a catastrophic-backtracking term such as
   `(a+)+$` is a live denial-of-service vector against this endpoint. **Do not offer a raw
   free-text box straight to this parameter without client-side length limiting**, and do not
   build features that fire it per keystroke. Filed as a backend defect.
 - The handler `console.log`s the whole page payload on every request
-  (`vendor-product.controller.ts:145`). Harmless to you; expect noisy backend logs.
+  (`vendor-product.controller.ts:171`). Harmless to you; expect noisy backend logs.
 
 ---
 
@@ -173,14 +184,16 @@ Server-set values: `mode: "advanced"`, `status: "draft"`, `hasVariants: false`,
 | Status | Code | When |
 |---|---|---|
 | 400 | `VALIDATION_ERROR` | Zod |
-| **403** | **`BILLING_LIMIT_EXCEEDED`** | the plan's product cap is reached. `details: { limit, current }` |
+| **403** | **`BILLING_LIMIT_EXCEEDED`** | the plan's product cap is reached. `details: { limit, current, requested, available }` |
 | 400 | `CATALOG_IMAGE_LIMIT_EXCEEDED` | too many images: **physical 7 · service 7 · digital 1**. `details: { scope, type, limit, received }` |
 | 404 | `CATALOG_FILE_NOT_FOUND` | a `fileIds` entry does not exist |
 | 403 | `CATALOG_PRODUCT_ACCESS_DENIED` | a `fileIds` entry belongs to another vendor |
 | 422 | `CATALOG_PRODUCT_INVALID_TITLE` | empty after trim (unreachable behind Zod) |
 
-**The plan cap counts non-archived, non-deleted products** — archiving frees a slot, and that is
-the affordance to offer when a vendor hits `BILLING_LIMIT_EXCEEDED`.
+**What counts against the cap:** every product that is not deleted, not `archived`, and not
+already quota-suspended (`product.repository.mongo.ts:86-93`). **Drafts count.** Archiving frees a
+slot, and that is the affordance to offer when a vendor hits `BILLING_LIMIT_EXCEEDED` — see
+[§ 11](#11--plan-quota--what-a-downgrade-does-to-the-catalogue).
 
 ### Behaviour worth knowing
 
@@ -254,6 +267,13 @@ They exist on the model and can be *filtered* on the list; only the platform set
 | `suspended` | — nothing (a platform/agency lock; the vendor cannot lift it) |
 
 Setting a product to the status it already holds is an accepted no-op, not an error.
+
+> 🔴 **`archived` → `draft` is quota-gated.** It is the one vendor transition that takes a
+> catalogue slot *back*, so it can be refused with **`403 BILLING_LIMIT_EXCEEDED`**
+> (`details: { limit, current, requested, available }`) even though the vendor owns the product
+> and the transition is legal. Every other transition on this route moves between two statuses
+> that both occupy a slot, so none of them can raise it
+> (`vendor-product.controller.ts:322-324`). See [§ 11](#11--plan-quota--what-a-downgrade-does-to-the-catalogue).
 
 An illegal transition is `422 CATALOG_PRODUCT_INVALID_STATE` with
 `details: { status, requested }`.
@@ -394,7 +414,7 @@ a *different* intent that survives a depot reorder differently. Do not pre-fill 
   "id": "66b1…",
   "key": "images/2026/08/9f2c…_front.jpg",
   "url": "https://api.example.com/api/files/images/…",   // string | null
-  "access": "public",                                     // "public" | "authorized"
+  "access": "public",                    // "public" | "authorized" | "quota_blocked"
   "mimeType": "image/jpeg",
   "size": 284119,
   "originalName": "front.jpg"
@@ -406,6 +426,19 @@ lands in public storage trees. But the classifier **fails closed**: an unrecogni
 yields `url: null`, `access: "authorized"`. So `url` is genuinely `string | null` and your types
 must say so. Full rules, and the trees that *are* private, in
 [files/private-files.md](../files/private-files.md).
+
+⚠ **There is a third value: `quota_blocked`**, also with `url: null`. It means the vendor is over
+their plan's storage cap and this image is one of the ones being held back — **not** a permissions
+problem and **not** a deletion. It is tested **before** the private-tree check, so it wins over
+`authorized` (`file-detail.resolver.ts:67-77`). A product gallery should render it as "locked —
+upgrade to show this image again". See [§ 11](#11--plan-quota--what-a-downgrade-does-to-the-catalogue).
+
+**On this vendor surface a blocked image is still listed**, as a `FileDetail` with
+`access: "quota_blocked"` — the vendor can see what they have. Elsewhere it is dropped entirely:
+`resolveProductImages` filters blocked files out (`product-image.resolver.ts:42`), so a blocked
+image disappears from the **public storefront**, from **customer order views** and from the
+**agency inventory rows** rather than appearing as a broken thumbnail. Worth telling the vendor:
+their shop listing loses the picture, their own editor does not.
 
 ---
 
@@ -516,11 +549,37 @@ branch on it programmatically, only display it.
 `productIds` entries are **not** ObjectId-validated by the schema. Garbage strings pass Zod and are
 silently dropped inside the query, surfacing only as a higher `failed` count.
 
+### 🔴 `POST /bulk/status` with `draft` is quota-gated, and it refuses the WHOLE batch
+
+Selecting archived products and moving them to `draft` reclaims that many slots at once. The
+check is **arithmetic, not a threshold** — it asks "is there room for all *N*", not "is there room
+for one" — and if there is not, **nothing in the batch is applied**
+(`ProductBulkOperationsService.ts:56-72`):
+
+```jsonc
+// 40 archived products selected, plan allows 15, 12 slots in use
+POST /api/vendor/products/bulk/status   { "productIds": [ /* 40 */ ], "status": "draft" }
+// → 403 BILLING_LIMIT_EXCEEDED
+//   details: { limit: 15, current: 12, requested: 40, available: 3 }
+```
+
+This is a `403` on the whole request, **not** rows in `data.errors` — so the partial-success
+shape above never appears for it. `available` is what to put in the message: *"you have room for
+3 more."*
+
+`POST /bulk/archive` is **never** quota-gated (archiving frees slots), and neither is
+`bulk/status` with `active` or `archived` as the target — only `archived → draft` takes a slot
+back, and `draft` is the only target that accepts `archived` as a source.
+
 ---
 
 ## 10 · `POST /api/vendor/products/:id/duplicate`
 
 No body. Returns `201` with the **raw** product ([§ 0](#0--read-this-first--two-response-shapes-for-a-product)).
+
+> 🔴 **Quota-gated.** The copy lands as a `draft`, and a draft occupies a slot, so this can be
+> refused with **`403 BILLING_LIMIT_EXCEEDED`** (`vendor-product.controller.ts:369-371`).
+> Disable the duplicate control when the vendor is at their cap rather than letting them find out.
 
 | Copied | Reset |
 |---|---|
@@ -538,3 +597,70 @@ No body. Returns `201` with the **raw** product ([§ 0](#0--read-this-first--two
   real `defaultVariantId`. The variant's SKU is regenerated; its **images are not carried over**.
 
 Tell the vendor which of these just happened. "Duplicated" means two quite different things.
+
+---
+
+## 11 · Plan quota — what a downgrade does to the catalogue
+
+**New since 2026-08-24.** The plan's `max_active_products` used to bind only at creation time. It
+now also binds **retroactively**: whenever a vendor's active plan changes, the backend recounts
+and brings the catalogue back inside the new allowance (`src/modules/plan-quota/`).
+
+### Products are SUSPENDED, never deleted
+
+The allowance is filled **from the oldest end**. Whatever no longer fits is set to
+`status: "suspended"` with:
+
+```jsonc
+"suspension": {
+  "reason": "plan_quota_exceeded",
+  "previousStatus": "active",          // what it will go back to
+  "suspendedAt": "2026-09-02T11:04:00.000Z"
+}
+```
+
+Nothing is deleted, no bytes are lost, and an upgrade restores exactly the same products in
+exactly the same order. **Do not describe this to the vendor as deletion.**
+
+### It is the only suspension reason the vendor can clear themselves — indirectly
+
+`plan_quota_exceeded` joins four existing `suspension.reason` values, and it behaves differently
+from all of them (`product.model.ts:85-93`):
+
+| `suspension.reason` | Who lifts it |
+|---|---|
+| `default_delivery_agency_removed` · `product_delivery_agency_removed` · `agency_connection_paused` | fixes itself once the agency link works again |
+| `agency_storage_suspended` | the storage agency |
+| `vendor_suspended` | the platform's vendor restore |
+| `platform_oversight` | **only** an administrator |
+| **`plan_quota_exceeded`** | **nobody's restore endpoint.** Only room reappearing — an upgrade, or archiving something older |
+
+`PATCH /:id/status` cannot lift it: `suspended → anything` is not a legal vendor transition
+([§ 5.1](#51-patch-apivendorproductsidstatus)). The two things that *do* work are **upgrade the
+plan** and **archive another product** — archiving publishes a capacity-freed signal and the
+next-oldest suspended product comes back on its own.
+
+### It is also the only reason that can attach to a `draft`
+
+A draft occupies a slot, so the sweep suspends drafts too. A vendor can therefore find a product
+they never published sitting in `suspended`.
+
+### Files are BLOCKED, not deleted
+
+The same sweep applies the plan's `max_storage_bytes`. Files outside the allowance keep their row
+and their bytes but stop being served — they come back as
+`access: "quota_blocked"` with **`url: null`** in every `FileDetail`
+(`file-detail.resolver.ts:67-77`). See [storage.md](./storage.md) and
+[file-management.md](./file-management.md).
+
+⚠ **`quota_blocked` outranks `authorized`** — a blocked file inside a private tree reports
+`quota_blocked`, so branch on it *first*. And **digital-product asset files are exempt**: they are
+billed under their own per-asset cap and are never blocked, so a customer's paid download never
+breaks.
+
+### Timing
+
+Enforcement normally lands **within a second** of the plan change, and a nightly sweep
+(`45 3 * * *` by default) is the backstop. Neither is on a request path, so a plan purchase
+returns before the recount finishes — **re-fetch the product list after an upgrade** rather than
+assuming the response reflects it.

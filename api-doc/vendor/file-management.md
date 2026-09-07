@@ -1,6 +1,11 @@
 # File Management Service API Documentation
 
 **Version:** 1.2 · **Written:** 2026-06-11 · **Audited against backend source: 2026-08-24**
+**Partially re-verified against source on 2026-09-08** — the nine audited deviations were each
+re-checked (`src/api/routes/file-upload.routes.ts`, `src/api/validators/file-management.validator.ts`,
+`src/api/controllers/file-management.controller.ts:108-198, 228-273`) and all nine still hold, and
+the quota-blocked note below was added from `modules/plan-quota/` and
+`repositories/mappers/file.mapper.ts:41-59`. The long-form body was not re-read.
 
 ---
 
@@ -36,6 +41,26 @@
 > violation codes, reference counting and the orphan sweep, the storage-provider abstraction,
 > ownership and linking rules, and the concurrency notes. Those are the reason this page was
 > kept rather than replaced.
+>
+> ### 🔴 One thing this page could not have known: a file can be QUOTA-BLOCKED
+>
+> Added 2026-08 (`src/modules/plan-quota/`). When a plan downgrade puts an owner over
+> `max_storage_bytes`, the files outside the allowance are **blocked**, newest first — the row
+> and the bytes are kept, the file simply stops being served, and an upgrade restores exactly
+> the same files. It is **not** a deletion and it is **not** the soft-delete this page
+> describes; nothing on the deletion-lifecycle sections below covers it.
+>
+> It surfaces in **two different dialects**, and that is the trap:
+>
+> | Where | Field | Blocked value |
+> |---|---|---|
+> | any `FileDetail` (product media, branding, avatars) | `access` | `"quota_blocked"`, with **`url: null`** |
+> | `GET /api/files` · `GET /api/files/:id` — these routes | `quotaBlockedAt` | an ISO timestamp instead of `null`; there is **no `access` and no `url` key on this shape at all** |
+>
+> These routes return the raw `File` domain object (`file.mapper.ts:41-59`), not a `FileDetail`.
+> Also: `quota_blocked` **outranks** `authorized`, so test it first; a blocked file's bytes
+> **still count** toward `usedBytes` (blocking frees no space); and a vendor's
+> **digital-product asset files are exempt** from the media cap and are never blocked.
 >
 > ⚠ Code fences on this page that reference backend source files were previously **links**
 > into a sibling repository. They are now plain paths — the files are in `jovi-mall/`, not in

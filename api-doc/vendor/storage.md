@@ -5,6 +5,12 @@
 `src/core/uploads/upload-config.ts:136-190` (the per-type caps),
 `src/api/validators/file-management.validator.ts:14` (the six category keys),
 `scripts/seed/seed-pricing-plans.ts:47-51` (the plan limits).
+**Partially re-verified against source on 2026-09-08** — the plan-quota half only: file blocking,
+the `access` / `quotaBlockedAt` split, and the digital-asset exemption, against
+`modules/plan-quota/`, `read-models/file-detail.resolver.ts:67-77`,
+`repositories/mappers/file.mapper.ts:41-59` and
+`domain/services/media/MediaStorageService.ts:36-66`. The rest of the page still carries its
+2026-08-24 verification and was not re-read.
 
 > **The `GET /api/files/storage` shape on this page is correct** — `limitBytes`, `usedBytes`,
 > `remainingBytes`, `byCategory`, and nothing else. It is the page that gets it right; the
@@ -203,6 +209,60 @@ reason as a per-file `violations[].code`: `FILE_TOO_LARGE` (413, exceeds the per
 Delete unreferenced files via `DELETE /api/files/:id` (only allowed when the file
 has no live references — detach it from products/variants first; see
 [File Management](./file-management.md)). Deleting media reduces `usedBytes`.
+
+---
+
+## 3.1 🔴 Going over the cap by DOWNGRADING — files are blocked, not refused
+
+**New since 2026-08-24** (`src/modules/plan-quota/`). The section above is the *upload* gate: it
+refuses new bytes at the door. It has never been able to do anything about a vendor who is
+already over the limit, and until this landed, a vendor who downgraded from 100 GB to 1 GB kept
+every byte served forever because nothing ever recounted.
+
+Now, on **every** plan change, the backend refills the allowance **from the oldest file** and
+**blocks** whatever no longer fits, newest first. Blocking is not deletion:
+
+| | Blocked file |
+|---|---|
+| the database row | **kept** |
+| the bytes in storage | **kept** |
+| its contribution to `usedBytes` | **still counted** — it did not free space |
+| what a client gets | `url: null` |
+| reversible? | yes — an upgrade restores exactly the same files, oldest first |
+
+⚠ **Never present this to the vendor as "your files were deleted."** The word to use is
+*hidden* or *locked*, and the fix is *upgrade* or *delete something older*.
+
+### The two dialects — the part that will catch you out
+
+The same condition is reported **two different ways** depending on which endpoint you asked:
+
+| Where | Field | Value when blocked |
+|---|---|---|
+| Any `FileDetail` — product media, variant media, branding, avatars | **`access`** | `"quota_blocked"`, and **`url: null`** |
+| `GET /api/files` and `GET /api/files/:id` (the media library) | **`quotaBlockedAt`** | an ISO timestamp instead of `null`. There is **no `access` key and no `url` key at all** on this shape |
+
+The media library returns the raw `File` domain object (`file.mapper.ts:41-59`), not a
+`FileDetail`. So the check you write for the product editor does not work on the library screen
+and vice versa. Branch on `quotaBlockedAt != null` in the library, on
+`access === "quota_blocked"` everywhere else.
+
+⚠ **`quota_blocked` outranks `authorized`.** A blocked file inside a private tree reports
+`quota_blocked`, not `authorized` (`file-detail.resolver.ts:67-77`) — so test for it **first**,
+or a private blocked file reads as a permissions problem when it is a billing one.
+
+### Digital-product assets are exempt
+
+Files backing a digital product's downloadable asset are **outside** the media cap — they are
+metered under their own per-asset cap — so they are never blocked, and a customer's paid download
+never breaks because their vendor downgraded. They are also excluded from `usedBytes` on this
+page's `GET /api/files/storage` for the same reason.
+
+### Timing
+
+The recount runs within a second of the plan change, with a nightly sweep as the backstop. It is
+not on the request path, so **re-fetch after an upgrade** rather than assuming the purchase
+response reflects it.
 
 ---
 

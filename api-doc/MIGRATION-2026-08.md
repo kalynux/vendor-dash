@@ -1,5 +1,7 @@
 # Migration — August 2026
 
+**Verified against source on 2026-09-08** — every count on this page re-measured, and the "seven dead calls" claim re-checked directly in this repository's `src/` (they are fixed).
+
 **If you read one document in this folder, read this one.**
 
 The backend moved and this repository's documentation did not follow. This page lists what is
@@ -11,29 +13,44 @@ corrections are noted per-page.
 
 ---
 
-## 1 · 🔴 Seven dead calls — broken today
+<a id="1---seven-dead-calls--broken-today"></a>
 
-All seven return **404**. They are all in one file:
-[`src/services/notification-channels.service.ts`](../src/services/notification-channels.service.ts).
+## 1 · ✅ The seven dead calls are FIXED — nothing here is broken today
 
-| Line | Dead call | Replacement |
-|---:|---|---|
-| 30 | `POST /webhooks/telegram/link-token` | `POST /api/me/connections` |
-| 34 | `GET /webhooks/telegram/status` | `GET /api/me/connections` |
-| 40 | `POST /webhooks/telegram/toggle` | **moved** — see [§ 1.2](#12-the-toggle-moved-it-did-not-vanish) |
-| 45 | `POST /webhooks/telegram/disconnect` | `DELETE /api/me/connections/telegram` |
-| **52** | **`POST /auth/request-wa-verification`** | `POST /api/me/connections` |
-| 56 | `GET /webhooks/whatsapp/link/status` | `GET /api/me/connections` |
-| 60 | `DELETE /webhooks/whatsapp/link` | `DELETE /api/me/connections/whatsapp` |
+<!-- The anchor above preserves the old heading's slug. Three pages in this set link to
+     `#1---seven-dead-calls--broken-today`; renaming the heading would have broken all three
+     silently, and two of them are outside this session's scope to edit. Do not remove it. -->
 
-> **Line 52 is new information.** The workspace audit found six dead calls; this is a seventh, found
-> by reading the service file by hand rather than by scanner. jovi-mall's own `auth.routes.ts:58`
-> carries the note: *"`POST /request-wa-verification` is GONE. It minted a code the user carried to
-> the WhatsApp bot; the direction is now inverted (the bot mints, the user redeems)."*
+**Re-checked in this repository's `src/` on 2026-09-08: none of the seven calls exists any more.**
+`src/services/notification-channels.service.ts` is down to `sendEmailVerification` and carries a
+comment recording the move; the linking flow lives in `src/services/connections.service.ts` against
+`/me/connections`. A repository-wide grep for `webhooks/telegram`, `webhooks/whatsapp/link` and
+`request-wa-verification` returns **nothing**.
 
-Nothing else in this repository calls a dead endpoint. A manual sweep of `src/` found **94 distinct
-API path literals** — every other one resolves to a live route. (The workspace scanner found only 8
-of those 94, so treat its silence as no evidence either way.)
+> ⛔ **This section read "🔴 Seven dead calls — broken today" until 2026-09-08, and the README's
+> banner repeated it.** The dashboard team acted on it; the page did not notice. A migration page
+> that still shouts about work already done trains its readers to skip it, which is the one thing
+> it cannot afford. **If you are re-reading this page for the seven calls: stop, they are done.**
+
+Kept for the record, because the *shape* of the replacement is still the contract:
+
+| Dead call (all now removed from this repo) | Replacement |
+|---|---|
+| `POST /webhooks/telegram/link-token` | `POST /api/me/connections` |
+| `GET /webhooks/telegram/status` | `GET /api/me/connections` |
+| `POST /webhooks/telegram/toggle` | **moved** — see [§ 1.2](#12-the-toggle-moved-it-did-not-vanish) |
+| `POST /webhooks/telegram/disconnect` | `DELETE /api/me/connections/telegram` |
+| `POST /auth/request-wa-verification` | `POST /api/me/connections` |
+| `GET /webhooks/whatsapp/link/status` | `GET /api/me/connections` |
+| `DELETE /webhooks/whatsapp/link` | `DELETE /api/me/connections/whatsapp` |
+
+jovi-mall's own `auth.routes.ts` still carries the note that explains the last of them:
+*"`POST /request-wa-verification` is GONE. It minted a code the user carried to the WhatsApp bot;
+the direction is now inverted (the bot mints, the user redeems)."*
+
+⚠ **On the scanner:** `call-audit.js` found only 8 of the ~94 API path literals in this repository
+when the sweep was done by hand, so **its silence is not evidence**. The 2026-09-08 re-check above
+was a direct grep of `src/`, not a scanner run.
 
 ### 1.1 What replaced them
 
@@ -77,7 +94,7 @@ Every referenced file — avatars, store logos and banners, product images — n
   "id": "66b1…",
   "key": "images/2026/08/9f2c…_front.jpg",
   "url": "https://…",        // string | null    ← was always a string
-  "access": "public",         // "public" | "authorized"   ← NEW, always present
+  "access": "public",         // "public" | "authorized" | "quota_blocked"   ← NEW, always present
   "mimeType": "image/jpeg",
   "size": 284119,
   "originalName": "front.jpg"
@@ -105,8 +122,15 @@ But the **type** changed, so your compiler will flag every site. Treat that flag
 
 ```ts
 if (file.access === 'public' && file.url) return <img src={file.url} />;
-// authorized → there is no URL to render; show metadata instead
+// authorized     → there is no URL to render; show metadata instead
+// quota_blocked  → also no URL. NOT a permissions problem: the owner is over their
+//                  plan's storage cap. Say "locked — upgrade your plan", never "deleted"
 ```
+
+⚠ **`access` has THREE values, not two.** `quota_blocked` was added with plan-quota enforcement
+and is **checked first**, so a blocked file inside a private tree reports `quota_blocked` rather
+than `authorized` — a `switch` written for two values sends the vendor to the wrong support
+conversation. See [vendor/storage.md § 3.1](./vendor/storage.md).
 
 ### 🔴 Digital product assets cannot be previewed by the vendor at all
 
@@ -321,8 +345,61 @@ on either behaviour.**
 
 ---
 
-## 12 · Where to go next
+## 12 · 🔴 Since 2026-08-24 — the two changes this page was written too early to name
+
+Both landed after the August sweep. Neither renamed a field, so **nothing in your build will
+fail**; both change what a number *means* or what a status *is*, which is the kind of change that
+shows up as a support ticket rather than as a stack trace.
+
+### 12.1 A plan downgrade now suspends products and blocks files
+
+`max_active_products` and `max_storage_bytes` used to bind only when a vendor created something.
+They now bind **retroactively**, on every plan change.
+
+| | What happens |
+|---|---|
+| Products over the cap | `status: "suspended"`, `suspension.reason: "plan_quota_exceeded"`. **Drafts count** toward the cap and get suspended too |
+| Files over the cap | `access: "quota_blocked"` with `url: null` (or `quotaBlockedAt` set, on `GET /api/files`) |
+| Reversible? | **Yes.** Nothing is deleted; an upgrade restores exactly the same items, oldest first |
+
+**Three endpoints can now refuse where they used to succeed**, all with
+`403 BILLING_LIMIT_EXCEEDED` and `details: { limit, current, requested, available }`:
+
+- `PATCH /api/vendor/products/:id/status` when the source status is `archived`
+- `POST /api/vendor/products/:id/duplicate`
+- `POST /api/vendor/products/bulk/status` with `draft` — **all-or-nothing**, a whole-request 403
+  rather than rows in `data.errors`
+
+**No restore endpoint lifts a quota suspension.** Only room reappearing does: upgrade, or archive
+something older. Full rules: [vendor/products.md § 11](./vendor/products.md#11--plan-quota--what-a-downgrade-does-to-the-catalogue)
+and [vendor/storage.md § 3.1](./vendor/storage.md).
+
+### 12.2 The storefront quotes a bargainable variant's CEILING, not its price
+
+**This is the most recent breaking change on the platform (2026-09-07), and it is silent.** For a
+variant with a `bargain` window and vectorisation on, the shop now displays **`bargain.maxPrice`**.
+`variant.price` becomes the vendor's **floor** and is never published on any public route.
+
+Nothing on the vendor wire changed — `price` is still `price`, in the same place, with the same
+type. What changed is what the vendor's input *does*:
+
+- A "maximum" field in your variant editor is **the price shoppers see**. Label it as such.
+  "Asking price (what shoppers see)" / "Your floor (never shown)" is the wording that does not
+  mislead.
+- It also drives the storefront's price range, the price sort and the price filter band, so the
+  product moves in search results.
+- **`compareAtPrice` is suppressed** on the shop unless it is strictly above `maxPrice`. A vendor
+  with `price 22 500 · compareAtPrice 27 000 · maxPrice 45 000` loses their "was" price entirely.
+  Warn when `compareAtPrice <= bargain.maxPrice`.
+- Un-ticking "allow bargaining" **lowers the shelf price back to `price`**. Confirm before saving.
+
+Full rules: [vendor/variants.md](./vendor/variants.md) · the customer app's doc set carries
+`FRONTEND-CHANGELOG-storefront-price-semantics.md` for the shop half.
+
+---
+
+## 13 · Where to go next
 
 - **[README.md](./README.md)** — the index, the permission row, and how to keep this folder in sync
 - **[ROUTE-MAP.md](./ROUTE-MAP.md)** — all 166 vendor routes and which document owns each
-- **[error-codes.ts](./error-codes.ts)** — 603 codes, copied from source on 2026-08-24
+- **[error-codes.ts](./error-codes.ts)** — **640** codes, re-counted from source on 2026-09-08

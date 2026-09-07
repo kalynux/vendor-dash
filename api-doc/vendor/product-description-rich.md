@@ -3,21 +3,25 @@
 **Verified against backend source on 2026-08-24** — `src/core/richtext/{types,schema,limits,doc}.ts`,
 `src/modules/catalog/validators/rich-description.validator.ts`,
 `src/modules/catalog/models/product.model.ts:242,408`.
+**Partially re-verified against source on 2026-09-08** — the rollout status only:
+`RICH_DESCRIPTION_WIRE_ENABLED` is now `true` (`vendor-dash/src/lib/richtext/wire.ts:36`), which
+reverses this page's former call to action. The document model and validator claims still carry
+their 2026-08-24 verification.
 
-> ## 🟢 ACTION: the backend has shipped. Your gate is still off.
+> ## ✅ CLOSED — the gate is on and nothing is outstanding
 >
 > `RICH_DESCRIPTION_WIRE_ENABLED` in [`src/lib/richtext/wire.ts`](../../src/lib/richtext/wire.ts)
-> is **`false`** in this working tree (verified 2026-08-24, line 29). Its own comment says
-> *"Flip this to `true` the day the backend ships the field"*.
+> is **`true`** (verified 2026-09-08, line 36). Rich descriptions are being sent.
 >
-> **That day has passed.** `descriptionRich` is a known key on **all four** product write
-> schemas — including the two `.strict()` quick-add ones — through one shared fragment
-> (`rich-description.validator.ts:39`), so the `.strict()` asymmetry the constant exists to
-> guard against **no longer exists**. Every vendor writing a formatted description today has
-> their bold and italic runs silently discarded on save.
+> ⚠ **This box read "ACTION: your gate is still off" until 2026-09-08, and it had been wrong for
+> some time** — the flag was flipped after the 2026-08-24 audit and nobody came back to the page.
+> A loud call-to-action for work already done is worse than no box at all: it invites a second
+> developer to "fix" something that is not broken.
 >
-> Flipping the constant is the only frontend change required. **This documentation does not
-> make that change** — nothing under `src/` was touched.
+> For the record, the reason it was flipped: `descriptionRich` is a known key on **all four**
+> product write schemas — including the two `.strict()` quick-add ones — through one shared
+> fragment (`rich-description.validator.ts:39`), so the `.strict()` asymmetry the constant existed
+> to guard against no longer exists.
 
 The structured description a vendor writes in the dashboard's formatting editor, and the source of truth for how a product reads when it is shared into **WhatsApp** or **Telegram**.
 
@@ -31,10 +35,10 @@ The structured description a vendor writes in the dashboard's formatting editor,
 > data.
 
 > [!NOTE]
-> **Implementation status: shipped.** The field is accepted on all four product
+> **Implementation status: shipped, both sides.** The field is accepted on all four product
 > write endpoints — including the two `.strict()` quick-add ones — persisted,
 > and returned on every vendor-facing product read. The frontend gate
-> (`RICH_DESCRIPTION_WIRE_ENABLED`) can be flipped to `true`. See
+> (`RICH_DESCRIPTION_WIRE_ENABLED`) **is `true`**. See
 > [Rollout](#rollout).
 
 ## Table of contents
@@ -250,11 +254,13 @@ Full algorithms, including truncation rules and test vectors, are in
 
 ## Rollout
 
-**The backend half is live.** The frontend still gates the field behind a single
-constant (`RICH_DESCRIPTION_WIRE_ENABLED`, `src/lib/richtext/wire.ts`), and
-flipping it to `true` is the only frontend change needed. While it stays `false`:
+**Both halves are live.** The frontend gate `RICH_DESCRIPTION_WIRE_ENABLED`
+(`src/lib/richtext/wire.ts:36`) is **`true`** — verified 2026-09-08 — so the field is being
+sent. Nothing here is outstanding.
 
-- The editor is fully functional and `description` persists as always.
+The constant is kept as a kill switch rather than deleted. If it is ever set back to `false`:
+
+- The editor stays fully functional and `description` persists as always.
 - Paragraphs, lists, line breaks, emoji and URLs survive a reload — the frontend
   reconstructs the document by parsing `description`.
 - Inline marks (bold / italic / strikethrough) and link labels do not survive,

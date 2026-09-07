@@ -1,6 +1,7 @@
 # Saved payment methods
 
 **Verified against backend source on 2026-08-24.**
+**Re-verified against source on 2026-09-08** — ALL claims on this page — the 5 routes, the DTO, the validator, the 10-method cap, the first-becomes-default and delete-does-not-promote behaviours, and the "nothing charges a saved method" claim (a repo-wide grep of every caller) — against `jovi-mall/src/modules/payment-methods/`.
 
 **Base path:** `/api/me/payment-methods` — **role-agnostic, not under `/api/vendor`.**
 **Routes: 5**

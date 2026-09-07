@@ -1,14 +1,38 @@
 # Vendor dashboard — backend API documentation
 
-**Last verified against backend source: 2026-08-24.**
-jovi-mall route census on that date: **677 routes total, 166 under `/api/vendor`.**
-Error registry: **603 codes** ([`error-codes.ts`](./error-codes.ts)).
+**Verified against source on 2026-09-08** — every number on this page re-measured against
+`jovi-mall/src/` and this directory, not carried forward from the previous edition.
+
+| Measured 2026-09-08 | Was (2026-08-24) |
+|---|---|
+| jovi-mall route census: **764 routes total** | 677 |
+| under `/api/vendor`: **166** | 166 — unchanged |
+| Error registry: **640 codes** ([`error-codes.ts`](./error-codes.ts), which is current) | 603 |
+| Files in this directory: **68** (66 `.md` + `error-codes.ts` + `ticket_types.txt`) | 67 |
+| Routers contributing to `/api/vendor`: **13** | 13 — unchanged |
+
+⚠ **Do not copy these numbers forward without re-measuring.** The error-registry figure alone has
+read 541 → 621 → 623 → 625 → **640** across editions of this program, and each stale value was
+quoted onward into other repositories and into generated code before anyone noticed. The two that
+matter to this dashboard — 166 vendor routes and 13 routers — have not moved.
+
+```bash
+# route census                    # error registry
+grep -c " /api/vendor" routes.txt
+node -e "const s=require('fs').readFileSync('src/core/error-codes.ts','utf8');\
+console.log(s.match(/^\s{4}[A-Z][A-Z0-9_]*:\s*'/gm).length)"
+```
 
 > # 🔴 Start here: [`MIGRATION-2026-08.md`](./MIGRATION-2026-08.md)
 >
-> **Seven endpoints this repository calls today no longer exist**, `FileDetail.url` can now be
-> `null`, sessions have a 90-day hard cap, uploads are really virus-scanned, and rate limits
-> exist. If you read one file before touching this dashboard, read that one.
+> `FileDetail.url` can be `null` and `access` now has **three** values (`public` ·
+> `authorized` · `quota_blocked`), sessions have a 90-day hard cap, uploads are really
+> virus-scanned, rate limits exist, a plan downgrade suspends products and blocks files, and the
+> storefront quotes a bargainable variant's **ceiling**. If you read one file before touching this
+> dashboard, read that one.
+>
+> ✅ **The "seven dead calls" this banner used to lead with are FIXED** — re-checked in `src/` on
+> 2026-09-08. Do not go looking for them.
 >
 > Then [`ROUTE-MAP.md`](./ROUTE-MAP.md) — all 166 vendor routes, each with exactly one owning
 > document.
@@ -65,7 +89,7 @@ Everything below is documented in full elsewhere; this is the orientation.
 Three envelope facts that catch people:
 
 1. **`error.category` is always present** and is the field to branch on when you have no
-   specific handling for a code — which is most of the 603. For **`internal`** and
+   specific handling for a code — which is most of the 640. For **`internal`** and
    **`external_service`** the `message` is replaced with a generic sentence and `details` is
    **dropped entirely, in every environment including development**. `requestId` is the only
    handle on a 5xx: show it.
@@ -131,16 +155,16 @@ again with `role`, or adds one via `POST /api/auth/add-role`. `403 AUTH_ROLE_NOT
 
 ---
 
-## 5 · Document index — the complete set, 67 files
+## 5 · Document index — the complete set, 68 files
 
 ### 5.1 Read these first
 
 | | |
 |---|---|
-| 🔴 [`MIGRATION-2026-08.md`](./MIGRATION-2026-08.md) | **the delta.** Seven dead calls with file and line, the `FileDetail` break, the session cap, rate limits, and every capability this dashboard was never told about |
+| 🔴 [`MIGRATION-2026-08.md`](./MIGRATION-2026-08.md) | **the delta.** The `FileDetail` break and its third `access` value, the session cap, rate limits, plan-quota suspension, the storefront price flip, and every capability this dashboard was never told about. (Its seven dead calls are **fixed** — kept only as the record of what replaced them) |
 | [`ROUTE-MAP.md`](./ROUTE-MAP.md) | all 166 vendor routes → exactly one owning document each; the 13 routers; the non-`/api/vendor` trees |
 | [`errors/README.md`](./errors/README.md) | the envelope, the nine categories, the exposure rule, the `details` shapes |
-| [`error-codes.ts`](./error-codes.ts) | 603 codes, copied verbatim from backend source |
+| [`error-codes.ts`](./error-codes.ts) | 640 codes, copied verbatim from backend source (re-counted 2026-09-08 — matches the registry) |
 
 ### 5.2 Cross-cutting
 
@@ -163,6 +187,14 @@ again with `role`, or adds one via `POST /api/auth/add-role`. `403 AUTH_ROLE_NOT
 | [`booking-implementation-guide.md`](./booking-implementation-guide.md) | the end-to-end booking build order |
 | [`health.md`](./health.md) | `/api/health` (frozen), `/live`, `/ready`, `/metrics` |
 
+> **Route accounting, re-measured 2026-09-08.** The per-page numbers below sum to exactly
+> **166** — every vendor route has one and only one owning page, with none left over. Two
+> sections' totals look off against a naive prefix count and are not: `digital-products.md` owns
+> three routes outside `/api/vendor/products` (the entitlement pair plus
+> `GET /orders/:id/entitlements`, which is why `orders.md` reads 13 against a live 14), and
+> `calendar.md` owns `GET /products/:id/service/calendar-status`. Likewise `notifications.md`
+> reads 7 because it owns the two `/vendor/devices` routes.
+
 ### 5.3 Vendor — products (47 routes)
 
 | Page | Routes |
@@ -177,7 +209,7 @@ again with `role`, or adds one via `POST /api/auth/add-role`. `403 AUTH_ROLE_NOT
 | [`vendor/availability-rules.md`](./vendor/availability-rules.md) | 6 |
 | [`vendor/digital-products.md`](./vendor/digital-products.md) | 7 |
 | [`vendor/product-share.md`](./vendor/product-share.md) 🆕 | 1 |
-| [`vendor/product-description-rich.md`](./vendor/product-description-rich.md) | — · 🟢 **the backend shipped; your gate is still off** |
+| [`vendor/product-description-rich.md`](./vendor/product-description-rich.md) | — · ✅ **shipped both sides**; `RICH_DESCRIPTION_WIRE_ENABLED` is `true` (re-checked 2026-09-08) |
 
 ### 5.4 Vendor — orders, delivery, bookings
 
@@ -323,10 +355,10 @@ The cheapest useful signal. Run it before believing anything in here:
 cd backend/jovi-mall
 node -r ts-node/register/transpile-only -r dotenv/config \
      ../FRONTEND-SYNC/tools/dump-routes.js "$(pwd)/src/app.ts" > /tmp/routes.txt
-grep -c " /api/vendor" /tmp/routes.txt      # 166 on 2026-08-24
+grep -c " /api/vendor" /tmp/routes.txt      # 166 on 2026-09-08 (unchanged since 2026-08-24)
 
 # 2. Has the error registry moved?
-grep -cE "^\s+[A-Z0-9_]+:\s*'" api-doc/error-codes.ts                      # 603
+grep -cE "^\s+[A-Z0-9_]+:\s*'" api-doc/error-codes.ts                      # 640 on 2026-09-08
 grep -cE "^\s+[A-Z0-9_]+:\s*'" backend/jovi-mall/src/core/error-codes.ts   # must match
 
 # 3. Which mirrored pages changed upstream?

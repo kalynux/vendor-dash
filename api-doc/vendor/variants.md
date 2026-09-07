@@ -1,6 +1,8 @@
 # Variants
 
 **Verified against backend source on 2026-08-24.**
+**Partially re-verified against source on 2026-09-08** — the bargainable-pricing half only — the `bargain`/`bargainable` shapes, the price-flip consequence and the `compareAtPrice` suppression, against `domain/services/bargain-price.rule.ts` and `read-models/public-display-price.ts`. The rest of the page still carries
+its 2026-08-24 verification and was not re-read.
 
 **Base path:** `/api/vendor/products` · **Routes: 7**
 
@@ -62,6 +64,31 @@ Options live in [option-variant-management.md](./option-variant-management.md) �
 So a configured bargain window on a product with vectorisation off comes back with `bargain`
 populated and **`bargainable: false`** — the window is kept but inert, never deleted. Show the
 configured range greyed out with "enable image vectorisation to activate", rather than hiding it.
+
+### 🔴 `maxPrice` is the SHELF PRICE on the storefront — say so in the editor
+
+**Changed 2026-09-07.** A bargainable variant is displayed on the shop at **`bargain.maxPrice`**,
+not at `price`. `price` becomes the vendor's **floor**, and it is **never published on any public
+route under any key** (`src/modules/catalog/read-models/public-display-price.ts`).
+
+This is the single most surprising thing on this page. A vendor filling in a "maximum" field
+expects private negotiating headroom; what they have actually done is **raise the price shoppers
+see**. Label it accordingly — "Asking price (what shoppers see)" and "Your floor (never shown)"
+reads correctly; "min / max" does not.
+
+`maxPrice` also drives the storefront's `priceMin`/`priceMax` range, the `price_asc`/`price_desc`
+sort and the `?minPrice=&maxPrice=` filter band, so the vendor's product moves in search results
+too.
+
+⚠ **`compareAtPrice` disappears from the storefront** on a bargainable variant unless it is
+strictly above `maxPrice`. `price 22 500 · compareAtPrice 27 000 · maxPrice 45 000` publishes
+**no** "was" price — publishing it would show a struck-through 27 000 above a live 45 000. The
+stored value is untouched and still comes back on this vendor route; only the shop suppresses it.
+Warn in the editor when `compareAtPrice <= bargain.maxPrice`.
+
+Storefront-side detail lives in the customer app's doc set, as
+`FRONTEND-CHANGELOG-storefront-price-semantics.md`; this dashboard carries no copy of it, and
+nothing on this page depends on reading it.
 
 ### `optionSignature`
 

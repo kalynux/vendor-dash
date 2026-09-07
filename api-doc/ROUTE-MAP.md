@@ -1,6 +1,13 @@
 # Route map — all 166 `/api/vendor/*` routes, and where each is documented
 
-**Generated:** 2026-08-24 · **Source:** the live Express router, not a document.
+**Generated:** 2026-08-24 · **Re-measured against source on 2026-09-08 — still 166, and the
+thirteen routers are unchanged.** **Source:** the live Express router, not a document.
+
+> The per-page ownership below was also re-checked: the counts in
+> [`README.md` § 5](./README.md#5--document-index--the-complete-set-68-files) sum to exactly
+> **166**, so every route has one owning page and none is orphaned. The wider jovi-mall census
+> **has** moved — 677 → **764** routes across all roles — but nothing was added to or removed
+> from `/api/vendor`.
 
 Every route the backend actually serves under `/api/vendor` appears **exactly once** below. If you
 find a vendor route that is not here, either the backend has changed or somebody added a route
