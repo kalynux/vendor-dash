@@ -1,7 +1,10 @@
 # Messaging connections — WhatsApp and Telegram
 
-**Verified against backend source on 2026-08-24.** 🆕 **This surface has never been documented in
-this repository.**
+**Verified against source on 2026-09-08** — re-checked the whole claim list: the three routes, the
+six error codes and their statuses, the 6-character code and its 10-minute life, the
+5-attempts-per-account counter and the 30/min per-IP limiter, against
+`src/modules/channel-connections/` and `src/api/rate-limit/policy.ts`. Nothing was wrong.
+*(First written against source 2026-08-24, when this surface had never been documented here.)*
 
 **Base path:** `/api/me/connections` · **Auth:** any signed-in role · **Routes: 3**
 

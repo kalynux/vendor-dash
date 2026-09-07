@@ -1,7 +1,13 @@
 # Billing, Plans & Credit — Cross-Dashboard Guide
 
-**Verified against backend source on 2026-08-24** — `scripts/seed/seed-pricing-plans.ts`,
-`src/modules/billing/services/entitlement.service.ts`, and the live route dump.
+**Verified against source on 2026-09-08** — the per-role caps and free-tier numbers re-checked, and
+the `BILLING_LIMIT_EXCEEDED` section corrected: it is **four** paths, not one, and `details` gained
+two fields. Against `scripts/seed/seed-pricing-plans.ts`,
+`src/modules/billing/services/entitlement.service.ts`,
+`src/modules/catalog/controllers/vendor-product.controller.ts`,
+`src/modules/catalog/domain/services/ProductBulkOperationsService.ts` and
+`src/modules/catalog/repositories/mongo/product.repository.mongo.ts`.
+*(First written against source 2026-08-24.)*
 
 > **This is a concept page.** The vendor endpoints it summarises are documented in full at
 > [`vendor/billing.md`](./vendor/billing.md) (plans, purchase, verify, credit) and
@@ -44,17 +50,50 @@ server job). Activating a plan grants its `credit_allowance` once into the role'
 | **Doc** | [vendor/billing.md](./vendor/billing.md) | `agency/billing.md` * | `agent/billing.md` * | `admin/docs/api/billing.md` (wi-admin) |
 | **Free tier** | `starter` | `agency_free` | `agent_free` | — |
 | **Plan limit** | products / storage / commission | `max_unterminated_shipments` (**soft**) | `max_unterminated_shipments` (**hard**) | defines all |
-| **Free-tier limit** | 15 products, 1 GB, 7% | **1000** unterminated shipments | **20** concurrent deliveries | — |
-| **Enforcement** | product create blocked at cap (`403 BILLING_LIMIT_EXCEEDED`) | never blocks — alert only | offer-accept blocked at cap (`422 AGENT_AT_CAPACITY`) | — |
+| **Free-tier limit** | 15 products, 1 GB storage, 7% commission | **1000** unterminated shipments, **5 GB** storage | **20** concurrent deliveries, **1 GB** storage | — |
+| **Enforcement** | **four** catalogue paths blocked at cap (`403 BILLING_LIMIT_EXCEEDED`) — see below | never blocks — alert only | offer-accept blocked at cap (`422 AGENT_AT_CAPACITY`) | — |
 | **Paid tiers today** | active | `is_active:false` (build UI, not yet buyable) | `is_active:false` | manage via catalog |
 
 * not mirrored in this repository — the page lives in the backend's own `api-doc/`.
 ** **not browser-reachable.** See [§ Admin](#admin-catalog--assignment) below.
 
-**Vendor figures verified in `scripts/seed/seed-pricing-plans.ts:47-51`:** `starter` —
-15 active products, 1 GB, 7 % commission, 50 credits. All three vendor tiers are
-`is_active: true`; the enforcement throw is `entitlement.service.ts:85`, a **403**
-`BILLING_LIMIT_EXCEEDED` carrying `details: { limit, current }`.
+**Vendor figures verified in `scripts/seed/seed-pricing-plans.ts:45-52`:** `starter` —
+15 active products, 1 GB, 7 % commission, 50 credits. `growth` — 150 products, 10 GB, 5 %, 850
+credits. `business` — **unlimited** products (`max_active_products: null`), 100 GB, 3 %, 4 500
+credits. All three vendor tiers are `is_active: true`.
+
+### 🔴 `403 BILLING_LIMIT_EXCEEDED` is thrown on FOUR paths, not one
+
+The cap used to be checked only when creating a product. Three more paths now refuse where they
+previously succeeded, so a screen built before 2026-09 will meet a 403 it does not handle:
+
+| Path | Endpoint |
+|---|---|
+| create | `POST /api/vendor/products`, and the simple-product create |
+| **un-archive** | `PATCH /api/vendor/products/:id/status` — **only** when the product is currently `archived` |
+| **duplicate** | `POST /api/vendor/products/:id/duplicate` — the copy lands as a `draft`, and a draft occupies a slot |
+| **bulk status change** | the bulk-operations endpoint — refused **all-or-nothing**, never partially applied |
+
+⚠ **The bulk check is arithmetic, the single one is a threshold.** The single check asks "is there
+room for one more?" against a count that does not move until the write — so looping it over fifty
+un-archives would pass fifty times and overshoot the cap. The bulk path asks "is there room for
+*N* more?" once.
+
+⚠ **`details` gained two fields, and they are the ones your message needs:**
+
+```json
+{ "limit": 15, "current": 13, "requested": 5, "available": 2 }
+```
+
+`{ limit, current }` was the old shape and is what this page used to document. **Say "you selected
+5 and have room for 2"**, not "limit reached" — the server's own `message` already does, and its
+category is `business_rule`, so that message is **not** replaced at the error boundary and is safe
+to show verbatim.
+
+⚠ **A draft occupies a slot.** The count is *not deleted, status not `archived`, and not already
+suspended by the quota sweep* — so drafts and active products both consume slots, and **only
+archiving frees one**. A vendor looking at 12 published products will not understand a 15-product
+refusal unless your UI shows which products are consuming slots.
 
 > **Launch state:** for agency and agent, **only the free tier is active** right now
 > (`GET /{role}/plans` returns one plan). The two paid tiers per role are seeded but

@@ -1,6 +1,10 @@
 # WhatsApp — the bot bridge
 
-**Verified against backend source on 2026-08-24.**
+**Verified against source on 2026-09-08** — re-checked the single route and its `X-Webhook-Secret`
+guard against `src/modules/whatsapp/whatsapp.routes.ts` and
+`src/api/middlewares/bot-webhook.middleware.ts`. Nothing was wrong — and this page's `Auth` cell
+was **right** where the backend's own copy said "none".
+*(First written against source 2026-08-24.)*
 
 > ## 🔴 Nothing on this page is a frontend endpoint.
 >
@@ -8,9 +12,12 @@
 > `/api/me/connections`, one mechanism for WhatsApp and Telegram alike.
 >
 > `GET /api/webhooks/whatsapp/link/status` and `DELETE /api/webhooks/whatsapp/link` are
-> **deleted**, and this repository's
-> [`src/services/notification-channels.service.ts`](../MIGRATION-2026-08.md#1---seven-dead-calls--broken-today)
-> still calls both. They return 404 today.
+> **deleted** from the backend — and **this repository no longer calls them.**
+> `src/services/notification-channels.service.ts` now carries only the email-verification call;
+> the linking flows moved to `connections.service.ts` against `/api/me/connections`. Verified in
+> that file on 2026-09-08. *(This page said both calls were still live and 404ing, which was true
+> when it was written and is not any more.)* See
+> [`../MIGRATION-2026-08.md`](../MIGRATION-2026-08.md) § 1.
 
 ---
 

@@ -1,6 +1,10 @@
 # Telegram — the bot bridge
 
-**Verified against backend source on 2026-08-24.**
+**Verified against source on 2026-09-08** — re-checked the route census and the four registered
+commands against `src/modules/telegram/telegram.routes.ts`,
+`src/modules/telegram/admin-messaging.routes.ts` and the four `command_name` declarations under
+`src/modules/{channel-connections,messaging-login}/commands/`. Nothing was wrong.
+*(First written against source 2026-08-24.)*
 
 > ## 🔴 Nothing on this page is a frontend endpoint.
 >
@@ -8,9 +12,12 @@
 > `/api/me/connections`, one mechanism for WhatsApp and Telegram alike.
 >
 > This page used to document five Telegram endpoints the dashboard could call. **All five are
-> gone.** Four of them are still called by
-> [`src/services/notification-channels.service.ts`](../MIGRATION-2026-08.md#1---seven-dead-calls--broken-today)
-> and return 404 today.
+> gone** from the backend — and **this repository no longer calls any of them.**
+> `src/services/notification-channels.service.ts` now carries only the email-verification call;
+> the linking flows moved to `connections.service.ts` against `/api/me/connections`. Verified in
+> that file on 2026-09-08. *(This page said the calls were still live and 404ing, which was true
+> when it was written and is not any more.)* See
+> [`../MIGRATION-2026-08.md`](../MIGRATION-2026-08.md) § 1.
 
 ---
 
@@ -75,6 +82,12 @@ Four commands are registered: `connect`, `login`, `reset_password` and `login_co
 Only `connect` concerns a vendor — the other three are the **customer** passwordless sign-in
 path and a cross-role password reset. A vendor signs in with a password at
 [`../auth/README.md`](../auth/README.md).
+
+⚠ **If you print `/reset-password` in a help message, print it exactly like that.** Telegram's
+`bot_command` entity accepts only `[a-zA-Z0-9_]`, so the command cannot be registered with
+BotFather and Telegram parses it as `/reset` plus text. It works because the automation layer
+matches the raw message text — so `/reset_password` with an underscore, which looks like the
+"correct" spelling, is the one that does **not** work.
 
 ## 2 · Related
 

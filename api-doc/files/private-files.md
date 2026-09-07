@@ -1,6 +1,13 @@
 # Private files — `FileDetail.url` is nullable
 
-**Verified against backend source on 2026-08-24.** 🆕 New page.
+**Verified against source on 2026-09-08** — the `FileDetail` shape, all **three** `access` values
+and their precedence, against `jovi-mall/src/modules/catalog/read-models/file-detail.resolver.ts`,
+`.../product-detail.read-model.ts` and `src/core/storage/storage-trees.ts`.
+*(First written against source 2026-08-24.)*
+
+> 🆕 **`access` gained a third value, `"quota_blocked"`, on 2026-09-07.** It is a **billing**
+> state, not a privacy one, and unlike everything else on this page it reaches **public** trees —
+> your product photos and your store logo. See [§ The third value](#the-third-value-quota_blocked).
 
 ---
 
@@ -14,15 +21,17 @@ images — comes back as this object. **Never a URL string.**
   "id": "66b1…",
   "key": "images/2026/08/9f2c…_front.jpg",
   "url": "https://api.example.com/api/files/images/…",   // string | null
-  "access": "public",                                     // "public" | "authorized"
+  "access": "public",                                     // "public" | "authorized" | "quota_blocked"
   "mimeType": "image/jpeg",
   "size": 284119,
   "originalName": "front.jpg"                             // OPTIONAL — key omitted when absent
 }
 ```
 
-- **`access` is always present.** Branch on it.
-- **`url` is `null` exactly when `access === "authorized"`.**
+- **`access` is always present.** Branch on it — all **three** values.
+- **`url` is a string exactly when `access === "public"`.** It is `null` for the other two, and
+  they are not the same situation: one is a private file you may be able to fetch another way, the
+  other is a billing problem. See [§ The third value](#the-third-value-quota_blocked).
 - **`originalName` is optional** — when the backend has none, the key is **omitted from the JSON
   entirely**, not set to `null`. Use optional chaining, not a null check.
 
@@ -31,11 +40,47 @@ public URL, so a client keeping `<img src={url}>` renders nothing for anyone not
 that shows up as "the photo is sometimes missing". `null` breaks the build instead.
 
 ```ts
-if (file.access === 'public' && file.url) {
-  return <img src={file.url} alt={file.originalName ?? ''} />;
+switch (file.access) {
+  case 'public':        return <img src={file.url!} alt={file.originalName ?? ''} />;
+  case 'quota_blocked': return <StoragePlaceholder onUpgrade={goToPlanPage} />;
+  case 'authorized':    return <AuthorizedFile id={file.id} />;  // metadata, or the owning entity's route
 }
-// authorized: there is no URL. Render metadata, or fetch through the owning entity's route.
 ```
+
+---
+
+## The third value: `quota_blocked`
+
+| `access` | `url` | What it means, and what to render |
+|---|---|---|
+| `"public"` | a real URL | ordinary media — render it |
+| `"authorized"` | **`null`** | private tree; the bytes come from the owning entity's own route, keyed on `id` |
+| `"quota_blocked"` | **`null`** | **this vendor is over their storage plan** |
+
+🔴 **This is the one on this page that will actually bite a vendor dashboard.** Everything else
+here is about `digital/`, `shipments/` and `ticket-attachments/` — trees a vendor barely touches.
+`quota_blocked` is independent of the tree, so it lands on **product photos, the store logo and
+the store banner**: the most ordinary files in the product.
+
+**It is a billing state, not a missing file.** The row, the bytes and the file's contribution to
+`usedBytes` all survive. Blocking is what a vendor gets *instead* of losing data when a plan
+downgrade puts them over the cap, and every blocked file comes back **unchanged** the moment they
+upgrade or free room — the sweep lifts oldest-first, exactly reversing how it blocked.
+
+So render a **placeholder plus an upgrade prompt**, linking to the plan page. Never a broken
+image. Never "file missing" or "file deleted" — the second is worse than useless: it starts a
+support conversation about data loss that did not happen.
+
+⚠ **`quota_blocked` outranks `authorized`.** A blocked file that is also in a private tree reports
+`quota_blocked`. Branch on it **first** — otherwise you send the client to an authorized route to
+find out what is wrong, and it comes back describing a permissions failure when the real answer
+is billing.
+
+⚠ **The file record on `/api/files/*` carries `quotaBlockedAt` instead** — a nullable timestamp,
+not an `access` string, because those routes do not return `FileDetail` at all (see below). A
+media-library screen has to read that field.
+
+Plan storage caps per tier: [`../billing-plans-across-roles.md`](../billing-plans-across-roles.md).
 
 ---
 
@@ -129,7 +174,8 @@ of those failing leaves the customer with a spent token and no file; retrying th
 
 ```jsonc
 { "id", "key", "provider", "mimeType", "size", "checksum", "originalName",
-  "ownerType", "ownerId", "orphanedAt", "createdAt", "updatedAt", "deletedAt", "purgeAt" }
+  "ownerType", "ownerId", "orphanedAt", "quotaBlockedAt", "createdAt", "updatedAt",
+  "deletedAt", "purgeAt" }
 ```
 
 **No `url`. No `access`.** A media-library screen built on `GET /api/files` has to construct the
@@ -140,7 +186,7 @@ Two more things about that endpoint, both from source:
 
 - ⚠ **`GET /api/files` leaks soft-deleted rows.** The list query filters on ownership and your query
   parameters only — it does **not** exclude `deletedAt`. Every id-scoped route does. **Filter
-  `deletedAt !== null` yourself.**
+  `deletedAt === null` yourself.**
 - **`provider` is always `"local"`**, hardcoded regardless of configuration. Filtering by it is
   pointless.
 
@@ -166,6 +212,7 @@ non-existent id fails the whole request with nothing persisted.
 | The doc says | Source says |
 |---|---|
 | `FileDetail` is `{id,key,url,mimeType,size,originalName}` | **`access` is a seventh field**, and `url` is `string \| null`. Wrong in five separate api-doc pages |
+| `access` has two values | it has **three** since 2026-09-07 — `quota_blocked` is the new one, and it outranks `authorized` |
 | the upload response contains `url` | it returns file records, which have **no `url` and no `access`** |
 | `/api/files/<path>` serves storage | only the **11 public trees** are mounted; the three private ones 404 |
 | `GET /files` returns `data: [...]` + `meta` | it returns `data: { files, storage, pagination }` with **no `meta`** |

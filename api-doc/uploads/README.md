@@ -1,9 +1,11 @@
 # Files & uploads — the shared `/api/files` tree
 
-**Verified against backend source on 2026-08-24** — `src/api/routes/file-upload.routes.ts`,
-`src/api/controllers/file-upload.controller.ts`,
+**Verified against source on 2026-09-08** — re-checked the whole claim list, and corrected the
+two 413 error codes and the `GET /api/files/:id` response, against
+`src/api/routes/file-upload.routes.ts`, `src/api/controllers/file-upload.controller.ts`,
 `src/api/controllers/file-management.controller.ts`,
-`src/core/storage/storage-trees.ts`, `src/api/index.ts:460-530`.
+`src/api/middlewares/error-handler.middleware.ts`, `src/core/storage/storage-trees.ts` and
+`src/api/index.ts`. *(First written against source 2026-08-24.)*
 
 **Base path:** `/api/files` · **Auth:** `requireAuth` on every route — **no role guard at all**
 · **Routes: 7**
@@ -19,7 +21,7 @@
 >
 > This page was **wrong in twelve ways** against source; the corrections are itemised in
 > `private-files.md` § "Where the backend's own docs are wrong" and summarised in
-> [§ 7](#7--what-this-page-used-to-say) below.
+> [§ 8](#8--what-this-page-used-to-say) below.
 
 ---
 
@@ -90,17 +92,28 @@ returns.** Never build a display URL out of the upload response.
 
 ### Errors
 
+Two mechanisms answer here. **Multer parses the multipart before the handler runs**, so its own
+ceilings are hit first and answer with no `details` at all.
+
 | Status | `error.code` | When |
 |---|---|---|
 | 400 | `UPLOAD_POLICY_VIOLATION` | any policy refusal — read `details.violations[]`, never `message` |
-| 413 | `CATALOG_FILE_TOO_LARGE` | a file exceeds the role ceiling above |
-| 400 | `VALIDATION_ERROR` | multer rejected the multipart (unexpected field, too many files) |
+| 413 | `UPLOAD_POLICY_VIOLATION` | the file is under 2 GB but over **the role ceiling above** — `details.violations[0].code` is `FILE_TOO_LARGE` |
+| 413 | `CATALOG_FILE_TOO_LARGE` | a part exceeded multer's hard **2 GB** ceiling. **No `details`.** |
+| 400 | `VALIDATION_ERROR` | multer rejected the multipart (field name other than `files`, or more than 10 parts). **No `details`.** |
+
+🔴 **A vendor over the 500 MB ceiling gets `UPLOAD_POLICY_VIOLATION` at 413 — not
+`CATALOG_FILE_TOO_LARGE`.** Multer's own ceiling is 2 GB, above every non-admin role limit, so
+the handler always catches an over-sized vendor upload first. If your error mapping keys on
+`CATALOG_FILE_TOO_LARGE` for this case it will never fire. *(This page said otherwise until
+2026-09-08.)*
 
 🔴 **"No files attached" is `UPLOAD_POLICY_VIOLATION`, not `VALIDATION_ERROR`** — the cheap
 pre-pipeline gate raises it through the same shape, with
-`violations[0].code = "NO_FILES_UPLOADED"`. The eleven pipeline codes and the varying status
-(413 for `FILE_TOO_LARGE`, 400 otherwise) are in
-[`../errors/README.md`](../errors/README.md).
+`violations[0].code = "NO_FILES_UPLOADED"`. But files sent under the *wrong field name* are
+`VALIDATION_ERROR`, because multer rejected them before the handler could look — two ways to
+send nothing, two different answers. The eleven pipeline codes plus `NO_FILES_UPLOADED`, and the
+varying status, are in [`../errors/README.md`](../errors/README.md).
 
 ---
 
@@ -112,6 +125,17 @@ pre-pipeline gate raises it through the same shape, with
   ceiling from § 2. A vendor's 500 MB allowance does not apply here.
 - **Count:** customers 1, every other role **3**.
 - `201` mirrors § 2, with `meta` carrying `count` and `perFileLimit: "70 MB"`.
+
+### Errors — and they are *not* § 2's
+
+Multer's ceiling on this route is set to exactly the documented 70 MB, so here the size refusal
+really does come back as `CATALOG_FILE_TOO_LARGE`.
+
+| Status | `error.code` | When |
+|---|---|---|
+| 413 | `CATALOG_FILE_TOO_LARGE` | a video over 70 MB. **No `details`** — this is multer, not the policy pipeline. |
+| 400 | `VALIDATION_ERROR` | field name other than `videos`, or a **fourth** video part |
+| 400 | `UPLOAD_POLICY_VIOLATION` | `NO_FILES_UPLOADED`; `TOO_MANY_FILES` (a **customer** sending 2 or 3); `MIME_NOT_ALLOWED` (anything that is not mp4/mov/webm) |
 
 ---
 
@@ -135,7 +159,7 @@ platform that does not use the house `meta` envelope. Read `data.pagination`.
 
 🔴 **The list leaks soft-deleted rows** (**F-26**). The query is built from ownership plus your
 filters and **never excludes `deletedAt`** (`file-management.controller.ts:139-149`). Every
-id-scoped route does exclude it; this one does not. **Filter `deletedAt !== null` client-side**
+id-scoped route does exclude it; this one does not. **Keep only rows whose `deletedAt` is `null`**
 or a deleted file reappears in a media browser.
 
 ### Query parameters — from `ListFilesQuerySchema`, not from the old doc
@@ -180,16 +204,69 @@ The same `storage` object embedded in § 4, on its own.
             "byCategory": { "image": { "bytes": 700000000, "count": 118 } } } }
 ```
 
-`limitBytes` and `remainingBytes` are **nullable** — `null` means no plan cap applies.
+`limitBytes` and `remainingBytes` are typed **nullable**, but **a vendor never sees `null`** —
+the resolver falls back to a default cap when a plan omits one, so there is always a number.
+`null` is the *customer* case; they have no plan and no cap. Keep the null branch in your types
+and do not build a "unlimited storage" state for a vendor.
+
 There is **no `fileCount` and no `plan`** field; both appeared in the old copy of this page and
-neither exists. The vendor's plan cap is 1 GB on `starter` — see
+neither exists. `byCategory` uses the six **singular** category names, and only the categories
+the vendor actually has appear. Plan caps per tier are in
 [`../billing-plans-across-roles.md`](../billing-plans-across-roles.md).
 
 `403 AUTH_FORBIDDEN` for a role with no owner scope.
 
 ---
 
-## 6 · Rendering a `url` — and the one attribute that will break you
+## 6 · `GET` · `PATCH` · `DELETE` `/api/files/:id`
+
+**`GET`** returns the file record *plus* a `usage` object saying where the file is referenced —
+which is what lets you tell a vendor **what would break** before offering a delete.
+
+```jsonc
+{
+  "success": true,
+  "data": {
+    "id": "664file0000000000000001",
+    "key": "images/2026/07/9f2c…_logo.png",
+    "provider": "local", "ownerType": "vendor",
+    "mimeType": "image/png", "size": 12044,
+    "usage": {
+      "totalReferences": 2,
+      "references": [
+        { "entityType": "product", "entityId": "664prod…", "field": "fileIds",     "label": "Blue kettle" },
+        { "entityType": "store",   "entityId": "664store…", "field": "logoFileId", "label": "Maison Kale" }
+      ],
+      "products": [ { "id": "664prod…", "title": "Blue kettle", "type": "physical", "status": "active" } ],
+      "variants": [], "digitalAssets": []
+    }
+  }
+}
+```
+
+**Build against `references[]`.** It carries one entry per live reference with a human-readable
+`label`, and it covers every entity type that can hold a file — product, variant, digital asset,
+ticket, vendor, store, agency, magazin, customer, agent, admin, shipment. A type with no label
+resolver still appears, with a generic fallback. The `products` / `variants` / `digitalAssets`
+arrays are kept for older consumers only; do not add new UI to them.
+
+**`PATCH`** edits `originalName` and nothing else — `{ "originalName": "new-name.jpg" }`,
+1–255 characters.
+
+**`DELETE`** soft-deletes, and **only if `usage.totalReferences` is 0**. Detach first.
+
+| Status | `error.code` | When |
+|---|---|---|
+| 404 | `CATALOG_FILE_NOT_FOUND` | no such file |
+| 403 | `AUTH_FORBIDDEN` | the file exists but belongs to somebody else |
+| 409 | `CATALOG_FILE_STILL_REFERENCED` | `DELETE` on a file that is still attached |
+
+🔴 **404 and 403 are different answers.** "Not found or not owned" is not the behaviour — an
+existing file you do not own says so, with a different status.
+
+---
+
+## 7 · Rendering a `url` — and the one attribute that will break you
 
 A public file's `url` points at the API host, so every dashboard renders it cross-origin.
 **Render it with a plain tag:**
@@ -234,7 +311,7 @@ original defect happened.
 
 ---
 
-## 7 · What this page used to say
+## 8 · What this page used to say
 
 Kept so a reader who has the old version in their head can check themselves against it.
 
@@ -255,7 +332,7 @@ Kept so a reader who has the old version in their head can check themselves agai
 
 ---
 
-## 8 · Related
+## 9 · Related
 
 - [`../files/private-files.md`](../files/private-files.md) — 🔴 the `FileDetail` break
 - [`../vendor/file-management.md`](../vendor/file-management.md) — the policy pipeline in full

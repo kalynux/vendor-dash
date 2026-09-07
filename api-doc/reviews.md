@@ -1,9 +1,12 @@
 # Reviews & ratings — the cross-role model
 
-**Verified against backend source on 2026-08-24** —
-`src/modules/reviews/domain/review-targets.ts`,
-`src/modules/reviews/domain/services/review-eligibility.service.ts`, and the live route dump.
-🆕 **New page in this repository.**
+**Verified against source on 2026-09-08** — re-checked the subject/author matrix, the aggregate
+matrix, the moderation rule and the trust weights, and **added the eligibility endpoint's `404`
+branch** (§ 4), against `src/modules/reviews/domain/review-targets.ts`,
+`src/modules/reviews/domain/services/review-eligibility.service.ts`,
+`src/modules/reviews/validators/review.validator.ts`, `src/modules/reviews/routes/*.ts` and
+`src/modules/agents/config/agent.config.ts`.
+*(First written against source 2026-08-24.)*
 
 > **This is the concept page.** The three routes a vendor calls are documented in full at
 > [`vendor/reviews.md`](./vendor/reviews.md). Read this one to understand *what a review is
@@ -115,7 +118,19 @@ review" screen has to be assembled from your own shipment list, not from this ro
 
 Both query parameters are required and the schema is **strict**: an extra parameter is a
 `400`. Same for the body — **the author's role comes from the route, never from the body**,
-so sending `authorRole` is a `400`.
+so sending `authorRole` is a `400`. (All six schemas in `review.validator.ts` are `.strict()`,
+so a cache-buster or analytics parameter appended to any of these URLs breaks the request.)
+
+🔴 **`/eligibility` does not always answer `200`, and the exception is the case you will hit
+first.** A *business* refusal is `200 { eligible: false, reason }`. But **`REVIEW_SUBJECT_NOT_FOUND`
+is thrown as a `404`** at four sites in `review-eligibility.service.ts` — an unknown product
+(`:93`), an unknown shipment (`:145`), its missing order (`:148`), and **a subject the caller does
+not own (`:158`)**. That last one is the trap: a vendor asking about somebody else's shipment gets
+a 404, not `eligible: false`.
+
+That conflation is deliberate — "does not exist" and "you may not see it" must be the same answer,
+or the endpoint becomes a way to probe which ids are real. **Handle both shapes**, and do not let
+a 404 here render as "something went wrong".
 
 Check eligibility before you render the form. The alternative is showing a vendor a review
 box that 422s on submit.

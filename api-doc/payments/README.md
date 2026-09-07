@@ -1,23 +1,33 @@
 # Payments
 
-**Verified against backend source on 2026-08-24.** This page was 129 lines behind its backend
-counterpart; rewritten from source.
+**Verified against source on 2026-09-08** — re-checked the whole claim list and added the two
+pay-link routes, against `src/modules/payments/routes/payment.routes.ts`,
+`src/modules/payments/validators/payment.validators.ts`,
+`src/modules/payments/services/pay-link.service.ts`,
+`src/modules/payments/gateways/registry.ts` and `src/modules/payments/config/payments.config.ts`.
+*(First rewritten from source 2026-08-24, when it was 129 lines behind its backend counterpart.)*
 
-**Base path:** `/api/payments` · **Routes: 4**
+**Base path:** `/api/payments` · **Routes: 6**
 
 Plan and credit purchases do **not** go through here — see
 [vendor/billing.md](../vendor/billing.md).
 
 ---
 
-## 0 · Three of the four routes are unauthenticated — by design
+## 0 · Four of the six routes are unauthenticated — by design
 
 | Route | Auth |
 |---|---|
 | `POST /api/payments/initiate` | **none** |
 | `POST /api/payments/verify` | **none** |
 | `POST /api/payments/:transactionId/authorize` | **none** |
+| `GET /api/payments/session/:token` | **none** — takes a link handle, never a transaction id |
+| `POST /api/payments/:transactionId/pay-link` | **`requireAuth`** + ownership |
 | `GET /api/payments/:transactionId` | **`requireAuth`** + ownership |
+
+🔴 **The two pay-link routes were added after this page was first written** (2026-08-26). Neither
+is reachable from a vendor dashboard — see [§ 9](#9--the-hosted-card-page--not-a-vendor-surface) —
+but the route census above is now the whole router.
 
 **This is deliberate: payment links are shareable.** A mother orders and her son pays. It was
 investigated during the workspace audit and explicitly **withdrawn as a finding — do not "fix" it**
@@ -215,3 +225,38 @@ and their payment may well complete anyway, out of sight.
 
 **Do not tell the payer their payment failed** on a 503 here. Tell them the platform is briefly
 unavailable and to check back. See [rate-limits.md § maintenance](../rate-limits.md#maintenance-mode--the-neighbouring-503).
+
+---
+
+## 9 · The hosted card page — not a vendor surface
+
+Two routes exist for a standalone card-payment page, and **a vendor dashboard cannot use either.**
+They are listed here so the route census in § 0 is complete, and so nobody builds against them by
+mistake.
+
+| Route | Auth | What it is for |
+|---|---|---|
+| `POST /api/payments/:transactionId/pay-link` | `requireAuth` **+ the caller must be the payer** | mint (or replace) a 256-bit link handle |
+| `GET /api/payments/session/:token` | none | what the payment page reads to confirm the charge |
+
+🔴 **`pay-link` is scoped to the payer, and a vendor is never the payer.** Ownership is matched
+against the transaction's `userId` — the customer's id, or the booking user's — so a vendor
+calling it on one of their own orders gets **`404 PAYMENT_TRANSACTION_NOT_FOUND`**, the same
+answer as a made-up id. Only the customer (or the automation layer acting as them, or an admin)
+can mint one.
+
+Why it exists at all: mobile money completes on the payer's handset, but a card cannot — `initiate`
+with `gateway: "STRIPE"` returns a `clientSecret` and only Stripe.js in a browser can confirm one.
+The handle is the door a standalone page reads through, and `GET /:transactionId` could not serve
+it because that route is authenticated and the payer often has no account.
+
+Two behaviours worth knowing even from this side:
+
+- **A second mint revokes the first.** At most one link per transaction is live. That is what makes
+  "the customer lost the message, send it again" safe.
+- **`url: null` on a mint is a real deployment state**, not an error: `STOREFRONT_URL` is unset, so
+  this deployment has no payment page.
+
+The full contract — the session projection, its four `state` values, and what it deliberately never
+discloses about the buyer — is in the role-neutral page
+`backend/jovi-mall/api-doc/payments/README.md` § "The hosted card page (GAP-008)".
