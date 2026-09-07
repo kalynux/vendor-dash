@@ -185,13 +185,3 @@ Every analytics request passes the auth stack **twice**, so it consumes **two to
 analytics panels on a timer spends eight. See [rate-limits.md](../rate-limits.md).
 
 ---
-
-## 6 · Where the backend's own doc is wrong
-
-| The doc says | Source says |
-|---|---|
-| date boundaries are computed in the timezone you pass | the parameter **has no effect** on the read; the zone applied at aggregation |
-| the 503 carries a detailed message and `details: {vendorId, from, to}` | the message is **replaced** and `details` **dropped** |
-| errors carry `{ code, message, statusCode }` | they also carry `requestId` and `category` |
-| aggregation runs "daily at 2:00 AM server time" | that is the default; it is configurable, and skipped during maintenance |
-| — | it never states that these four responses **have no `success` key** |

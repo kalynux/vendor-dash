@@ -2,7 +2,9 @@
 
 **Verified against backend source on 2026-08-24.** Every statement below was read out of
 `jovi-mall/src/`, not out of a document. Where the backend's own `api-doc/vendor/products.md`
-disagrees, source won and the disagreement is filed — see [§ 9](#11--where-the-backends-own-doc-is-wrong).
+disagreed, source won — and **every filed disagreement was fixed at source on 2026-09-06**
+(DOC-PROGRAM § 24), so that page now carries a *Verified against source* stamp. The worklist
+section that tracked them has been deleted.
 
 **Base path:** `/api/vendor/products` · **Auth:** vendor session · **Routes on this page: 8**
 
@@ -536,28 +538,3 @@ No body. Returns `201` with the **raw** product ([§ 0](#0--read-this-first--two
   real `defaultVariantId`. The variant's SKU is regenerated; its **images are not carried over**.
 
 Tell the vendor which of these just happened. "Duplicated" means two quite different things.
-
----
-
-## 11 · Where the backend's own doc is wrong
-
-Filed in `FRONTEND-SYNC/03-FINDINGS-REGISTER.md`. Listed here so you do not re-derive them from
-`jovi-mall/api-doc/vendor/products.md`.
-
-| # | The doc says | Source says |
-|---|---|---|
-| 1 | `FileDetail` is `{id,key,url,mimeType,size,originalName}`, `url` always a string | `access` is present and always has been since Phase 4; `url` is `string \| null` |
-| 2 | list rows have no `mode` | every list row carries `mode` |
-| 3 | `status` filter takes 3 values | it takes 5 |
-| 4 | `vectorisationStatus` has 4 values | it has 5 — `skipped_no_credits` |
-| 5 | create returns `fileIds: []` and `defaultVariantId: null` | it returns `files` + `pickup`, and `defaultVariantId` is **omitted** |
-| 6 | `descriptionRich` is not in the product shape | it is, on every detail/create/update response |
-| 7 | `PATCH /:id/status` and `duplicate` return the full product | they return the **raw** object |
-| 8 | duplicate never copies variants | a **simple** product's variant is copied |
-| 9 | `PATCH /:id` is allowed on `draft` and `active` | `suspended` is editable too |
-| 10 | the activation table lists 11 blockers | there are 15; description, vendor-suspended, service capacity and service availability are missing |
-| 11 | the error envelope has no `requestId` / `statusCode` / `category`, and `details` is an array of `{field,message}` | all three are present, and Zod details are `{ fields: [{ path, message, code }] }` |
-| 12 | `409 CATALOG_PRODUCT_VECTORISATION_PENDING` is only a vectorisation concern | it gates update, status, archive **and duplicate** |
-| 13 | `POST /` raises only two 400s | `403 BILLING_LIMIT_EXCEEDED` is the one that will actually stop a vendor |
-| 14 | `PATCH /:id` cannot raise `CATALOG_PRODUCT_AGENCY_STORAGE_INFINITE_STOCK` | it can |
-| 15 | bulk `errors` always explains a failure | it is omitted when empty, and on two of three paths explains only vectorisation locks |

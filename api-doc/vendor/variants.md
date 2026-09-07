@@ -312,17 +312,3 @@ All carry `details: { variant }`. Note the first three of those messages are dev
 **Setting a variant to the status it already has is a `200` no-op** with
 `message: "Variant is already <status>"`. That short-circuit runs *before* the simple-mode guard,
 so archiving an already-archived variant of a simple product succeeds rather than 409ing.
-
----
-
-## 6 · Where the backend's own doc is wrong
-
-| The doc says | Source says |
-|---|---|
-| max 1 000 variants per product, `CATALOG_VARIANT_LIMIT_EXCEEDED` | **no cap for physical products** — that code is unreachable. (The backend's `variants.md` says "unlimited"; its `option-variant-management.md` says 1 000. They contradict each other) |
-| `optionSignature` is `""` when there are no options | it is the **SKU** |
-| archiving reassigns the default to the variant with the **lowest `createdAt`** | the query is **unsorted** — the replacement is arbitrary |
-| "…or clears it if none remain" | it is **never cleared** — the pointer dangles |
-| `optionValueIds` is ignored on PATCH | it **is** written, and `optionSignature` is not recomputed |
-| several error tables | omit `CATALOG_PRODUCT_SIMPLE_MODE_LOCKED`, `CATALOG_PRODUCT_VECTORISATION_PENDING`, `CATALOG_PRODUCT_SERVICE_NO_CAPACITY` and every stock-gate error |
-| the endpoint list has five variant routes | there are **seven** — `/status` and `/default-variant` are missing |

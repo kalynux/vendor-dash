@@ -41,7 +41,9 @@ All billing endpoints use the platform-standard envelope.
 
 **Error:**
 ```json
-{ "success": false, "error": { "code": "ERROR_CODE", "message": "Human-readable description", "details": { } } }
+{ "success": false, "requestId": "3f8a1c74-…",
+  "error": { "code": "ERROR_CODE", "message": "Human-readable description",
+             "statusCode": 400, "category": "validation", "details": { } } }
 ```
 `details` is present on some errors (e.g. insufficient credits, limit exceeded).
 
@@ -255,4 +257,6 @@ Vendors choose how many days **before** plan expiry they want to be warned (`not
 | `PAYMENT_GATEWAY_NOT_SUPPORTED` | 400 | Unsupported `gateway` value on a top-up or plan purchase |
 | `PAYMENT_INITIATION_FAILED` | 502 | Gateway rejected the top-up / plan-purchase initiation |
 
-Plus the platform-standard `UNAUTHORIZED` (401), `FORBIDDEN` (403), `VALIDATION_ERROR` (400), `NOT_FOUND` (404), `INTERNAL_ERROR` (500).
+Plus the platform-standard `VALIDATION_ERROR` (400), the `AUTH_*` family on 401/403 — `AUTH_MISSING_TOKEN` · `AUTH_TOKEN_EXPIRED` · `AUTH_TOKEN_INVALID` on 401, `AUTH_ROLE_NOT_FOUND` on 403 — and `INTERNAL_SERVER_ERROR` (500).
+
+> ⚠ **This line named four codes that do not exist** (`UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND` for a resource miss, `INTERNAL_ERROR`) until 2026-09-06. `NOT_FOUND` **is** in the registry but is marked *"unmatched routes only"* (`error-codes.ts:1531`) — a resource miss gets a domain-prefixed code such as `ORDER_NOT_FOUND`. Corrected from source.

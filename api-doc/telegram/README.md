@@ -9,7 +9,7 @@
 >
 > This page used to document five Telegram endpoints the dashboard could call. **All five are
 > gone.** Four of them are still called by
-> [`src/services/notification-channels.service.ts`](../MIGRATION-2026-08.md#1--seven-dead-calls)
+> [`src/services/notification-channels.service.ts`](../MIGRATION-2026-08.md#1---seven-dead-calls--broken-today)
 > and return 404 today.
 
 ---
@@ -76,27 +76,7 @@ Only `connect` concerns a vendor — the other three are the **customer** passwo
 path and a cross-role password reset. A vendor signs in with a password at
 [`../auth/README.md`](../auth/README.md).
 
----
-
-## 2 · Where the backend's own doc is wrong
-
-Filed as **F-29** in the sync register.
-
-🔴 **`jovi-mall/api-doc/telegram/README.md:9` still lists
-`POST /api/webhooks/telegram/send` in its route table, and documents it in full at line 141**
-under the heading `POST /webhooks/telegram/send (admin)`. That path does not exist. The route
-dump has no `/api/webhooks/telegram/send`, and `telegram.routes.ts` registers exactly one route
-(`/webhook`, line 39). The capability moved to `POST /api/internal/admin/messaging/telegram`
-— which the same repository's `admin-messaging.routes.ts:11` says plainly. The page corrected
-its *linking* section for Phase 5 and missed its own *send* section.
-
-It does not affect a vendor dashboard (the route was admin-only either way), but it is the
-same failure mode that left seven dead calls in this repo's source: **a page half-updated for
-a change reads as authoritative for the half nobody touched.**
-
----
-
-## 3 · Related
+## 2 · Related
 
 - [`../connections/README.md`](../connections/README.md) — **the page you actually want**
 - [`../whatsapp/README.md`](../whatsapp/README.md) — the sibling bot bridge

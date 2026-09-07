@@ -114,7 +114,7 @@ pending, or when the profile has no payout method — checking is cheaper than e
 
 The payout method is `payout_details[0]` on the profile — the **first** entry, which is the
 preferred one. See
-[profile.md § 4](./profile.md#4--payout-details--read-is-lossy-write-is-a-full-replace).
+[profile.md § 4](./profile.md#4---payout-details--read-is-lossy-write-is-a-full-replace).
 **Mobile money only right now.**
 
 ---
@@ -161,10 +161,3 @@ initiated, and they will not remember requesting it.
 fire on a given deployment. Do not promise it.
 
 ---
-
-## 6 · Where the backend's own doc is wrong
-
-| The doc says | Source says |
-|---|---|
-| errors are `401 UNAUTHORIZED` / `403 FORBIDDEN` | neither string exists in the registry — the real codes are `AUTH_MISSING_TOKEN` etc. and `AUTH_ROLE_NOT_FOUND` |
-| a payout method may be "mobile money, bank or card" | **mobile money only**. Its own `payout-methods.md` gets this right, so the two disagree |

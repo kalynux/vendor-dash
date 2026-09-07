@@ -1,8 +1,10 @@
 # Orders
 
 **Verified against backend source on 2026-08-24.** Read out of `jovi-mall/src/modules/vendor/` and
-`src/modules/orders/`. The backend's own `api-doc/vendor/orders.md` disagrees with source in
-**thirty** places and **omits two routes entirely** — see [§ 12](#12--where-the-backends-own-doc-is-wrong).
+`src/modules/orders/`. The backend's own `api-doc/vendor/orders.md` disagreed with source in
+**thirty** places and omitted two routes entirely; **all thirty were fixed at source on
+2026-09-06** (DOC-PROGRAM § 24) and that page now carries a *Verified against source* stamp. The
+worklist section that tracked them has been deleted.
 
 **Base path:** `/api/vendor/orders` · **Auth:** vendor session · **Routes: 13**
 
@@ -590,37 +592,3 @@ It declares `delivery` singular where the wire has `deliveries` plural; it omits
 `deliveryTimeline`, per-item `delivery`, `trackingNumber`, `rejection` and `freeDelivery`; and its
 timeline type bears no resemblance to what ships. The shapes in this document were read from the
 service that actually builds the response.
-
----
-
-## 12 · Where the backend's own doc is wrong
-
-Filed in `FRONTEND-SYNC/03-FINDINGS-REGISTER.md`. Thirty confirmed items; these are the ones that
-change what you build.
-
-**Two routes are missing from it entirely:** `GET /:id/refund-eligibility` and `POST /:id/refund`
-— yet it asserts refund behaviour anyway.
-
-| The doc says | Source says |
-|---|---|
-| `status` filter includes `returned`; `paymentStatus` includes `disputed` | neither is in the filter enum — both are `400` |
-| there is no `customerId` filter | there is, and it works |
-| `q` searches order number, customer name and email | **order number only** |
-| `shippingAddress` comes from the customer's saved address | it is the **order's own checkout snapshot**, and carries a `geo` object the doc never mentions |
-| `deliveryStatus` has no `handing_over`; `rejection.reason` has no `platform_intervention` | both exist |
-| unresolvable customer fields are `null` | `orderCount`/`totalSpent` fall back to **`0`** |
-| the order carries a `dispute_hold` field to render, with snake_case keys | **it is never emitted**, and the status keys are camelCase |
-| vendor control is `pending → processing → cancelled` only | **`fulfilled → cancelled` is also allowed** |
-| terminal states are `delivered, fulfilled, cancelled, returned` | `fulfilled` is **not** terminal; `partially_shipped`, `shipped`, `partially_delivered` **are** |
-| `delivered → processing` gives `400 INVALID_STATE_TRANSITION` | **`422 ORDER_TERMINAL_STATE`** — the terminal check runs first |
-| errors are `NOT_FOUND`, `INVALID_STATE_TRANSITION`, `403 FORBIDDEN` | `ORDER_NOT_FOUND`, `ORDER_INVALID_TRANSITION`, and **no 403** — unpaid is `422 ORDER_PAYMENT_REQUIRED` |
-| `ORDER_TERMINAL_STATE` is not an error of `PATCH /:id/status` | it is the **most common** rejection |
-| reassignment is blocked once "picked up / in transit / delivered / returned" | only `pending`, `assigned`, `pending_agency_reassignment` are **allowed** |
-| the timeline has 8 event types | **9** — `order.completed` is missing |
-| timeline rows have no `noteId` / `description` | both are always present |
-| `oldValue`/`newValue` are only set on `fulfillment.updated` | read generically from any event's metadata |
-| `GET /:id/notes/:noteId` needs a meaningful order id | `:id` is **never read** |
-| entitlements return `[]` for non-digital orders | they **throw `400 ORDER_WRONG_TYPE`** |
-| entitlement revoke/restore give `404 NOT_FOUND` | `DIGITAL_ENTITLEMENT_NOT_FOUND` |
-| revoke/restore `reason` fails only when missing | it is **min 10, max 500** characters |
-| the error envelope has no `requestId`/`statusCode`/`category` | all three are present |

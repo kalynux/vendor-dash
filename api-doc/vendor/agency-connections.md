@@ -325,13 +325,3 @@ gate answers `CATALOG_PRODUCT_NO_DELIVERY_AGENCY`. Both mean "you need an active
 vendor hitting the second one from the product editor needs to be sent here.
 
 ---
-
-## 6 · Where the backend's own doc is wrong
-
-| The doc says | Source says |
-|---|---|
-| `logo` is `{id,key,url,mimeType,size,originalName}` | `access` is a seventh field, and `url` is `string \| null` |
-| suspension hits "products depending on that agency" | when the agency is the default, it hits **every active physical product**, override or not — and skips ones mid-vectorisation |
-| the lifecycle is `pending → active/rejected/withdrawn` | the `rejected\|withdrawn\|terminated → pending` re-request edge is missing from the summary |
-| four notification events exist | true, but it never says **withdraw and terminate emit nothing** |
-| `connection.rejected` always fires | it fires only if the vendor's Store name resolves |

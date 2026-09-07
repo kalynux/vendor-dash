@@ -162,8 +162,9 @@ clear. Bind them to fields that omit rather than blank.
 | **409** | `VENDOR_BUSINESS_ADDRESS_IN_USE` | `details: { blockedAddresses: [{ addressId, label, productCount }] }` |
 | 409 | *(misnamed — see § 0.1)* | version mismatch |
 
-⚠ **`whatsapp: true` is accepted** even though the backend's doc says it is feature-gated. Only
-`phone` is actually gated.
+⚠ **`whatsapp: true` is accepted.** Only `phone` is gated (`403 AUTH_FORBIDDEN`). The backend's
+doc used to claim WhatsApp was feature-gated too; that was corrected at source on 2026-09-06, so
+both documents now agree. WhatsApp is limited by **credits at send time**, not by a flag.
 
 ### 🔴 The business-address identity trap
 
@@ -283,7 +284,8 @@ The schema still validates all three shapes, and stored bank/card entries still 
 **write** naming `bank` or `card` is refused:
 
 ```jsonc
-{ "error": { "code": "VALIDATION_ERROR", "statusCode": 400, "category": "validation",
+{ "success": false, "requestId": "3f8a1c74-…",
+  "error": { "code": "VALIDATION_ERROR", "statusCode": 400, "category": "validation",
   "details": { "fields": [ {
     "path": "payout_details.0.method",
     "message": "Bank transfer payouts are not available right now. Currently accepted: mobile money.",
@@ -340,22 +342,3 @@ the orphan sweep spares it.
 | `PATCH /api/vendor/profile` | **`policies.documents`** |
 
 Both are `string[]`, max 2, each a URL. Easy to get wrong when sharing a form component.
-
----
-
-## 7 · Where the backend's own doc is wrong
-
-| The doc says | Source says |
-|---|---|
-| a version conflict returns `"CONFLICT"` | it returns **`VENDOR_FISCAL_CALENDAR_INVALID`** |
-| `whatsapp` notifications are feature-gated | only `phone` is; `whatsapp: true` is accepted |
-| the `GET /profile` response has 12 keys | it has **22** — `country`, `operatingHours`, `kycVerified`, `socialLinks`, `policies`, `preferredLanguage` and `onboardingStep` are all missing from the example |
-| business addresses have no `geo` | `geo` is always present |
-| errors are `FORBIDDEN` / `UNAUTHORIZED` / `NOT_FOUND` / `CONFLICT` | none of those strings exists — the real codes are `AUTH_*` prefixed |
-| 401/403 bodies are `{ "error": "Unauthorized: Missing token" }` | nothing emits that shape |
-| validation `details` is `[{field, message}]` | it is `{ fields: [{ path, message, code }] }` |
-| payout methods include bank and card | **mobile money only** right now |
-| `FileDetail` has six fields | `access` is a seventh, and `url` is nullable |
-| `ADDRESS_GEO_REQUIRED` | mentioned in prose, **missing from every error table** |
-| the policy-document gate is the declared MIME | there are **two** gates, and the second sniffs |
-| `PATCH /profile/password` is fully equivalent to `/api/me/password` | it additionally requires the vendor role |

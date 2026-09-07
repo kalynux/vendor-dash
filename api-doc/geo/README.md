@@ -124,14 +124,3 @@ address isn't found", ten minutes is the answer.
 - There is no geo-specific rate limit — only the global and identity layers apply.
 - Both routes are **GETs**, so they survive a `readonly` maintenance window but fail during `down`.
 
----
-
-## 7 · Where the backend's own doc is wrong
-
-| The doc says | Source says |
-|---|---|
-| only `nominatim` has an adapter | **Geoapify and LocationIQ are both wired** |
-| the `GEO_PROVIDER` values | omits `locationiq` and **`chain`** — the intended production value |
-| — | `GEO_PROVIDER_CHAIN` and the four provider keys are **entirely undocumented** |
-| the error table | omits `GEO_PROVIDER_RATE_LIMITED` (429) and `CONFIG_INVALID_GEO_PROVIDER`, and describes messages the client never receives |
-| `data.provider` is "which provider resolved it" | it is the **configured type** — literally `"chain"` |

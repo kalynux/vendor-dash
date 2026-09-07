@@ -183,17 +183,3 @@ value between `PATCH /api/vendor/profile` and `PATCH /api/vendor/store`.
 your supplied version, the store half with a freshly-read one. A concurrent store edit makes the
 branding half a **silent no-op** while the vendor half succeeds. After a branding step, re-fetch the
 store rather than trusting that the logo landed.
-
----
-
-## 8 · Where the backend's own doc is wrong
-
-| The doc says | Source says |
-|---|---|
-| `publicUrl` is `https://yourdomain.com/store/{slug}` | it is **`/shop/stores/{slug}`** — this repo's copy was correct |
-| sending `slug` or `country` is rejected with `403` | both are **silently stripped**; the request returns `200` |
-| a version conflict returns `"code": "CONFLICT"` | it returns **`"STORE_SLUG_TAKEN"`** |
-| 401/403 bodies look like `{ "error": "Unauthorized: Missing token" }` | nothing ever emits that shape — every error uses the full envelope |
-| `FileDetail` is `{id,key,url,mimeType,size,originalName}` | `access` is a seventh field and `url` is `string \| null` |
-| validation `details` is an array of `{field, message}` | it is `{ fields: [{ path, message, code }] }` |
-| errors are `FORBIDDEN` / `UNAUTHORIZED` / `NOT_FOUND` / `CONFLICT` | none of those strings exists in the registry — the real codes are `AUTH_*` prefixed |

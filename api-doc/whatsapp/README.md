@@ -9,7 +9,7 @@
 >
 > `GET /api/webhooks/whatsapp/link/status` and `DELETE /api/webhooks/whatsapp/link` are
 > **deleted**, and this repository's
-> [`src/services/notification-channels.service.ts`](../MIGRATION-2026-08.md#1--seven-dead-calls)
+> [`src/services/notification-channels.service.ts`](../MIGRATION-2026-08.md#1---seven-dead-calls--broken-today)
 > still calls both. They return 404 today.
 
 ---
@@ -95,17 +95,7 @@ connecting**.
 > [`../connections/README.md` § 1](../connections/README.md). Surface the failure as
 > *"we haven't seen a code yet"* with a retry, never as a spinner.
 
----
-
-## 3 · Where the backend's own doc is wrong
-
-Nothing found. `jovi-mall/api-doc/whatsapp/README.md` matches source, including the environment
-split and the E.164 exemption. (Its sibling `telegram/README.md` does **not** — see
-[`../telegram/README.md` § 2](../telegram/README.md).)
-
----
-
-## 4 · Related
+## 3 · Related
 
 - [`../connections/README.md`](../connections/README.md) — **the page you actually want**
 - [`../telegram/README.md`](../telegram/README.md) — the sibling bot bridge

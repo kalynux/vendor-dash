@@ -162,21 +162,6 @@ but **do not gate any tracking UI on it yet** — it exists so a future free-tie
 tracking restriction is a data change, not a frontend release. When it flips, hide
 live tracking where the entitlement is `false`.
 
-## Where the backend's own doc is wrong
-
-Filed as **F-30** in the sync register.
-
-🔴 `jovi-mall/api-doc/billing-plans-across-roles.md:88-90` had been corrected to
-`/api/internal/admin/billing/*`, but its **per-dashboard table still shows the admin base
-path as `/api/admin`** and still links `admin/billing.md` — a page describing a mount that
-no longer exists. Half-updated, the same failure mode as `telegram/README.md`.
-
-🟡 The same table's **`Doc` row links four sibling pages**, three of which this repository
-has never mirrored. That is not a backend defect; it is what makes a cross-role page
-dangerous to copy verbatim into a single-role repo, and why this copy names them instead.
-
----
-
 ## Payment disputes (all roles)
 
 Card charges can be reversed after the fact (webhook-driven, no user action):

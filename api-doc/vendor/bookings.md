@@ -438,22 +438,3 @@ A vendor may call this. Exactly seven data keys, and **no settlement or balance 
 booking detail for that.
 
 `transaction.status` is **uppercase**.
-
----
-
-## 9 · Where the backend's own doc is wrong
-
-| The doc says | Source says |
-|---|---|
-| booking JSON carries `_id` | the wire key is **`id`** (except the populated `userId`) |
-| calendar-view `date` is UTC | it is **server-local** |
-| reschedule can return `500 BOOKING_CALENDAR_SYNC_FAILED` | calendar sync never throws; that code is raised nowhere |
-| slot ids look like `slot-2026-02-10T14:00:00Z-60` | `slot_{startMs}_{endMs}_{hash}` — its own customer doc has this right, so the two docs disagree |
-| the complete response includes `amountPaid` and `creditDue` | it does not |
-| `additionalAmountDue = finalPrice − priceSnapshot` | it is `finalPrice − amountPaid` — and the doc contradicts itself two lines later |
-| settling a balance splits earnings like the original payment | for an online-paid booking it **silently records nothing** |
-| booking creation fails without a calendar connection | calendar mirroring is best-effort; the booking succeeds |
-| the callback can return `reason=state_mismatch` | unreachable |
-| `transaction.status` is lowercase | it is **uppercase** |
-| the error code is `INTERNAL_ERROR` | it is `INTERNAL_SERVER_ERROR` |
-| the error envelope has no `requestId` / `statusCode` / `category` | all three are present |

@@ -197,17 +197,3 @@ there is nothing for them to act on.
 
 [simple-products.md](./simple-products.md).
 
----
-
-## 5 · Where the backend's own doc is wrong
-
-| The doc says | Source says |
-|---|---|
-| max 3 options per product, 422 on a 4th | **no cap is enforced anywhere reachable** |
-| max 1 000 variants, `CATALOG_VARIANT_LIMIT_EXCEEDED` | no cap; that code is unreachable. Its own `variants.md` says "unlimited" — the two docs disagree |
-| four `CATALOG_VARIANT_*` / `CATALOG_OPTION_*` errors are reachable | all four live in dead code |
-| the options endpoints 400 for digital/service products | **only `POST` checks the type** |
-| a duplicate value returns a catalog 409 | it returns `DATABASE_UNIQUE_CONSTRAINT_VIOLATION`, which the doc never mentions — and duplicate option **names** are not mentioned at all |
-| there is one "Option object" shape | there are **three** |
-| the endpoint list has five variant routes | there are **seven** |
-| `optionValueIds` cannot be changed on a variant PATCH | it **can**, and `optionSignature` is not recomputed — see [variants.md](./variants.md) |

@@ -186,15 +186,3 @@ means the deployment has no Google credentials — not a user error.
 failure, including "not connected", becomes a masked 500. **It is not a usable health check** — use
 `/api/vendor/calendar/status`.
 
----
-
-## 8 · Where the backend's own doc is wrong
-
-| The doc says | Source says |
-|---|---|
-| booking creation fails without a calendar connection | it is **best-effort**; the booking succeeds |
-| the callback can redirect with `reason=state_mismatch` | **unreachable** |
-| reschedule can return `500 BOOKING_CALENDAR_SYNC_FAILED` | that code is raised nowhere |
-| disconnect returns `{ success, data: null, message }` | there is **no `data` key** |
-| `/test` reports a meaningful `ok` | it is never `false` |
-| the route comment calls the product calendar-status a stub | it reads the real connection |

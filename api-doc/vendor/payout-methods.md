@@ -22,7 +22,7 @@ This was investigated during the workspace audit and **withdrawn as a finding** 
 is correct; the filename is just misleading.
 
 **Full contract:**
-[profile.md § 4](./profile.md#4--payout-details--read-is-lossy-write-is-a-full-replace).
+[profile.md § 4](./profile.md#4---payout-details--read-is-lossy-write-is-a-full-replace).
 
 ---
 
@@ -34,7 +34,8 @@ Bank and card payouts are **switched off**. The schema still validates all three
 bank/card entries still read back — but a **write** naming one is refused:
 
 ```jsonc
-{ "error": { "code": "VALIDATION_ERROR", "statusCode": 400,
+{ "success": false, "requestId": "3f8a1c74-…",
+  "error": { "code": "VALIDATION_ERROR", "statusCode": 400, "category": "validation",
   "details": { "fields": [ {
     "path": "payout_details.0.method",
     "message": "Bank transfer payouts are not available right now. Currently accepted: mobile money.",

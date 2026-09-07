@@ -226,19 +226,6 @@ diagnose, so know what they do.
 deliberate: a cached copy is the kind of thing that makes a config change look like it did
 not take.
 
-## Where the backend's own doc is wrong
-
-Nothing found. This page was **ahead of** this repository's copy: the frontend's version still
-described `/callback` as cookie-authenticated and had no `connect-url` route at all — meaning
-it documented no way for the Capacitor build to connect a calendar, which is the build a vendor
-most often uses for it. Re-verified against source rather than trusted:
-
-- `/connect-url` exists at `google.routes.ts:142`, behind `requireAuth` (bearer **or** cookie).
-- `/callback` at `:193` has **no** `requireAuth` argument — the signed `state` is the credential.
-- `returnTo` is validated at **mint** time by `isAllowedReturnTo` and **re-validated** on the
-  way out. The source's reason for the second check is worth keeping: *"we signed it" proves
-  only that we minted it, not that this deployment still allows it.*
-
 ## Related
 - [../vendor/calendar.md](../vendor/calendar.md) — **the vendor how-to; start there**
 - [../vendor/bookings.md](../vendor/bookings.md) · [../vendor/availability-rules.md](../vendor/availability-rules.md)

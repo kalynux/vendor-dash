@@ -242,21 +242,3 @@ Other errors: `400 CATALOG_INVALID_CSV` · `422 CATALOG_BULK_LIMIT_EXCEEDED`
 ⚠ **This is the one upload surface with no virus scan.** The file is parsed in memory and never
 persisted, so the exposure is limited — but the only type gate is a client-controlled MIME/extension
 check.
-
----
-
-## 5 · Where the backend's own doc is wrong
-
-| The doc says | Source says |
-|---|---|
-| all four responses are unwrapped | all four use the standard envelope |
-| `history` returns `{ logs, pagination }` | `{ data, meta }` — and the field is `pages`, not `totalPages` |
-| `reservations` returns `{ reservations, totalReserved, pagination }` | `{ data, meta }` with `totalReserved` **inside `meta`** |
-| bulk failures are `{ success: false, errors }` | a standard envelope, rows at `error.details.errors` |
-| an infinite-stock variant never alerts | it can |
-| alerts evaluate every thresholded variant | only those on **`active`** products |
-| `adjustment` is a "system-level correction" | it is the **stock-request approval** path |
-| the metadata keys | omits **`requestId`**, the only agency signal available |
-| expiry writes a `release` log and returns stock | **neither happens** |
-| `expired` is a status | it is a date filter with the status filter dropped |
-| the error envelope has no `requestId`/`statusCode`/`category` | all three are present |

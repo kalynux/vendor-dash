@@ -194,12 +194,3 @@ skipped when flags are resolved. A flag can quietly vanish from a customer with 
 `404 VENDOR_CUSTOMER_FLAG_NOT_FOUND` covers both "no such flag" and "already deleted".
 
 ---
-
-## 7 · Where the backend's own doc is wrong
-
-| The doc says | Source says |
-|---|---|
-| `avatar` is `{id,key,url,mimeType,size,originalName}` | `access` is a seventh field, and `url` is nullable |
-| errors carry `{ code, message }` or `{ code, message, statusCode }` | every error also carries `requestId` and `category` |
-| — | it never mentions that `VENDOR_CUSTOMER_FLAG_NOT_FOUND` is a **400** on the flags-assignment route and a **404** on the flag routes |
-| — | it never documents how a **closed** customer appears, which is the one case with no flag to branch on |

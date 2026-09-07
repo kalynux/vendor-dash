@@ -171,12 +171,3 @@ pinning an explicit id does not. Do not pre-fill the picker with the primary's i
 [product-update.md § 3](./product-update.md#3--the-delivery-object).
 
 ---
-
-## 3 · Where the backend's own doc is wrong
-
-| The doc says | Source says |
-|---|---|
-| `rating: 4.6`, `ratingCount: 38`, "render it" | **always `null` / `0`** on this endpoint |
-| errors include `UNAUTHORIZED`, `FORBIDDEN`, `INTERNAL_ERROR` | none of those codes exists — the real ones are `AUTH_*` prefixed |
-| — | it never says the parameters are **clamped rather than validated**, or that the boolean filters are one-way |
-| `region` is an exact match | it is a case-insensitive partial (the backend's own source comment is the wrong half here) |

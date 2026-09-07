@@ -237,9 +237,3 @@ The agency's mirror is endpoint-for-endpoint the same, with byte-identical DTOs 
 types are reusable as-is.
 
 ---
-
-## 9 · Where the backend's own doc is wrong
-
-| The doc says | Source says |
-|---|---|
-| show `quantityBefore` and `currentQuantity` together | `currentQuantity` is **`null`** on reject and withdraw |

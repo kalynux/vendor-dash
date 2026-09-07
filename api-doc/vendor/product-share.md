@@ -133,7 +133,8 @@ The backend attaches `details: { channel, cause }` — but the code is a **502**
 environment**. Worse, this code has no registry default, so what you actually receive is:
 
 ```jsonc
-{ "error": { "code": "PRODUCT_SHARE_SEND_FAILED", "message": "Something went wrong",
+{ "success": false, "requestId": "3f8a1c74-…",
+  "error": { "code": "PRODUCT_SHARE_SEND_FAILED", "message": "Something went wrong",
              "statusCode": 502, "category": "external_service" } }
 ```
 
@@ -159,10 +160,3 @@ customers from there.
   `sentTo` does not.
 
 ---
-
-## 6 · Where the backend's own doc is wrong
-
-| The doc says | Source says |
-|---|---|
-| `"sentTo": "••••3456"` — "a masked hint, never the raw identifier" | it is the **raw handle**, and **always `null` for WhatsApp** |
-| `PRODUCT_SHARE_SEND_FAILED` is an actionable 502 with details | the message is replaced and `details` is dropped before it reaches you |

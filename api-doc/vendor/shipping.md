@@ -19,7 +19,7 @@ Two things carry "delivery" meanings and they share no field and no endpoint.
 
 Editing one never touches the other. If a vendor asks "why is my product still blocked from
 publishing after I set up shipping?", the answer is that they set this and the activation gate wants
-the other. See [products.md § 5.2](./products.md#52--the-activation-gate).
+the other. See [products.md § 5.2](./products.md#52-the-activation-gate).
 
 ---
 

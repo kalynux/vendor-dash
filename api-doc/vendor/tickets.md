@@ -1,8 +1,10 @@
 # Support tickets
 
 **Verified against backend source on 2026-08-24.** Read out of `jovi-mall/src/modules/tickets/`,
-not out of a document. The backend's own `api-doc/vendor/tickets.md` disagrees with source in
-**twenty** places, several of them load-bearing — see [§ 11](#11--where-the-backends-own-doc-is-wrong).
+not out of a document. The backend's own `api-doc/vendor/tickets.md` disagreed with source in
+**twenty** places, several of them load-bearing; **all twenty were fixed at source on 2026-09-06**
+(DOC-PROGRAM § 26) and that page is now stamped. ⚠ **Two SERVICE defects on this surface are
+still open** and are not doc drift — see [§ 11](#11--two-backend-defects-on-this-surface--still-open).
 
 **Base path:** `/api/vendor/tickets` · **Auth:** vendor session · **Routes: 14**
 
@@ -426,31 +428,21 @@ the platform opens automatically when a vendor requests a withdrawal. See
 
 ---
 
-## 11 · Where the backend's own doc is wrong
+## 11 · Two backend defects on this surface — still open
 
-Twenty confirmed contradictions, filed in `FRONTEND-SYNC/03-FINDINGS-REGISTER.md`. The ones that
-would change what you build:
+The doc-drift list that used to sit here is gone: all fifteen items were verified against
+`jovi-mall/src/` on 2026-09-06 and the backend page now carries the corrections inline
+(DOC-PROGRAM § 26). **These two are different — they are defects in the SERVICE, not in its
+documentation, and both are still live:**
 
-| The doc says | Source says |
-|---|---|
-| 44 ticket types | **39** |
-| every write returns `message: "… successfully"` | **no `message` key on any of the seven** |
-| responses carry `assigned_admin_id` | that field is **deleted**; it is `admin_assignment` now |
-| `GET /` supports a `q` search parameter | **there is none** — it is silently stripped |
-| the five write routes return `{_id, status, updatedAt}` | they return the **whole document**, with `id` and **no `_id`** |
-| only the ticket **creator** may update | **any follower** may |
-| only tickets **created by** the vendor are readable | **any ticket they follow** is |
-| invalid status transitions are rejected | **every transition is legal** except same-status |
-| there is an "Exclusive Admin Locking" mechanism | it was **deleted**; nothing implements it |
-| attachment responses carry `createdAt` | the key is **not on the wire** |
-| `POST /attachments` can return `404 TICKET_NOT_FOUND` | **unreachable** — there is no ticket lookup on that route |
-| `FileDetail` is `{id,key,url,mimeType,size,originalName}` | **`access` is missing from the doc** |
-| vendor name falls back to `business_name`, agency to `agency_name` | `Store.name` and `Magazin.name` respectively |
-| entity types are `order, product, booking, account, other` | 11 **UPPERCASE** values, and `account` is not one |
-| "no `tier`, no `id` — deliberately not disclosed" | **`admin_assignment` carries both.** A promise the source does not keep |
+- **Five routes perform no follower check** — `GET`/`POST /:ticketId/attachments`,
+  `GET /:ticketId/notes`, `PATCH /:id/priority`, `PATCH /:id/assign`. Re-verified 2026-09-06:
+  `updatePriority` and `assignTicket` contain no `isFollower` call at all.
+- **The administrator `tier` leaks to every ticket follower.** `TicketEnrichmentService` builds
+  a sanitised `assigned_admin` via `publicAdminSnapshot`, and **never deletes the raw
+  `admin_assignment`** — so `admin_assignment.admin.tier` and `.id` reach the vendor, customer,
+  agency and agent views. The service's own comment says that block *"must not travel to a
+  ticket follower"* (`ticket-enrichment.service.ts:166-169`), which is what makes this a bug
+  rather than a decision.
 
-Two further items are backend defects rather than doc drift, and are filed as such: five routes on
-this surface perform **no follower check** (`GET`/`POST /:ticketId/attachments`,
-`GET /:ticketId/notes`, `PATCH /:id/priority`, `PATCH /:id/assign`), and the administrator `tier`
-leak above. **Do not build features that depend on either behaviour** — both are expected to be
-fixed.
+**Do not build features that depend on either behaviour** — both are expected to be fixed.

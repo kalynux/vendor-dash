@@ -250,6 +250,7 @@ and it follows any conversion the pipeline applies — a `png` stored as `webp` 
     "message": "Upload policy violations found",
     "statusCode": 400,
     "category": "validation",
+    "category": "validation",
     "details": { "violations": [
       { "code": "NO_FILES_UPLOADED", "message": "At least one file is required" }
     ] }
@@ -266,6 +267,7 @@ and it follows any conversion the pipeline applies — a `png` stored as `webp` 
     "code": "UPLOAD_POLICY_VIOLATION",
     "message": "Upload policy violations found",
     "statusCode": 400,
+    "category": "validation",
     "category": "validation",
     "details": { "violations": [
       { "code": "TOO_MANY_FILES", "message": "Maximum 10 files per request" }
@@ -306,6 +308,7 @@ and that a pipeline refusal can report **several files at once**, each keyed by 
     "code": "UPLOAD_POLICY_VIOLATION",
     "message": "Upload policy violations found",
     "statusCode": 400,
+    "category": "validation",
     "details": {
       "violations": [
         {
@@ -458,6 +461,7 @@ It carries `metadata: { claimedMimeType, originalName }`.
     "code": "UPLOAD_POLICY_VIOLATION",
     "message": "Upload policy violations found",
     "statusCode": 400,
+    "category": "validation",
     "category": "validation",
     "details": { "violations": [
       { "code": "MIME_NOT_ALLOWED",
@@ -692,9 +696,12 @@ Retrieve metadata for a single file by ID.
 ```json
 {
   "success": false,
+  "requestId": "3f8a1c74-9b2e-4d10-8c55-6a0f2b7e19dd",
   "error": {
-    "code": "NOT_FOUND",
-    "message": "File not found"
+    "code": "CATALOG_FILE_NOT_FOUND",
+    "message": "File not found",
+    "statusCode": 404,
+    "category": "not_found"
   }
 }
 ```
@@ -703,9 +710,12 @@ Retrieve metadata for a single file by ID.
 ```json
 {
   "success": false,
+  "requestId": "3f8a1c74-9b2e-4d10-8c55-6a0f2b7e19dd",
   "error": {
-    "code": "FORBIDDEN",
-    "message": "You do not have access to this file"
+    "code": "AUTH_FORBIDDEN",
+    "message": "You do not have access to this file",
+    "statusCode": 403,
+    "category": "authorization"
   }
 }
 ```
@@ -789,9 +799,12 @@ Soft delete a file (mark for garbage collection).
 ```json
 {
   "success": false,
+  "requestId": "3f8a1c74-9b2e-4d10-8c55-6a0f2b7e19dd",
   "error": {
-    "code": "NOT_FOUND",
-    "message": "File not found"
+    "code": "CATALOG_FILE_NOT_FOUND",
+    "message": "File not found",
+    "statusCode": 404,
+    "category": "not_found"
   }
 }
 ```
@@ -800,9 +813,12 @@ Soft delete a file (mark for garbage collection).
 ```json
 {
   "success": false,
+  "requestId": "3f8a1c74-9b2e-4d10-8c55-6a0f2b7e19dd",
   "error": {
-    "code": "FORBIDDEN",
-    "message": "You do not have access to this file"
+    "code": "AUTH_FORBIDDEN",
+    "message": "You do not have access to this file",
+    "statusCode": 403,
+    "category": "authorization"
   }
 }
 ```

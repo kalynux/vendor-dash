@@ -108,8 +108,8 @@ starting — this endpoint stores ids it does not produce.
 
 ---
 
-## 4 · Where the backend's own doc is wrong
+## 4 · Saving a method changes no purchase flow
 
-Nothing material was found for this surface. The one thing worth restating, because it is easy to
-assume: **saving a method has no effect on any purchase flow.** Every payment endpoint asks for the
-channel again.
+Kept when this page's drift section was closed on 2026-09-07, because it is the assumption
+this surface most invites: **a saved method is a convenience record, not a payment
+instrument.** Every payment endpoint asks for the channel again.

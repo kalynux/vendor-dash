@@ -213,11 +213,3 @@ and sliced into `durationMinutes` chunks.
 See [bookings.md](./bookings.md) and [calendar.md](./calendar.md).
 
 ---
-
-## 8 · Where the backend's own doc is wrong
-
-| The doc says | Source says |
-|---|---|
-| rules carry `_id` | the wire key is **`id`** |
-| the rule object's field list | omits `purgeAt` (and `vendorId`) |
-| `PATCH …/service/config` | **not documented at all**, and the route comment omits `maxBookings` |

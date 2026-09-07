@@ -260,11 +260,3 @@ There is no type tag — **you distinguish them by the `instructions` object**:
 `chargedAmount`/`chargedCurrency` so the vendor is not surprised by their card statement.
 
 ---
-
-## 6 · Where the backend's own doc is wrong
-
-| The doc says | Source says |
-|---|---|
-| `GET /api/vendor/settings` is "billing settings" (plural) | it returns **one scalar** — see [settings.md](./settings.md) |
-| — | it never says plan and credit purchases create **no `PaymentTransaction`** |
-| — | it never mentions that `channel.phoneNumber` is **unvalidated** on these two endpoints |

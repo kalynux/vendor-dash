@@ -205,10 +205,3 @@ for an **agency**, and even that is the **customers'** average, not the vendor's
 `ratingCount: 0` **always** — a backend defect. Use the browse endpoint for ratings.
 
 ---
-
-## 6 · Where the backend's own doc is wrong
-
-| The doc says | Source says |
-|---|---|
-| eligibility always answers `200` with `eligible: false` | **`REVIEW_SUBJECT_NOT_FOUND` throws a 404** — the most likely case |
-| the error table lists seven `REVIEW_*` codes and no `VALIDATION_ERROR` | **both** query schemas are strict, so an unknown parameter is a `400` |

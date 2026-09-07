@@ -268,15 +268,3 @@ Returns `200` with `message` only, no `data`. Idempotent — an unknown token st
 Both routes are scoped to the **user**, not the vendor, so one registration covers every role the
 person holds.
 
----
-
-## 8 · Where the backend's own doc is wrong
-
-| The doc says | Source says |
-|---|---|
-| `preferences` has 11 keys | it has **12** — `agencyStorageUpdates` is missing from the doc |
-| you can `PATCH` `planUpdates` | it is stripped — **read-only over HTTP** |
-| "to turn off a secondary channel, send that flag as `false`" | only **all three at once** works |
-| `isRead` is an optional filter | absent means **`false`** — the default call returns unread only |
-| errors are `{ code, message }` or `{ code, message, statusCode }` | every error carries `requestId` and `category` too |
-| `avatar` is `{id,key,url,mimeType,size,originalName}` | `access` is a seventh field and `url` is nullable |

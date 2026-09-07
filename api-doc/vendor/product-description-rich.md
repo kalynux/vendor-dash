@@ -280,25 +280,15 @@ Exported from `core/richtext`: `toPlainText`, `toWhatsApp`, `toTelegramHtml`,
 
 ---
 
-## Where the backend's own doc is wrong
+## ⚠ You send the pair — the server derives neither half
 
-Nothing found on this page. It was **corrected ahead of this repository's copy** — the
-version here previously said the backend had not shipped, which is the drift this page
-existed to have caught. Two of its claims were re-verified rather than trusted:
-
-- *"accepted on all four product write endpoints, including the two `.strict()` ones"* —
-  true; one shared `descriptionRichSchema` is imported by `product.validator.ts:54,90` and
-  `simple-product.validator.ts:51,97`.
-- *"`descriptionRich` is not in the text index"* — true, and deliberate
-  (`product.model.ts:408-414`): `$text` would tokenise the structural keys `paragraph`,
-  `list`, `bold` and every `href` alongside the prose, handing a vendor free relevance for
-  words no customer typed.
-
-One thing to know that neither page states plainly: **the server never derives
-`description` from `descriptionRich`** (`doc.ts:138`), and must not start. Your client
-sends the pair. If you send a `description` that is not the plain-text projection of your
-`descriptionRich`, the platform stores the inconsistency and the storefront shows your
+**The server never derives `description` from `descriptionRich`** (`doc.ts:138`), and must not
+start. Your client sends both. If you send a `description` that is not the plain-text projection
+of your `descriptionRich`, the platform stores the inconsistency and the storefront shows your
 version while WhatsApp shows the other.
+
+This is not doc drift and it is not resolved by anything — it is a standing property of the
+contract, kept here when this page's drift section was closed on 2026-09-07.
 
 ---
 

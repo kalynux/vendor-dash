@@ -107,7 +107,7 @@ Note **`price` must be positive here** while the advanced variant route allows `
 (`PATCH /:id/status`) you get one blocker at a time and have to loop. **If you are building a publish
 wizard, drive it from here.**
 
-Every blocker: [products.md § 5.2](./products.md#52--the-activation-gate).
+Every blocker: [products.md § 5.2](./products.md#52-the-activation-gate).
 
 ⚠ Three blocker messages are developer placeholders that will reach the vendor verbatim. Map codes
 to your own copy.
@@ -215,11 +215,3 @@ will notice:
 See [products.md § 10](./products.md#10--post-apivendorproductsidduplicate).
 
 ---
-
-## 5 · Where the backend's own doc is wrong
-
-| The doc says | Source says |
-|---|---|
-| the example blocker messages | it quotes the **registry defaults**; the call sites override them, and `CATALOG_PRODUCT_NO_DELIVERY_AGENCY` has four different messages |
-| the PATCH response is identical to create | **`meta.activation.pickupReason` is never present on PATCH** |
-| max 1 000 variants / max 3 options exist as enforced caps | neither is enforced anywhere reachable over HTTP |

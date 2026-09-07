@@ -124,7 +124,9 @@ No body. Success is **`202`** with the same `data` shape.
 
 ```jsonc
 { "success": false,
+  "requestId": "3f8a1c74-…",
   "error": { "code": "CATALOG_PRODUCT_VECTORISATION_NOT_ELIGIBLE", "statusCode": 422,
+             "category": "business_rule",
              "message": "Product is not eligible for vectorisation. Vectorisation has been disabled — ensure the product is active and has a title, description, and category, then re-enable vectorisation.",
              "details": { "state": { /* the post-write row */ } } } }
 ```
@@ -175,13 +177,3 @@ behind the admin service token, reached by wi-admin.
 **There is no vendor-facing bulk vectorisation.** Do not document or build one.
 
 ---
-
-## 8 · Where the backend's own doc is wrong
-
-| The doc says | Source says |
-|---|---|
-| four status values | there are **five** — `skipped_no_credits` |
-| retry: "the vectoriser **will be** called" | "**is being** called" — cosmetic, but the 422 message differs substantively too |
-| the retry 422 tells you to check eligibility | it also **already disabled the toggle**, and carries `details.state` — neither is documented |
-| the retry error list | omits `404 CATALOG_PRODUCT_NOT_FOUND` |
-| the vectorisation 409 is a vectorisation concern | it gates update, status, archive **and duplicate**, and is missing from all four of those error tables |

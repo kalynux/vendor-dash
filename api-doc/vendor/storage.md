@@ -165,9 +165,12 @@ rejected** and nothing is stored.
 ```json
 {
   "success": false,
+  "requestId": "3f8a1c74-9b2e-4d10-8c55-6a0f2b7e19dd",
   "error": {
     "code": "UPLOAD_POLICY_VIOLATION",
     "message": "Upload policy violations found",
+    "statusCode": 400,
+    "category": "validation",
     "details": {
       "violations": [
         {
@@ -269,5 +272,7 @@ Per-file `violations[].code` values (inside `UPLOAD_POLICY_VIOLATION`): `NO_FILE
 
 All errors use the standard envelope:
 ```json
-{ "success": false, "error": { "code": "ERROR_CODE", "message": "…", "details": { } } }
+{ "success": false, "requestId": "3f8a1c74-…",
+  "error": { "code": "ERROR_CODE", "message": "…", "statusCode": 400, "category": "validation",
+             "details": { } } }
 ```

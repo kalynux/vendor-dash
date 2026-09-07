@@ -298,16 +298,3 @@ re-authenticate. Warn before the form, or sign them back in yourself afterwards.
 There is also a deprecated alias, `PATCH /api/vendor/profile/password`, which is the same handler
 behind the vendor role guard. Prefer `/api/me/password`.
 
----
-
-## 8 · Where the backend's own doc is wrong
-
-| The doc says | Source says |
-|---|---|
-| the endpoint table is "the complete auth surface" | it omits `POST /api/auth/email-change/confirm` and both `/api/auth/mobile/magic/*` routes |
-| the browser-refresh error list | omits `AUTH_ACCOUNT_CLOSED` (403) and `AUTH_ROLE_NOT_FOUND` (403), both raised by the shared rotation |
-| — | **`AUTH_ACCOUNT_CLOSED` appears nowhere in the whole `api-doc/auth/` tree**, despite being raised at four sites |
-| `admin` can call `PATCH /api/me/password` | `admin` is not an authenticatable role at all |
-| three path prefixes are exempt from rate limiting | there are **six** |
-| `request-wa-verification` is in the credential bucket | that route is **deleted** |
-| the credential bucket list | omits `email-change/confirm` and all four magic routes |

@@ -234,12 +234,3 @@ Each cycle appends an order-timeline row, so the history is auditable — see
   developer placeholder (`"catalog variant no digital asset"`). Map the code to your own copy.
 
 ---
-
-## 6 · Where the backend's own doc is wrong
-
-| The doc says | Source says |
-|---|---|
-| entitlements return `[]` for a non-digital order | they **throw `400 ORDER_WRONG_TYPE`** |
-| revoke/restore give `404 NOT_FOUND` | the code is **`DIGITAL_ENTITLEMENT_NOT_FOUND`** |
-| `reason` fails only when missing or empty | it is **min 10, max 500** characters |
-| an oversized asset gives `400 CATALOG_FILE_TOO_LARGE` | it is **413** |

@@ -65,6 +65,7 @@ caller's role:
       "createdAt": "2026-08-02T09:11:00.000Z",
       "customerName": "Jane Doe",
       "customerAvatar": { "id": "…", "key": "…", "url": "https://…", "mimeType": "image/png",
+                          "access": "public",
                           "size": 24576, "originalName": "avatar.png" },
       "shipments": [
         { "shipmentId": "664shp...", "agencyId": "664agy...", "agencyName": "FastTrack Logistics",

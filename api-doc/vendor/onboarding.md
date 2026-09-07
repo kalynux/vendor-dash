@@ -106,7 +106,7 @@ Changing it re-checks existing addresses → `400 ADDRESS_COUNTRY_MISMATCH` if a
 sits elsewhere.
 
 **Payout methods: mobile money only right now.** See
-[profile.md § 4](./profile.md#4--payout-details--read-is-lossy-write-is-a-full-replace).
+[profile.md § 4](./profile.md#4---payout-details--read-is-lossy-write-is-a-full-replace).
 
 **Side effect:** completing step 1 for the first time provisions the vendor's **Store**,
 best-effort. A failure there is logged and does not fail the step — the store is created lazily on
@@ -246,15 +246,3 @@ Shared errors:
 ⚠ A step **before** the current one still saves its data without moving the step. So a vendor can go
 back and edit step 1 while sitting on step 3.
 
----
-
-## 8 · Where the backend's own doc is wrong
-
-| The doc says | Source says |
-|---|---|
-| step 3 completes onboarding | it advances to **step 4**; only step 4 completes |
-| `branding` is a full replacement — "send both or it will be cleared" | each slot is independent; omitting one leaves it alone |
-| `version` is ignored when `skip: true` | it is **not** — a stale version still 409s |
-| step 2 accepts `default_delivery_agency_id`, and can produce a validation error on it | the field is **not in the schema**; that error is unproducible |
-| `progressPercent` tracks completed fields | it is derived from the **step number** alone |
-| the policy-document error list has 4 outcomes | `UPLOAD_POLICY_VIOLATION` from the sniffed-type and quota gates is missing |
