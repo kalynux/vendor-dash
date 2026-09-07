@@ -1,6 +1,6 @@
 # Geocoding
 
-**Re-verified against source on 2026-09-08** — both routes, the `data.results` / `data.result`
+**Verified against source on 2026-09-08** — re-check of both routes, the `data.results` / `data.result`
 response shapes and all five error codes re-checked against
 `jovi-mall/src/modules/geo/routes.ts` and `controllers/geo.controller.ts:22-43`. No corrections
 were needed.
