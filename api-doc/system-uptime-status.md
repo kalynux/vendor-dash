@@ -1,8 +1,9 @@
 # Uptime & status widget — an unserved spec
 
-**Re-verified against the live route dump on 2026-08-24: still unserved.** No public status or
-uptime route exists. The only health surfaces are the three on [`health.md`](./health.md), and
-the operator ones behind `/api/internal/admin/system/*`, which no browser can reach.
+**Verified against source on 2026-09-08** — still unserved. No public status or uptime route
+exists in `jovi-mall/src/` (route dump: zero matches under `/api/status` or `/api/uptime`); the
+only health surfaces are the three in `health.md` and the operator ones behind
+`/api/internal/admin/system/*`.
 
 **Kept, not deleted.** It is a decision record — "we chose not to build this, and here is why"
 — and deleting it would make the next person propose it again. See

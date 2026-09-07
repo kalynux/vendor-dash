@@ -1,8 +1,9 @@
 # Change Password API
 
-**Verified against backend source on 2026-08-24** — `src/modules/users/user.routes.ts:23`,
-`src/modules/users/user.controller.ts:22-70`, `src/core/auth/password-epoch.ts`,
-`src/modules/auth/auth.service.ts:151`.
+**Verified against source on 2026-09-08** — the route, the strength rule, the `message`-only
+response, the cookies-only re-issue and the fresh `auth_time`, against
+`jovi-mall/src/modules/users/user.controller.ts:22-71`, `user.validator.ts:12-28` and
+`src/core/auth/token.issuer.ts`.
 
 > ## 🔴 Capacitor / WebView builds: this endpoint signs the caller OUT
 >

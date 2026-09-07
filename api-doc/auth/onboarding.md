@@ -1,7 +1,10 @@
 # Onboarding API Endpoints Documentation
 
-**Verified against the live route dump on 2026-08-24.** The five vendor routes below are
-confirmed present and correctly named.
+**Verified against source on 2026-09-08** — every route in the three step tables exists and is
+named correctly (`PUT /api/vendor/onboarding/{basic-setup,delivery-linking,branding,policy-setup}`,
+`PUT /api/agency/onboarding/{logistics,payout,branding,policies}`,
+`PATCH /api/agent/onboarding/step`, and the four `*/completion-status` reads), against the live
+route table for `jovi-mall/src/`.
 
 > ### Scope for this repository
 >

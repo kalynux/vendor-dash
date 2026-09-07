@@ -1,6 +1,9 @@
 # Account closure
 
-**Verified against backend source on 2026-08-24.** 🆕 New page.
+**Verified against source on 2026-09-08** — the route and verb, the exact `confirm` literal, the
+two 422 refusals with their `details`, the 409 compare-and-set, the cookie clear and the
+`password_changed_at` stamp, against `jovi-mall/src/modules/users/user.controller.ts:89-130`,
+`account-closure.service.ts` and `user.validator.ts:77-104`.
 
 **`POST /api/me/close`** · **Auth:** any signed-in role
 

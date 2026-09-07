@@ -1,9 +1,13 @@
 # Authentication
 
-**Verified against backend source on 2026-08-24.** This page was 592 lines behind its backend
-counterpart; it has been rewritten from source.
+**Verified against source on 2026-09-08** — the route count, the lifetimes, the 90-day cap, every
+error row and the `details` claim below, against `jovi-mall/src/modules/auth/`,
+`src/api/middlewares/auth.middleware.ts`, `src/core/auth/` and `src/core/error-detail-policy.ts`.
+(First verified 2026-08-24, when this page was 592 lines behind its backend counterpart and was
+rewritten from source.)
 
-**Base paths:** `/api/auth`, `/api/auth/browser`, `/api/auth/mobile` · **Routes: 23**
+**Base paths:** `/api/auth`, `/api/auth/browser`, `/api/auth/mobile`, `/api/auth/magic`,
+`/api/auth/mobile/magic` · **Routes: 24**
 
 ---
 
@@ -147,8 +151,20 @@ terminal ones.
 | `USER_INVALID_PASSWORD` | **403** | wrong `oldPassword` on a password change. Note **403, not 401** |
 | `VALIDATION_ERROR` | 400 | `details.fields[]` with `path` |
 
-⚠ `AUTH_ROLE_NOT_FOUND` carries `details.required`, but **`details.actual` is stripped at the
-boundary** — you cannot see which role the token actually had.
+⚠ **`AUTH_ROLE_NOT_FOUND` gives you almost nothing in `details`, and which "almost" depends on
+where it was raised.** A 403 is `category: "authorization"`, and that category's `details` is cut
+down at the response boundary to a four-key allowlist — `required`, `requiredAny`, `resource`,
+`hint` (`src/core/error-detail-policy.ts:29-33`). So:
+
+- from a **role guard** on a route (`requireRole`), which raises `{ required, actual }`, you get
+  `{ required }` — `actual` is stripped, and you cannot see which role the token actually had;
+- from **`/auth/login`, `/auth/auth-me/:role` or a refresh**, which raise `{ role }`, you get
+  **no `details` at all** — the projected object is empty, so the key is omitted entirely.
+
+⚠ **Corrected 2026-09-08:** this note previously said only the first half, which read as though
+`details.required` were always present. Echo back the role *you* sent rather than reading one off
+the error. The same filter applies to **every** 403 on the platform, not just this code — see
+[errors/README.md](../errors/README.md#two-more-categories-are-allowlisted).
 
 ---
 
@@ -199,7 +215,8 @@ re-issues both tokens at full lifetime, which keeps the 30-day window alive, whi
 | `GET /api/auth/auth-me/:role` | **role switch, no password** |
 | `POST /api/auth/add-role` | adds a role to the account |
 | `POST /api/auth/send-email-verification` | authenticated |
-| `GET /api/auth/verify-email?token=` | public; token TTL 24 h |
+| `POST /api/auth/verify-email` | public; `{ token }` in the body — **this is what new verification mail points at** |
+| `GET /api/auth/verify-email?token=` | public; **legacy**, still answered. A `GET` that mutates, so the token is spent by anything that prefetches the URL. Token TTL 24 h on both |
 | `POST /api/auth/forgot-password` | **always 200**, even for an unknown account |
 | `POST /api/auth/reset-password` | token TTL 30 min; **does not sign the user in** |
 | `POST /api/auth/email-change/confirm` | public — see [me/contact-change.md](../me/contact-change.md) |
@@ -255,7 +272,12 @@ if (!res.data.role_entity) {
 
 ⚠ **Customers are bot-first and passwordless.** They are created on first bot contact and sign in
 with a magic link or code. The `/api/auth/magic/*` routes **always mint a `customer` session** — the
-role is hardcoded. They are not a vendor sign-in path.
+role is hardcoded (`messaging-login.service.ts:221`). They are not a vendor sign-in path.
+
+There are **four** of them, and they complete the 24: `POST /api/auth/magic/link` and
+`/api/auth/magic/code` set cookies; `POST /api/auth/mobile/magic/link` and
+`/api/auth/mobile/magic/code` are their bearer twins, returning `data.tokens` and setting no
+cookie. All four sit in the **20/min credential bucket** — see § 6.
 
 ---
 

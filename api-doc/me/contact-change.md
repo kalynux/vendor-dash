@@ -1,6 +1,9 @@
 # Changing email and phone
 
-**Verified against backend source on 2026-08-24.** 🆕 New page.
+**Verified against source on 2026-09-08** — all six routes, all six `CONTACT_CHANGE_*` codes with
+their statuses and derived categories, the 1-hour email token TTL and 24-hour phone TTL, and the
+optional `app=` role key, against `jovi-mall/src/modules/users/services/contact-change.service.ts`
+and `src/modules/users/config/contact-change.config.ts`.
 
 **Base path:** `/api/me` · **Auth:** any signed-in role · **Routes: 6**
 

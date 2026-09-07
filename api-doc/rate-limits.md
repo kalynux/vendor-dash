@@ -1,7 +1,9 @@
 # Rate limits
 
-**Verified against backend source on 2026-08-24.** 🆕 New page. jovi-mall had **no rate limiting of
-any kind** before this.
+**Verified against source on 2026-09-08** — every ceiling, the `Retry-After`/CORS behaviour, the
+six exempt prefixes and the auth-pass multipliers below, against
+`jovi-mall/src/api/rate-limit/`, `src/app.ts` and `src/api/index.ts`. (First verified
+2026-08-24.) jovi-mall had **no rate limiting of any kind** before this.
 
 **Ceilings are backstops, not budgets.** A well-behaved dashboard never sees one.
 
@@ -25,10 +27,21 @@ request can decrement the bucket more than once.
 
 | Surface | Auth passes | Effective ceiling |
 |---|---|---|
-| `/api/vendor/products/*`, `/api/vendor/bookings/*`, `/api/vendor/analytics/*` | 2 | **~450/min** |
+| `/api/vendor/profile*`, `/vendor/orders/*`, **`/vendor/analytics/*`**, `/vendor/notifications` | 1 | 900/min |
+| `/api/vendor/products/*`, `/api/vendor/bookings/*`, `/vendor/store/*`, `/vendor/inventory/*` | 2 | **~450/min** |
 | `/api/vendor/plan`, `/vendor/credits`, `/vendor/settings` | 2 | ~450/min |
 | `/api/vendor/earnings` | 3 | ~300/min |
 | `/api/vendor/transactions` | 4 | **~225/min** |
+
+**Count the passes yourself like this:** `src/api/index.ts` mounts **three** routers at the bare
+`/vendor` prefix — `vendorRoutes` (:143), `vendorBillingRoutes` (:190), `vendorEarningsRoutes`
+(:260) — and each begins with `router.use(requireAuth)`. A request pays one pass for every bare
+`/vendor` mount it falls *through* before something matches, plus one for the mount that matches.
+
+⚠ **Corrected 2026-09-08: `/api/vendor/analytics/*` is ONE pass, not two.** It is mounted
+*inside* `vendorRoutes` (`src/modules/vendor/routes.ts:415`), not beside it, so it matches on the
+first pass and never reaches the billing or earnings routers. The same is true of everything else
+served directly by that router — profile, orders, customers, notifications, devices.
 
 The `RateLimit-Remaining` header reflects the inflated count, so it is telling the truth about the
 bucket — just not about how many *requests* you have left.

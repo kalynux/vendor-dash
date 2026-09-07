@@ -1,8 +1,9 @@
 # Health probes and metrics
 
-**Verified against backend source on 2026-08-24** — `src/api/routes/health.routes.ts`,
-`src/modules/system/services/dependency-probe.service.ts`,
-`src/infra/redis/redis.factory.ts`.
+**Verified against source on 2026-09-08** — the three probe paths, their exact bodies, the
+Redis `up`/`idle`/`down` states and all three `/metrics` gates, against
+`jovi-mall/src/api/routes/health.routes.ts`, `src/app.ts:165-171` and
+`src/modules/system/metrics/metrics.routes.ts`.
 
 > **Scope for this repository.** `/api/health` and `/api/health/live` are useful to a
 > dashboard as a connectivity check. `/api/health/ready` and `/metrics` are operator
