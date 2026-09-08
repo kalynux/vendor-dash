@@ -73,20 +73,36 @@ An unrecognised role falls back to the customer ceiling.
 ```jsonc
 {
   "success": true,
-  "data": [ /* raw file RECORDS — see below */ ],
+  "data": [ /* file RECORDS, each with url + access — see below */ ],
   "message": "Successfully uploaded 1 file(s)",
   "meta": { "count": 1, "roleLimit": "500 MB" }
 }
 ```
 
-🔴 **`data` is an array of file *records*, not `FileDetail` objects.** They carry
-`id`, `key`, `provider`, `mimeType`, `size`, `checksum`, `originalName`, `ownerType`,
-`ownerId`, `createdAt`, `updatedAt`, `deletedAt`, `purgeAt` — **no `url` and no `access`**
-(`upload-intake.service.ts:110-124`). You get a URL only when the file comes back *referenced
-from another entity*, as a `FileDetail`.
+✅ **`data` is an array of file *records*, and since 2026-09-08 they carry `url` and `access`.**
+The full record — `id`, `key`, **`url`**, **`access`**, `provider`, `mimeType`, `size`,
+`checksum`, `originalName`, `ownerType`, `ownerId`, `createdAt`, `updatedAt`, `deletedAt`,
+`purgeAt`. The two new fields are computed by the same `toFileDetail` resolver every other file
+on the platform passes through, so they carry the same privacy and quota rules.
 
-**So: upload, keep the `id`, attach the `id`, and render from whatever the owning entity
-returns.** Never build a display URL out of the upload response.
+It is still **not** a `FileDetail`: it is a strict SUPERSET of one, keeping ten fields a
+`FileDetail` does not have — including the `createdAt` / `updatedAt` that § 4's `sortBy` sorts on.
+That is exactly why the fields were added rather than the shape replaced.
+
+> ### 🔴 → ✅ This page told you the opposite, and it was right at the time
+>
+> It read *"no `url` and no `access` … never build a display URL out of the upload response."*
+> That described a real gap, and this dashboard worked around it by rebuilding the rules in
+> `src/services/files.service.ts`. **That workaround is now removable, and it should be removed** —
+> it was wrong three ways: its `FileAccess` type had only two values so a `quota_blocked` file was
+> unrepresentable, its private-tree check failed **open** where the server fails closed, and it did
+> not normalise the backslashes a key written on Windows carries.
+>
+> **Read `url` and `access`. Derive neither.**
+
+**Attaching by `id` is still the right thing to do with the file.** `url` is for *showing* it —
+the media library, or a "you just uploaded this" confirmation. Never store a URL where an `id`
+belongs.
 
 ⚠ `meta.roleLimit` is a **display string** (`"500 MB"`), not a number of bytes.
 
@@ -145,7 +161,7 @@ really does come back as `CATALOG_FILE_TOO_LARGE`.
 {
   "success": true,
   "data": {
-    "files": [ /* file records */ ],
+    "files": [ /* file records, each with url + access */ ],
     "storage": { "limitBytes": 1073741824, "usedBytes": 734003200,
                  "remainingBytes": 339480576,
                  "byCategory": { "image": { "bytes": 700000000, "count": 118 } } },
@@ -229,6 +245,8 @@ which is what lets you tell a vendor **what would break** before offering a dele
   "data": {
     "id": "664file0000000000000001",
     "key": "images/2026/07/9f2c…_logo.png",
+    "url": "http://localhost:8022/api/files/images/2026/07/9f2c…_logo.png",
+    "access": "public",
     "provider": "local", "ownerType": "vendor",
     "mimeType": "image/png", "size": 12044,
     "usage": {
@@ -318,7 +336,7 @@ Kept so a reader who has the old version in their head can check themselves agai
 | The old page said | Source says |
 |---|---|
 | `GET /files/orphans` and `DELETE /files/:id/permanent` are admin routes here | both **moved** to `/api/internal/admin/files`; this router has no role guard |
-| the upload `201` carries `url` and `provider` per file | file **records** — no `url`, no `access` |
+| the upload `201` carries `url` and `provider` per file | ⚠ **the old page was RIGHT about `url`, as of 2026-09-08.** It was wrong when this table was written — the correction stood for the gap's whole life — and the backend has since closed it. `url` **and** `access` are both there now |
 | `GET /files` returns a `data` array plus `meta` | `data` is an object of `files`, `storage`, `pagination` — **no `meta`** |
 | `limit` accepts 1–100 | **1–50** |
 | date filters are `startDate` / `endDate` | **`createdAfter` / `createdBefore`** |

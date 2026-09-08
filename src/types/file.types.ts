@@ -37,13 +37,21 @@ export type MediaCategory =
   | 'archive'
   | 'other';
 
-// Whether a referenced file is served from a public storage tree or requires a
-// credential. Always present on a `FileRef`.
+// Which of three classes a referenced file is in. Always present on a `FileRef`,
+// and — since the backend change of 2026-09-08 — on every `/api/files/*` record too.
+//
+// ⚠ THREE values, not two. `quota_blocked` was missing from this union until
+// 2026-09-08, and its absence was not a documentation gap: it made a blocked file
+// literally unrepresentable here, so the media library rendered one as ordinary
+// public media. The bytes are still on the static mount (blocking is a flag, not an
+// unmount), so nothing looked wrong — the plan-quota enforcement was simply invisible
+// on the screen built to show storage.
 //
 // ⚠ The backend classifier FAILS CLOSED: a storage tree it does not recognise is
 // reported as `authorized`. So a tree added later reads as private until somebody
-// says otherwise, and this stays a two-value branch even for product imagery.
-export type FileAccess = 'public' | 'authorized';
+// says otherwise, and this stays a branch — never an `=== 'public'` assumption —
+// even for product imagery.
+export type FileAccess = 'public' | 'authorized' | 'quota_blocked';
 
 // Canonical "resolved file reference" — the shape every read endpoint returns for
 // a single file slot (product media, avatar, logo, banner, cover). A slot that is
@@ -72,22 +80,33 @@ export interface FileRef {
 }
 
 // The least a value needs to carry for `fileRefUrl`/`resolveFileUrl` to answer.
-// Deliberately wider than either concrete shape: `FileRef` always sends `url` and
-// `access`, while the raw records from `GET /api/files` send neither.
+// Both fields are optional only so a locally-built placeholder still satisfies it;
+// every server payload now sends both.
 export interface FileUrlSource {
   key: string;
   url?: string | null;
   access?: FileAccess;
 }
 
-// List-item shape returned by GET /files. This route returns the RAW file record,
-// which carries neither `url` nor `access` (api-doc/files/private-files.md) — the
-// display URL has to be constructed from `key`. `url` stays optional because older
-// payloads did populate it and constructing is only the fallback.
+// List-item shape returned by GET /files. The route returns the stored file record
+// PLUS the two computed fields `url` and `access` — a strict superset of a
+// `FileRef`, keeping `provider`, the owner fields and the timestamps a `FileRef`
+// does not carry (api-doc/uploads/README.md).
+//
+// ⚠ `url` and `access` were absent until the backend change of 2026-09-08, and this
+// dashboard reconstructed them from `key`. That workaround is GONE — see
+// `resolveFileUrl` in services/files.service.ts. Do not bring it back: rebuilding a
+// URL from `key` cannot express `quota_blocked`, treats an unclassified tree as
+// public where the server treats it as private, and mishandles the backslashes a key
+// written on Windows carries.
+//
+// They stay optional on the type so a payload from an older backend still compiles;
+// read them, and treat a missing `url` as "nothing to render" rather than deriving one.
 export interface ApiFile {
   id: string;
   key: string;
   url?: string | null;
+  access?: FileAccess;
   provider: StorageProvider;
   mimeType: string;
   size: number;

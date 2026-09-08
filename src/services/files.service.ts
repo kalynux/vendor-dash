@@ -9,7 +9,6 @@ import { tStatic } from '@/i18n';
 import type {
   ApiFile,
   ApiFileDetail,
-  FileAccess,
   FileKind,
   FileRef,
   FileUrlSource,
@@ -39,52 +38,32 @@ function buildQueryString(params: Record<string, unknown>): string {
   );
 }
 
-// Public origin for files that arrive without a populated `url`. The local
-// provider serves at `<api>/files/<key>`; override via VITE_FILE_BASE_URL when the
-// storage host differs from the API host.
-//
-// `key` is an opaque storage path — never parse or build one. Uploads are routed
-// by detected media type (`images/`, `videos/`, `audio/`, `documents/`,
-// `archives/`, `other/`), and files predating that routing keep their original
-// `products/…` keys; both resolve identically through here.
-const FILE_PUBLIC_BASE: string =
-  (import.meta.env.VITE_FILE_BASE_URL as string | undefined) ??
-  `${BASE_URL.replace(/\/$/, '')}/files`;
-
-/**
- * Storage trees the backend serves only to a credentialed reader. The static
- * mount carries the eleven public trees and nothing else, so a URL rebuilt from a
- * key in one of these resolves to a 404 rather than to the file.
- *
- * Kept in sync with api-doc/files/private-files.md § "Which trees are private".
- */
-const PRIVATE_KEY_PREFIXES = ['digital/', 'shipments/', 'ticket-attachments/'];
-
-function isPrivateKey(key: string): boolean {
-  const k = key.replace(/^\//, '');
-  return PRIVATE_KEY_PREFIXES.some((p) => k.startsWith(p));
-}
-
 /**
  * Resolve a displayable URL for a file, or `null` when there is none to show.
  *
- * 🔴 The key-based fallback exists for `GET /api/files`, which returns raw file
- * records carrying **no `url` and no `access`** — reconstructing from `key` is the
- * only option there, and the backend docs acknowledge that as a contract gap.
+ * ✅ **The server answers this now, and this function only reads it.** Every file
+ * payload — including the raw records from `GET /api/files`, which gained `url` and
+ * `access` on 2026-09-08 — carries a URL computed by the backend's single
+ * `toFileDetail` resolver.
  *
- * It must never fire for a private tree. `FileRef.url` is `null` on an authorized
- * file deliberately, to stop a client rendering a path that only works while
- * signed in; rebuilding that path from `key` would reintroduce exactly the bug the
- * null was added to prevent, except now pointing at an unmounted tree that 404s
- * for everyone.
+ * ⚠ **Do NOT reintroduce a key-based fallback.** This function used to rebuild a URL
+ * from `key` against a `VITE_FILE_BASE_URL` origin, with a hardcoded copy of the
+ * backend's private-tree list. That copy was wrong three ways and each was silent:
+ *
+ *   1. it could not produce `quota_blocked` at all, so a file held back for exceeding
+ *      the owner's storage plan rendered as ordinary public media;
+ *   2. it failed OPEN on an unrecognised storage tree where the backend fails CLOSED,
+ *      so a private tree added later would have been rendered as a public URL;
+ *   3. it did not normalise backslashes, so a key written on Windows
+ *      (`shipments\\2026\\…`) classified as public.
+ *
+ * A `null` return is a normal, renderable state — show a placeholder. Branch on
+ * `access` to say WHY: `authorized` (fetch through the owning entity's own route)
+ * versus `quota_blocked` (the owner is over their plan; offer an upgrade, never
+ * "file missing").
  */
 export function resolveFileUrl(file: FileUrlSource): string | null {
-  if (file.url) return file.url;
-  // Explicitly private, or a key in a tree the public mount does not serve.
-  if (file.access === 'authorized' || isPrivateKey(file.key)) return null;
-  const base = FILE_PUBLIC_BASE.replace(/\/$/, '');
-  const key = file.key.replace(/^\//, '');
-  return `${base}/${key}`;
+  return file.url ?? null;
 }
 
 /**
@@ -96,7 +75,7 @@ export function resolveFileUrl(file: FileUrlSource): string | null {
  * (legacy / not-yet-migrated fields), or `null`/`undefined`.
  *
  * A `null` return is a normal, renderable state — show a placeholder or the file's
- * metadata, not an error.
+ * metadata, not an error. `access` says which of the two null cases it is.
  */
 export function fileRefUrl(
   ref: string | FileUrlSource | null | undefined,
@@ -107,31 +86,24 @@ export function fileRefUrl(
 }
 
 /**
- * Which access class a storage key falls into.
- *
- * Needed because `GET /api/files` returns the raw file record, which carries no
- * `access` field at all — so a `FileRef` built from a library pick has to derive
- * one. Mirrors the backend classifier, including its fail-closed default.
- */
-export function fileAccessForKey(key: string): FileAccess {
-  return isPrivateKey(key) ? 'authorized' : 'public';
-}
-
-/**
  * Build the `FileRef` an entity write expects from a file picked out of the media
  * library.
  *
- * The two shapes differ in more than naming: a library record has no `url` and no
- * `access`, both of which a `FileRef` must carry. Deriving them in one place keeps
- * every picker consistent — and keeps the `access` derivation honest, since the
- * obvious hand-written version is to hardcode `'public'`.
+ * Since 2026-09-08 this is a projection rather than a derivation: `GET /api/files`
+ * carries `url` and `access`, so both are copied straight through. `fileAccessForKey`
+ * — which guessed `access` from the key prefix, and could only ever return two of the
+ * three values — was deleted with the rest of that workaround.
+ *
+ * The `?? 'authorized'` is the fail-closed default for a payload from an older
+ * backend that sends no `access`. It matches `isPrivateStorageKey`'s own posture:
+ * treat the unknown as private, because the opposite guess is the one that leaks.
  */
 export function fileRefFromApiFile(file: ApiFile): FileRef {
   return {
     id: file.id,
     key: file.key,
-    url: resolveFileUrl(file),
-    access: fileAccessForKey(file.key),
+    url: file.url ?? null,
+    access: file.access ?? 'authorized',
     mimeType: file.mimeType,
     size: file.size,
     originalName: file.originalName,
