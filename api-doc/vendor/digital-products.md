@@ -1,5 +1,7 @@
 # Digital products
 
+**Verified against source on 2026-09-08** — R7 re-checked the seven routes, the `AssetDetail` shape with **no `url` field at all** (`catalog/read-models/product-detail.read-model.ts:64-71`), and the POST/PUT precondition split and its two messages verbatim (`domain/services/digital/VariantDigitalService.ts:83-122` — POST sets `status: active`, PUT preserves it). No defects found.
+
 **Verified against backend source on 2026-08-24.**
 **Re-verified against source on 2026-09-08** — § 0 only — the "no vendor preview or download" claim, against `AssetDetail` (`read-models/product-detail.read-model.ts:64-71`, which has no `url` field) and the live `/api/digital/*` route list. The rest of the page carries its 2026-08-24 verification.
 

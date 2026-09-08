@@ -1,13 +1,21 @@
 # Route map — all 166 `/api/vendor/*` routes, and where each is documented
 
+**Verified against source on 2026-09-08** — R7 re-ran this page's own recipe against the live Express router — `dump-routes.js` on `src/app.ts` — and `grep -c " /api/vendor"` returned **166**, exactly as claimed, across the thirteen routers named below. **One defect fixed:** the parenthetical platform-wide census said 764; the live dump is **782**.
+
 **Generated:** 2026-08-24 · **Re-measured against source on 2026-09-08 — still 166, and the
 thirteen routers are unchanged.** **Source:** the live Express router, not a document.
 
 > The per-page ownership below was also re-checked: the counts in
 > [`README.md` § 5](./README.md#5--document-index--the-complete-set-68-files) sum to exactly
 > **166**, so every route has one owning page and none is orphaned. The wider jovi-mall census
-> **has** moved — 677 → **764** routes across all roles — but nothing was added to or removed
+> **has** moved — 677 → **782** routes across all roles — but nothing was added to or removed
 > from `/api/vendor`.
+>
+> ⚠ **That platform-wide figure said 764 until 2026-09-08 (R7).** Re-measured by running the
+> dumper below: `grep -c " /api/vendor"` → **166** (unchanged, as claimed) and the whole file →
+> **782**. The vendor half of this page was right; only the parenthetical census had drifted.
+> It moves whenever any role gains a route, so treat it as a dated observation rather than a
+> contract — the **166** is the number this page actually stands on.
 
 Every route the backend actually serves under `/api/vendor` appears **exactly once** below. If you
 find a vendor route that is not here, either the backend has changed or somebody added a route

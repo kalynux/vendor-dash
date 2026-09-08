@@ -1,5 +1,7 @@
 # Products — core CRUD
 
+**Verified against source on 2026-09-08** — third pass (R7) — the whole claim list re-read, not a sample. `ProductQuerySchema` (`product.validator.ts:162-174`), the bulk 50-cap and its vendor-only three-status enum (`:179-207`), the transition map (`ProductStatusValidationService.ts:47-53`), the silent demote (`:439-453`), the image limits (`domain/services/media/image-limits.ts:14-29`), the duplicate split by `mode` (`ProductDuplicateService.ts:13-152`), the quota slot filter (`product.repository.mongo.ts:86-93`), the bulk all-or-nothing gate (`ProductBulkOperationsService.ts:53-72`), the five vectorisation statuses (`product.model.ts:26`) and the 900/1200 rate ceilings (`api/rate-limit/policy.ts:88-123`). **No defects found — every claim held.** The unescaped `$regex` on `q` is confirmed live at four sites (`product.repository.mongo.ts:219-220,269-270`) and is filed as a backend defect, not a doc defect.
+
 **Verified against backend source on 2026-08-24.** Every statement below was read out of
 `jovi-mall/src/`, not out of a document. Where the backend's own `api-doc/vendor/products.md`
 disagreed, source won — and **every filed disagreement was fixed at source on 2026-09-06**

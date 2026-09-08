@@ -1,5 +1,7 @@
 # Vendor Frontend — Stripe Card Payments
 
+**Verified against source on 2026-09-08** — R7 re-confirmed `STRIPE` is in the gateway enum on **both** billing initiate schemas at the cited lines (`modules/billing/validators/billing.validators.ts:77` topup, `:83` plan purchase) and that neither billing path creates a `PaymentTransaction` — `modules/payments/` and `modules/billing/` share the gateway class only. No defects found.
+
 **Verified against backend source on 2026-08-24** —
 `src/modules/payments/gateways/stripe.gateway.ts:60-105`,
 `src/modules/payments/gateways/stripe.client.ts:51-89`,

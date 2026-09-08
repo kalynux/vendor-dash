@@ -1,5 +1,7 @@
 # Rich Product Descriptions (`descriptionRich`)
 
+**Verified against source on 2026-09-08** — R7 re-checked the gate (`vendor-dash/src/lib/richtext/wire.ts:36` — `RICH_DESCRIPTION_WIRE_ENABLED = true`) and the "all four write schemas" claim, which holds exactly: `descriptionRichSchema` is used at `catalog/validators/product.validator.ts:54,90` and `simple-product.validator.ts:51,97`, from the one shared fragment at `rich-description.validator.ts:39`. No defects found.
+
 **Verified against backend source on 2026-08-24** — `src/core/richtext/{types,schema,limits,doc}.ts`,
 `src/modules/catalog/validators/rich-description.validator.ts`,
 `src/modules/catalog/models/product.model.ts:242,408`.

@@ -1,5 +1,7 @@
 # Payout methods
 
+**Verified against source on 2026-09-08** — R7 re-checked the mobile-money-only write gate against `core/types/payout.types.ts:180-194` (`ENABLED_PAYOUT_METHODS = ['mobile_money']`) and confirmed there is no `/api/vendor/payout-methods` route in `modules/vendor/routes.ts`. No defects found.
+
 **Verified against backend source on 2026-08-24.**
 **Re-verified against source on 2026-09-08** — the "no `/api/vendor/payout-methods` route" claim and the mobile-money-only write gate, against `jovi-mall/src/core/types/payout.types.ts:150-195` (`ENABLED_PAYOUT_METHODS = ["mobile_money"]`) and the live route table.
 

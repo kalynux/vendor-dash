@@ -1,5 +1,7 @@
 # File Management Service API Documentation
 
+**Verified against source on 2026-09-08** — third pass (R7). Re-checked the nine audited deviations, the role size limits, the `storage` block and the `url`/`access` addition, against `jovi-mall/src/api/routes/file-upload.routes.ts`, `controllers/file-upload.controller.ts:45-57`, `controllers/file-management.controller.ts:159-281,325`, `validators/file-management.validator.ts:24-55` and `modules/catalog/read-models/file-detail.resolver.ts:67-120`. **Four defects fixed** — it is four routes not two and the change is committed (`141bc5c`), `agency` was missing from both size tables and from the `storage` block, and the `limitBytes`-is-null claim was false for agency and agent. **The long-form lifecycle, storage-provider and security sections below were not re-read** — the `usageCount` warning above still governs them.
+
 **Version:** 1.2 · **Written:** 2026-06-11 · **Audited against backend source: 2026-08-24**
 **Partially re-verified against source on 2026-09-08 (second pass)** — the file-listing query
 schema (`file-management.validator.ts:24-55`), the row shape (`file.mapper.ts:41-59`), the
@@ -82,23 +84,28 @@ the quota-blocked note below was added from `modules/plan-quota/` and
 > the same files. It is **not** a deletion and it is **not** the soft-delete this page
 > describes; nothing on the deletion-lifecycle sections below covers it.
 >
-> **These two routes report it TWICE, and `access` is the one to read:**
+> **These routes report it TWICE, and `access` is the one to read:**
 >
 > | Where | Field | Blocked value |
 > |---|---|---|
 > | any `FileDetail` (product media, branding, avatars) | `access` | `"quota_blocked"`, with **`url: null`** |
-> | `GET /api/files` · `GET /api/files/:id` — these routes | `access` **and** `quotaBlockedAt` | `"quota_blocked"` / `url: null`, **plus** an ISO timestamp on `quotaBlockedAt` |
+> | all **four** `/api/files/*` routes (see the ✅ note below) | `access` **and** `quotaBlockedAt` | `"quota_blocked"` / `url: null`, **plus** an ISO timestamp on `quotaBlockedAt` |
 >
 > ⚠ **This box said these routes carried `quotaBlockedAt` and "no `access` and no `url` key at
-> all". Re-measured 2026-09-08 and that is no longer true.** Both handlers map the row through
-> `withUrlAndAccess` (`file-management.controller.ts:185` for the list, `:325` for the detail),
-> which spreads the raw `File` and **adds** `url` and `access`
-> (`file-detail.resolver.ts:114-120`). So one check — `access === "quota_blocked"` — works on
-> every surface, and you do **not** need a second branch for the library screen.
+> all". Re-measured 2026-09-08 and that is no longer true.** The handlers map each row through
+> `withUrlAndAccess` (`file-management.controller.ts:185` for the list, `:325` for the detail;
+> `file-upload.controller.ts:247` and `:362` for the two upload routes), which spreads the raw
+> `File` and **adds** `url` and `access` (`file-detail.resolver.ts:114-120`). So one check —
+> `access === "quota_blocked"` — works on every surface, and you do **not** need a second
+> branch for the library screen.
 >
-> ⚠ **Caveat worth stating: that change is uncommitted working-tree state** (`git show HEAD` of
-> the controller contains no `withUrlAndAccess`). It is what the source does today; confirm
-> against the deployed build before relying on it, and keep `quotaBlockedAt` as a fallback.
+> ✅ **Corrected 2026-09-08 (R7): it is FOUR routes, not two, and the change is COMMITTED.**
+> `POST /api/files/upload` and `POST /api/files/upload/video` return `url` and `access` on
+> every element of their `data` array as well — which is what lets an upload confirmation
+> render a thumbnail straight away, with no follow-up `GET`. And the caveat that used to sit
+> here — *"that change is uncommitted working-tree state"* — **is no longer true.** It landed
+> in `141bc5c` (*feat(files): return url and access on all four `/api/files/*` responses*,
+> 2026-09-08 02:44) and both source files are clean against `HEAD`. Rely on it.
 >
 > Also: `quota_blocked` **outranks** `authorized`, so test it first; a blocked file's bytes
 > **still count** toward `usedBytes` (blocking frees no space); and a vendor's
@@ -239,13 +246,17 @@ Content-Type: multipart/form-data
 files: File[] (max 10 files)
 ```
 
-**Role-Based Size Limits:**
+**Role-Based Size Limits** (`file-upload.controller.ts:48-53`)**:**
 | Role     | Max File Size |
 |----------|---------------|
 | Vendor   | 500 MB        |
+| **Agency** | **200 MB**  |
 | Agent    | 1 GB          |
 | Admin    | 2 GB          |
 | Customer | 100 MB        |
+
+> ✅ **`agency` (200 MB) was missing from this table** — added 2026-09-08 (R7) from source. It is
+> the smallest non-customer limit, and the backend's own route docstring omits it too.
 
 **Where the file is stored:**
 
@@ -661,7 +672,15 @@ GET /api/files?ownerType=vendor&provider=cloudinary
 }
 ```
 
-**`storage` block:** owner-scoped media usage analytics, returned for **vendor / customer / agent** callers (and **omitted — `null` — for admins**, whose listing is global). See the **[Vendor Media Storage guide](./storage.md)** for the full storage feature (limits, alerts, quota errors, lifecycle). `usedBytes` is the total of `byCategory` bytes. For **vendors**, `limitBytes` is the active plan's media storage limit (`max_storage_bytes`) and `remainingBytes = max(0, limitBytes − usedBytes)`; for other roles `limitBytes`/`remainingBytes` are `null`. **Digital-product asset files are excluded** from these figures (they have their own 500 MB/asset cap, independent of plan). Categories follow the same `category` mapping used for filtering.
+**`storage` block:** owner-scoped media usage analytics, returned for **vendor / agency / agent / customer** callers (and **omitted — `null` — for admins**, whose listing is global). See the **[Vendor Media Storage guide](./storage.md)** for the full storage feature (limits, alerts, quota errors, lifecycle). `usedBytes` is the total of `byCategory` bytes. For the three **plan-metered** owner types — **vendor, agency and agent** — `limitBytes` is the active plan's media storage limit (`max_storage_bytes`) and `remainingBytes = max(0, limitBytes − usedBytes)`. **Customers** have no plan, so both are `null` (= unlimited). **A vendor's digital-product asset files are excluded** from these figures (they have their own per-asset cap, `MAX_DIGITAL_ASSET_SIZE`, default 500 MB, independent of plan). Categories follow the same `category` mapping used for filtering.
+
+> ✅ **Corrected 2026-09-08 (R7), three ways**, against `file-management.controller.ts:238-281`.
+> This paragraph named only *vendor / customer / agent* — **`agency` was missing**; it said
+> `limitBytes` is `null` "for other roles", which is **false for agency and agent** (all three
+> plan-metered types get a real cap, and only a customer gets `null`); and the digital-asset
+> exclusion is **vendor-only** (`MediaStorageService.getUsageBreakdown:45-52` subtracts them for
+> vendors and for nobody else). None of the three changes what a *vendor* screen should render —
+> they matter if you reuse this block's shape for another role.
 
 **Authorization Rules:**
 - **Vendors**: See only files where `ownerType === 'vendor'` and `ownerId === vendorId`
@@ -675,7 +694,8 @@ GET /api/files?ownerType=vendor&provider=cloudinary
 
 Lightweight storage usage + plan limit summary for the authenticated owner — the same `storage` object embedded in `GET /api/files`, without the file list. Use it for a storage usage widget.
 
-**Authentication:** Required (vendor / customer / agent). Admins receive **`403 AUTH_FORBIDDEN`**
+**Authentication:** Required (vendor / agency / agent / customer — `agency` was missing here until
+2026-09-08). Admins receive **`403 AUTH_FORBIDDEN`**
 (no owner scope) — `file-management.controller.ts:216-221`. ⚠ Not `FORBIDDEN`, which is in no
 registry.
 
@@ -1685,6 +1705,7 @@ async function reconcileStorage() {
 | Role     | Max File Size | Use Case                          |
 |----------|---------------|-----------------------------------|
 | Vendor   | 500 MB        | Product images, digital downloads |
+| **Agency** | **200 MB**  | Magazin branding, storage-invoice documents |
 | Agent    | 1 GB          | Support attachments               |
 | Admin    | 2 GB          | System assets, bulk imports       |
 | Customer | 100 MB        | Profile pictures, ticket attachments |

@@ -1,5 +1,7 @@
 # Google Calendar integration
 
+**Verified against source on 2026-09-08** — R7 re-checked the six callback reasons and confirmed `state_mismatch` is unreachable (`modules/integrations/calendar/google/google.routes.ts:189,199-244`), and the asymmetric branch keys on the product-scoped route — `calendarEmail` when connected, `email` when not (`catalog/controllers/vendor-service-calendar.controller.ts:55,59`). **One note corrected:** the stale `STUB` comments it warned about were fixed at source on 2026-08-19 and 2026-09-07 and no longer exist.
+
 **Verified against backend source on 2026-08-24.**
 
 **Routes: 4** — three under `/api/vendor/calendar`, plus the product-scoped status check.
@@ -126,8 +128,13 @@ exactly two values.
 
 Errors: `404 CATALOG_PRODUCT_NOT_FOUND` · `400 CATALOG_BOOKING_INVALID_PRODUCT_TYPE`.
 
-📌 The route still carries a stale `STUB: Returns placeholder response` comment in the backend. It is
-not a stub — it reads the real connection.
+📌 ✅ **The stale `STUB` comments this note warned about are GONE** — re-checked 2026-09-08 (R7).
+Both sites now carry an explicit correction instead: the route
+(`catalog/routes/vendor-products.routes.ts:545`, *"⚠ NOT a stub. This said 'STUB: Returns
+placeholder response' until 2026-09-07"*) and the controller
+(`catalog/controllers/vendor-service-calendar.controller.ts:14-23`, corrected 2026-08-19). It was
+never a stub in behaviour — it reads the real `ConnectedCalendarAccount` — and the source no longer
+says otherwise.
 
 **Prefer `/api/vendor/calendar/status`** unless you specifically want the product guards. It has
 more fields and one consistent shape.

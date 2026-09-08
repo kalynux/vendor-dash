@@ -1,5 +1,7 @@
 # Vendor profile
 
+**Verified against source on 2026-09-08** — R7 re-checked all four opening warnings against `modules/vendor/service/vendor-profile.service.ts`: the misnamed optimistic-lock code really is `VENDOR_FISCAL_CALENDAR_INVALID` at 409 with the "Profile was modified by another request" message (`:334`), the onboarding paths raise `VENDOR_ONBOARDING_CONCURRENT_MODIFICATION` instead (`:400,415,478,539,555,633`), `PROFILE_COUNTRY_IMMUTABLE` is a 403 (`:227`), and the policy-change pause is driven by a **serialised deep-equality** (`JSON.stringify(updated.policies) !== JSON.stringify(vendor.policies)`, `:347`) into `pauseConnectionsForPolicyChange` — so the "a reordered but equivalent object triggers the pause" warning is exact. No defects found.
+
 **Verified against backend source on 2026-08-24.**
 
 **Base path:** `/api/vendor/profile` (plus `/api/vendor/delivery-agencies`) · **Routes: 11**

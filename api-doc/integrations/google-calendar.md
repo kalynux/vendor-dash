@@ -1,5 +1,7 @@
 # Google Calendar Integration (OAuth)
 
+**Verified against source on 2026-09-08** — R7 re-verified all six route registrations and their paths at the exact cited lines (`modules/integrations/calendar/google/google.routes.ts:111 /connect · 142 /connect-url · 193 /callback · 257 /status · 282 /disconnect · 298 /test`) and confirmed `requireAuth` is present on five and absent on `/callback` alone. No defects found.
+
 **Verified against backend source on 2026-08-24** —
 `src/modules/integrations/calendar/google/google.routes.ts` (six `router` registrations,
 lines 111 / 142 / 193 / 257 / 282 / 298).

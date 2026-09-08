@@ -1,5 +1,7 @@
 # Agency connections
 
+**Verified against source on 2026-09-08** — R7 re-checked the eight routes against the live route dump, the **six**-member status enum (`modules/agency-connections/connection.model.ts:5-16,88,105`), and the "terms are not negotiated here" claim by grepping the model — **zero** occurrences of `terms_proposed_by` on a vendor↔agency connection. The policy-version pause is driven from `vendor-profile.service.ts:347-352`. No defects found.
+
 **Verified against backend source on 2026-08-24.**
 
 **Base path:** `/api/vendor/agency-connections` · **Auth:** vendor session · **Routes: 8**

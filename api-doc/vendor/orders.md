@@ -1,5 +1,7 @@
 # Orders
 
+**Verified against source on 2026-09-08** — R7 re-checked the fourteen routes against the live route dump, and every enum on the page against `modules/orders/order.model.ts`: `AWAITING_PAYMENT` really is the only uppercase member of `PaymentStatus` in both the type (`:38`) and the Mongoose enum (`:401`); the nine `FulfillmentStatus` values (`:44`); the eleven `deliveryStatus` values including `handing_over` and `pending_agency_reassignment` (`:102,292`). ✅ **Both "cannot be filtered for" claims hold**: the list filter enums omit `disputed` and `returned` while the stored enums carry them (`modules/vendor/validators/vendor-order.validator.ts:14-15`). No defects found.
+
 **Verified against backend source on 2026-08-24.** Read out of `jovi-mall/src/modules/vendor/` and
 `src/modules/orders/`. The backend's own `api-doc/vendor/orders.md` disagreed with source in
 **thirty** places and omitted two routes entirely; **all thirty were fixed at source on

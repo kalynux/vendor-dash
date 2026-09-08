@@ -1,5 +1,7 @@
 # Service products — availability rules and variant config
 
+**Verified against source on 2026-09-08** — R7 re-checked the six routes (`catalog/routes/vendor-products.routes.ts:508-533,359`), the weekly-only rule shape with `isActive` defaulting to **false** and `timezone` absent-rather-than-null (`modules/booking/models/availability-rule.model.ts:5-62`), and the three accepted body shapes with all-or-nothing overlap validation (`controllers/vendor-availability.controller.ts:52-90`). No defects found.
+
 **Verified against backend source on 2026-08-24.**
 
 **Routes: 6** — five rule endpoints plus the service variant configuration.
@@ -66,6 +68,14 @@ stay consistent; a bare array is the clearest.
 become bookable will find nothing happened. **Either send `isActive: true` explicitly, or call
 `/toggle` afterwards, and tell them either way** — only active rules satisfy the
 `CATALOG_PRODUCT_SERVICE_NO_AVAILABILITY` activation blocker.
+
+> 🔴 **`isActive` is the ONE field `PATCH /availability-rules/:ruleId` will not change** — added
+> 2026-09-08 (R7). The update schema is literally
+> `CreateAvailabilityRuleSchema.omit({ isActive: true }).partial()`
+> (`modules/booking/controllers/vendor-availability.controller.ts:30`), so sending
+> `{ "isActive": true }` there is **silently stripped** and answers `200` having changed nothing.
+> Use `PATCH /availability-rules/:ruleId/toggle`. This is the trap that makes the
+> created-inactive rule above expensive: the obvious fix for it does not work.
 
 `201` returns **always an array**, even for a single rule, with
 `"N availability rule(s) created"`.

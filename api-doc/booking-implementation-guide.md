@@ -1,5 +1,7 @@
 # Service Booking — Frontend Implementation Guide
 
+**Verified against source on 2026-09-08** — R7 re-checked the four public booking routes (`catalog/routes/product-booking.routes.ts:24,49,83,119`), the vendor setup order and the service-variant config rules. ✅ **F-23 is CONFIRMED STILL LIVE**: the slot lock is written under the authenticated **user** id (`product-booking.routes.ts:51,58`) while `rescheduleBooking` asserts it under the **vendor role-entity** id (`controllers/vendor-booking.controller.ts:331,341-343`), so a vendor who locks a slot cannot then reschedule into it. The warning at the top of this guide is correct and should stay. No doc defects found.
+
 **Verified against the live route dump on 2026-08-24.**
 
 > ### Scope for this repository — **roughly half of this guide is not yours**

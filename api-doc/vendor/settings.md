@@ -1,5 +1,7 @@
 # Billing settings
 
+**Verified against source on 2026-09-08** — R7 re-checked the one-key shape and its 0-90 range (`modules/billing/validators/billing.validators.ts:94-96`) and the two routes (`routes/vendor-billing.routes.ts:31-32`). No defects found.
+
 **Verified against backend source on 2026-08-24.**
 **Re-verified against source on 2026-09-08** — the one-key shape, the 0–90 range, the required-field PATCH and the two routes, against `jovi-mall/src/modules/billing/{validators/billing.validators.ts:95, controllers/vendor-billing.controller.ts:85-92}`.
 

@@ -1,5 +1,7 @@
 # Notification channels — SUPERSEDED
 
+**Verified against source on 2026-09-08** — the email-verification flow against `jovi-mall/src/modules/auth/auth.routes.ts:25-26,70` and `auth.service.ts:35,536-563`. **One defect fixed, and it was the dangerous direction:** this page said the emailed link points at the API and that "your frontend never builds this URL and never calls this route". The link now points at a FRONTEND page (`${STOREFRONT_URL}/verify-email?token=…&app=<role>`) which must call `POST /api/auth/verify-email`.
+
 **Verified against backend source on 2026-08-24.**
 
 > ## 🔴 This page described a mechanism that no longer exists.
@@ -69,17 +71,42 @@ role profile (`auth.service.ts:520-529`).
 | 422 | `AUTH_EMAIL_MISSING` | the profile carries no email address |
 
 The token is a 32-byte hex string held in Redis for **24 hours** (`EMAIL_VERIFY_EXPIRE`,
-`auth.service.ts:35`). The emailed link points at the **API**, not at your dashboard:
-`${API_PUBLIC_URL}/api/auth/verify-email?token=…` (`auth.service.ts:537`).
+`auth.service.ts:35`).
 
-### `GET /api/auth/verify-email?token=…`
+> ### 🔴 Corrected 2026-09-08 (R7) — the emailed link points at a FRONTEND page now
+>
+> This section said the link points at the **API** (`${API_PUBLIC_URL}/api/auth/verify-email?token=…`)
+> and that "your frontend never builds this URL and never calls this route". **Both are false as of
+> today's source** (`auth.service.ts:536-563`). The link is now:
+>
+> ```
+> ${STOREFRONT_URL || API_PUBLIC_URL}/verify-email?token=<token>&app=<role>
+> ```
+>
+> — a **page in a frontend app**, which holds the token until a person acts and then calls
+> `POST /api/auth/verify-email`. `app=` is a **role key, never a URL**: one page serves customer,
+> vendor, agency and agent, and only the half of the flow holding a session knows which asked.
+> Map it through a compile-time table and ignore anything unrecognised.
+>
+> Why it moved: the old form gave a person who clicked it a **raw JSON envelope** in their
+> browser, and it was a **mutating `GET`**, so link scanners and mail-client previews spent the
+> token before the person ever tapped it.
 
-**Public.** Opened from the vendor's inbox — **your frontend never builds this URL and never
-calls this route.** It is listed only so you do not try to.
+### `POST /api/auth/verify-email` — what the emailed page calls
+
+**Public.** Body `{ "token": "<token>" }`. This is the route to build against
+(`auth.routes.ts:26`).
+
+### `GET /api/auth/verify-email?token=…` — legacy, do not build against it
+
+**Public**, and still live **only** because tokens last 24 hours, so links already in inboxes stay
+valid for a day. It is a mutating `GET` with the prefetch problem described above.
 
 | Status | `error.code` | When |
 |---|---|---|
 | 400 | `AUTH_VERIFY_TOKEN_INVALID` | `token` absent or not a string (`auth.controller.ts:135`) |
+
+Both verbs sit in the strict credential rate-limit bucket (**20/min/IP**).
 
 ### The flag it flips
 

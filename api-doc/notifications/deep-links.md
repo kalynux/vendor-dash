@@ -1,5 +1,7 @@
 # Notification deep links — the vendor, agency and agent apps
 
+**Verified against source on 2026-09-08** — R7 diffed this copy against the backend original — **byte-identical**, so it inherits that page's verification — and independently re-ran `npm run test:notification-deeplinks` in jovi-mall (**13 passed, 0 failed**), whose final assertion pins every path in this very document against the notification catalogues. No defects found.
+
 **Audience: whoever builds `vendor-dash`, `agency-dash` or `agent_app`.** One document
 rather than three, because the rules are shared and three copies drift — which is the
 failure this whole contract exists to prevent. Find your app's section; the rules above it

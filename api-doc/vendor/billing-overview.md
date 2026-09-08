@@ -1,5 +1,7 @@
 # Billing Module — Overview (Pricing Plans & Credit Wallet)
 
+**Verified against source on 2026-09-08** — R7 re-checked the seeded plan table against `scripts/seed/seed-pricing-plans.ts:45-52` (all three rows exact), and the bulk-vectorise route move to `POST /api/internal/admin/dev-tools/catalogue/vectorise` (`modules/dev-tools/admin-dev-tools.routes.ts:278`). No defects found.
+
 **Verified against backend source on 2026-08-24** — `scripts/seed/seed-pricing-plans.ts:47-51`,
 `src/modules/billing/services/entitlement.service.ts`, `src/modules/billing/validators/billing.validators.ts`.
 **Partially re-verified against source on 2026-09-08** — the seeded plan table (against

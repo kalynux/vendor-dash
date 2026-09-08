@@ -1,5 +1,7 @@
 # Plans and credits
 
+**Verified against source on 2026-09-08** — R7 re-read the eight routes (`modules/billing/routes/vendor-billing.routes.ts:16-28`), confirmed both "GETs that write" — `getActivePlan` lazily creates the free tier (`services/subscriber-plan.service.ts:66-85`) and `getBalance` calls `walletRepo.getOrCreate` (`services/credit-wallet.service.ts:106-109`) — and that both survive a `readonly` window because it exempts every safe method (`modules/system/domain/maintenance-mode.ts:64,232-234`). **One defect fixed:** the `GET /plans` example used the real `growth` code with invented figures.
+
 **Verified against backend source on 2026-08-24.**
 
 **Routes: 8** — `/api/vendor/plans` · `/plan` · `/plan-purchases` · `/credits`
@@ -63,17 +65,23 @@ The purchasable catalogue. **No query parameters** — active vendor plans only,
 ```jsonc
 { "success": true, "data": [{
     "_id": "…", "role": "vendor", "code": "growth", "name": "Growth",
-    "price": 15000, "currency": "XAF",
+    "price": 5000, "currency": "XAF",
     "term_days": 30,
-    "credit_allowance": 500,
-    "max_active_products": 200,
-    "max_storage_bytes": 5368709120,
-    "commission_percent": 8,
+    "credit_allowance": 850,
+    "max_active_products": 150,
+    "max_storage_bytes": 10737418240,        // 10 GB
+    "commission_percent": 5,
     "max_unterminated_shipments": null,      // agency/agent only — always null here
     "live_tracking_enabled": false,
     "is_active": true, "sort_order": 2
 }] }
 ```
+
+⚠ **Corrected 2026-09-08 (R7).** This example used the real `growth` code with invented figures
+(15 000 XAF · 500 credits · 200 products · 5 GB · 8 %), none of which matched the seeded plan.
+The values above are now the seeded ones (`scripts/seed/seed-pricing-plans.ts:47-49`). They are
+still only an illustration — **plans are admin-editable without a deploy, so read the live
+catalogue rather than hardcoding any of it.**
 
 **No pagination.**
 

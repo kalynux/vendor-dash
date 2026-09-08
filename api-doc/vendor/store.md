@@ -1,5 +1,7 @@
 # Store
 
+**Verified against source on 2026-09-08** — R7 re-checked the three routes, the twelve-field store model (`modules/store/models/store.model.ts:11-27` — exactly the list on this page) and the public-URL default `https://yourdomain.com/shop/stores` (`modules/store/config/store.config.ts:19`). **One stale claim fixed:** this page accused the backend copy of teaching `/store/{slug}`; that copy has since been corrected and both now agree.
+
 **Verified against backend source on 2026-08-24.**
 
 **Base path:** `/api/vendor/store` · **Auth:** vendor session · **Routes: 3**
@@ -22,16 +24,24 @@ own doc was wrong.**
 | **Path shape** | **`/shop/stores/{slug}`** |
 | Example | `https://yourdomain.com/shop/stores/techsolutions` |
 
-The backend's `api-doc/vendor/store.md` claims `/store/{slug}`. It is wrong, and the source says
-why: the storefront nests stores under `/shop`, and the base *used* to end in `/store` — "which is
-not a route the storefront serves — every `publicUrl` it produced 404'd."
+The source says why the `/shop` nesting exists: the storefront nests stores under `/shop`, and the
+base *used* to end in `/store` — "which is not a route the storefront serves — every `publicUrl` it
+produced 404'd."
 
-So **do not "fix" this repository's `/shop/stores` to match the backend document.** Filed as a
-correction to F-8: the finding was framed as "the frontend teaches the wrong URL"; source says the
-opposite.
+✅ **The disagreement is CLOSED — re-checked 2026-09-08 (R7).** This section used to say *"the
+backend's `api-doc/vendor/store.md` claims `/store/{slug}`. It is wrong"* and warned against
+"fixing" this page to match it. **The backend page has since been corrected** and now prints
+`https://yourdomain.com/shop/stores/techsolutions` at every one of its five occurrences. Both
+documents and the source (`modules/store/config/store.config.ts:19`) now agree. Nothing here needs
+defending against the other copy any more.
 
-⚠ One stale artefact exists in the backend: a test script still asserts the old `/store` default. It
-is a leftover, not the contract.
+This was the correction to F-8, which had been framed as "the frontend teaches the wrong URL";
+source said the opposite, and the backend document was the side that moved.
+
+⚠ **One stale artefact survives in the backend and is still only an artefact:** a test script
+comment at `src/scripts/test-store-profile.ts:394` still quotes the old
+`'https://yourdomain.com/store'` fallback. It is a leftover in a comment, not the contract — the
+live default is `/shop/stores`.
 
 ---
 

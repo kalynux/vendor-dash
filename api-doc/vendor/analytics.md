@@ -1,5 +1,7 @@
 # Analytics
 
+**Verified against source on 2026-09-08** — R7 re-checked every claim: the four routes and their `{data, meta}` envelope with **no** `success` key (`modules/vendors/controllers/vendor-analytics.controller.ts:44,77,110,142`), the 365-day cap and the `limit` silent coercion to 5 (`validators/analytics.validator.ts:84-100`), the 02:00 default aggregation cron (`core/jobs/aggregation-scheduler.ts:32,43`), and that `timezone` is echoed into `meta` and never used in the query — `vendor-analytics.service.ts` does not mention it at all. No defects found.
+
 **Verified against backend source on 2026-08-24.**
 
 **Base path:** `/api/vendor/analytics` · **Routes: 4, all `GET`**

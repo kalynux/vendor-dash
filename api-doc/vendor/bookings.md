@@ -1,5 +1,7 @@
 # Bookings
 
+**Verified against source on 2026-09-08** — R7 re-checked the nine routes (`modules/booking/routes/vendor-booking.routes.ts:23-86`), the seven-value booking payment enum (`models/booking.model.ts:159`), the transition map (`services/booking.service.ts:684-689`), and — the sharpest claim on the page — that `POST /:id/cancel` refunds and writes `cancelledAt`/`cancelledReason` (`:377-386`) while `PATCH /:id/status` to `cancelled` does **neither** and detaches the calendar only from `confirmed` (`:709-746`). ✅ **The calendar `date`-key warning is CORRECT and the backend comment is wrong:** `booking.service.ts:1013` says "YYYY-MM-DD in UTC" over a `format(booking.startAt, ...)` call, which formats in the SERVER local zone. No doc defects found.
+
 **Verified against backend source on 2026-08-24.**
 
 **Base path:** `/api/vendor/bookings` · **Routes: 9**, plus the six shared booking routes the

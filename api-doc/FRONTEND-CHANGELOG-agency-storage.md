@@ -1,5 +1,7 @@
 # Front-end changelog — agency storage management
 
+**Verified against source on 2026-09-08** — R7 re-checked the two ⚠️ BREAKING items on the vendor half: the `meta.stockAdjustment` block returned instead of a stock write (`catalog/controllers/vendor-simple-product.controller.ts:224-228`, `vendor-variant.controller.ts:448`), and the infinite-stock refusal — a `422` on the write paths (`domain/services/agency-storage-stock.rule.ts:72`, `stock-requests/services/stock-request.service.ts:125`) **and** an activation blocker (`ProductStatusValidationService.ts:319`). No defects found; the historical-record framing and the "those win" pointer to `vendor/stock-requests.md` are both still correct.
+
 **Audience:** whoever builds the **agency dashboard** and the **vendor dashboard**.
 **Status:** backend shipped. Nothing here is behind a flag.
 

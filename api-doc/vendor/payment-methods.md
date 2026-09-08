@@ -1,5 +1,7 @@
 # Saved payment methods
 
+**Verified against source on 2026-09-08** — R7 re-checked the 10-method cap and its `409 PAYMENT_METHOD_LIMIT_REACHED` (`payment-methods/services/payment-method.service.ts:9,36-38`), the default-first-then-newest sort, the first-becomes-default rule and the fact that `remove` promotes nobody (`payment-methods/repositories/payment-method.repository.ts:26-124`). No defects found.
+
 **Verified against backend source on 2026-08-24.**
 **Re-verified against source on 2026-09-08** — ALL claims on this page — the 5 routes, the DTO, the validator, the 10-method cap, the first-becomes-default and delete-does-not-promote behaviours, and the "nothing charges a saved method" claim (a repo-wide grep of every caller) — against `jovi-mall/src/modules/payment-methods/`.
 

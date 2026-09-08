@@ -1,5 +1,7 @@
 # Simple products
 
+**Verified against source on 2026-09-08** — R7 read the whole page. The three routes (`catalog/routes/vendor-products.routes.ts:82,89,95`), the strict create schema field by field (`validators/simple-product.validator.ts:39-80` — `price` strictly positive, `stock` default 0, `bargain` sharing the layered `BargainRangeSchema`), the five `409 CATALOG_PRODUCT_SIMPLE_MODE_LOCKED` refusal sites (`vendor-option.controller.ts:51`, `vendor-product.controller.ts:348`, `vendor-variant.controller.ts:61,501,544`) and the `details` shape carrying `convertEndpoint` (`domain/services/simple/mode-guard.ts:17-31`). No defects found.
+
 **Verified against backend source on 2026-08-24.**
 **Partially re-verified against source on 2026-09-08** — the `BILLING_LIMIT_EXCEEDED` `details` shape only, against `services/entitlement.service.ts:100-113`. The rest of the page still carries
 its 2026-08-24 verification and was not re-read.
