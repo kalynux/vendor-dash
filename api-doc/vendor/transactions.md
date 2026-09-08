@@ -1,6 +1,10 @@
 # Transactions
 
-**Verified against backend source on 2026-08-24.**
+**Verified against source on 2026-09-08** — the query schema, the merge and dedup, the empty
+`payout` branch, and all four row mappers with their `type`/`status`/`unit`/`direction` values,
+against `jovi-mall/src/modules/transactions/services/vendor-transaction.service.ts` and
+`src/modules/earnings/models/`. **Every claim on this page held.** The backend's own copy was the
+one behind, and was corrected.
 
 **`GET /api/vendor/transactions/`** — one merged, newest-first history.
 

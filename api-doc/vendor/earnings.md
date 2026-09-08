@@ -1,6 +1,11 @@
 # Earnings and payouts
 
-**Verified against backend source on 2026-08-24.**
+**Verified against source on 2026-09-08** — all three routes, the balance fields, the four payout
+refusals *in the order they are checked*, both config thresholds, the destination snapshot and the
+auto-payout gate, against `jovi-mall/src/modules/earnings/` (`config/earnings.config.ts`,
+`services/earnings-account.service.ts`, `services/payout-request.service.ts`,
+`controllers/payout-request.controller.ts`, `workers/earnings-release.worker.ts`). **Every claim on
+this page held.** The one edit is the currency-units note, which contradicted the backend copy.
 
 **Routes: 3** — `GET /api/vendor/earnings` · `GET`/`POST /api/vendor/earnings/payout`
 
@@ -59,7 +64,12 @@ already in flight.
 
 All values default to `0` and `currency` to `XAF` when the vendor has no account yet.
 
-**Whole currency units.** Do not divide by 100.
+**Do not divide by 100.** The values are integers in the currency's *minor* units — which the
+backend's own copy says, and which reads as "divide by 100" to anyone used to Stripe. It is not,
+because **XAF is a zero-decimal currency**: its minor unit *is* the franc, so `142000` means
+XAF 142,000. The currency is one per deployment (`EARNINGS_CURRENCY`, default `XAF`,
+`earnings.config.ts:20`), so if a deployment ever sets a two-decimal one, this is the line that
+changes — read `currency` rather than hard-coding the assumption.
 
 ---
 

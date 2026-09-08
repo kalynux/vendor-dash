@@ -1,6 +1,8 @@
 # Product media and vectorisation
 
-**Verified against backend source on 2026-08-24.**
+**Verified against source on 2026-09-08** — the five `vectorisationStatus` values, against
+`jovi-mall/src/modules/catalog/models/product.model.ts:26,336` and
+`domain/services/VectorisationService.ts:715`. The claim held.
 
 **Routes: 3** — `PATCH /api/vendor/products/:id/vectorisation` ·
 `POST /api/vendor/products/:id/vectorisation/retry` ·
@@ -67,7 +69,14 @@ not_started · pending · completed · failed · skipped_no_credits
 
 **`skipped_no_credits`** means the vendor's credit balance was empty when the job ran. It is an
 actionable state with an obvious call to action — top up — and it deserves its own UI rather than
-falling into an "unknown" branch. The backend's own doc lists only four.
+falling into an "unknown" branch. All five are the `VectorisationStatus` union
+(`catalog/models/product.model.ts:26`) and the Mongoose enum beside it (`:336`); the fifth is
+written at `VectorisationService.ts:715`.
+
+⚠ **It is also TERMINAL**, which is the part that bites: a poller written to stop on `completed`
+and `failed` alone spins for its whole timeout on a product that will never move. The full state
+table, with the polling recipe, is on [products.md](./products.md) — this page carries the flow,
+that one carries the contract.
 
 ### Eligibility
 

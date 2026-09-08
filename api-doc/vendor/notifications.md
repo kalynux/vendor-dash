@@ -1,6 +1,9 @@
 # Notifications, preferences and push devices
 
-**Verified against backend source on 2026-08-24.**
+**Verified against source on 2026-09-08** — the twelve stored preference keys against
+`jovi-mall/src/modules/notifications/models/vendor-notification-preference.model.ts:30-52` and the
+eleven writable ones against `src/modules/vendor/validators/vendor-notification.validator.ts:38-58`.
+Both counts held.
 
 **Routes: 7** · `/api/vendor/notifications` (3) · `/api/vendor/notification-preferences` (2) ·
 `/api/vendor/devices` (2)
@@ -157,8 +160,11 @@ No body. Returns `{ "success": true, "data": { "count": 12 }, "message": "…" }
 }
 ```
 
-**Twelve stored keys, eleven writable.** The backend's own doc lists eleven and omits
-`agencyStorageUpdates` — it is real and it is returned.
+**Twelve stored keys, eleven writable.** The twelfth is `planUpdates`, which is on the stored
+document and returned by `GET` but is **not** in `UpdateNotificationPreferencesSchema`
+(`vendor-notification.validator.ts:44-58`) — and since that inner object is not `.strict()`,
+sending it succeeds silently and changes nothing. See § 0.3. *(The backend's own doc omitted
+`agencyStorageUpdates` until 2026-09-06; it now documents both.)*
 
 `inAppEnabled` is forced to `true` on every save. It is not a toggle; do not render one.
 

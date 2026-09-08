@@ -1,6 +1,12 @@
 # Inventory
 
-**Verified against backend source on 2026-08-24.**
+**Verified against source on 2026-09-08** — all four routes, every response shape, the alert
+trigger conditions, the reservation lifecycle and the bulk-update failure body, against
+`jovi-mall/src/modules/catalog/` (`controllers/vendor-inventory.controller.ts`,
+`validators/inventory.validator.ts`, `domain/services/inventory/`,
+`repositories/mongo/variant.repository.mongo.ts`) and `src/modules/orders/services/order-stock.service.ts`.
+One factual error found and fixed here (the alert status condition is on the **variant**, not the
+product) and one wrong enum value (`type: "product"` → `physical`).
 
 **Base path:** `/api/vendor/inventory` · **Routes: 4**
 
@@ -9,11 +15,15 @@ Stock on an agency-warehoused SKU is not directly writable — see
 
 ---
 
-## 0 · 🔴 Every response shape on this page differs from the backend's own doc
+## 0 · The four response shapes
 
-All four are wrapped in the standard envelope. The backend's `inventory.md` shows all four
-**unwrapped**, and two of them under key names that do not exist. If you built from that page,
-everything on this surface is wrong.
+All four are wrapped in the standard envelope.
+
+> ✅ **Corrected 2026-09-08.** This section used to say the backend's own `inventory.md` showed
+> all four **unwrapped**. That was true when it was written and is no longer: three of the four
+> were fixed at source on 2026-09-06, and the fourth — the bulk-update *failure* body — on
+> 2026-09-08. Both pages now agree with the wire. Keep the table; it is still the fastest way to
+> see that `alerts` paginates differently from the other three.
 
 | Route | Actual shape |
 |---|---|
@@ -54,10 +64,18 @@ Query: `page` (1), `limit` (50, **max 100**).
 
 A variant appears when **all** of these hold:
 
-1. it belongs to an **`active`** product — ⚠ archived and draft products never alert, which the
-   backend's doc omits
+1. the **variant** is `status: 'active'` and not soft-deleted
 2. `lowStockThreshold` is **not null**
 3. `availableStock <= threshold`
+
+🔴 **Condition 1 is on the VARIANT, not the product — and there is no product-status condition at
+all.** This page said the opposite until 2026-09-08. `findByVendorWithThreshold`
+(`variant.repository.mongo.ts:152-178`) `$lookup`s the product only to read its `vendorId`; the
+`status` and `deletedAt` in its `$match` are the variant's own fields. Archiving a product writes
+the product row alone (`ProductArchiveService.ts:27-29`), so **a draft or archived product goes on
+raising low-stock alerts** for each of its `active` variants. An alerts screen that assumes every
+row is a live listing will show the vendor stock warnings for products nobody can buy — label the
+row with the product's status, or filter.
 
 where `availableStock = allowOversell ? stock : stock - activeReservations`.
 
@@ -76,9 +94,10 @@ broken.
 
 ### ⚠ Infinite-stock variants DO appear
 
-The backend's doc says a variant with `isInfiniteStock: true` "will never appear". Nothing in the
-code reads that flag on this path. An infinite-stock variant with a threshold and a low `stock`
-counter **does** alert. Filter client-side if that is noise.
+Nothing in the code reads `isInfiniteStock` on this path — `InventoryAvailabilityCalculator.calculate`
+reads `stock`, `activeReservations` and `allowOversell` only. An infinite-stock variant with a
+threshold and a low `stock` counter **does** alert, about a quantity that means nothing. Filter
+client-side if that is noise. *(The backend's doc denied this until 2026-09-06; it now agrees.)*
 
 ---
 
@@ -99,8 +118,9 @@ Query: `variantId`, `startDate`, `endDate` (**full ISO-8601 with `Z`**), `page` 
 
 `operation`: `manual` · `bulk` · `reservation` · `release` · `order` · **`adjustment`**.
 
-⚠ **`adjustment` means "approved through the two-sided stock request"** — not "system correction" as
-the backend's doc says. It is the only operation an agency can cause.
+⚠ **`adjustment` means "approved through the two-sided stock request"**, not "system correction".
+It is the only operation an agency can cause. *(The backend's doc said "system correction" until
+2026-09-06; it now agrees.)*
 
 ### 🔴 There is no actor field on the wire
 
@@ -114,8 +134,8 @@ stock request. Resolve it via `GET /api/vendor/stock-requests/:id` to learn who 
 const viaAgency = log.operation === 'adjustment' && log.metadata?.requestId;
 ```
 
-`metadata` may also carry `orderId`, `reservationId`, `batchId` and `reason`. **`requestId` is
-undocumented on the backend side.**
+`metadata` may also carry `orderId`, `reservationId`, `batchId` and `reason`. *(`requestId` was
+undocumented on the backend side until 2026-09-06; its `operation` table now names it.)*
 
 ⚠ `sku` falls back to the literal `"N/A"` when the variant is gone.
 
@@ -134,7 +154,7 @@ Query: `variantId`, `status` (**default `active`**), `page`, `limit` (50, max 10
 { "success": true,
   "data": [{ "reservationId": "cart123:66b2…",
              "variantId": "…", "sku": "…", "productTitle": "…",
-             "quantity": 2, "type": "product", "status": "active",
+             "quantity": 2, "type": "physical", "status": "active",
              "expiresAt": "…", "createdAt": "…" }],
   "meta": { "total": 6, "page": 1, "limit": 50, "pages": 1, "totalReserved": 9 } }
 ```
@@ -155,8 +175,9 @@ set. Do not label it "total units reserved" unless everything fits on one page.
 | release (order cancelled, unpaid sweep) | no stock write |
 | **expiry** | the row is **deleted**. 🔴 **No audit row and no compensating write** |
 
-⚠ The backend's doc claims expiry writes a `release` audit entry and "returns stock". Neither
-happens — stock was never taken. **Do not look for expiry events in the history.**
+⚠ Expiry writes **no** `release` audit entry and returns nothing — stock was never taken. **Do not
+look for expiry events in the history.** *(The backend's doc claimed a return until 2026-09-06; it
+now agrees, and says so twice.)*
 
 ### 🔴 Both status filters mean something other than they look
 
@@ -225,8 +246,9 @@ The failure is a **standard error envelope**, not a `{ success: false, errors }`
                                         "error": "VARIANT_ARCHIVED", "message": "…" } ] } } }
 ```
 
-🔴 **The rows are at `error.details.errors` — two levels down.** The backend's doc shows them at the
-top level.
+🔴 **The rows are at `error.details.errors` — two levels down.** `validation` is not one of the two
+categories whose `details` the boundary strips, so they reach you in every environment. *(The
+backend's doc showed a top-level `errors` array until 2026-09-08; it now agrees.)*
 
 Per-row `error` values (plain strings, not registry codes): `INVALID_QUANTITY` ·
 `INVALID_VARIANT` · `VARIANT_ARCHIVED` · `FORBIDDEN` · `INVALID_PRODUCT_TYPE` (non-physical) ·

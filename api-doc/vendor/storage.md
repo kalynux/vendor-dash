@@ -5,12 +5,16 @@
 `src/core/uploads/upload-config.ts:136-190` (the per-type caps),
 `src/api/validators/file-management.validator.ts:14` (the six category keys),
 `scripts/seed/seed-pricing-plans.ts:47-51` (the plan limits).
-**Partially re-verified against source on 2026-09-08** — the plan-quota half only: file blocking,
-the `access` / `quotaBlockedAt` split, and the digital-asset exemption, against
-`modules/plan-quota/`, `read-models/file-detail.resolver.ts:67-77`,
-`repositories/mappers/file.mapper.ts:41-59` and
-`domain/services/media/MediaStorageService.ts:36-66`. The rest of the page still carries its
-2026-08-24 verification and was not re-read.
+**Verified against source on 2026-09-08** — the whole page this time, not just the plan-quota half:
+the `storage` object and its six singular category keys, the per-type upload caps, the video
+route's 70 MB × 3, the 80/90/100 alert thresholds and their per-month dedup, and the blocking
+behaviour, against `src/api/controllers/file-management.controller.ts:183-225`,
+`src/api/validators/file-management.validator.ts:14`,
+`src/core/uploads/upload-config.ts:130-195,329-338`, `src/api/routes/file-upload.routes.ts:29-47`,
+`src/config/file-cleanup.config.ts:124`, `src/modules/file-cleanup/services/StorageAlertService.ts`,
+`modules/plan-quota/`, `read-models/file-detail.resolver.ts:67-77` and
+`repositories/mappers/file.mapper.ts:41-59`. One defect fixed: the error line named `UNAUTHORIZED`
+and `FORBIDDEN`, neither of which is in the registry.
 
 > **The `GET /api/files/storage` shape on this page is correct** — `limitBytes`, `usedBytes`,
 > `remainingBytes`, `byCategory`, and nothing else. It is the page that gets it right; the
@@ -127,7 +131,13 @@ breakdown, limit and remaining — without listing files.
 | `remainingBytes` | number\|null | `max(0, limitBytes − usedBytes)`. `null` when there is no limit. |
 | `byCategory` | object | Per-category `bytes` + file `count`. Categories: `image, video, document, audio, archive, other`. |
 
-**Errors**: `401 UNAUTHORIZED`, `403 FORBIDDEN` (admin or unsupported role).
+**Errors**: `401` — `AUTH_MISSING_TOKEN` · `AUTH_TOKEN_EXPIRED` · `AUTH_TOKEN_INVALID`
+(`auth.middleware.ts:126`) · `403 AUTH_FORBIDDEN` for an admin or unsupported role
+(`file-management.controller.ts:216-221`).
+
+🔴 **There is no `UNAUTHORIZED` and no `FORBIDDEN` in the registry** — both were named here until
+2026-09-08, and a client branching on either branches on a string the backend never sends, so the
+user gets the generic fallback message.
 
 **Frontend tips:**
 - Render a usage bar from `usedBytes / limitBytes`; show the per-category split from `byCategory`.
@@ -240,12 +250,18 @@ The same condition is reported **two different ways** depending on which endpoin
 | Where | Field | Value when blocked |
 |---|---|---|
 | Any `FileDetail` — product media, variant media, branding, avatars | **`access`** | `"quota_blocked"`, and **`url: null`** |
-| `GET /api/files` and `GET /api/files/:id` (the media library) | **`quotaBlockedAt`** | an ISO timestamp instead of `null`. There is **no `access` key and no `url` key at all** on this shape |
+| `GET /api/files` and `GET /api/files/:id` (the media library) | **`access` and `quotaBlockedAt`** | `"quota_blocked"` with `url: null`, **plus** an ISO timestamp on `quotaBlockedAt` |
 
-The media library returns the raw `File` domain object (`file.mapper.ts:41-59`), not a
-`FileDetail`. So the check you write for the product editor does not work on the library screen
-and vice versa. Branch on `quotaBlockedAt != null` in the library, on
-`access === "quota_blocked"` everywhere else.
+⚠ **Re-measured 2026-09-08: the library is no longer a different dialect.** This section said it
+returned the raw `File` with "no `access` key and no `url` key at all", and that the product-editor
+check did not work there. Both handlers now map through `withUrlAndAccess`
+(`file-management.controller.ts:185` for the list, `:325` for the detail), which spreads the raw
+`File` and **adds** `url` and `access` (`file-detail.resolver.ts:114-120`). **One check —
+`access === "quota_blocked"` — works everywhere.**
+
+⚠ **That source change is uncommitted working-tree state** — `git show HEAD` of the controller
+contains no `withUrlAndAccess`. Treat `access` as the primary check and keep `quotaBlockedAt` as a
+fallback until you have confirmed the deployed build.
 
 ⚠ **`quota_blocked` outranks `authorized`.** A blocked file inside a private tree reports
 `quota_blocked`, not `authorized` (`file-detail.resolver.ts:67-77`) — so test for it **first**,

@@ -1,6 +1,10 @@
 # Delivery agencies
 
-**Verified against backend source on 2026-08-24.**
+**Verified against source on 2026-09-08** — the always-null rating, against
+`jovi-mall/src/modules/vendor/dto/vendor-agency.dto.ts:155-190`,
+`service/vendor-profile.service.ts:871-899,786` and
+`src/modules/agency-connections/connection.service.ts:576-590`. The claim held; the backend's own
+page was the wrong one and was corrected.
 
 **Routes: 2** — `GET /api/vendor/delivery-agencies` ·
 `GET /api/vendor/delivery-agencies/:agencyId/locations`
@@ -95,8 +99,9 @@ The backend never passes the rating through here — the parameter defaults to `
 supplies three arguments to a four-argument function. The same is true of
 `GET /api/vendor/profile/default-delivery-agency`.
 
-**Do not render stars from this endpoint.** The backend's own doc shows `"rating": 4.6` and
-instructs you to display it; you would be displaying "no ratings" for every agency, forever.
+**Do not render stars from this endpoint.** You would be displaying "no ratings" for every agency,
+forever. *(The backend's own doc showed `"rating": 4.6` and instructed you to display it until
+2026-09-08; it now agrees.)*
 
 **Ratings that do work** are on
 [`GET /api/vendor/agency-connections/browse`](./agency-connections.md#get-apivendoragency-connectionsbrowse),

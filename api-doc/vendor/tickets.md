@@ -1,5 +1,11 @@
 # Support tickets
 
+**Verified against source on 2026-09-08** — the route count, all four enum sizes (39 types, 9
+statuses, 11 `EntityType`, 4 priorities), the absence of `q`, and **every claim in § 11**, against
+`jovi-mall/src/modules/tickets/`. Two of the five "unguarded" routes and the whole `tier` leak had
+been fixed since this page was written; § 11 is rewritten from the source rather than carried
+forward.
+
 **Verified against backend source on 2026-08-24.** Read out of `jovi-mall/src/modules/tickets/`,
 not out of a document. The backend's own `api-doc/vendor/tickets.md` disagreed with source in
 **twenty** places, several of them load-bearing; **all twenty were fixed at source on 2026-09-06**
@@ -48,8 +54,8 @@ being added as a follower, puts it in this list.
 
 🔴 **There is no `q` / `search` parameter.** The schema is non-strict, so sending one is *silently
 stripped* — you get an unfiltered page and no error. If you need search on tickets, filter
-client-side within a page or file a backend request. (The backend's own doc documents a `q`
-parameter that does not exist.)
+client-side within a page or file a backend request. *(The backend's own doc documented a `q` here
+until 2026-09-06; it now strikes it through and says so.)*
 
 ### 1.1 The pagination block
 
@@ -103,11 +109,13 @@ const pageCount = p?.totalPages ?? p?.pages ?? 0;
 
 `followers` is **absent from the list** and present on create and detail.
 
-> ⚠ **Do not render `admin_assignment`.** It is serialised on every ticket response and contains
-> the administrator's internal `tier` and `id` — which the backend's own documentation states are
-> "deliberately not disclosed to a ticket follower". Use **`assigned_admin`**, which is the
-> deliberately-projected public snapshot (`name`, `job_title`, `department`, `avatar_url`).
-> Reported to the backend team; treat `admin_assignment` as if it were not there.
+> ✅ **`admin_assignment` is no longer on the wire — FIXED, re-verified 2026-09-08.**
+> `TicketEnrichmentService` now ends with `delete obj.admin_assignment`
+> (`ticket-enrichment.service.ts:189`), so the administrator's internal `tier` and `id` no longer
+> reach a ticket follower. This page said the opposite until today. Use **`assigned_admin`** — the
+> deliberately-projected public snapshot (`name`, `job_title`, `department`, `avatar_url`) — and
+> expect `admin_assignment` to be **absent**, not merely unsafe. A client written against the old
+> text and reading `admin_assignment?.admin?.name` gets `undefined`.
 
 ---
 
@@ -252,9 +260,10 @@ Side effects: the target is silently added as a follower (subject to a lifetime 
 non-admin followers → `422 TICKET_FOLLOWER_LIMIT_EXCEEDED`), and a **public** system note is
 written naming the role and the raw user id.
 
-> ⚠ This route has **no follower check and no ownership check**. That is a backend defect, not a
-> capability to build on. Offer "escalate to support" (`targetRole: "admin"`, no id) and nothing
-> else.
+> ✅ **The follower check is now present — re-verified 2026-09-08.** `TicketService.assignTicket`
+> calls `followerService.isFollower` at `ticket.service.ts:254-255`; this page said it did not.
+> Offer "escalate to support" (`targetRole: "admin"`, no id) and nothing else all the same — the
+> other targets need a raw user id a vendor has no way to obtain.
 
 ---
 
@@ -435,14 +444,25 @@ The doc-drift list that used to sit here is gone: all fifteen items were verifie
 (DOC-PROGRAM § 26). **These two are different — they are defects in the SERVICE, not in its
 documentation, and both are still live:**
 
-- **Five routes perform no follower check** — `GET`/`POST /:ticketId/attachments`,
-  `GET /:ticketId/notes`, `PATCH /:id/priority`, `PATCH /:id/assign`. Re-verified 2026-09-06:
-  `updatePriority` and `assignTicket` contain no `isFollower` call at all.
-- **The administrator `tier` leaks to every ticket follower.** `TicketEnrichmentService` builds
-  a sanitised `assigned_admin` via `publicAdminSnapshot`, and **never deletes the raw
-  `admin_assignment`** — so `admin_assignment.admin.tier` and `.id` reach the vendor, customer,
-  agency and agent views. The service's own comment says that block *"must not travel to a
-  ticket follower"* (`ticket-enrichment.service.ts:166-169`), which is what makes this a bug
-  rather than a decision.
+⚠ **Re-measured 2026-09-08: this section was two-thirds wrong.** Of the five routes it named,
+**two have been fixed**, and the `tier` leak has been **closed entirely**. Corrected below —
+three unguarded routes remain, all of them reads or writes on the notes/attachment sub-resources.
 
-**Do not build features that depend on either behaviour** — both are expected to be fixed.
+### Still open — three routes with no follower check
+
+| Route | Where | What it means |
+|---|---|---|
+| `GET /:ticketId/notes` | `ticket-note.service.ts:139` `listNotes` | any signed-in vendor holding a ticket id reads its notes |
+| `GET /:ticketId/attachments` | `ticket-attachment.service.ts:241` `listAttachments` | same, for attachments |
+| `POST /:ticketId/attachments` | `ticket-attachment.service.ts:65` `attachFile` | attaches to a ticket the caller does not follow, and never loads the ticket, so an unknown id "succeeds" |
+
+None of the three loads the ticket, so `404 TICKET_NOT_FOUND` is unreachable on all of them.
+**Do not build on this** — it is expected to be fixed.
+
+### Closed since this section was written
+
+- ✅ `PATCH /:id/priority` — `ticket.service.ts:422-423` now calls `isFollower`.
+- ✅ `PATCH /:id/assign` — `ticket.service.ts:254-255` now calls `isFollower`.
+- ✅ `POST /:ticketId/notes` — `ticket-note.service.ts:65-66` checks it (admins exempt).
+- ✅ **The `tier` leak is gone.** `ticket-enrichment.service.ts:189` deletes `admin_assignment`
+  from the enriched payload.

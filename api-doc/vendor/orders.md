@@ -6,7 +6,9 @@
 2026-09-06** (DOC-PROGRAM § 24) and that page now carries a *Verified against source* stamp. The
 worklist section that tracked them has been deleted.
 
-**Base path:** `/api/vendor/orders` · **Auth:** vendor session · **Routes: 13**
+**Base path:** `/api/vendor/orders` · **Auth:** vendor session · **Routes: 14** — 13 are
+specified here; the fourteenth, `GET /:id/entitlements`, is on
+[digital-products.md](./digital-products.md#get-apivendorordersidentitlements).
 
 Digital entitlements on an order are documented in
 [digital-products.md](./digital-products.md).
@@ -440,8 +442,10 @@ distinguish "wrong order" from "wrong note".
 
 ## 8 · Refunds
 
-**Both routes are entirely absent from the backend's own documentation.** This section is source
-only.
+This section was written from source. The backend's own `vendor/orders.md` now lists both routes
+in its Actions Overview and specifies them on
+[customer-management.md](./customer-management.md), beside the return-policy rules that decide
+what may be refunded.
 
 ### `GET /api/vendor/orders/:id/refund-eligibility`
 

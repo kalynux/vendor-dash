@@ -1,6 +1,8 @@
 # Updating a product
 
-**Verified against backend source on 2026-08-24.**
+**Verified against source on 2026-09-08** — the editable-status set, against
+`jovi-mall/src/modules/catalog/domain/services/ProductUpdateService.ts:97-98`. The claim held; the
+backend's own page was the wrong one and was corrected.
 
 **`PATCH /api/vendor/products/:id`** — the widest request body on the vendor surface.
 
@@ -149,9 +151,11 @@ tripping the returned object back is safe.
 | 400 | `CATALOG_IMAGE_LIMIT_EXCEEDED` | `details: { scope, type, limit, received }` |
 | 404 | `CATALOG_FILE_NOT_FOUND` | |
 
-⚠ **`suspended` products are editable.** The backend's doc says `draft` and `active` only, and then
-contradicts itself. Do not grey out the editor for a suspended product — editing may be exactly how
-the vendor fixes it (though only an agency or admin can lift the suspension).
+⚠ **`suspended` products are editable.** `ProductUpdateService.ts:97` admits `draft`, `active` and
+`suspended`, and refuses everything else with `422 CATALOG_PRODUCT_INVALID_STATE`
+(`details: { status }`). Do not grey out the editor for a suspended product — editing may be
+exactly how the vendor fixes it, though only an agency or admin can lift the suspension. *(The
+backend's doc said `draft` and `active` only until 2026-09-08; it now agrees.)*
 
 ### `CATALOG_PRODUCT_AGENCY_STORAGE_INFINITE_STOCK`
 

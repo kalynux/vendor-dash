@@ -1,6 +1,9 @@
 # Shipping configuration
 
-**Verified against backend source on 2026-08-24.**
+**Verified against source on 2026-09-08** — the request schema, the units, and the serialised key,
+against `jovi-mall/src/modules/catalog/controllers/vendor-shipping.controller.ts:13-21`,
+`models/shipping-config.model.ts:21` and `src/core/base.schema.ts:17-26`. All three claims held;
+the backend's own page was wrong on units and positivity and was corrected.
 
 **Routes: 3** — `GET`/`POST`/`DELETE /api/vendor/products/:id/shipping`
 
@@ -37,14 +40,16 @@ the other. See [products.md § 5.2](./products.md#52-the-activation-gate).
 | `handlingDays` | integer ≥ 0 | | **1** |
 | `shippingEnabled` | boolean | | **true** |
 
-### 🔴 Two things the backend's own doc gets wrong about these fields
+### 🔴 Two things that are easy to get wrong about these fields
 
-1. **`weight` is in GRAMS, not kilograms.** The doc says kilograms in two places; the model says
-   grams, and the variant documentation agrees with the model. **Label your input "g".** A vendor
-   entering `2` for a 2 kg parcel will produce a 2 g parcel.
-2. **`0` is accepted** for all four measurements. The doc says "must be positive (> 0)" — the
-   validator says `>= 0`. The Zod *message* reads "must be positive", which is where the doc's
-   claim came from, but the constraint is not.
+1. **`weight` is in GRAMS, not kilograms** (`shipping-config.model.ts:21`). **Label your input
+   "g".** A vendor entering `2` for a 2 kg parcel will produce a 2 g parcel.
+2. **`0` is accepted** for all four measurements — the validator is
+   `z.number().min(0, 'Weight must be positive')` (`vendor-shipping.controller.ts:14-17`). The Zod
+   *message* reads "must be positive"; the constraint does not. Do not add a client-side `> 0`
+   rule.
+
+*(The backend's own doc said kilograms and `> 0` until 2026-09-08; it now agrees on both.)*
 
 ### It is a **full replace**, not a merge
 
@@ -73,8 +78,8 @@ that omits `handlingDays` resets it to 1 even if it was 5.
 }
 ```
 
-🔴 **The wire key is `id`.** The backend's doc shows `_id` in every example; the serialiser deletes
-`_id` and adds an `id` virtual. A client reading `_id` gets `undefined`.
+🔴 **The wire key is `id`.** `BaseSchemaOptions.toJSON` deletes `_id` and adds an `id` virtual
+(`core/base.schema.ts:17-26`). A client reading `_id` gets `undefined`.
 
 `vendorId` and `purgeAt` are also on the wire and absent from the doc's field list.
 

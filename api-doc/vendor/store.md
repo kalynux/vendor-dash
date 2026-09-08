@@ -146,7 +146,9 @@ string is **`STORE_SLUG_TAKEN`**:
 
 The message is correct; the code is a backend bug that cannot be fixed without a wire change.
 **Branch on `statusCode === 409 && category === "conflict"`, not on the code string** — and
-certainly not on `"CONFLICT"`, which is what the backend's doc claims and which never appears.
+certainly not on `"CONFLICT"`, which is in no registry and never appears
+(`store-profile.service.ts:175,247` raise `STORE_SLUG_TAKEN`). *(The backend's doc claimed
+`CONFLICT` until 2026-09-06; it now says the same as this line.)*
 
 Same code, same situation, on `PATCH /store/status`.
 

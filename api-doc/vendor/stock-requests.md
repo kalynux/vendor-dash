@@ -1,6 +1,10 @@
 # Stock requests
 
-**Verified against backend source on 2026-08-24.**
+**Verified against source on 2026-09-08** — all six routes, the four gating conditions, both
+validators (`.strict()` on every one), the `currentQuantity`-null asymmetry, `direction=awaiting_me`
+forcing `status=pending`, and every error code with its status and `details`, against
+`jovi-mall/src/modules/stock-requests/`. Everything checked was already correct; the one addition
+is the `STOCK_REQUEST_NOT_PENDING` race note below.
 
 **Base path:** `/api/vendor/stock-requests` · **Routes: 6**
 
@@ -197,7 +201,7 @@ flips the status in one commit. **Reject and withdraw touch no stock.**
 | Status | Code | Meaning |
 |---|---|---|
 | 404 | `STOCK_REQUEST_NOT_FOUND` | not a party to it — **404, never 403** |
-| **409** | `STOCK_REQUEST_NOT_PENDING` | `details: { status }` — **reload, do not retry** |
+| **409** | `STOCK_REQUEST_NOT_PENDING` | **reload, do not retry.** ⚠ `details.status` is present only when the guard catches it up front (`stock-request.service.ts:469`); on the compare-and-set race — two people answering at once — the same code is raised with **no `details` at all** (`:291`, `:340`, `:384`). Fall back to re-fetching the request rather than reading `details.status` |
 | **403** | `STOCK_REQUEST_NOT_YOURS` | `details: { availableActions }` — the wrong verb for your side |
 | **409** | `STOCK_REQUEST_STALE` | approve only — the product left that agency while the request was open |
 | 404 | `CATALOG_VARIANT_NOT_FOUND` | approve only — the SKU was deleted underneath |

@@ -1,5 +1,9 @@
 # Ticket entity pickers — `reference/*`
 
+**Verified against source on 2026-09-08** — the two open-defect claims in the banner below, against
+`jovi-mall/src/modules/tickets/services/ticket.service.ts`, `ticket-note.service.ts`,
+`ticket-attachment.service.ts` and `ticket-enrichment.service.ts`; both had gone stale.
+
 **Verified against backend source on 2026-08-24** —
 `src/modules/tickets/services/ticket-reference.service.ts`, and the live route dump.
 
@@ -7,10 +11,12 @@
 > reference (14 vendor routes); this one is the record of *why* the two `reference/*`
 > endpoints carry the fields they do.
 >
-> 🔴 Before building any ticket screen, read [`tickets.md`](./tickets.md) on **F-14** and
-> **F-15**: five vendor ticket routes perform **no follower check**, and the administrator
-> `tier` **leaks to vendors** on every ticket response — against an explicit written
-> guarantee in the backend own doc. Both are documented around, not built on.
+> ⚠ Before building any ticket screen, read [`tickets.md` § 11](./tickets.md#11--two-backend-defects-on-this-surface--still-open).
+> **Re-measured 2026-09-08 and mostly closed:** of the five vendor ticket routes that once had no
+> follower check, **three remain** — `GET /:ticketId/notes` and `GET`/`POST /:ticketId/attachments`
+> — and the administrator `tier` **no longer leaks**; `admin_assignment` is deleted from the
+> enriched payload (`ticket-enrichment.service.ts:189`). This box claimed both in full until
+> today.
 >
 > ⚠ Ticket lists use **`pagination`, not `meta`** — `GET /api/vendor/tickets` and **both**
 > `reference/*` lookups.

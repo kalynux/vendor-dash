@@ -1,6 +1,9 @@
 # Product share
 
-**Verified against backend source on 2026-08-24.** 🆕 **Net-new capability — this dashboard has
+**Verified against source on 2026-09-08** — the `sentTo` claim, against
+`jovi-mall/src/modules/catalog/controllers/vendor-product-share.controller.ts:53`,
+`domain/services/ProductShareService.ts:139` and
+`src/modules/channel-connections/channel-connection.model.ts:63-64`. It held. 🆕 **Net-new capability — this dashboard has
 never been told it exists.**
 
 **`POST /api/vendor/products/:id/share`** · **Routes: 1**
@@ -55,8 +58,12 @@ vectorisation lock — sharing reads, and an `active` product is the one you wan
 
 ### 🔴 `sentTo` is not masked, and on WhatsApp it is always `null`
 
-The backend's own doc shows `"sentTo": "••••3456"` and says it is "a masked hint, never the raw
-identifier". **Both halves are wrong.**
+The controller passes `target.handle` straight through
+(`vendor-product-share.controller.ts:53`), and `handle` is Telegram's `@username`, stored as
+`null` for WhatsApp because WhatsApp has no handle (`channel-connection.model.ts:63-64`). The
+masking function is not on this path at all. *(The backend's own doc showed `"••••3456"` and
+called it "a masked hint, never the raw identifier" until 2026-09-06; it now agrees, and warns
+against carrying "sentTo is masked" onto any other page.)*
 
 | Channel | `sentTo` |
 |---|---|

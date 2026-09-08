@@ -1,6 +1,11 @@
 # Storage invoices
 
-**Verified against backend source on 2026-08-24.** 🆕 **Net-new — this dashboard has never been told
+**Verified against source on 2026-09-08** — both routes, the `.strict()` query with its `YYYY-MM`
+regex and three-value `status`, the ignored `vendorId`, the `lines`-absent-on-list split and the
+`404 STORAGE_INVOICE_NOT_FOUND` with `details.invoiceId`, against
+`jovi-mall/src/modules/inventory/storage-invoice.routes.ts:64-67`,
+`controllers/storage-invoice.controller.ts:14-20,75,110-128,136` and
+`dto/storage-invoice.dto.ts:49-80`. **Every claim on this page held.** 🆕 **Net-new — this dashboard has never been told
 this exists.**
 
 **Base path:** `/api/vendor/storage-invoices` · **Routes: 2, both `GET`**

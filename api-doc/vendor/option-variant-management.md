@@ -1,6 +1,11 @@
 # Options and option values
 
-**Verified against backend source on 2026-08-24.**
+**Verified against source on 2026-09-08** — the absence of the options cap and of any
+server-side variant generation, against
+`jovi-mall/src/modules/catalog/controllers/vendor-option.controller.ts:38-57`,
+`routes/vendor-products.routes.ts:380-407`, `domain/services/variants/OptionService.ts:41-70` and
+`domain/services/variants/constants.ts:9-12`, plus a repository-wide reachability grep. Both
+claims held — the cap exists in code and no live route reaches it.
 
 **Base path:** `/api/vendor/products/:productId/options` · **Routes: 10**
 
@@ -24,7 +29,10 @@ There is **no cartesian-product generation**. Creating "Colour: Red, Blue" and "
 pass the `optionValueIds` it represents.
 
 A variant-generation engine exists in the codebase but **nothing reaches it over HTTP** — it is dead
-code, along with the error codes the backend's doc says it raises.
+code, along with the error codes it raises. Re-verified 2026-09-08: a repository-wide grep for
+`OptionService` and `VariantGeneratorService` outside `catalog/domain/services/variants/` returns
+nothing, and `VendorOptionController.createOption` writes through `optionRepository.create`
+directly (`vendor-option.controller.ts:38-57`).
 
 **The full flow:**
 
@@ -99,8 +107,12 @@ defaults to the next free slot.
 | **409** | `CATALOG_PRODUCT_SIMPLE_MODE_LOCKED` — `details.convertEndpoint` |
 | 409 | `DATABASE_UNIQUE_CONSTRAINT_VIOLATION` — duplicate name |
 
-🔴 **There is no maximum-options cap.** The backend's doc claims 3 with a 422; nothing enforces it.
-If your UI wants a limit, that limit is yours.
+🔴 **There is no maximum-options cap over HTTP.** `MAX_OPTIONS_PER_PRODUCT = 3` and its
+`422 CATALOG_OPTION_LIMIT_EXCEEDED` live in `OptionService`
+(`domain/services/variants/OptionService.ts:52-53`), which **nothing imports** — the live
+controller never consults it. If your UI wants a limit, that limit is yours. *(The backend's doc
+claimed the cap was enforced until 2026-09-06; it now marks both it and
+`CATALOG_VARIANT_LIMIT_EXCEEDED` unreachable.)*
 
 ### `PATCH` and `DELETE /:productId/options/:optionId`
 
@@ -150,8 +162,10 @@ and then collides at the database.
 ### Duplicate handling — and a casing asymmetry
 
 Duplicates surface as an uncaught `409 DATABASE_UNIQUE_CONSTRAINT_VIOLATION` with `details.keyValue`
-— **not** a catalog-specific code. There is no pre-check, and the backend's doc never names this
-code.
+— **not** a catalog-specific code. There is no pre-check; it is the global handler converting
+Mongo's 11000. `details` survives on the wire, because the exposure rule strips it only for
+`internal` and `external_service`. *(The backend's doc did not name this code until 2026-09-06; it
+now does.)*
 
 🔴 **Option names are case-SENSITIVE; option values are case-INSENSITIVE.**
 

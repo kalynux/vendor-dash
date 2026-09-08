@@ -117,7 +117,8 @@ The schema is **not** `.strict()`, so an unknown query key is silently dropped r
 
 - **Pagination is keyed `meta`**, and the page-count field is **`pages`** — not `totalPages`.
   `pages = ceil(total / limit)`, so **an empty result has `pages: 0`, not 1.**
-- `mode` **is** on every list row. (The backend's doc omits it; it is there —
+- `mode` **is** on every list row (`ProductListService.ts:87`). (The backend's doc omitted it until
+  2026-09-06; it now documents it —
   `src/modules/catalog/domain/services/ProductListService.ts:86`.)
 - A file that has been deleted since it was referenced is **dropped from the array** rather than
   returned as a null hole (`ProductListService.ts:90-91`), so `fileIds.length` can be smaller than
@@ -589,7 +590,8 @@ No body. Returns `201` with the **raw** product ([§ 0](#0--read-this-first--two
 | | `digitalConfig.isActive` → `false` |
 | | `vectorisationEnabled` → `false`, status → `not_started` |
 
-🔴 **Variants: it depends on `mode`, and the backend's own doc gets this wrong.**
+🔴 **Variants: it depends on `mode`.** *(The backend's own doc said variants are never copied until
+2026-09-06; it now agrees with the split below.)*
 
 - **`advanced`** — variants are **not** copied. The clone has `hasVariants: false` and no default
   variant. It cannot be activated until the vendor rebuilds them.

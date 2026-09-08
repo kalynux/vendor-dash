@@ -64,7 +64,7 @@ attempts to publish.
 | `tags` · `fileIds` | string[] | | unique entries |
 | `seoTitle` · `seoDescription` | string | | ≤ 60 / ≤ 160 |
 | `compareAtPrice` | number ≥ 0 | | |
-| `bargain` | `{ minPrice?, maxPrice }` | | |
+| `bargain` | `{ minPrice?, maxPrice }` — ⚠ **send `maxPrice` only**, see below | | |
 | `stock` | integer ≥ 0 | | `0` |
 | `isInfiniteStock` | boolean | | `false` |
 | `sku` | string 1–100 | | auto-generated |
@@ -114,9 +114,12 @@ Every blocker: [products.md § 5.2](./products.md#52-the-activation-gate).
 ⚠ Three blocker messages are developer placeholders that will reach the vendor verbatim. Map codes
 to your own copy.
 
-⚠ And two blocker messages differ from the registry defaults the backend's doc quotes —
-`CATALOG_PRODUCT_NO_DELIVERY_AGENCY` alone has **four** distinct messages depending on which link of
-the agency chain failed. Render `message`; do not hardcode from the code.
+⚠ And several blocker messages differ from the registry default for their code —
+`CATALOG_PRODUCT_NO_DELIVERY_AGENCY` alone has **five** distinct ones depending on which link of
+the agency chain failed (`ProductStatusValidationService.ts:206-262`), plus a sixth at
+`ProductUpdateService.ts:184` and the registry default itself. **Render `message`; never map from
+the code.** *(This page said "four" until 2026-09-08 — the count was wrong and the backend's copy
+was the accurate one.)*
 
 ### `pickupReason`
 
@@ -135,7 +138,17 @@ route them to [profile.md](./profile.md).
 
 `403 BILLING_LIMIT_EXCEEDED` (`details: { limit, current, requested, available }`) · `400 CATALOG_IMAGE_LIMIT_EXCEEDED`
 (7 for physical) · `409 CATALOG_VARIANT_SKU_EXISTS` — **SKU uniqueness is platform-global** ·
-`422 CATALOG_VARIANT_BARGAIN_*`.
+`422 CATALOG_VARIANT_BARGAIN_PRICE_MISMATCH` · `422 CATALOG_VARIANT_BARGAIN_RANGE_INVALID`.
+
+### 🔴 The bargain window, in one paragraph
+
+A simple product runs the **same** rule as a multi-variant one, so read
+[variants.md § 1.1](./variants.md#11--the-bargain-window--the-rules-you-must-build-against) before
+building the editor. The two things that catch people: **`bargain.minPrice` is not a second price —
+it must equal `price`**, so send `{ "bargain": { "maxPrice": … } }` and omit `minPrice`; and once
+the product is vectorised, **`maxPrice` is the price shoppers see on the storefront**, while `price`
+becomes an unpublished floor. A field labelled "maximum" invites a vendor to raise their own shelf
+price believing it is private headroom.
 
 ---
 

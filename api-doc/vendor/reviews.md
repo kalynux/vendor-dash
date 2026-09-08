@@ -1,6 +1,9 @@
 # Reviews — a vendor reviews DELIVERIES
 
-**Verified against backend source on 2026-08-24.** 🆕 **Net-new — this dashboard has never been told
+**Verified against source on 2026-09-08** — the eligibility endpoint's two response shapes and the
+always-null agency rating, against
+`jovi-mall/src/modules/reviews/domain/services/review-eligibility.service.ts:45,93` and
+`src/modules/vendor/dto/vendor-agency.dto.ts:155-190`. Both claims held. 🆕 **Net-new — this dashboard has never been told
 this exists.**
 
 **Base path:** `/api/vendor/reviews` · **Routes: 3**
@@ -56,11 +59,12 @@ Both parameters are **required**, and the schema is **strict** — an extra para
 
 ### 🔴 It does not always answer 200
 
-The backend's own doc says *"200 with `eligible: false` — 'no, and here is why' is a successful
-answer"*. **That is true for those four cases only.**
+`200` with `eligible: false` — *"no, and here is why"* — is the answer for those four cases only.
 
-**`REVIEW_SUBJECT_NOT_FOUND` throws a real `404`** — and that is the case you will hit most often,
-with a stale or foreign shipment id.
+**`REVIEW_SUBJECT_NOT_FOUND` throws a real `404`** (`review-eligibility.service.ts:93`) — and that
+is the case you will hit most often, with a stale or foreign shipment id. A client must handle
+**both** shapes. *(The backend's doc claimed a uniform `200` until 2026-09-06; it now documents
+the split too.)*
 
 ```ts
 try {
@@ -202,6 +206,8 @@ for an **agency**, and even that is the **customers'** average, not the vendor's
 
 ⚠ And note the *other* agency directory,
 [`GET /api/vendor/delivery-agencies`](./delivery-agencies.md), returns `rating: null` and
-`ratingCount: 0` **always** — a backend defect. Use the browse endpoint for ratings.
+`ratingCount: 0` **always** — `VendorAgencyMapper.toListItemDto` takes the rating as a fourth
+argument that `listAvailableAgencies` never passes (`vendor-profile.service.ts:887-891`). Use the
+browse endpoint for ratings.
 
 ---

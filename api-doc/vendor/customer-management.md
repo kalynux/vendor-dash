@@ -1,6 +1,11 @@
 # Customers and customer flags
 
-**Verified against backend source on 2026-08-24.**
+**Verified against source on 2026-09-08** — all eight routes, every validator, both error-code
+statuses (`VENDOR_CUSTOMER_FLAG_NOT_FOUND` is **400** on the flags PUT and **404** on the flag
+routes), and the closed-account labels, against
+`jovi-mall/src/modules/vendor/validators/vendor-customer.validator.ts`,
+`service/vendor-customer.service.ts:79,87,135,200,255-266`, `src/modules/vendor/routes.ts:335-351`
+and `src/modules/users/account-closure.repository.ts:48`. **Every claim on this page held.**
 
 **Routes: 8** — `/api/vendor/customers` (4) · `/api/vendor/customer-flags` (4)
 

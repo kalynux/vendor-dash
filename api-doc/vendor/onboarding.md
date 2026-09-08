@@ -1,6 +1,9 @@
 # Onboarding
 
-**Verified against backend source on 2026-08-24.**
+**Verified against source on 2026-09-08** — the step numbering (`COMPLETED = 0`), the `version`
+behaviour under `skip`, and the per-slot branding write, against
+`jovi-mall/src/core/constants/onboarding-steps.ts:24-34` and
+`src/modules/vendor/service/vendor-profile.service.ts:92-115,455-477`. All three claims held.
 
 **Base path:** `/api/vendor/onboarding` · **Routes: 5**
 
@@ -16,7 +19,8 @@
 | 4 · Policy setup | `PUT /onboarding/policy-setup` | optional | ✅ | **0 = complete** |
 
 🔴 **Step 3 does not complete onboarding.** It advances to step 4. Only step 4 sets the completed
-state. (The backend's doc says step 3 completes it, and then contradicts itself in its own example.)
+state — `VendorOnboardingStep.COMPLETED` is **`0`** (`core/constants/onboarding-steps.ts:24-34`).
+*(The backend's doc said step 3 completed it until 2026-09-06; it now agrees.)*
 
 `onboardingStep: 0` means **finished**, not "not started".
 
@@ -32,8 +36,10 @@ Three consequences:
   failing — you get no error and no protection.
 - A mismatch is `409 VENDOR_ONBOARDING_CONCURRENT_MODIFICATION`.
 
-⚠ **`version` is *not* ignored when `skip: true`**, contrary to the backend's doc. A stale version
-plus `skip: true` still 409s.
+⚠ **`version` is *not* ignored when `skip: true`.** The skip path still calls
+`atomicOnboardingUpdate(vendorId, updates, expectedVersion)`, so a stale version plus `skip: true`
+still 409s. Omit `version` if you do not want the guard. *(The backend's doc said it was ignored
+until 2026-09-06; it now agrees.)*
 
 This is the opposite convention from `PATCH /api/vendor/profile`, where `version` is **required**.
 
@@ -150,8 +156,10 @@ Errors: `400 VENDOR_ONBOARDING_STEP_INCOMPLETE` if step 1 is not done ·
 ```
 
 🔴 **`branding` is NOT a full replacement of both slots.** Each is touched only if its key is
-present — omitting `cover_image_file_id` leaves the banner alone. (The backend's doc says the
-opposite and warns you it will be cleared. It will not.)
+present — `applyBrandingToStore` tests `logo_file_id !== undefined` and
+`cover_image_file_id !== undefined` separately (`vendor-profile.service.ts:96,108`), so omitting
+`cover_image_file_id` leaves the banner alone. Send `null` to clear a slot. *(The backend's doc
+said the opposite until 2026-09-06; it now agrees.)*
 
 🔴 **Branding is written to the STORE, not the profile.** `logo_file_id` becomes the store's logo and
 `cover_image_file_id` becomes the store's **banner** — note the name change. See

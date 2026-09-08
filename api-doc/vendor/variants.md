@@ -1,6 +1,10 @@
 # Variants
 
-**Verified against backend source on 2026-08-24.**
+**Verified against source on 2026-09-08** — the read model, the create/update validators, and the
+whole bargain rule, against `jovi-mall/src/modules/catalog/validators/variant.validator.ts`,
+`domain/services/bargain-price.rule.ts` and `read-models/public-display-price.ts`. **The bargain
+window's rules were missing entirely from this set** and are now in § 1.1; the error row that
+deferred to `products.md` was pointing at a page that never had them.
 **Partially re-verified against source on 2026-09-08** — the bargainable-pricing half only — the `bargain`/`bargainable` shapes, the price-flip consequence and the `compareAtPrice` suppression, against `domain/services/bargain-price.rule.ts` and `read-models/public-display-price.ts`. The rest of the page still carries
 its 2026-08-24 verification and was not re-read.
 
@@ -134,7 +138,7 @@ expecting server-side efficiency.
 | `price` | number ≥ 0 | **yes** | |
 | `name` | string 1–100 | no | |
 | `compareAtPrice` | number ≥ 0 | no | |
-| `bargain` | `{ minPrice?, maxPrice }` — **strict** | no | |
+| `bargain` | `{ minPrice?, maxPrice }` — **strict**. See [§ 1.1](#11--the-bargain-window--the-rules-you-must-build-against) | no | |
 | `stock` | integer ≥ 0 | no | `0` |
 | `isInfiniteStock` | boolean | no | `false` |
 | `weight` / `length` / `width` / `height` | number ≥ 0 | no | |
@@ -191,10 +195,59 @@ Exceeding gives `400 CATALOG_IMAGE_LIMIT_EXCEEDED` with
 | 400 | `CATALOG_DIGITAL_VARIANT_LIMIT_EXCEEDED` | digital products cap at 5 |
 | 409 | `CATALOG_VARIANT_SKU_EXISTS` | **SKU uniqueness is global, not per product**. `details: { sku }` |
 | 409 | `DATABASE_UNIQUE_CONSTRAINT_VIOLATION` | duplicate `optionSignature` within the product |
-| 400/422 | `CATALOG_VARIANT_BARGAIN_*` | see [products.md](./products.md) |
+| 400 | `CATALOG_VARIANT_BARGAIN_NOT_SUPPORTED` | a window was sent on a **service** product's variant. `details: { variant, productType }` |
+| 422 | `CATALOG_VARIANT_BARGAIN_PRICE_MISMATCH` | an explicit `minPrice` ≠ the effective price. `details: { variant, price, minPrice }` |
+| 422 | `CATALOG_VARIANT_BARGAIN_RANGE_INVALID` | `maxPrice` below the effective price. `details: { variant, price, minPrice, maxPrice }` |
 
 **SKU uniqueness is platform-global.** A vendor cannot reuse a SKU another vendor already holds.
 Surface that clearly — "SKU already in use" without "by someone else" reads as a bug.
+
+---
+
+## 1.1 · The bargain window — the rules you must build against
+
+This dashboard's documentation carried none of these until 2026-09-08; the error row above pointed
+at `products.md`, which has never had them. All four are enforced in
+`domain/services/bargain-price.rule.ts` and were read out of it.
+
+### 🔴 `minPrice` is NOT a second price — it always equals `price`
+
+`build()` refuses an explicit `minPrice` that differs from the effective price
+(`422 CATALOG_VARIANT_BARGAIN_PRICE_MISMATCH`), and a bare `price` edit **auto-syncs**
+`bargain.minPrice` to the new value. So there is exactly one floor number on the variant and it is
+`price`.
+
+**Do not render "min" and "max" as two independent inputs.** The correct editor is *one* price
+field plus *one* ceiling field. Send `{ "bargain": { "maxPrice": … } }` and omit `minPrice`
+altogether — it defaults to the effective price, which is what you want in every case.
+
+| You send | What happens |
+|---|---|
+| `{ "bargain": { "maxPrice": 45000 } }` | window set, `minPrice` = the effective price |
+| `{ "bargain": { "minPrice": 22500, "maxPrice": 45000 } }` | accepted **only if** 22500 *is* the effective price |
+| `{ "price": 32000 }` alone, window configured | `minPrice` auto-syncs to 32000; `maxPrice` untouched — unless that would put `maxPrice` below it, which is a `422` rather than a silent lift of the ceiling |
+| `{ "bargain": null }` | **clears** the window (PATCH only) |
+
+"Effective price" = the `price` in *this* request if it sends one, otherwise the stored price.
+
+### `maxPrice >= price`, and equality is legal
+
+Below is `422 CATALOG_VARIANT_BARGAIN_RANGE_INVALID`. Equal is deliberately allowed and means
+"bargainable, no headroom yet".
+
+### Service variants may never have one
+
+`400 CATALOG_VARIANT_BARGAIN_NOT_SUPPORTED` — a flat range cannot describe a price the booking
+engine prorates and peak-surcharges. `null` (clearing) is still accepted. A bare price edit on a
+service variant will never *create* a window either.
+
+### Setting it is not the same as switching it on
+
+A window only takes effect while the **product** has `vectorisationEnabled: true` — see
+[`bargainable` vs `bargain`](#bargainable-vs-bargain) above. Turning vectorisation off keeps the
+window and reports `bargainable: false`; nothing is deleted.
+
+---
 
 ### Side effect
 
@@ -304,11 +357,15 @@ variant").
 When you archive the variant that is currently the default, the backend tries to reassign to
 another active one. Two source defects make that unreliable:
 
-1. **The replacement is arbitrary.** It picks the first row from an **unsorted** query — not the
-   oldest, despite what the backend's doc says. You cannot predict which variant becomes default.
-2. 🔴 **When no active variant remains, the pointer is NOT cleared.** The backend writes
-   `undefined`, which Mongoose strips from the update — so `defaultVariantId` keeps pointing at the
-   archived variant while `hasVariants` correctly goes `false`.
+1. **The replacement is arbitrary.** `remaining.find(v => v.status === 'active' && …)` takes the
+   first row of a bare `find({ productId, deletedAt: null })` with no `sort`
+   (`vendor-variant.controller.ts:511-512`, `variant.repository.mongo.ts:71-74`) — not the oldest.
+   You cannot predict which variant becomes default. *(The backend's doc claimed "oldest" until
+   2026-09-06; it now agrees.)*
+2. 🔴 **When no active variant remains, the pointer is NOT cleared.** The update writes
+   `defaultVariantId: nextActive?.id` — i.e. `undefined` — and Mongoose strips `undefined` from a
+   `$set` (`vendor-variant.controller.ts:514-517`), so `defaultVariantId` keeps pointing at the
+   archived variant while `hasVariants` correctly goes `false`. **Branch on `hasVariants`.**
 
 The visible consequence: the product is demoted to `draft` with
 `CATALOG_PRODUCT_NO_DEFAULT_VARIANT`, and **re-activating a variant does not fix it** — the status

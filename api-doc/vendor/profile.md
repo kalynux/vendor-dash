@@ -22,7 +22,9 @@ Business identity — name, logo, banner — lives on the **Store**, not here. S
 
 The message is right; the code is a backend bug that cannot be fixed without a wire change.
 **Branch on `statusCode === 409 && category === "conflict"`**, never on the code string — and never
-on `"CONFLICT"`, which the backend's doc claims and which never appears.
+on `"CONFLICT"`, which is in no registry and never appears
+(`vendor-profile.service.ts:400` raises `VENDOR_ONBOARDING_CONCURRENT_MODIFICATION`). *(The
+backend's doc claimed `CONFLICT` until 2026-09-06; it now says the same as this line.)*
 
 ### 🔴 2. A successful `PATCH` can advance `version` by **2**
 
