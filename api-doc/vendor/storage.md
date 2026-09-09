@@ -259,9 +259,10 @@ check did not work there. Both handlers now map through `withUrlAndAccess`
 `File` and **adds** `url` and `access` (`file-detail.resolver.ts:114-120`). **One check —
 `access === "quota_blocked"` — works everywhere.**
 
-⚠ **That source change is uncommitted working-tree state** — `git show HEAD` of the controller
-contains no `withUrlAndAccess`. Treat `access` as the primary check and keep `quotaBlockedAt` as a
-fallback until you have confirmed the deployed build.
+✅ **The caveat that used to sit here — *"that source change is uncommitted working-tree state"* —
+is no longer true.** It landed in `141bc5c` (*feat(files): return url and access on all four
+`/api/files/*` responses*, 2026-09-08 02:44) and the controller is clean against `HEAD`. **Rely on
+`access`**; you do not need to keep `quotaBlockedAt` as a fallback.
 
 ⚠ **`quota_blocked` outranks `authorized`.** A blocked file inside a private tree reports
 `quota_blocked`, not `authorized` (`file-detail.resolver.ts:67-77`) — so test for it **first**,
