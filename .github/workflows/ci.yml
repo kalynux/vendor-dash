@@ -1,0 +1,90 @@
+# Checks every push and pull request. Produces no artefact — release.yml does
+# that, and only from production.
+#
+# This is the gate that keeps a main with no test environment meaningful: nothing
+# is deployed from main, but nothing broken should be merged into it either, and
+# production is branched from it.
+
+name: CI
+
+on:
+  push:
+    branches: [main, production]
+  pull_request:
+
+jobs:
+  check:
+    name: Checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # ⚠ NON-BLOCKING, AND THE REASON IS A MEASUREMENT, NOT A PREFERENCE.
+      #   Measured on 2026-09-13, before any deployment change: this repository's
+      #   lint is ALREADY RED — 34 errors and 46 warnings, none of them in anything
+      #   the deployment touches. The bulk is 17 x react-refresh/only-export-components
+      #   plus 8 React Compiler errors (setState in an effect, refs read during
+      #   render) spread across ~20 components, and 2 irregular-whitespace errors in
+      #   tools/i18n/smoke.ts.
+      #
+      #   Making this blocking on day one would hand you a permanently red pipeline
+      #   for faults that predate it, and a pipeline nobody believes is worse than no
+      #   pipeline. Removing the step would hide a real signal. So it runs, it
+      #   reports, and it does not gate.
+      #
+      #   ⚠ TURN THIS BLOCKING — delete the continue-on-error line — as soon as the
+      #     count reaches zero. That is the point of recording the number here: a
+      #     baseline with no date and no figure is how "temporarily non-blocking"
+      #     becomes permanent. The sibling dashboards are both clean (admin-dash 0
+      #     errors, agency-dash 0 errors / 3 warnings), so this is not a
+      #     house-style problem — it is this repository's backlog.
+      - name: Lint
+        continue-on-error: true
+        run: npm run lint
+
+      # ⚠ ALSO NON-BLOCKING, AND ALSO A MEASUREMENT. Measured 2026-09-13, before
+      #   any deployment change: `i18n:audit` exits 1 on SEVEN hardcoded user-facing
+      #   strings, in use-swipe-navigate.ts (2), ChatRichTextEditor.tsx, LinkDialog.tsx,
+      #   PreferencesSettings.tsx, Analytics.tsx and Orders.tsx. None is in anything
+      #   the deployment touches.
+      #
+      #   The smoke half of `i18n:check` passes, as do `richtext:verify` and
+      #   `mobileauth:verify` below — so this is a known backlog of seven strings,
+      #   not a broken guard.
+      #
+      #   ⚠ DELETE THE continue-on-error LINE once the count is zero. Seven is a
+      #     morning's work; the figure is recorded so it stays visible.
+      - name: i18n audit and smoke test
+        continue-on-error: true
+        run: npm run i18n:check
+
+      - name: Rich-text contract
+        run: npm run richtext:verify
+
+      - name: Mobile auth contract
+        run: npm run mobileauth:verify
+
+      # ⚠ THERE IS NO `npm test` IN THIS REPOSITORY. The four checks above are
+      #   the guards it actually has — they are not a substitute for a unit suite,
+      #   and a green run here is a weaker signal than in admin-dash or
+      #   agency-dash. Worth knowing before trusting a tick on a risky change.
+      # The production image is built by exactly this command, with WEB_DEPLOY set
+      # the way the Dockerfile sets it. Building it here is the cheapest way to
+      # catch a Vite-only failure — a bad import, a missing asset, a base-path
+      # mistake — on a branch that publishes nothing.
+      #
+      # ⚠ WEB_DEPLOY=1 MATTERS TO THIS STEP. Without it Vite emits a relative base
+      #   and the build still succeeds, so this would pass while the real image
+      #   broke every deep link. Setting it here means CI builds the same artefact
+      #   the Dockerfile does.
+      - name: Production build
+        env:
+          WEB_DEPLOY: '1'
+        run: npm run build
