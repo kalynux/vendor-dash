@@ -81,7 +81,7 @@ export function SearchSelectField({
       >
         <Command className="bg-transparent">
           <CommandInput placeholder={searchPlaceholder ?? 'Search…'} />
-          <CommandList className="max-h-[55vh]">
+          <CommandList className="max-h-[55dvh]">
             <CommandEmpty>{t('tickets.detail.noMatches')}</CommandEmpty>
             {groups.map((group, i) => (
               <CommandGroup key={group.label ?? i} heading={group.label}>

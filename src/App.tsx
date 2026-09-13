@@ -1,66 +1,50 @@
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
-import { createContext, useContext, useCallback, useState, useEffect } from 'react';
+import { createContext, useContext, useCallback, useState, useEffect, Suspense } from 'react';
 import { Toaster } from '@/components/ui/sonner';
 
-// Dashboard pages
-import { Overview } from '@/pages/Overview';
-import { Orders } from '@/pages/Orders';
-import { Products } from '@/pages/Products';
-import { Inventory } from '@/pages/Inventory';
-import { Customers } from '@/pages/Customers';
-import { Analytics } from '@/pages/Analytics';
-import { Notifications } from '@/pages/Notifications';
-import { Settings } from '@/pages/Settings';
-import { Account } from '@/pages/Account';
-import { Transactions } from '@/pages/Transactions';
-import { MediaGallery } from '@/pages/MediaGallery';
-import { ProductUpload } from '@/pages/ProductUpload';
-import { ProductEdit } from '@/pages/ProductEdit';
-import { SimpleProductCreate } from '@/pages/SimpleProductCreate';
-import { SimpleProductEdit } from '@/pages/SimpleProductEdit';
-import { Tickets } from '@/pages/Tickets';
-import { Agency } from '@/pages/Agency';
-import { Services } from '@/pages/Services';
-import { ServiceUpload } from '@/pages/ServiceUpload';
-import { ServiceEdit } from '@/pages/ServiceEdit';
-import { ProductPreview } from '@/pages/ProductPreview';
-import { StorePreview } from '@/pages/StorePreview';
+// Every route below is code-split. The map of which screen lands in which chunk
+// — and why the three entry paths are split the way they are — lives in one
+// place, `routes/lazy.ts`, rather than being spread across 22 import lines.
+import {
+  DashboardShell,
+  ForgotPassword,
+  LoginScreen,
+  OnboardingRouter,
+  ProductPreview,
+  Register,
+  ResetPassword,
+  StorePreview,
+  prefetchDashboard,
+} from '@/routes/lazy';
+import { DeepLinkFallback } from '@/routes/DeepLinkFallback';
+import { ScreenSkeleton, ShellSkeleton } from '@/components/layout/RouteSkeleton';
 
-// Auth screens — see pages/auth/index.tsx for which transport gets which.
-import { LoginScreen, Register, ForgotPassword, ResetPassword } from '@/pages/auth';
 import { useBearerAuth } from '@/platform/env';
 
 // Layout
-import { Sidebar } from '@/components/layout/Sidebar';
-import { Header } from '@/components/layout/Header';
-import { MobileTabBar } from '@/components/layout/MobileTabBar';
-import { NotificationsBootstrap } from '@/components/notifications/NotificationsBootstrap';
 import { OfflineBanner } from '@/components/layout/OfflineBanner';
 import { StatusBarScrim } from '@/components/layout/StatusBarScrim';
-import { useIsMobile, useIsTablet } from '@/hooks/use-mobile';
-import { useRouteSwipe } from '@/hooks/use-route-swipe';
-import { cn } from '@/lib/utils';
+import { useIsTablet } from '@/hooks/use-mobile';
 
-// Native shell behaviour (CAPACITOR-PLAN.md → Phase 3). Both are inert on the
-// web: `useKeyboardOpen` is hardwired to false there, and the back-button
-// listener is only ever registered on Android.
+// Native shell behaviour (CAPACITOR-PLAN.md → Phase 3). Inert on the web: the
+// back-button listener is only ever registered on Android. `useKeyboardOpen`
+// moved to DashboardShell along with the `main` padding that reads it.
 import { useHardwareBackButton } from '@/platform/shell/backButton';
-import { useKeyboardOpen } from '@/platform/shell/keyboard';
 // Deep links (P4.2). Also inert on the web — the listeners are only ever
 // attached inside a native shell.
 import { useDeepLinks } from '@/platform/shell/deepLinks';
 
-// Onboarding system
-import { OnboardingProvider } from '@/onboarding/store/onboarding.store';
+// Onboarding system. The guard, the provider and the error boundary stay eager
+// — they are what decides which of the three entry paths a vendor is on, so
+// they run before any chunk can be chosen. Only `OnboardingRouter` is split,
+// from `routes/lazy.ts`.
+import { OnboardingProvider, useOnboarding } from '@/onboarding/store/onboarding.store';
 import { OnboardingGuard } from '@/onboarding/OnboardingGuard';
-import { OnboardingRouter } from '@/onboarding/OnboardingRouter';
 import { OnboardingErrorBoundary } from '@/onboarding/OnboardingErrorBoundary';
+import { OnboardingSkeleton } from '@/onboarding/OnboardingSkeleton';
 
 // i18n — binds the dashboard language to the vendor's Profile setting
 import { SessionLocaleSync, useTranslation } from '@/i18n';
-
-// StoreStore for the vendor's storefront profile
-import { useStoreStore } from '@/store';
 
 // ─── Sidebar collapse context (preserved for Sidebar/Header compatibility) ────
 
@@ -165,99 +149,44 @@ const LegacyRouterContext = createContext<LegacyRouterContextType>({
 
 export const useRouter = () => useContext(LegacyRouterContext);
 
-// ─── Dashboard shell ──────────────────────────────────────────────────────────
+
+// ─── Dashboard warm-up ────────────────────────────────────────────────────────
 
 /**
- * The bottom tab bar's three destinations, in the order they sit in the bar —
- * which is the order a sideways swipe walks them. The FAB and "More" are not
- * destinations, so they are not in the ring.
+ * Fetch the dashboard shell and Overview once the session says the vendor is
+ * heading there.
+ *
+ * This matters more on a phone than it would on a desktop. The vendor is on a
+ * connection that just made them wait for the login screen; making them wait
+ * again, twice, after they tap sign in turns the split from a win into a
+ * different stall. Fetching while they are still reading the form spends idle
+ * time instead of theirs.
+ *
+ * Gated on a real session, so a signed-out vendor still downloads nothing of
+ * the dashboard — that gate is the whole point of the split and this must not
+ * quietly undo it. Gated on `currentStep === 0` too, because a vendor who is
+ * mid-onboarding is going to `/onboarding`, not here.
+ *
+ * `requestIdleCallback` keeps the fetch behind whatever the current screen is
+ * still doing; Safari and the older Android WebViews do not have it, hence the
+ * timeout fallback. Renders nothing.
  */
-const TAB_BAR_RING = ['/dashboard', '/dashboard/orders', '/dashboard/products'] as const;
-
-function DashboardShell() {
-  const { sidebarCollapsed } = useUI();
-  const isMobile = useIsMobile();
-  // Always false on the web, so the browser build is unchanged (P3.2).
-  const keyboardOpen = useKeyboardOpen();
-  const { fetchStore } = useStoreStore();
-
-  // Swipe left/right to move along the bottom tab bar. Inert off mobile, and
-  // inert on any screen that is not one of the three — see `useRouteSwipe`.
-  useRouteSwipe(TAB_BAR_RING);
+function DashboardPrefetch() {
+  const { session, currentStep, isInitializing } = useOnboarding();
+  const ready = !isInitializing && !!session && currentStep === 0;
 
   useEffect(() => {
-    fetchStore();
-  }, [fetchStore]);
+    if (!ready) return;
+    const idle = window.requestIdleCallback;
+    if (idle) {
+      const handle = idle(() => prefetchDashboard(), { timeout: 2000 });
+      return () => window.cancelIdleCallback?.(handle);
+    }
+    const handle = window.setTimeout(prefetchDashboard, 300);
+    return () => window.clearTimeout(handle);
+  }, [ready]);
 
-  return (
-    <div className="min-h-screen bg-background">
-      <NotificationsBootstrap />
-      {!isMobile && <Sidebar />}
-      <div
-        className={cn(
-          'transition-all duration-300 ease-in-out',
-          isMobile ? 'ml-0' : sidebarCollapsed ? 'ml-20' : 'ml-64',
-        )}
-      >
-        {!isMobile && <Header />}
-        <main
-          className={cn(
-            'px-6 pb-6 md:px-8 md:pb-8',
-            // The shell draws edge to edge on a device, so the status bar sits
-            // *over* the top of this column and the first 1.5rem of content
-            // would be under the clock (P3.3). The eleven pages that render a
-            // `MobilePageHeader` cancel this again from inside that component —
-            // it, not this, owns the visible inset, because it is the thing that
-            // touches the top of the viewport once the page is scrolled.
-            // `env(...)` is 0 in every browser, so the web is untouched.
-            'pt-[calc(1.5rem+env(safe-area-inset-top))] md:pt-[calc(2rem+env(safe-area-inset-top))]',
-            // Room for the tab bar, its safe-area inset and the FAB that pops
-            // above it — and none of it while the keyboard is up, because the
-            // tab bar hides itself then and the allowance would be dead space
-            // between the content and the keys (P3.2).
-            isMobile && !keyboardOpen && 'pb-[calc(6rem_+_env(safe-area-inset-bottom))]',
-          )}
-        >
-          <div className="mx-auto w-full max-w-[1600px]">
-          <Routes>
-            <Route index element={<Overview />} />
-            <Route path="orders" element={<Orders />} />
-            <Route path="products" element={<Products />} />
-            {/* Inventory's four surfaces are sidebar sub-tabs, so each is a real
-                route. The bare path renders the page too — it redirects itself,
-                which is what carries `?view=` (and the legacy `?tab=`) across. */}
-            <Route path="inventory" element={<Inventory />} />
-            <Route path="inventory/:tab" element={<Inventory />} />
-            <Route path="product-upload" element={<ProductUpload />} />
-            {/* Nested under the same prefixes so pathToLegacyRoute keeps
-                highlighting 'products' without needing a new entry. */}
-            <Route path="product-upload/simple" element={<SimpleProductCreate />} />
-            <Route path="product-edit/:id" element={<ProductEdit />} />
-            <Route path="product-edit/:id/simple" element={<SimpleProductEdit />} />
-            <Route path="customers" element={<Customers />} />
-            <Route path="analytics" element={<Analytics />} />
-            <Route path="notifications" element={<Notifications />} />
-            <Route path="account" element={<Navigate to="/dashboard/account/profile" replace />} />
-            <Route path="account/:tab" element={<Account />} />
-            <Route path="agency" element={<Navigate to="/dashboard/agency/connections" replace />} />
-            <Route path="agency/:tab" element={<Agency />} />
-            <Route path="settings" element={<Navigate to="/dashboard/settings/policies" replace />} />
-            <Route path="settings/:tab" element={<Settings />} />
-            <Route path="transactions" element={<Transactions />} />
-            <Route path="media" element={<MediaGallery />} />
-            <Route path="tickets" element={<Tickets />} />
-            <Route path="services" element={<Services />} />
-            <Route path="services/:tab" element={<Services />} />
-            <Route path="service-upload" element={<ServiceUpload />} />
-            <Route path="service-edit/:id" element={<ServiceEdit />} />
-            <Route path="*" element={<Navigate to="/dashboard" replace />} />
-          </Routes>
-          </div>
-        </main>
-      </div>
-      {isMobile && <MobileTabBar />}
-    </div>
-  );
+  return null;
 }
 
 // ─── Root App ─────────────────────────────────────────────────────────────────
@@ -335,6 +264,17 @@ function AppContent() {
               <OnboardingProvider>
                 {/* Applies the vendor's saved language once the session loads. */}
                 <SessionLocaleSync />
+                {/* Fetches the dashboard's first two chunks as soon as the
+                    session says they will be needed. Renders nothing. */}
+                <DashboardPrefetch />
+                {/* The outer boundary. It catches the screens that own their
+                    whole viewport — the auth pages and the two storefront
+                    previews — and nothing else: `/onboarding/*` and
+                    `/dashboard/*` each declare a boundary of their own below,
+                    with a fallback shaped like the screen that is coming. React
+                    uses the nearest boundary above the component that suspends,
+                    so those win and this one never gets their loads. */}
+                <Suspense fallback={<ScreenSkeleton />}>
                 <Routes>
                   {/* Sign-in. On the web this is still the card that sends the
                       vendor to the main site, which is where authentication has
@@ -378,12 +318,21 @@ function AppContent() {
                     </>
                   )}
 
-                  {/* Onboarding — gated: must be authenticated, step > 0 */}
+                  {/* Onboarding — gated: must be authenticated, step > 0.
+                      Its own boundary, inside the guard: the guard already
+                      renders `OnboardingSkeleton` while the session resolves,
+                      so reusing it for the chunk makes the two waits one
+                      continuous frame instead of two different placeholders in
+                      a row. The four steps, their schemas and framer-motion —
+                      which nothing outside `OnboardingLayout` imports — all
+                      arrive with it. */}
                   <Route
                     path="/onboarding/*"
                     element={
                       <OnboardingGuard>
-                        <OnboardingRouter />
+                        <Suspense fallback={<OnboardingSkeleton />}>
+                          <OnboardingRouter />
+                        </Suspense>
                       </OnboardingGuard>
                     }
                   />
@@ -410,12 +359,19 @@ function AppContent() {
                     }
                   />
 
-                  {/* Dashboard — gated: must be authenticated AND fully onboarded */}
+                  {/* Dashboard — gated: must be authenticated AND fully
+                      onboarded. Its own boundary too, so the wait for the shell
+                      shows the shell's chrome rather than the centred card the
+                      outer fallback draws. Once the shell is mounted it owns a
+                      second, inner boundary for the pages, which is what keeps
+                      the sidebar painted across a navigation. */}
                   <Route
                     path="/dashboard/*"
                     element={
                       <OnboardingGuard requireComplete>
-                        <DashboardShell />
+                        <Suspense fallback={<ShellSkeleton />}>
+                          <DashboardShell />
+                        </Suspense>
                       </OnboardingGuard>
                     }
                   />
@@ -423,9 +379,11 @@ function AppContent() {
                   {/* Root redirect */}
                   <Route path="/" element={<Navigate to="/dashboard" replace />} />
 
-                  {/* Catch-all */}
-                  <Route path="*" element={<Navigate to="/dashboard" replace />} />
+                  {/* Catch-all — tries the notification deep-link vocabulary
+                      before falling back to the dashboard. */}
+                  <Route path="*" element={<DeepLinkFallback />} />
                 </Routes>
+                </Suspense>
               </OnboardingProvider>
             </OnboardingErrorBoundary>
             {/* The status bar is drawn over the app on a device, so sonner's

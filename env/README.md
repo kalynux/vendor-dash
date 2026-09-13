@@ -1,5 +1,84 @@
 # Environment configuration (`env/`)
 
+## The two build profiles
+
+There are exactly two, and everything below is detail on top of them.
+
+| Profile | Backend | Storefront | Built by |
+|---|---|---|---|
+| **PRODUCTION**<br>`.env.production` | `https://api.wi-mall.com/api` | `https://wi-mall.com` | `build` (web)<br>`sync:android` · `sync:android:release`<br>`build:aab` · `build:apk:release` |
+| **DEVELOPMENT**<br>`.env.mobile` | `http://100.124.149.1:8022/api` | `http://100.124.149.1:3000` | `sync:android:lan` · `run:android`<br>`build:apk` |
+
+**Mobile-web and native share `.env.production`.** There is no separate "mobile
+production" profile and there should never be one: only the shell differs
+between the web deploy and the Android bundle, so `npm run build` and
+`npm run build:mobile` read the same file and reach the same backend. The
+`mobile` *mode* is the DEVELOPMENT profile, nothing else — `.env.mobile` says so
+in its own header. Anything that needs to differ between web and native belongs
+behind `isNative` (`src/platform/env.ts`), not behind a third env file.
+
+### Knowing which one you have
+
+`VITE_API_BASE_URL` is inlined at **build** time, so the backend a native build
+talks to is frozen into the JS the moment `vite build` runs. Two consequences:
+
+- the env files tell you what the **next** build will use — never what the
+  installed app is calling;
+- a production APK and a LAN-dev APK are indistinguishable from the outside.
+  Same icon, same version, same screens. The difference surfaces as "nothing
+  loads" on a tester's phone, or as a support ticket after a store release.
+
+The only reliable answer comes from the synced bundle, which is what gradle
+actually packages:
+
+```bash
+npm run env:which
+```
+
+It reads `android/app/src/main/assets/`, prints the API host, the storefront
+host and the WebView scheme found there, and says which profile they are. The
+raw form of the same check, if you want it without node:
+
+```bash
+grep -rhoE "https?://[a-zA-Z0-9._-]+(:[0-9]+)?/api" \
+  android/app/src/main/assets/public/assets/*.js | sort -u
+```
+
+Expect **one** line. `https://api.wi-mall.com/api` is production; anything else —
+a `100.64.0.0/10` Tailscale address, a `192.168.`/`10.` LAN address, `localhost`,
+`10.0.2.2` — is a dev bundle. Note the tree is LAN-synced most of the time,
+because that is what the normal development loop leaves behind.
+
+### The guard
+
+`npm run env:assert:production` is the same check with a non-zero exit, and
+`sync:android` runs it immediately after `cap sync`. `sync:android:release` is
+an alias of `sync:android` — deliberately, so the release path cannot drift away
+from the guarded one — and `build:aab` / `build:apk:release` both go through it,
+so **no release script can reach gradle with a dev bundle in the tree**. It
+fails on any of four signals:
+
+1. nothing synced at all (an empty `assets/public/` would otherwise package fine);
+2. an `…/api` URL that is not `.env.production`'s `VITE_API_BASE_URL`;
+3. any loopback / private-LAN / Tailscale origin **anywhere** in the bundle —
+   this is what catches `VITE_STOREFRONT_BASE_URL`, which has no distinctive
+   shape to grep for the way an API URL does;
+4. a LAN-dev `capacitor.config.json` (`androidScheme: "http"`,
+   `allowMixedContent: true`) — both are set by `CAP_LAN_DEV=1` and `cap sync`
+   copies them in beside the JS, so they fingerprint the last sync independently
+   of the bundle.
+
+Expected values come from `.env.production` itself rather than being repeated in
+the script, so there is one place hosts are written down. Source:
+`tools/env/bundle-profile.mjs`.
+
+⚠ **The guard is npm-side, so it cannot see a gradle-only build.** Running
+`gradlew bundleRelease` by hand, or *Build → Generate Signed Bundle* in Android
+Studio, packages whatever is in the tree without consulting it. Run
+`npm run env:which` first, or go through `npm run build:aab`.
+
+---
+
 Vite is configured (`vite.config.ts` → `envDir`) to load all `.env*` files from
 **this folder** rather than the project root.
 
@@ -80,11 +159,16 @@ npm run sync:android:lan
 npm run run:android          # the same, then installs and launches
 
 # The native bundle that ships. Reads env/.env.production — the same values the
-# web deploy gets, since only the shell differs.
+# web deploy gets, since only the shell differs. Ends in the production guard.
 npm run sync:android
+npm run sync:android:release # an alias of the line above
 
 npm run open:android         # Android Studio, for native-side work
 npm run build:apk            # LAN sync, then gradlew assembleDebug
+npm run build:apk:release    # production sync + guard, then gradlew assembleRelease
+npm run build:aab            # production sync + guard, then gradlew bundleRelease
+
+npm run env:which            # which profile is in the tree right now
 ```
 
 **`localhost` inside a packaged app is the phone**, not your machine — which is

@@ -300,7 +300,7 @@ export function Header() {
               </div>
 
               {/* Search Results */}
-              <div className="max-h-[60vh] overflow-auto">
+              <div className="max-h-[60dvh] overflow-auto">
                 {searchQuery ? (
                   <div className="p-4">
                     <p className="text-sm text-muted-foreground mb-3">

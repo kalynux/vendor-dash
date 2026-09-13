@@ -125,7 +125,7 @@ export function UploadSourceSheet({
       title={t('media.upload.source.title')}
       description={t('media.upload.source.description')}
       // Three rows do not need most of a screen; `h-auto` lets the sheet size
-      // itself instead of opening to the full 92vh the default assumes.
+      // itself instead of opening to the full 92dvh the default assumes.
       mobileClassName="h-auto max-h-[92dvh]"
       desktopClassName="sm:max-w-sm"
       disableClose={busy !== null}

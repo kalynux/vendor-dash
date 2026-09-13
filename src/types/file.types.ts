@@ -118,6 +118,15 @@ export interface ApiFile {
   ownerId?: string;
   createdAt: string;
   updatedAt: string;
+  /**
+   * Soft-delete stamp. `null` on a live file.
+   *
+   * 🔴 **`GET /api/files` is the one list endpoint that does NOT exclude these**
+   * (F-26 — the query is built from ownership plus your filters and never touches
+   * `deletedAt`). Every id-scoped route does exclude them. `listFiles` filters
+   * client-side; without that a deleted file reappears in the media browser.
+   */
+  deletedAt?: string | null;
 }
 
 // Where a file is referenced — the single source of truth for "attached or not".

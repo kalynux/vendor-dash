@@ -123,6 +123,21 @@ export const services = {
             'available from the service card.',
     },
 
+    /**
+     * Calendar-desync badge on the services list.
+     *
+     * The connection is per-VENDOR, not per-service, so this reads off the one
+     * account-level `requiresReauth` flag and marks every ACTIVE service — the
+     * inbound sync writes vendor-wide busy blocks, so a revoked token exposes
+     * all of them to double-booking at once.
+     */
+    calendarSync: {
+        desynced: 'Calendar not syncing',
+        desyncedHint:
+            'Google Calendar access was revoked or expired, so your busy times are no longer ' +
+            'blocking slots on this service. Reconnect it on the Calendar tab.',
+    },
+
     /** Vendor-triggered status changes on a service. */
     transitions: {
         publish: 'Publish service',

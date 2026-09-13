@@ -182,7 +182,7 @@ export function AddressSearch({
               type="button"
               aria-label={t('common.actions.clear')}
               onClick={() => { setQuery(''); setResults([]); setOpen(false); }}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground tap-target"
             >
               <X className="h-4 w-4" />
             </button>
@@ -259,7 +259,7 @@ export function AddressSearch({
               type="button"
               aria-label={t('common.address.clearPinned')}
               onClick={onClear}
-              className="shrink-0 text-muted-foreground transition-colors hover:text-destructive"
+              className="shrink-0 text-muted-foreground transition-colors hover:text-destructive tap-target"
             >
               <X className="h-4 w-4" />
             </button>

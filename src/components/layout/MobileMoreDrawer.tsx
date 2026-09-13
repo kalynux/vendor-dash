@@ -5,6 +5,8 @@ import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { AppLogo } from '@/components/layout/AppLogo';
 import { PlatformStatus } from '@/components/layout/PlatformStatus';
 import { Button } from '@/components/ui/button';
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
+import { nameInitials } from '@/components/customers/customer.constants';
 import { useAuth } from '@/App';
 import { useNotificationStore } from '@/store';
 import { PRIMARY_NAV, FOOTER_NAV, type NavItem, type NavChild, type NavBadge } from '@/config/navigation';
@@ -131,7 +133,7 @@ export function MobileMoreDrawer({ open, onOpenChange }: MobileMoreDrawerProps) 
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="bottom" className="h-[85vh] p-0 rounded-t-2xl">
+      <SheetContent side="bottom" className="h-[85dvh] p-0 rounded-t-2xl">
         <div className="flex flex-col h-full">
           {/* Header */}
           <div className="px-4 py-4 border-b flex-shrink-0">
@@ -141,11 +143,12 @@ export function MobileMoreDrawer({ open, onOpenChange }: MobileMoreDrawerProps) 
           <div className="flex-1 overflow-y-auto min-h-0 pb-safe">
             {/* Vendor profile card */}
             <div className="mx-4 mt-4 mb-4 p-4 bg-card rounded-xl border flex items-center gap-3">
-              <img
-                src={user?.avatar || `https://i.pravatar.cc/150?u=${user?.id}`}
-                alt={user?.name}
-                className="w-12 h-12 rounded-full flex-shrink-0 object-cover"
-              />
+              <Avatar className="w-12 h-12 flex-shrink-0">
+                {user?.avatar && <AvatarImage src={user.avatar} alt={user.name} className="object-cover" />}
+                <AvatarFallback className="bg-primary/10 text-sm font-medium text-primary">
+                  {nameInitials(user?.name ?? '')}
+                </AvatarFallback>
+              </Avatar>
               <div className="flex-1 min-w-0">
                 <p className="font-semibold truncate">{user?.name}</p>
                 <p className="text-sm text-muted-foreground">

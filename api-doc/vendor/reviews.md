@@ -174,6 +174,17 @@ const deliveryReviews = data.filter(r => r.subjectType === 'delivery');
 
 Filter client-side if the screen is meant to be vendor-only.
 
+> ✅ **Consumed since 2026-09-09.** The screen is `/dashboard/agency/reviews`
+> (`src/components/reviews/VendorReviewsTab.tsx`), a third tab beside Connections and Browse —
+> deliveries are this section's subject. It reads the list with `includeOtherRoles: true` and does
+> the `delivery` filter itself, so it can report **how many rows it dropped**: `meta.total` counts
+> the unfiltered set, so on a dual-role account the pager and the screen disagree by exactly that
+> many, and a whole page can legitimately come back empty. Both cases are stated in the UI rather
+> than left to look like a bug.
+>
+> `status` is the only filter sent. No search box — the schema is strict, so there would be
+> nothing to send it as. No row action of any kind, per § 4.
+
 ---
 
 ## 4 · 🔴 Write-once — there is no edit or delete

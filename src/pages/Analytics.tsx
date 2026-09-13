@@ -1,4 +1,5 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   Download,
   TrendingUp,
@@ -23,8 +24,9 @@ import { TopProductsList } from '@/components/features/TopProductsList';
 import { DateRangePicker } from '@/components/features/DateRangePicker';
 import { MobilePageHeader } from '@/components/layout/MobilePageHeader';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useRouteSwipe } from '@/hooks/use-route-swipe';
 import { cn } from '@/lib/utils';
-import { useTranslation, useFormatters } from '@/i18n';
+import { useTranslation, useFormatters, type TranslationKey } from '@/i18n';
 
 interface MetricCardProps {
   title: string;
@@ -128,10 +130,47 @@ function useTwoUpMetrics(values: string[]) {
   return { gridRef, measureRef, twoUp };
 }
 
+// ─── Tabs ─────────────────────────────────────────────────────────────────────
+
+const VALID_TABS = ['overview', 'sales', 'products', 'customers'] as const;
+
+/** The same four, as routes — what a sideways swipe walks. Order matters. */
+const TAB_RING = VALID_TABS.map((tab) => `/dashboard/analytics/${tab}`);
+type AnalyticsTab = (typeof VALID_TABS)[number];
+const DEFAULT_TAB: AnalyticsTab = 'overview';
+
+const TAB_ICONS: Record<AnalyticsTab, typeof BarChart3> = {
+  overview: BarChart3,
+  sales: LineChart,
+  products: PieChart,
+  customers: Users,
+};
+
+const isValidTab = (v: string | null | undefined): v is AnalyticsTab =>
+  !!v && (VALID_TABS as readonly string[]).includes(v);
+
 export function Analytics() {
   const { t } = useTranslation();
   const fmt = useFormatters();
   const isMobile = useIsMobile();
+  const navigate = useNavigate();
+  const { tab: tabParam } = useParams();
+  const [searchParams] = useSearchParams();
+
+  const tab: AnalyticsTab | null = isValidTab(tabParam) ? tabParam : null;
+
+  // Before the bare-path redirect below — a hook cannot sit behind an early
+  // return. The mobile strip scrolls horizontally, and `useSwipeNavigate` leaves
+  // gestures that start inside a horizontal scroller alone, so dragging the
+  // strip still just scrolls the strip.
+  useRouteSwipe(TAB_RING);
+
+  const goToTab = useCallback(
+    // Pushes, so back steps through the tabs — and so a tap leaves exactly the
+    // history a swipe does.
+    (next: AnalyticsTab) => navigate(`/dashboard/analytics/${next}`),
+    [navigate],
+  );
 
   // Analytics totals carry no per-currency field; use the platform default (XAF)
   // via the shared, locale-aware formatter.
@@ -190,6 +229,47 @@ export function Analytics() {
 
   const { gridRef, measureRef, twoUp } = useTwoUpMetrics(metricTiles.map((m) => m.value));
 
+  // Bare `/dashboard/analytics` (or a bogus segment) lands on the default tab.
+  // Redirecting from inside the component rather than with a `<Route element=
+  // {<Navigate/>}>` is what carries the query string over — same as Inventory.
+  if (!tab) {
+    const query = searchParams.toString();
+    return <Navigate to={`/dashboard/analytics/${DEFAULT_TAB}${query ? `?${query}` : ''}`} replace />;
+  }
+
+  /**
+   * Mobile sub-navigation. Four labels across 360px left ~90px a cell, which
+   * wrapped "Customers" (and clipped "Vue d'ensemble" outright) — so this
+   * scrolls horizontally instead of squeezing, exactly like Inventory's strip.
+   */
+  const mobileTabStrip = (
+    <div className="-mx-4 overflow-x-auto px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div className="flex w-max gap-2">
+        {VALID_TABS.map((value) => {
+          const Icon = TAB_ICONS[value];
+          const active = value === tab;
+          return (
+            <button
+              key={value}
+              type="button"
+              onClick={() => goToTab(value)}
+              aria-current={active ? 'page' : undefined}
+              className={cn(
+                'tap-target flex shrink-0 items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors',
+                active
+                  ? 'border-foreground bg-foreground text-background'
+                  : 'border-border bg-background',
+              )}
+            >
+              <Icon className="h-3.5 w-3.5" />
+              {t(`analytics.tabs.${value}` as TranslationKey)}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+
   return (
     <div className={cn('animate-fade-in', isMobile ? '-mx-6 -mt-6' : 'space-y-6')}>
       {/* Header. The mobile one is pinned and carries the notifications bell —
@@ -210,8 +290,11 @@ export function Analytics() {
             },
           ]}
           subheader={
-            <div className="flex justify-end">
-              <DateRangePicker value={dateRange} onChange={setDateRange} />
+            <div className="space-y-2">
+              {mobileTabStrip}
+              <div className="flex justify-end">
+                <DateRangePicker value={dateRange} onChange={setDateRange} />
+              </div>
             </div>
           }
         />
@@ -268,26 +351,25 @@ export function Analytics() {
         ))}
       </div>
 
-      {/* Main Content Tabs */}
-      <Tabs defaultValue="overview" className="w-full">
-        <TabsList className="grid w-full grid-cols-4 lg:w-auto lg:inline-grid">
-          <TabsTrigger value="overview" className="gap-2">
-            <BarChart3 className="w-4 h-4" />
-            {t('analytics.tabs.overview')}
-          </TabsTrigger>
-          <TabsTrigger value="sales" className="gap-2">
-            <LineChart className="w-4 h-4" />
-            {t('analytics.tabs.sales')}
-          </TabsTrigger>
-          <TabsTrigger value="products" className="gap-2">
-            <PieChart className="w-4 h-4" />
-            {t('analytics.tabs.products')}
-          </TabsTrigger>
-          <TabsTrigger value="customers" className="gap-2">
-            <Users className="w-4 h-4" />
-            {t('analytics.tabs.customers')}
-          </TabsTrigger>
-        </TabsList>
+      {/* Main Content Tabs — the URL owns which one is open, so a link, the back
+          button and a sideways swipe all reach the same four panes. */}
+      <Tabs value={tab} onValueChange={(v) => goToTab(v as AnalyticsTab)} className="w-full">
+        {/* Desktop only: on a phone the pinned header's pill strip is the tab
+            affordance, and a second row of them would just be the same four
+            labels twice. */}
+        {!isMobile && (
+          <TabsList className="h-11 rounded-xl">
+            {VALID_TABS.map((value) => {
+              const Icon = TAB_ICONS[value];
+              return (
+                <TabsTrigger key={value} value={value} className="gap-2">
+                  <Icon className="w-4 h-4" />
+                  {t(`analytics.tabs.${value}` as TranslationKey)}
+                </TabsTrigger>
+              );
+            })}
+          </TabsList>
+        )}
 
         <TabsContent value="overview" className="space-y-6 mt-6">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

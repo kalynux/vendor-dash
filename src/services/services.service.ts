@@ -176,10 +176,6 @@ export async function changeServiceStatus(
   return res.data;
 }
 
-export async function archiveService(id: string): Promise<void> {
-  await api.delete<SimpleMessageResponse>(`${BASE}/products/${id}`);
-}
-
 /** The single service variant carrying price + serviceConfig, or null if none. */
 function pickServiceVariant(variants: ApiVariant[]): ApiVariant | null {
   return variants.find((v) => v.status === 'active') ?? variants[0] ?? null;
@@ -311,13 +307,21 @@ export async function fetchBookingById(id: string): Promise<Booking> {
   return res.data;
 }
 
+/**
+ * The calendar view, with the zone its day keys were computed in.
+ *
+ * ⚠ `meta.timezone` must NOT be dropped here: the `date` key is a wall-clock day
+ * in the vendor's zone, so a caller that matches it against keys built from the
+ * browser's zone puts boundary bookings in the wrong cell. `undefined` on a
+ * backend from before 2026-09-09 — callers fall back to the browser's zone.
+ */
 export async function fetchBookingCalendar(
   startDate: string,
   endDate: string,
-): Promise<BookingCalendarDay[]> {
+): Promise<{ days: BookingCalendarDay[]; timezone: string | null }> {
   const qs = buildQueryString({ startDate, endDate });
   const res = await api.get<BookingCalendarResponse>(`${BASE}/bookings/calendar${qs}`);
-  return res.data;
+  return { days: res.data, timezone: res.meta?.timezone ?? null };
 }
 
 export async function updateBookingStatus(id: string, status: BookingStatus): Promise<Booking> {

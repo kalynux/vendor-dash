@@ -74,10 +74,26 @@ export function BargainCeilingsSheet({
         </Button>
       }
     >
+      {/* Stated once, at the top, because it is the one thing a vendor filling in
+          a "maximum" does not expect: this number is the shelf price, not private
+          headroom above it (api-doc/vendor/variants.md § 0). */}
+      <p className="mb-4 rounded-lg bg-muted/60 p-3 text-xs text-muted-foreground">
+        {t('products.bargain.shelfPriceNotice')}
+      </p>
+
       <div className="space-y-3">
         {variants.map((v) => {
           const rowError = errors[v.id];
           const minCeiling = minCeilingFor(v.price);
+          // The shop suppresses `compareAtPrice` unless it beats the asking
+          // price, so this row's "was" price would silently vanish.
+          const asking = Number(ceilings[v.id]);
+          const compareAtHidden =
+            Number.isFinite(asking) &&
+            asking > 0 &&
+            typeof v.compareAtPrice === 'number' &&
+            v.compareAtPrice > 0 &&
+            v.compareAtPrice <= asking;
           return (
             <div
               key={v.id}
@@ -147,6 +163,13 @@ export function BargainCeilingsSheet({
                     ? t(rowError)
                     : t('products.bargain.ceilingMin', { min: fmt.currency(minCeiling) })}
                 </p>
+                {compareAtHidden && (
+                  <p className="mt-1 text-xs text-amber-600">
+                    {t('products.fields.bargainCompareAtHidden', {
+                      max: fmt.currency(asking),
+                    })}
+                  </p>
+                )}
               </div>
             </div>
           );

@@ -9,6 +9,14 @@ import { hideSplashWhenPainted } from '@/platform/shell/splash'
 import { initStatusBar } from '@/platform/shell/statusBar'
 import { initKeyboard } from '@/platform/shell/keyboard'
 import { installExternalLinkInterceptor } from '@/platform/browser'
+import { isNative } from '@/platform/env'
+
+// Opts the document into the native-only touch rules in index.css (see its
+// 'Touch behaviour' block). Suppressing the tap flash and the double-tap-zoom
+// delay is right on the web too, so those are unscoped; killing pull-to-refresh
+// and text selection is not, so those hang off this class. Set before render so
+// the first painted frame already has them.
+if (isNative) document.documentElement.classList.add('native')
 
 // Native shell behaviour (CAPACITOR-PLAN.md → Phase 3). All three are no-ops
 // off native, and all three run BEFORE render: the system bars should already

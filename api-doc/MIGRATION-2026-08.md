@@ -165,26 +165,24 @@ lapsed. There is now a hard ceiling.
 🔴 **It is terminal. The refresh token is refused too.** A client that treats every 401 as
 "refresh and retry" will loop.
 
-### Action required in `src/api.ts`
+### ✅ Handled in `src/services/api.ts` — no action
 
-`TERMINAL_AUTH_CODES` does not contain it. The comment there says an unrecognised code "costs one
-doomed round trip rather than signing someone out by surprise" — which is the right default and
-means you are not looping. But you are spending a wasted refresh and showing a worse message than
-you could. **Add it:**
+> ⛔ **This section read "Action required" and named `TERMINAL_AUTH_CODES` until 2026-09-09.**
+> That symbol does not exist in this repository and the work it asked for is done. Verified by
+> reading the file, not by re-reading this page.
+
+The set was split in two, keyed by status, and both codes are present:
 
 ```ts
-const TERMINAL_AUTH_CODES: ReadonlySet<string> = new Set([
-  'AUTH_MISSING_TOKEN',
-  'AUTH_REFRESH_TOKEN_INVALID',
-  'AUTH_SESSION_EXPIRED',
-  'AUTH_TOKEN_INVALID',
-  'AUTH_PASSWORD_CHANGED',
-  'AUTH_USER_NOT_FOUND',
-  'AUTH_ACCOUNT_SUSPENDED',
-  'AUTH_SESSION_CAP_REACHED',   // ← add
-  'AUTH_ACCOUNT_CLOSED',        // ← add: 403, equally terminal
-]);
+// src/services/api.ts:62
+const TERMINAL_401_CODES = new Set([ …, 'AUTH_SESSION_CAP_REACHED', … ]);
+// src/services/api.ts:104
+const TERMINAL_403_CODES = new Set(['AUTH_ACCOUNT_CLOSED', 'AUTH_ACCOUNT_SUSPENDED', 'AUTH_VENDOR_SUSPENDED']);
 ```
+
+`classifyAuthError` chooses by `res.status`, so a terminal 403 is never sent through the refresh
+path and `AUTH_TOKEN_EXPIRED` — the one recoverable code — is in neither set. Grep for
+`TERMINAL_401_CODES` if you are re-checking.
 
 `auth_time` is **copied, not re-stamped**, by `auth-me`, `add-role` and refresh — so none of them
 extends the 90 days. It resets only on a real sign-in, a registration, or a password change.

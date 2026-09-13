@@ -232,6 +232,18 @@ export const media = {
         stillReferenced: 'This file is still used somewhere. Detach it before deleting.',
         detachFirst: 'Detach this file from everything using it before deleting it.',
         notDownloadable: "This file is stored privately and can't be downloaded here.",
+        blockedNotDownloadable:
+            "This file is locked by your storage limit. Upgrade your plan to download it.",
+    },
+    // A file the vendor is over their plan's storage cap for. The bytes and the
+    // record are both intact and an upgrade restores them, so nothing here says
+    // "deleted" or "missing" — that sends the vendor to the wrong support queue.
+    blocked: {
+        badge: 'Locked',
+        title: 'Hidden by your storage limit',
+        body: "This file is still here. Your plan's storage limit is hiding it — upgrade, or delete something older, to bring it back.",
+        action: 'Upgrade plan',
+        thumbnailHint: 'Locked by your storage limit',
     },
 } as const;
 

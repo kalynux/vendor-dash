@@ -124,7 +124,7 @@ export function AgencyCard({ agency, selected = false, onSelect, onInfo, rightSl
                                 type="button"
                                 onClick={onInfo}
                                 aria-label={t('agency.browse.viewDetailsFor', { name: agency.agencyName })}
-                                className="flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/20 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring md:h-auto md:w-12 md:rounded-none md:border-l md:border-border/60"
+                                className="flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/20 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring md:h-auto md:w-12 md:rounded-none md:border-l md:border-border/60 tap-target"
                             >
                                 <Info className="w-4 h-4" />
                             </button>

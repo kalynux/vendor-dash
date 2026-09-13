@@ -4,10 +4,20 @@
  *
  * Served from the origin root (/firebase-messaging-sw.js) so FCM can use it.
  * This file runs OUTSIDE the bundler and cannot read Vite env vars, so the
- * messaging config below must be kept in sync with the VITE_FIREBASE_* values
- * in .env (it is public web config, safe to commit).
+ * messaging config below is a SECOND COPY of the VITE_FIREBASE_* values in
+ * env/.env.production and has to be edited alongside them. It is public web
+ * config, safe to commit.
  *
- * Until real values are filled in, background push is inert.
+ * The two copies drifting apart is the failure this comment exists to prevent,
+ * and it is silent: registration still succeeds against whichever project this
+ * file names, and messages sent to the other one are simply never delivered.
+ *
+ * `bingoo-22222` is the production messaging project (confirmed 2026-09-09) —
+ * the name is historical. One project serves every environment and all three
+ * apps; android/app/google-services.json is the native half of the same one.
+ *
+ * The apiKey guard below is a real switch, not a placeholder check: blank it
+ * and background push goes inert while in-app notifications keep working.
  */
 /* eslint-disable no-undef */
 importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js');

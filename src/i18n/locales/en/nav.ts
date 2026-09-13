@@ -26,6 +26,9 @@ export const nav = {
         agency: 'Agency',
         connection: 'Connection',
         browse: 'Browse',
+        // Not just "Reviews": a vendor rates deliveries, never products, and an
+        // unqualified label invites them to look for the wrong screen.
+        deliveryReviews: 'Delivery ratings',
         account: 'Account',
         profile: 'Profile',
         store: 'Store',

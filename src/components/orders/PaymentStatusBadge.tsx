@@ -12,8 +12,8 @@ const PAYMENT_MAP: Record<string, { class: string; labelKey: TranslationKey }> =
   partially_paid:     { class: 'border-blue-500 text-blue-600 bg-blue-50',      labelKey: 'orders.paymentStatus.partiallyPaid' },
   disputed:           { class: 'border-orange-500 text-orange-600 bg-orange-50', labelKey: 'orders.paymentStatus.disputed' },
   failed:             { class: 'border-red-500 text-red-600 bg-red-50',         labelKey: 'orders.paymentStatus.failed' },
-  refunded:           { class: 'border-gray-400 text-gray-600 bg-gray-50',      labelKey: 'orders.paymentStatus.refunded' },
-  partially_refunded: { class: 'border-gray-400 text-gray-600 bg-gray-50',      labelKey: 'orders.paymentStatus.partiallyRefunded' },
+  refunded:           { class: 'border-border text-muted-foreground bg-muted', labelKey: 'orders.paymentStatus.refunded' },
+  partially_refunded: { class: 'border-border text-muted-foreground bg-muted', labelKey: 'orders.paymentStatus.partiallyRefunded' },
 };
 
 interface PaymentStatusBadgeProps {
@@ -30,7 +30,7 @@ export function PaymentStatusBadge({ status, size = 'sm', className }: PaymentSt
       className={cn(
         'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 font-medium capitalize',
         size === 'xs' ? 'text-[10px]' : 'text-xs',
-        config?.class ?? 'border-gray-300 text-gray-600 bg-gray-50',
+        config?.class ?? 'border-border text-muted-foreground bg-muted',
         className,
       )}
     >

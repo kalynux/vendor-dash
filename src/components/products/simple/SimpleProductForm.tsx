@@ -167,6 +167,22 @@ export function SimpleProductForm({
   const minCeiling =
     typeof price === 'number' && price > 0 ? minCeilingFor(price) : null;
 
+  const bargainMaxPrice = watch('bargainMaxPrice');
+
+  /**
+   * The shop publishes `compareAtPrice` only when it is strictly ABOVE the asking
+   * price — otherwise it would strike through a number lower than the live one.
+   * So a vendor who sets an asking price above their compare-at silently loses
+   * their "was" price, on a screen that never mentioned it. Warn, never block:
+   * both values are legal and stored either way.
+   */
+  const compareAtHiddenByAsking =
+    typeof bargainMaxPrice === 'number' &&
+    bargainMaxPrice > 0 &&
+    typeof compareAtPrice === 'number' &&
+    compareAtPrice > 0 &&
+    compareAtPrice <= bargainMaxPrice;
+
   /** Keeps `description` a derived projection of the document. See StepBasicInfo. */
   function onDescriptionChange(doc: RichDoc) {
     setValue('descriptionRich', doc, { shouldValidate: false, shouldDirty: true });
@@ -653,6 +669,20 @@ export function SimpleProductForm({
                   {errors.bargainMaxPrice
                     ? m(errors.bargainMaxPrice.message)
                     : t('products.bargain.ceilingMin', { min: currency(minCeiling as number) })}
+                </p>
+              )}
+              {/* Both of these are consequences the vendor cannot see from this
+                  screen: what shoppers pay, and what happens to the "was" price. */}
+              {typeof bargainMaxPrice === 'number' && bargainMaxPrice > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  {t('products.fields.bargainFloorHint')}
+                </p>
+              )}
+              {compareAtHiddenByAsking && (
+                <p className="text-xs text-amber-600">
+                  {t('products.fields.bargainCompareAtHidden', {
+                    max: currency(bargainMaxPrice as number),
+                  })}
                 </p>
               )}
             </div>

@@ -75,7 +75,7 @@ export function PaymentBrandLogo({
                 />
             ) : (
                 <Icon
-                    className={cn('text-slate-600', ICON_SIZES[size])}
+                    className={cn('text-muted-foreground', ICON_SIZES[size])}
                     aria-hidden={decorative || undefined}
                     aria-label={decorative ? undefined : label}
                     role={decorative ? undefined : 'img'}

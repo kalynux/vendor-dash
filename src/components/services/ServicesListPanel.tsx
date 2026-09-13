@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Plus, CalendarClock, Loader2, Clock, Grid3X3, List,
+  Plus, CalendarClock, CalendarX2, Loader2, Clock, Grid3X3, List,
   MoreHorizontal, Edit, Rocket, RotateCcw, Trash2, Sparkles, RotateCw, XCircle,
   CheckCircle2,
 } from 'lucide-react';
@@ -56,6 +56,12 @@ interface ServicesListPanelProps {
   onCreate: () => void;
   /** Bump to force a refetch after create / edits elsewhere. */
   reloadToken: number;
+  /**
+   * The vendor's Google Calendar needs re-authorising, so inbound busy-time sync
+   * has stopped. Vendor-wide (`requiresReauth` on the account-level status), so
+   * it badges every active service rather than any one of them.
+   */
+  calendarDesynced?: boolean;
 }
 
 const STATUS_OPTIONS: { value: ServiceStatus; labelKey: TranslationKey }[] = [
@@ -101,6 +107,40 @@ function VectorisationBadge({ enabled, status }: { enabled: boolean; status: Api
     <span className={cn('inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium', meta.className)}>
       <Icon className={cn('h-3 w-3', status === 'pending' && 'animate-spin')} />
       {t(meta.labelKey)}
+    </span>
+  );
+}
+
+/**
+ * "Calendar not syncing" — shown on a service whose bookable slots have stopped
+ * reflecting the vendor's real availability.
+ *
+ * ⚠ **Deliberately NOT fed by `GET /vendor/products/:id/service/calendar-status`.**
+ * That per-product route reports the *vendor's* connection (its own handler says
+ * so), returns a strict subset of the account-level status, and its `syncStatus`
+ * is only ever `connected`/`not_connected` — a restatement of `connected` that
+ * cannot express a desync at all. The flag that can is `requiresReauth`, which
+ * only `GET /vendor/calendar/status` carries, and which the page already fetches.
+ *
+ * Gated on `active` because the sync writes vendor-wide busy blocks: when the
+ * token dies every live service is exposed at once, but a draft or archived one
+ * takes no bookings and would only be noise.
+ */
+function CalendarDesyncBadge({ compact = false }: { compact?: boolean }) {
+  const { t } = useTranslation();
+  const label = t('services.calendarSync.desynced');
+  return (
+    <span
+      title={t('services.calendarSync.desyncedHint')}
+      aria-label={label}
+      className={cn(
+        'inline-flex items-center gap-1 rounded-full font-medium',
+        'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+        compact ? 'h-5 w-5 justify-center' : 'px-2 py-0.5 text-[10px]',
+      )}
+    >
+      <CalendarX2 className="h-3 w-3 shrink-0" />
+      {!compact && label}
     </span>
   );
 }
@@ -237,9 +277,10 @@ interface ServiceCardProps {
   service: ServiceListItem;
   onOpen: () => void;
   actions: React.ReactNode;
+  calendarDesynced: boolean;
 }
 
-function ServiceGridCard({ service, onOpen, actions }: ServiceCardProps) {
+function ServiceGridCard({ service, onOpen, actions, calendarDesynced }: ServiceCardProps) {
   return (
     <Card
       onClick={onOpen}
@@ -259,6 +300,7 @@ function ServiceGridCard({ service, onOpen, actions }: ServiceCardProps) {
         )}
         <div className="absolute right-3 top-3 z-10 flex flex-col items-end gap-1">
           <ServiceStatusBadge status={service.status} />
+          {calendarDesynced && service.status === 'active' && <CalendarDesyncBadge />}
           <VectorisationBadge enabled={service.vectorisationEnabled} status={service.vectorisationStatus} />
         </div>
       </div>
@@ -277,7 +319,7 @@ function ServiceGridCard({ service, onOpen, actions }: ServiceCardProps) {
 
 // ─── Panel ──────────────────────────────────────────────────────────────────────
 
-export function ServicesListPanel({ onOpenDetail, onCreate, reloadToken }: ServicesListPanelProps) {
+export function ServicesListPanel({ onOpenDetail, onCreate, reloadToken, calendarDesynced = false }: ServicesListPanelProps) {
   const isMobile = useIsMobile();
   const { t } = useTranslation();
   const apiError = useApiError();
@@ -550,6 +592,7 @@ export function ServicesListPanel({ onOpenDetail, onCreate, reloadToken }: Servi
           service={s}
           onOpen={() => openService(s)}
           actions={renderActions(s)}
+          calendarDesynced={calendarDesynced}
         />
       ))}
     </div>
@@ -597,6 +640,7 @@ export function ServicesListPanel({ onOpenDetail, onCreate, reloadToken }: Servi
                 <td className="px-4 py-3">
                   <div className="flex flex-col items-start gap-1">
                     <ServiceStatusBadge status={s.status} />
+                    {calendarDesynced && s.status === 'active' && <CalendarDesyncBadge />}
                     <VectorisationBadge enabled={s.vectorisationEnabled} status={s.vectorisationStatus} />
                   </div>
                 </td>
@@ -631,6 +675,7 @@ export function ServicesListPanel({ onOpenDetail, onCreate, reloadToken }: Servi
               {s.bookingMode && ` · ${t(BOOKING_MODE_LABEL_KEYS[s.bookingMode])}`}
             </p>
           </div>
+          {calendarDesynced && s.status === 'active' && <CalendarDesyncBadge compact />}
           <ServiceStatusBadge status={s.status} />
           <button
             type="button"
@@ -638,7 +683,7 @@ export function ServicesListPanel({ onOpenDetail, onCreate, reloadToken }: Servi
               e.stopPropagation();
               setActionsSheetService(s);
             }}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-accent"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-accent tap-target"
             aria-label={t('services.list.rowActions')}
           >
             <MoreHorizontal className="h-5 w-5 text-muted-foreground" />
@@ -682,7 +727,7 @@ export function ServicesListPanel({ onOpenDetail, onCreate, reloadToken }: Servi
       open={!!actionsSheetService}
       onOpenChange={(open) => { if (!open) setActionsSheetService(null); }}
     >
-      <SheetContent side="bottom" className="p-0">
+      <SheetContent side="bottom" className="p-0 pb-[env(safe-area-inset-bottom)]">
         {actionsSheetService && (() => {
           const s = actionsSheetService;
           const close = () => setActionsSheetService(null);

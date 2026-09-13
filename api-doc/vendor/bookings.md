@@ -1,5 +1,10 @@
 # Bookings
 
+**Source changed 2026-09-09 (DOC-PROGRAM close-out § 6, item 2)** — the backend defect this page
+carried as `🔴 3` is fixed: the calendar view's `date` key now groups in the **vendor's** timezone
+rather than the server's, and the response gained `meta.timezone`. § 0.3 and § 2 are updated; the
+instruction to ignore the key and group off `startAt` is withdrawn. Nothing else changed.
+
 **Verified against source on 2026-09-08** — R7 re-checked the nine routes (`modules/booking/routes/vendor-booking.routes.ts:23-86`), the seven-value booking payment enum (`models/booking.model.ts:159`), the transition map (`services/booking.service.ts:684-689`), and — the sharpest claim on the page — that `POST /:id/cancel` refunds and writes `cancelledAt`/`cancelledReason` (`:377-386`) while `PATCH /:id/status` to `cancelled` does **neither** and detaches the calendar only from `confirmed` (`:709-746`). ✅ **The calendar `date`-key warning is CORRECT and the backend comment is wrong:** `booking.service.ts:1013` says "YYYY-MM-DD in UTC" over a `format(booking.startAt, ...)` call, which formats in the SERVER local zone. No doc defects found.
 
 **Verified against backend source on 2026-08-24.**
@@ -43,7 +48,7 @@ wrong on both surfaces.
 A third enum, on the payment *transaction*, is **all uppercase**:
 `INITIATED · PENDING · SUCCEEDED · FAILED · CANCELLED · REFUNDED`.
 
-### 🔴 3. Times are UTC — except one field that is not
+### 3. Times are UTC — except the calendar's day key, which is the vendor's
 
 Everything on the wire is an ISO-8601 UTC instant with `Z`: `startAt`, `endAt`, `paidAt`,
 `cancelledAt`, `settledAt`, slot `start`/`end`, `expiresAt`. **There is no per-booking timezone
@@ -52,9 +57,16 @@ field** and no naive time anywhere.
 Availability and peak-hour pricing resolve against the **vendor's** `timezone` (set at onboarding,
 default `Africa/Douala`), and an availability rule may carry its own IANA override.
 
-⚠ **The one exception: the calendar view's `date` key is computed in the *server's* local
-timezone**, not UTC and not the vendor's. It is documented as UTC and is not. **Do not group by it
-if the day boundary matters — group client-side off `startAt`.**
+**The calendar view's `date` key is a wall-clock day, not an instant**, and it is computed in that
+same vendor timezone. The zone comes back beside it as **`meta.timezone`** — the only reliable way
+to re-derive a key from `startAt` yourself. Simplest is not to: group by the `date` key you were
+given.
+
+> ✅ **This was `🔴 3` until 2026-09-09, and the defect is fixed at source.** The key used to be
+> computed in the **server's** local timezone — not UTC and not the vendor's — while being
+> documented as UTC, so this section told you to ignore the key and group off `startAt` instead.
+> `meta.timezone` is new with the fix. Both instructions are obsolete; the key is now safe to use
+> and is the recommended one.
 
 ### 🔴 4. The wire key is `id`, not `_id`
 
@@ -123,11 +135,11 @@ A free booking (`requiresPayment: false`) is stamped `paid` automatically on sav
 **`startDate` and `endDate` are required**, ISO with offset, and the range is capped at **90 days**
 (`400 VALIDATION_ERROR` on the `endDate` path beyond that).
 
-Returns a **bare grouped array — no `meta`, no pagination:**
+Returns a **grouped array with no pagination**, and a `meta` carrying one key:
 
 ```jsonc
 { "success": true, "data": [{
-    "date": "2026-02-05",
+    "date": "2026-02-05",        // the VENDOR's wall-clock day — see meta.timezone
     "bookings": [{
       "bookingId": "…",           // NOT `id`
       "startAt": "…Z", "endAt": "…Z",
@@ -137,7 +149,8 @@ Returns a **bare grouped array — no `meta`, no pagination:**
       "customerEmail": "…|null",
       "externalCalendarEventId": "…|null"
     }]
-}] }
+}],
+  "meta": { "timezone": "Africa/Douala" } }
 ```
 
 Exactly eight keys per entry, and **two of them are named differently from the list endpoint**
@@ -146,7 +159,9 @@ the two views without a mapper.
 
 No status filter — cancelled bookings appear here too.
 
-See [§ 0.3](#-3-times-are-utc--except-one-field-that-is-not) about `date`.
+⚠ **`meta` is new as of 2026-09-09** — this section said "a bare grouped array, no `meta`" and that
+is no longer true. It carries the IANA zone the `date` keys were computed in, which is what makes
+them re-derivable; see [§ 0.3](#3-times-are-utc--except-the-calendars-day-key-which-is-the-vendors).
 
 ---
 

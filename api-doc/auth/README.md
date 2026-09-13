@@ -102,12 +102,22 @@ rotation *and* the auth middleware — precisely so the two token-reissuing rout
 The clock is carried inside the token as `auth_time` and is **copied, not re-stamped**, by all three
 non-credential paths.
 
-### Action required in this repository
+### ✅ Handled in this repository — no action
 
-`TERMINAL_AUTH_CODES` in [`src/services/api.ts:62`](../../src/services/api.ts) does not list it. The fall-through comment
-there is right — an unrecognised code costs one doomed round trip rather than a surprise sign-out —
-so you are not looping. But you are wasting a refresh and showing a worse message. Add
-`AUTH_SESSION_CAP_REACHED` and `AUTH_ACCOUNT_CLOSED`.
+**This section read "Action required" until 2026-09-09, and it was already stale when written.**
+There is no symbol named `TERMINAL_AUTH_CODES`; it was split into two sets keyed by status, and
+both codes are present and correctly placed:
+
+| Set | Where | Contains |
+|---|---|---|
+| `TERMINAL_401_CODES` | [`src/services/api.ts:62`](../../src/services/api.ts) | **`AUTH_SESSION_CAP_REACHED`**, plus the eight other terminal 401s |
+| `TERMINAL_403_CODES` | [`src/services/api.ts:104`](../../src/services/api.ts) | **`AUTH_ACCOUNT_CLOSED`**, `AUTH_ACCOUNT_SUSPENDED`, `AUTH_VENDOR_SUSPENDED` |
+
+`classifyAuthError` picks the set by status, so a 403 is never treated as refreshable and
+`AUTH_TOKEN_EXPIRED` — the one recoverable case — is deliberately in neither. Both locale catalogs
+carry copy for the two codes.
+
+⚠ If you are re-checking this, grep for `TERMINAL_401_CODES`, not the old name.
 
 ---
 

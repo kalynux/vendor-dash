@@ -252,8 +252,7 @@ A vendor **never** sets the lock; only an admin does. Setting the same priority 
 
 Body: `{ "targetRole", "targetUserId?" }`.
 
-- `targetRole: "admin"` with no `targetUserId` → assigns to the **admin pool**. This is the normal
-  vendor action: "escalate to support".
+- `targetRole: "admin"` with no `targetUserId` → writes `assigned_to_role: "admin"`.
 - Any other role → `targetUserId` is **mandatory**, else `400 TICKET_ASSIGN_FAILED`.
 
 Side effects: the target is silently added as a follower (subject to a lifetime cap of 5
@@ -262,8 +261,30 @@ written naming the role and the raw user id.
 
 > ✅ **The follower check is now present — re-verified 2026-09-08.** `TicketService.assignTicket`
 > calls `followerService.isFollower` at `ticket.service.ts:254-255`; this page said it did not.
-> Offer "escalate to support" (`targetRole: "admin"`, no id) and nothing else all the same — the
-> other targets need a raw user id a vendor has no way to obtain.
+
+### 🚫 Do not build vendor UI for this — verified against source 2026-09-09
+
+**`vendor-dash` deliberately does not implement this route.** `tickets.service.ts` covers every
+other ticket mutation; the omission is a decision, not an oversight, and a route-coverage audit
+should not re-raise it. Reasons, all read off the handler:
+
+1. **It routes nothing to support.** `assigned_to_role` is only ever an *optional list filter*
+   (`ticket.repository.ts:125,185`), and `findVisibleToUser` already gives admins **every** ticket.
+   Support's real queue keys on `admin_assignment`, a **different field** that this route never
+   writes — only the internal-admin-only `assignToAdministrator` does. So `targetRole: "admin"`
+   is an "escalate" button that escalates nothing.
+2. **The real escalation already ships.** `waiting_on_admin` is a first-class status with a label,
+   badge and dot colour in `ticket.constants.ts`, set through `PATCH /:id/status`, which the app
+   fully implements. That is the supported way to say "the ball is in support's court".
+3. **Every other target is unreachable, and unsafe if reached.** Non-admin roles require a raw
+   `users` id, and no vendor endpoint discloses one. Supplying one silently **adds that user as a
+   follower** (`ticket.service.ts:272-280`) — granting read access to the whole ticket and burning
+   one of only 5 *lifetime* non-admin follower slots, with no route to undo it.
+4. **The only visible effect is a leak.** A public system note is written reading
+   `"Assigned to <role> (User ID: <raw id>)"` — a raw id rendered into the vendor's own timeline.
+
+If support ever needs vendor-initiated escalation, the fix is a backend one (have the vendor path
+write `admin_assignment`, or drop `/assign` from `vendor-ticket.routes.ts`) — not a button here.
 
 ---
 

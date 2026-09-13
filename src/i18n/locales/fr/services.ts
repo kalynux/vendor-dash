@@ -120,6 +120,20 @@ export const services = {
             'relance sont disponibles depuis la fiche du service.',
     },
 
+    /**
+     * Badge de désynchronisation du calendrier sur la liste des services.
+     *
+     * La connexion est par VENDEUR, pas par service : le badge lit l'unique
+     * indicateur `requiresReauth` du compte et marque tous les services ACTIFS —
+     * la synchronisation écrit des plages occupées valables pour tout le compte.
+     */
+    calendarSync: {
+        desynced: 'Calendrier non synchronisé',
+        desyncedHint:
+            'L’accès à Google Agenda a été révoqué ou a expiré : vos plages occupées ne bloquent ' +
+            'plus les créneaux de ce service. Reconnectez-le dans l’onglet Calendrier.',
+    },
+
     transitions: {
         publish: 'Publier le service',
         unpublish: 'Dépublier (brouillon)',

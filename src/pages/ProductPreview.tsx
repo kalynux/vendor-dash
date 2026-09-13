@@ -16,7 +16,7 @@ import {
   type PreviewAction,
   type PreviewDevice,
 } from '@/components/preview';
-import { fetchProductById } from '@/services/products.service';
+import { fetchProductById, suspensionNoticeKey } from '@/services/products.service';
 import { useStoreStore } from '@/store';
 import { useApiError, useLocale, useTranslation, type TranslationKey } from '@/i18n';
 import {
@@ -190,7 +190,18 @@ export function ProductPreview() {
     );
   }
 
-  const unavailable = UNAVAILABLE[product.status];
+  // `suspended` is the one status whose "why" is not knowable from the status
+  // alone: the reason decides both the explanation and whether the vendor can do
+  // anything about it. Everything else keeps its single per-status help text.
+  const unavailable = UNAVAILABLE[product.status]
+    ? {
+        ...UNAVAILABLE[product.status]!,
+        help:
+          product.status === 'suspended'
+            ? suspensionNoticeKey(product.suspension, 'products.preview.unavailable.helpSuspended')
+            : UNAVAILABLE[product.status]!.help,
+      }
+    : undefined;
 
   // Most important first — that is the order the menu shows them in, and the bar
   // re-sorts the handful it renders as buttons.

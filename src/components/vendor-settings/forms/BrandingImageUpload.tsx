@@ -137,7 +137,7 @@ export function BrandingImageUpload({
                             type="button"
                             onClick={handleRemove}
                             aria-label={t('settings.branding.removeImage', { label })}
-                            className="text-muted-foreground hover:text-destructive transition-colors"
+                            className="text-muted-foreground hover:text-destructive transition-colors tap-target"
                         >
                             <X className="w-4 h-4" />
                         </button>

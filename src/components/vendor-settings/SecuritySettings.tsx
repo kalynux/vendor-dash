@@ -140,7 +140,7 @@ export function SecuritySettings() {
                   ? 'account.security.hidePassword'
                   : 'account.security.showPassword')}
                 aria-pressed={showCurrent}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground tap-target"
               >
                 {showCurrent ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
@@ -166,7 +166,7 @@ export function SecuritySettings() {
                   ? 'account.security.hidePassword'
                   : 'account.security.showPassword')}
                 aria-pressed={showNew}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground tap-target"
               >
                 {showNew ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
@@ -195,7 +195,7 @@ export function SecuritySettings() {
                   ? 'account.security.hidePassword'
                   : 'account.security.showPassword')}
                 aria-pressed={showConfirm}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground tap-target"
               >
                 {showConfirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>

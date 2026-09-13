@@ -433,7 +433,7 @@ export function PaymentDialog({
                     onClick={clearSaved}
                     aria-pressed={!selectedSavedId}
                     className={cn(
-                      'flex shrink-0 items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition',
+                      'tap-target flex shrink-0 items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition',
                       'outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
                       !selectedSavedId
                         ? 'border-primary bg-primary/5 text-primary'

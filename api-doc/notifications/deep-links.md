@@ -92,10 +92,15 @@ notification with no button, in an app that has not been rebuilt yet.
 | `plans` | `plan.expiring`, `plan.expired` | — |
 | `settings/storage` | `storage.alert` | — |
 
-**Your app currently ignores `path`** and routes from `aggregateType` + `aggregateId`
-instead, which is why your in-app inbox works. That is a legitimate way to satisfy this
-contract and nothing here asks you to abandon it — the labels above are simply what you
-would switch on if you ever preferred to.
+**Your in-app inbox routes from `aggregateType` + `aggregateId`**, not from `path`,
+which is a legitimate way to satisfy this contract and is unchanged —
+`notificationRoute` in `src/lib/notifications.utils.ts`.
+
+✅ **Since 2026-09-09 the app ALSO speaks `path`,** because the emailed button below
+carries nothing else. `routeFromNotificationPath` in the same file translates all
+eight labels, and it is called from three places: both SPA catch-alls in `App.tsx`
+and `routeFromUrl` in `src/platform/shell/deepLinks.ts`. One vocabulary, one
+resolver, two entry points — deliberately not two resolvers.
 
 ⚠ **The one row where the two sources disagree is `tickets/{{ticketId}}`.** The path carries
 the ticket; `aggregateId` carries the payout request. Your `notificationRoute` already
@@ -183,6 +188,13 @@ Those channels can only carry a URL, so the button is `{APP_URL}/{path}` — for
 **Web dashboards** — that URL has no `/dashboard` in it, and both SPAs answer an unmatched
 path with `Navigate to="/dashboard"`. So the recipient lands on the dashboard home with no
 explanation. Not a 404 — a silent wrong page, which is worse.
+
+> ✅ **Fixed in vendor-dash on 2026-09-09**, by the suggestion below: a `DeepLinkFallback`
+> element sits at both catch-alls in `App.tsx` and tries `routeFromNotificationPath` on the
+> incoming pathname before falling back to `/dashboard`. An unknown label still falls back,
+> per rule 5. Its Android App Link filter was widened at the same time — it claimed only
+> `pathPrefix="/dashboard"`, so an emailed `/orders/…` never reached the app to be routed.
+> **agency-dash is unchanged and still has this bug.**
 
 *A suggestion, not a requirement — you own this and may solve it any way you prefer.* The
 smallest change we can see is to reuse the translation you already do for push, one layer

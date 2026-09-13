@@ -536,6 +536,15 @@ export const errors = {
         STORAGE_DELETE_FAILED: 'We could not delete that file. Please try again.',
         STORAGE_QUOTA_EXCEEDED: 'You have used all your storage. Free some space or upgrade your plan.',
         STORAGE_CLEANUP_FAILED: 'We could not clean up those files. Please try again.',
+        // The storage backend cannot serve this file's bytes directly. Raised on
+        // a download attempt, not on a read — the metadata is fine.
+        STORAGE_DOWNLOAD_NOT_SUPPORTED: 'This file cannot be downloaded from here.',
+        // The three PAYMENT_LINK_* codes belong to the customer-facing pay-by-link
+        // flow. A vendor reaches them only through a shared link, never through a
+        // dashboard call, so the wording stays neutral about who is paying.
+        PAYMENT_LINK_NOT_FOUND: 'That payment link is not valid.',
+        PAYMENT_LINK_NOT_APPLICABLE: 'A payment link does not apply to this order.',
+        PAYMENT_LINK_NOT_PAYABLE: 'That payment link can no longer be paid.',
 
         // ── Addresses & geocoding ─────────────────────────────────────────────
         GEO_PROVIDER_NOT_CONFIGURED: 'Address search is unavailable right now. Enter the address manually.',

@@ -85,6 +85,12 @@ export const products = {
          * toast's description, from `errors[]`, where they exist.
          */
         partial: '{{success}} of {{total}} done — {{failed}} skipped.',
+        // The run stopped mid-way rather than reporting per-row failures. Naming
+        // what DID apply matters: the vendor is about to go looking for it.
+        stoppedPartway: plural({
+            one: 'Stopped after {{count}} product. The rest were not changed.',
+            other: 'Stopped after {{count}} products. The rest were not changed.',
+        }),
         done: plural({ one: '{{count}} product archived.', other: '{{count}} products archived.' }),
         published: plural({
             one: '{{count}} product published.',
@@ -289,6 +295,28 @@ export const products = {
         },
     },
 
+    /**
+     * Why a product is suspended, keyed by `suspension.reason`.
+     *
+     * The three delivery-agency reasons are NOT here: each screen keeps its own
+     * wording for those, because it names where on that screen the fix lives.
+     * What is here is every reason a delivery agency cannot explain.
+     */
+    suspension: {
+        agencyStorage:
+            'This product is suspended by the agency that warehouses it. Only they can lift it — you can still edit it here in the meantime.',
+        vendorSuspended:
+            'This product is suspended because your seller account is suspended. It comes back on its own once your account is restored.',
+        platformOversight:
+            'This product was suspended by an administrator. Contact support — this one cannot be lifted from the dashboard.',
+        // Nothing was deleted and an upgrade restores it, so this never says
+        // "removed". It is also the only suspension the vendor can clear
+        // themselves, which is why it is the only one with an action.
+        planQuota:
+            "This product is over your plan's limit for active products, so it is hidden — nothing was deleted. Upgrade your plan, or archive an older product, and it comes back automatically.",
+        planQuotaAction: 'Upgrade plan',
+    },
+
     fields: {
         title: 'Title',
         titlePlaceholder: 'e.g. Wireless Bluetooth Headphones',
@@ -316,11 +344,31 @@ export const products = {
         compareAtOptional: 'Optional',
         compareAtHigherHint: 'Shown struck through when higher than the price.',
         compareAtTooLowHint: 'Customers only see a discount when this is higher than the price.',
-        bargainMaxPrice: 'Negotiable up to',
-        bargainOptional: 'Optional — no negotiation',
-        bargainHint: 'Buyers can offer up to this. Blank switches it off.',
+        /**
+         * 🔴 Since 2026-09-07 this field IS the price shoppers see. `price`
+         * became a floor that is never published on any public route, so
+         * "negotiable up to" — which reads as private headroom above a live
+         * price — described the opposite of what the vendor was doing.
+         */
+        bargainMaxPrice: 'Asking price',
+        bargainOptional: 'Optional — sell at your price',
+        bargainOn: 'Allow buyers to negotiate',
+        bargainHint:
+            'Shoppers see this price and can offer down toward yours. Blank switches negotiation off and shows your price instead.',
         /** Create flow: the window saves fine, it just does nothing until AI discovery is on. */
-        bargainInertHint: 'Buyers can offer up to this. Starts once AI discovery is on.',
+        bargainInertHint:
+            'Becomes the price shoppers see once AI discovery is on. Until then they see your price.',
+        /** Your `price` under a bargain window — private, and worth saying so. */
+        bargainFloorHint: 'Your floor — shoppers never see this.',
+        /**
+         * The shop hides `compareAtPrice` entirely unless it beats the asking
+         * price, so a vendor loses their "was" price without being told.
+         */
+        bargainCompareAtHidden:
+            'Your compare-at price is not above the asking price, so shoppers will not see a "was" price at all. Raise it above {{max}}, or lower the asking price.',
+        /** Clearing a set ceiling drops the shelf price back to `price`. */
+        bargainClearWarning:
+            'Switching negotiation off lowers the price shoppers see from {{max}} to {{price}}.',
         unlimitedStock: 'Unlimited stock',
         unlimitedStockHint: 'Never runs out.',
         /** Shown instead of the hint when the product is warehoused by an agency. */
@@ -400,15 +448,26 @@ export const products = {
      * this copy may frame it as a discount.
      */
     bargain: {
-        title: 'Price negotiation',
-        description: 'Buyers can offer between your price and this ceiling.',
-        ceilingLabel: 'Negotiable up to',
+        title: 'Asking price & negotiation',
+        description:
+            'Shoppers see the asking price and can offer down toward the variant price, which stays private.',
+        ceilingLabel: 'Asking price',
         ceilingPlaceholder: 'No negotiation',
         /** The floor this variant's price implies, shown under the input. */
-        ceilingMin: 'Min {{min}} — 20% above price',
-        badge: 'Up to {{max}}',
+        ceilingMin: 'Min {{min}} — 20% above your price',
+        badge: 'Asking {{max}}',
         inertHint: 'Needs AI discovery on.',
-        clearHint: 'Leave a row blank to switch its negotiation off.',
+        clearHint: 'Leave a row blank to sell at your price instead.',
+        /** Shown before a save that removes a live asking price. */
+        clearConfirm:
+            'Switching negotiation off lowers the price shoppers see. Continue?',
+        clearConfirmRow: '{{variant}}: {{from}} → {{to}}',
+        /**
+         * The one thing a vendor filling in a "maximum" does not expect, so it is
+         * stated once at the top of the sheet rather than left to per-row hints.
+         */
+        shelfPriceNotice:
+            'This is the price on your storefront — not a private ceiling. It also drives where the product lands in price sorting and filters. Your variant price becomes a floor shoppers never see.',
 
         /**
          * The collapsed row on the review step — all that stays inline now the
@@ -546,6 +605,11 @@ export const products = {
 
     /** Client-side pre-flight blockers, and the dialog that reports them. */
     activation: {
+        // 403 BILLING_LIMIT_EXCEEDED. `available` is the number the vendor can
+        // act on — "you have room for N more" — and archiving is the free way
+        // out, so it is named beside the upgrade.
+        planLimitExceeded:
+            "You have reached your plan's limit for active products, so this one cannot go live. You have room for {{available}} more. Upgrade your plan, or archive a product you no longer sell.",
         notCreated: 'Product has not been created yet',
         noDescription: 'A product description is required',
         noActiveVariant: 'At least one active variant is required',

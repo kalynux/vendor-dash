@@ -443,6 +443,12 @@ export const errors = {
         STORAGE_DELETE_FAILED: "Nous n'avons pas pu supprimer ce fichier. Réessayez.",
         STORAGE_QUOTA_EXCEEDED: 'Vous avez utilisé tout votre espace de stockage. Libérez de la place ou changez de forfait.',
         STORAGE_CLEANUP_FAILED: "Nous n'avons pas pu nettoyer ces fichiers. Réessayez.",
+        // Le stockage ne peut pas servir les octets de ce fichier directement.
+        STORAGE_DOWNLOAD_NOT_SUPPORTED: 'Ce fichier ne peut pas être téléchargé ici.',
+        // Les trois codes PAYMENT_LINK_* relèvent du paiement par lien côté client.
+        PAYMENT_LINK_NOT_FOUND: 'Ce lien de paiement n’est pas valide.',
+        PAYMENT_LINK_NOT_APPLICABLE: 'Un lien de paiement ne s’applique pas à cette commande.',
+        PAYMENT_LINK_NOT_PAYABLE: 'Ce lien de paiement ne peut plus être payé.',
 
         // ── Adresses & géocodage ──────────────────────────────────────────────
         GEO_PROVIDER_NOT_CONFIGURED: "La recherche d'adresse est indisponible. Saisissez l'adresse manuellement.",

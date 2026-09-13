@@ -19,7 +19,7 @@ import { formatPhoneInternational } from '@/lib/phone';
 import { CustomerAvatar } from '@/components/customers/CustomerAvatar';
 import { FlagBadge, FlagDot } from '@/components/customers/FlagBadge';
 import { RefundDialog } from '@/components/customers/RefundDialog';
-import { responsiveSheetProps } from '@/components/customers/customer.constants';
+import { responsiveSheetProps } from '@/components/ui/responsive-sheet';
 import { OrderStatusBadge } from '@/components/orders/OrderStatusBadge';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useTranslation, useFormatters, useApiError, type TranslationKey } from '@/i18n';
@@ -265,7 +265,7 @@ export function CustomerDetailSheet({
                             type="button"
                             onClick={() => { setEditingName(true); setDraftName(customer.hasNameOverride ? customer.displayName : ''); }}
                             aria-label={t('customers.detail.editName')}
-                            className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-70 transition hover:bg-accent hover:opacity-100"
+                            className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-70 transition hover:bg-accent hover:opacity-100 tap-target"
                           >
                             <Pencil className="h-4 w-4" />
                           </button>
@@ -501,7 +501,7 @@ function InfoRow({ icon, value }: { icon: React.ReactNode; value: string }) {
 const PAYMENT_PILL_CLASSES: Record<string, string> = {
   paid: 'border-green-500 text-green-600 bg-green-50',
   partially_refunded: 'border-amber-500 text-amber-600 bg-amber-50',
-  refunded: 'border-gray-400 text-gray-600 bg-gray-50',
+  refunded: 'border-border text-muted-foreground bg-muted',
   pending: 'border-amber-500 text-amber-600 bg-amber-50',
   authorized: 'border-blue-500 text-blue-600 bg-blue-50',
   disputed: 'border-orange-500 text-orange-600 bg-orange-50',

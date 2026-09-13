@@ -10,7 +10,7 @@
 // display survives a step remount.
 
 import { useState } from 'react';
-import { ImagePlus, Loader2, RefreshCw, Trash2 } from 'lucide-react';
+import { ImagePlus, Loader2, Lock, RefreshCw, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import {
@@ -123,12 +123,21 @@ export function VariantImageStack({
           )}
           title={f.originalName ?? t('products.media.imageFallback')}
         >
-          <img
-            src={f.url}
-            alt={f.originalName ?? t('products.media.variantImageAlt')}
-            className="h-full w-full object-cover"
-            draggable={false}
-          />
+          {/* `url` is null for a quota-blocked or private file. The lock keeps
+              that distinct from an empty slot — see files.service's
+              `fileDisplayState`. */}
+          {f.url ? (
+            <img
+              src={f.url}
+              alt={f.originalName ?? t('products.media.variantImageAlt')}
+              className="h-full w-full object-cover"
+              draggable={false}
+            />
+          ) : (
+            <span className="flex h-full w-full items-center justify-center text-amber-600">
+              <Lock className="size-3.5" aria-hidden />
+            </span>
+          )}
         </button>
       ))}
 
@@ -140,7 +149,7 @@ export function VariantImageStack({
           disabled={!interactive}
           style={{ marginLeft: files.length === 0 ? 0 : -10, zIndex: files.length + 1 }}
           className={cn(
-            'relative flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-dashed border-border bg-background text-muted-foreground transition-colors',
+            'tap-target relative flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-dashed border-border bg-background text-muted-foreground transition-colors',
             'hover:z-20 hover:border-primary/60 hover:text-foreground',
             !interactive && 'opacity-50 cursor-not-allowed',
           )}
@@ -177,11 +186,18 @@ export function VariantImageStack({
           {openFile && (
             <div className="space-y-3">
               <div className="overflow-hidden rounded-lg border border-border bg-muted">
-                <img
-                  src={openFile.url}
-                  alt={openFile.originalName ?? t('products.media.variantImageAlt')}
-                  className="max-h-72 w-full object-contain"
-                />
+                {openFile.url ? (
+                  <img
+                    src={openFile.url}
+                    alt={openFile.originalName ?? t('products.media.variantImageAlt')}
+                    className="max-h-72 w-full object-contain"
+                  />
+                ) : (
+                  <div className="flex h-40 w-full flex-col items-center justify-center gap-2 text-amber-600">
+                    <Lock className="size-6" aria-hidden />
+                    <span className="text-xs">{t('media.blocked.thumbnailHint')}</span>
+                  </div>
+                )}
               </div>
               <dl className="grid grid-cols-2 gap-1 text-xs text-muted-foreground">
                 <div>

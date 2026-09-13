@@ -255,19 +255,6 @@ export const NOTE_MAX_LENGTH = 300;
 // endpoints cap the description differently, so one shared number was wrong on
 // whichever form it wasn't written for.
 
-/**
- * Responsive props for a ticket Sheet: a bottom sheet on mobile, a right-side
- * panel on desktop. `desktopWidth` tunes the panel width on desktop.
- */
-export function responsiveSheetProps(
-  isMobile: boolean,
-  desktopWidth = 'sm:max-w-xl',
-): { side: 'bottom' | 'right'; className: string } {
-  return isMobile
-    ? { side: 'bottom', className: 'h-[92vh] rounded-t-2xl' }
-    : { side: 'right', className: `w-full ${desktopWidth}` };
-}
-
 /** Format bytes into a short human-readable size. */
 // ─── Type icon / colour ───────────────────────────────────────────────────────
 // Each ticket type maps to a lucide icon + tint, grouped by domain. Used for the

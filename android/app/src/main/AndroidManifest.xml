@@ -46,11 +46,20 @@
               URLs, so a link in an email or a WhatsApp message opens the app
               rather than a browser tab the vendor then has to sign in to.
 
-              Only `/dashboard` is claimed, not the whole host. The marketing
-              pages, the storefront preview targets and anything else on
-              vendor.wi-mall.com should keep opening in a browser — an app that
-              swallows every link to its own domain is the reason people turn
-              this feature off.
+              `/dashboard` is claimed, plus the eight notification deep-link
+              prefixes. The marketing pages, the storefront preview targets and
+              anything else on vendor.wi-mall.com keep opening in a browser — an
+              app that swallows every link to its own domain is the reason people
+              turn this feature off — so these are enumerated rather than claiming
+              the whole host.
+
+              ⚠ The eight below are NOT arbitrary: they are the backend's
+              notification deep-link vocabulary (api-doc/notifications/deep-links.md),
+              which email / WhatsApp / Telegram buttons use. Those URLs carry NO
+              `/dashboard` prefix — the backend does not know this app's route
+              tree — so without these entries an emailed "View order" button never
+              reaches the app at all. `routeFromNotificationPath` translates them
+              once they arrive. Adding a label there means adding it here too.
 
               ⚠ `autoVerify` is a REQUEST, not a guarantee. Android fetches
               https://vendor.wi-mall.com/.well-known/assetlinks.json at install
@@ -70,6 +79,34 @@
                 <data android:scheme="https"
                       android:host="vendor.wi-mall.com"
                       android:pathPrefix="/dashboard" />
+                <!-- The notification deep-link vocabulary, in the doc's order. -->
+                <data android:scheme="https"
+                      android:host="vendor.wi-mall.com"
+                      android:pathPrefix="/orders" />
+                <data android:scheme="https"
+                      android:host="vendor.wi-mall.com"
+                      android:pathPrefix="/bookings" />
+                <data android:scheme="https"
+                      android:host="vendor.wi-mall.com"
+                      android:pathPrefix="/products" />
+                <data android:scheme="https"
+                      android:host="vendor.wi-mall.com"
+                      android:pathPrefix="/agency-connections" />
+                <data android:scheme="https"
+                      android:host="vendor.wi-mall.com"
+                      android:pathPrefix="/stock-requests" />
+                <data android:scheme="https"
+                      android:host="vendor.wi-mall.com"
+                      android:pathPrefix="/tickets" />
+                <data android:scheme="https"
+                      android:host="vendor.wi-mall.com"
+                      android:pathPrefix="/plans" />
+                <!-- Only `settings/storage` is in the vocabulary, but a prefix
+                     cannot express that; the resolver returns null for any other
+                     `settings/*` and the app lands on the dashboard. -->
+                <data android:scheme="https"
+                      android:host="vendor.wi-mall.com"
+                      android:pathPrefix="/settings/storage" />
             </intent-filter>
         </activity>
 

@@ -20,6 +20,8 @@ export const nav = {
         agency: 'Agence',
         connection: 'Connexion',
         browse: 'Parcourir',
+        // Pas seulement « Avis » : un vendeur évalue des livraisons, jamais des produits.
+        deliveryReviews: 'Évaluations',
         account: 'Compte',
         profile: 'Profil',
         store: 'Boutique',

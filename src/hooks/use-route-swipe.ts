@@ -11,10 +11,10 @@ import { useSwipeNavigate } from '@/hooks/use-swipe-navigate';
  *
  *  - **`DashboardShell`** passes the bottom tab bar's destinations, so a swipe
  *    walks the tab bar without reaching for it.
- *  - **The sub-tab pages** (Account, Settings, Inventory, Agency, Bookings)
- *    pass their own tabs, so a swipe walks the pill strip. On a phone those
- *    strips are the only navigation on screen, and several of them do not fit
- *    across 360px — Account has six.
+ *  - **The sub-tab pages** (Account, Settings, Inventory, Agency, Bookings,
+ *    Analytics) pass their own tabs, so a swipe walks the pill strip. On a
+ *    phone those strips are the only navigation on screen, and several of them
+ *    do not fit across 360px — Account has six.
  *
  * The two sets never overlap: no bottom-tab destination has sub-tabs, and no
  * sub-tab page is a bottom-tab destination. So exactly one ring is live on any

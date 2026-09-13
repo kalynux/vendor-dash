@@ -1125,7 +1125,7 @@ export function Inventory() {
               onClick={() => goToTab(value)}
               aria-current={active ? 'page' : undefined}
               className={cn(
-                'flex shrink-0 items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors',
+                'tap-target flex shrink-0 items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors',
                 active
                   ? 'border-foreground bg-foreground text-background'
                   : 'border-border bg-background',

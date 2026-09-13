@@ -380,7 +380,7 @@ export function StorefrontSettings() {
                     type="button"
                     aria-label={t('settings.storefront.changeLogo')}
                     onClick={() => setPicker('logo')}
-                    className="absolute -bottom-1.5 -right-1.5 rounded-full border border-border bg-background p-1.5 text-foreground shadow-sm transition-colors hover:bg-accent"
+                    className="absolute -bottom-1.5 -right-1.5 rounded-full border border-border bg-background p-1.5 text-foreground shadow-sm transition-colors hover:bg-accent tap-target"
                   >
                     <Camera className="w-3.5 h-3.5" />
                   </button>
@@ -388,7 +388,7 @@ export function StorefrontSettings() {
                     type="button"
                     aria-label={t('settings.storefront.removeLogo')}
                     onClick={() => set('logo', null)}
-                    className="absolute -right-1.5 -top-1.5 rounded-full border border-border bg-background p-1 text-muted-foreground shadow-sm transition-colors hover:text-destructive"
+                    className="absolute -right-1.5 -top-1.5 rounded-full border border-border bg-background p-1 text-muted-foreground shadow-sm transition-colors hover:text-destructive tap-target"
                   >
                     <X className="w-3 h-3" />
                   </button>

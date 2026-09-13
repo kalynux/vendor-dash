@@ -13,7 +13,7 @@ import {
   AccordionContent,
 } from '@/components/ui/accordion';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { responsiveSheetProps } from '@/components/tickets/ticket.constants';
+import { responsiveSheetProps } from '@/components/ui/responsive-sheet';
 import { useTranslation } from '@/i18n';
 
 const FAQS: { q: string; a: string }[] = [

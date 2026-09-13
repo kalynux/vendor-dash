@@ -110,6 +110,38 @@ export function fileRefFromApiFile(file: ApiFile): FileRef {
   };
 }
 
+/**
+ * The four states a file slot can be in on screen, collapsed from `url` + `access`
+ * so no consumer has to re-derive the precedence.
+ *
+ * 🔴 **`quota_blocked` OUTRANKS `authorized` and is tested first.** A blocked file
+ * inside a private tree reports `quota_blocked`, and a check written the other way
+ * round sends the vendor to a permissions conversation about a billing problem
+ * (api-doc/vendor/storage.md § 3.1).
+ *
+ *  - `renderable` — there is a URL; paint it.
+ *  - `blocked`    — the OWNER is over their plan's storage cap. The bytes and the
+ *                   database row are both intact and an upgrade restores them, so
+ *                   the words are *locked* / *hidden* and the fix is *upgrade or
+ *                   delete something older*. **Never "missing" or "deleted"** — the
+ *                   second starts the wrong support conversation.
+ *  - `restricted` — a private tree. There is no URL to render and no vendor route
+ *                   that serves the bytes; show metadata instead.
+ *  - `empty`      — the slot is genuinely unset.
+ */
+export type FileDisplayState = 'renderable' | 'blocked' | 'restricted' | 'empty';
+
+export function fileDisplayState(
+  ref: string | FileUrlSource | null | undefined,
+): FileDisplayState {
+  if (!ref) return 'empty';
+  if (typeof ref === 'string') return 'renderable';
+  // Quota first — see the precedence note above.
+  if (ref.access === 'quota_blocked') return 'blocked';
+  if (ref.url) return 'renderable';
+  return ref.access === 'authorized' ? 'restricted' : 'empty';
+}
+
 /** Coarse UI category from a MIME type. */
 export function kindFromMime(mimeType: string): FileKind {
   if (mimeType.startsWith('image/')) return 'image';
@@ -123,14 +155,6 @@ export function categoryFromKind(kind: FileKind): MediaCategory {
   return kind; // FileKind is a subset of MediaCategory
 }
 
-/**
- * The ONLY attachment signal: a file is attached if it has live references.
- * Reads `usage`, never `usageCount`.
- */
-export function isAttached(detail: ApiFileDetail): boolean {
-  return detail.usage.totalReferences > 0;
-}
-
 // ─── Reads ────────────────────────────────────────────────────────────────────
 
 export async function listFiles(
@@ -139,7 +163,10 @@ export async function listFiles(
   const qs = buildQueryString(params as Record<string, unknown>);
   const res = await api.get<FileListResponse>(`/files${qs}`);
   return {
-    files: res.data.files,
+    // F-26: this endpoint leaks soft-deleted rows — it is the only list route on
+    // the platform that does not exclude them. Filter here or a file the vendor
+    // deleted comes straight back into the media browser.
+    files: res.data.files.filter((f) => f.deletedAt == null),
     pagination: res.data.pagination,
     // Embedded usage summary (api-doc/vendor/storage.md §2); `null` for admins.
     storage: res.data.storage ?? null,
@@ -332,7 +359,14 @@ function errorFromXhr(xhr: XMLHttpRequest, files: File[]): ApiError {
   }
   // Same envelope as `fetch`, so it goes through the same parser — `category`,
   // `requestId` and the normalized field errors come along for free.
-  const err = errorFromBody(xhr.status, body, xhr.getResponseHeader('Retry-After'));
+  const err = errorFromBody(
+    xhr.status,
+    body,
+    xhr.getResponseHeader('Retry-After'),
+    // Set on every response and the one header exposed cross-origin, so an
+    // upload that fails with a non-JSON 5xx still yields an id to quote.
+    xhr.getResponseHeader('X-Request-Id'),
+  );
   // `fileIndex` is scoped to this request's own file list. Because a mixed
   // selection is split across two requests, backfill each violation's filename
   // from THIS request so per-file messaging stays correct after the split.

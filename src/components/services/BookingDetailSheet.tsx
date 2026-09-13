@@ -25,9 +25,10 @@ import { BookingStatusBadge, PaymentStatusBadge } from '@/components/services/St
 import { RescheduleSheet } from '@/components/services/RescheduleSheet';
 import { CompleteBookingDialog } from '@/components/services/CompleteBookingDialog';
 import {
-  responsiveSheetProps, toMajorUnits,
+  toMajorUnits,
   BOOKING_TRANSITIONS, CANCEL_REASON_MAX, type BookingTransition,
 } from '@/components/services/service.constants';
+import { responsiveSheetProps } from '@/components/ui/responsive-sheet';
 import type { Booking } from '@/types/services.types';
 
 interface BookingDetailSheetProps {

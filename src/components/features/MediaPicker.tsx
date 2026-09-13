@@ -22,6 +22,7 @@ import {
   ChevronLeft,
   ChevronRight,
   AlertCircle,
+  Lock,
   X,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -64,6 +65,7 @@ import {
   uploadMediaWithProgress,
   validateMediaSelection,
   resolveFileUrl,
+  fileDisplayState,
   kindFromMime,
 } from '@/services/files.service';
 import type {
@@ -158,11 +160,25 @@ function describeAccepted(types: FileKind[], t: Translate): string {
 // Module-level so its identity is stable across renders — defining it inside the
 // component would remount every <img> on each selection (visible as a flicker).
 function FileThumb({ file }: { file: ApiFile }) {
+  const { t } = useTranslation();
   const kind = kindFromMime(file.mimeType);
   const Icon = typeIcons[kind];
   // `null` for an authorized-access file — there is no URL to preview, so these
   // fall through to the type icon below.
   const url = resolveFileUrl(file);
+
+  // A file the vendor's plan is hiding. It still picks and attaches perfectly
+  // well — only the preview is gone — so this marks it rather than removing it.
+  if (fileDisplayState(file) === 'blocked') {
+    return (
+      <div
+        className="flex h-full w-full items-center justify-center bg-amber-500/10 text-amber-600"
+        title={t('media.blocked.thumbnailHint')}
+      >
+        <Lock className="h-5 w-5" />
+      </div>
+    );
+  }
   if (kind === 'image' && url) {
     return (
       <img
@@ -732,7 +748,7 @@ export function MediaPicker({
         <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
           <SheetContent
             side="bottom"
-            className="flex h-[92vh] flex-col gap-0 rounded-t-2xl p-0 [&>button]:hidden"
+            className="flex h-[92dvh] flex-col gap-0 rounded-t-2xl p-0 pb-[env(safe-area-inset-bottom)] [&>button]:hidden"
           >
             <SheetHeader className="border-b px-4 pb-3 pt-4 text-left">
               <SheetTitle>{titleNode}</SheetTitle>
@@ -743,7 +759,7 @@ export function MediaPicker({
         </Sheet>
       ) : (
         <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-          <DialogContent className="flex max-h-[90vh] max-w-5xl flex-col gap-0 overflow-hidden p-0">
+          <DialogContent className="flex max-h-[90dvh] max-w-5xl flex-col gap-0 overflow-hidden p-0">
             <DialogHeader className="border-b px-6 pb-4 pt-6">
               <DialogTitle>{titleNode}</DialogTitle>
             </DialogHeader>

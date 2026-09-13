@@ -182,7 +182,7 @@ function Chip({
       onClick={onClick}
       aria-pressed={selected}
       className={cn(
-        'inline-flex items-center gap-1.5 rounded-full border px-3.5 py-2 text-sm transition-colors',
+        'tap-target inline-flex items-center gap-1.5 rounded-full border px-3.5 py-2 text-sm transition-colors',
         'focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50',
         selected
           ? 'border-primary bg-primary text-primary-foreground font-medium'

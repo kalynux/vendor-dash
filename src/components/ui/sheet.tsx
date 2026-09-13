@@ -63,6 +63,14 @@ function SheetContent({
             "data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left inset-y-0 left-0 h-full w-3/4 border-r sm:max-w-sm rounded-r-[15px] overflow-hidden",
           side === "top" &&
             "data-[state=closed]:slide-out-to-top data-[state=open]:slide-in-from-top inset-x-0 top-0 h-auto border-b rounded-b-[15px] overflow-hidden",
+          // No bottom safe-area inset here, deliberately. `cn` is tailwind-merge
+          // and `className` merges last, so a `pb-*` in this base string is
+          // STRIPPED by any call site passing `p-0` — which most bottom sheets do
+          // for a pinned header/footer. It would silently no-op on exactly the
+          // sheets that need it. The inset is applied per surface instead: via
+          // `responsiveSheetProps` (@/components/ui/responsive-sheet) or, for a
+          // hardcoded side="bottom", a `pb-[env(safe-area-inset-bottom)]` written
+          // after the padding reset. See also FilterSheet and ResponsiveModal.
           side === "bottom" &&
             "data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom inset-x-0 bottom-0 h-auto border-t rounded-t-[15px] overflow-hidden",
           className
@@ -70,7 +78,12 @@ function SheetContent({
         {...props}
       >
         {children}
-        <SheetPrimitive.Close className="ring-offset-background focus:ring-ring data-[state=open]:bg-secondary absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none">
+        {/* Painted box is the bare 16px icon. `tap-target` takes the touchable
+            region to 44px; `absolute` outranks the utility's zero-specificity
+            `position`, so the icon does not move. Call sites that pull the
+            close in to `right-3` lose ~2px of halo to the content's
+            `overflow-hidden` — still 42px, against 16px before. */}
+        <SheetPrimitive.Close className="ring-offset-background focus:ring-ring data-[state=open]:bg-secondary absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none tap-target">
           <XIcon className="size-4" />
           <span className="sr-only">Close</span>
         </SheetPrimitive.Close>

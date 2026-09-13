@@ -14,6 +14,68 @@ export const agency = {
     tabSubtitles: {
         connections: 'The delivery agencies you work with, and which one is your default',
         browse: 'Find delivery agencies to connect with',
+        reviews: 'The delivery ratings you have submitted',
+    },
+
+    /**
+     * Delivery reviews the vendor has written.
+     *
+     * 🔴 A vendor rates a DELIVERY — never a product, never a customer. What is
+     * actually scored is the agent and the agency who carried it, but the author's
+     * view deliberately does not name either, so none of this copy may imply it
+     * does. It also may not offer editing: the surface is write-once.
+     */
+    reviews: {
+        title: 'Your delivery ratings',
+        hint: 'Ratings you submitted from an order. Rate a delivery from the order it belongs to.',
+        writeOnceNotice:
+            "Ratings can't be changed or removed once submitted. A rating on its own goes live straight away; adding a comment sends it to a moderator first.",
+        countSummary: plural({ one: '{{count}} rating', other: '{{count}} ratings' }),
+        filterTitle: 'Filter',
+        /** Last six characters of the shipment id — see `deliveryRef`. */
+        deliveryRef: 'Delivery {{ref}}',
+        ratingOnly: 'Rating only',
+
+        status: {
+            // Not "Live"/"Hidden": these are the three states the backend names,
+            // and `pending` has to read as "we have it, it just isn't up yet".
+            published: 'Published',
+            pending: 'Awaiting review',
+            rejected: 'Not published',
+        },
+
+        columns: {
+            rating: 'Rating',
+            delivery: 'Delivery',
+            comment: 'Comment',
+            submitted: 'Submitted',
+            status: 'Status',
+        },
+
+        filters: {
+            status: 'Status',
+            anyStatus: 'Any status',
+        },
+
+        empty: {
+            none: "You haven't rated a delivery yet",
+            noneHint:
+                'Open a delivered order and use "Rate delivery" to score how it went. Ratings help agencies see which agents are doing well.',
+            filtered: 'No ratings match that filter',
+            // The whole page was product reviews written as a customer.
+            otherRolesOnly: 'No delivery ratings on this page',
+        },
+        // The count the pager shows includes reviews written under another role,
+        // because the endpoint counts them. Say so rather than let the two numbers
+        // silently disagree.
+        otherRolesHidden: plural({
+            one: '{{count}} review written under another role is hidden here.',
+            other: '{{count}} reviews written under another role are hidden here.',
+        }),
+
+        errors: {
+            loadFailed: "We couldn't load your ratings. Please try again.",
+        },
     },
 
     page: {

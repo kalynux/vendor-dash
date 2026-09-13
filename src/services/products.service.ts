@@ -24,6 +24,8 @@ import type {
   CreateProductPayload,
   UpdateProductPayload,
   ApiProductStatus,
+  ApiProductSuspension,
+  ProductSuspensionReason,
   CreateVariantPayload,
   UpdateVariantPayload,
   CreateOptionPayload,
@@ -53,12 +55,17 @@ function adaptToListItem(p: ApiProduct): ProductListItem {
     title: p.title,
     type: p.type,
     status: p.status,
+    // Only set while suspended; the reason decides what we tell the vendor.
+    suspension: p.suspension ?? null,
     category: p.category,
     tags: p.tags,
     // Absent on a backend build that predates simple mode — fall back to the
     // advanced editor, which every pre-existing product belongs to anyway.
     mode: p.mode ?? 'advanced',
     firstFileUrl: p.fileIds[0]?.url ?? null,
+    // Carry the access class, not just the URL: a quota-blocked image and an
+    // unset one both arrive as `url: null` and mean opposite things.
+    firstFileAccess: p.fileIds[0]?.access ?? null,
     hasVariants: p.hasVariants,
     defaultVariantId: p.defaultVariantId,
     createdAt: p.createdAt,
@@ -132,10 +139,6 @@ export async function updateProductStatus(id: string, status: ApiProductStatus):
   return res.data;
 }
 
-export async function archiveProduct(id: string): Promise<void> {
-  await api.delete<ArchiveResponse>(`/vendor/products/${id}`);
-}
-
 /**
  * Both bulk routes cap at 50 ids — more is a `400 VALIDATION_ERROR` — so larger
  * selections are chunked and the per-chunk results summed.
@@ -150,6 +153,25 @@ export async function archiveProduct(id: string): Promise<void> {
  */
 const BULK_CHUNK_SIZE = 50;
 
+/**
+ * A bulk run that a later chunk aborted. `totals` holds what the earlier chunks
+ * really did apply — throwing it away and reporting "nothing happened" is a lie
+ * the vendor then acts on.
+ */
+export class BulkPartialError extends Error {
+  // Assigned in the body rather than declared as constructor parameter
+  // properties: `erasableSyntaxOnly` is on, and that syntax emits code.
+  readonly cause: unknown;
+  readonly totals: BulkArchiveResult;
+
+  constructor(cause: unknown, totals: BulkArchiveResult) {
+    super('Bulk operation stopped partway');
+    this.name = 'BulkPartialError';
+    this.cause = cause;
+    this.totals = totals;
+  }
+}
+
 async function runBulk(
   path: string,
   productIds: string[],
@@ -157,10 +179,20 @@ async function runBulk(
 ): Promise<BulkArchiveResult> {
   const totals: BulkArchiveResult = { success: 0, failed: 0, total: 0, errors: [] };
   for (let i = 0; i < productIds.length; i += BULK_CHUNK_SIZE) {
-    const res = await api.post<BulkArchiveResponse>(path, {
-      ...extra,
-      productIds: productIds.slice(i, i + BULK_CHUNK_SIZE),
-    });
+    let res: BulkArchiveResponse;
+    try {
+      res = await api.post<BulkArchiveResponse>(path, {
+        ...extra,
+        productIds: productIds.slice(i, i + BULK_CHUNK_SIZE),
+      });
+    } catch (err) {
+      // A well-formed bulk request normally answers 200 with per-row `errors[]`.
+      // `bulk/status` with `draft` is the exception: it is quota-gated and
+      // refuses the WHOLE request with 403 BILLING_LIMIT_EXCEEDED, so on a
+      // multi-chunk selection the earlier chunks have already applied.
+      if (i > 0) throw new BulkPartialError(err, totals);
+      throw err;
+    }
     totals.success += res.data.success;
     totals.failed += res.data.failed;
     totals.total += res.data.total;
@@ -299,13 +331,6 @@ export async function setDefaultVariant(productId: string, variantId: string): P
 
 export async function fetchVariants(productId: string): Promise<ApiVariant[]> {
   const res = await api.get<VariantListResponse>(`/vendor/products/${productId}/variants`);
-  return res.data;
-}
-
-export async function fetchVariantById(productId: string, variantId: string): Promise<ApiVariant> {
-  const res = await api.get<VariantDetailResponse>(
-    `/vendor/products/${productId}/variants/${variantId}`,
-  );
   return res.data;
 }
 
@@ -520,17 +545,6 @@ export async function removeVariantAsset(
   );
 }
 
-export async function updateVariantDigitalConfig(
-  productId: string,
-  variantId: string,
-  config: { maxDownloads?: number | null; expiresAfterDays?: number | null },
-): Promise<void> {
-  await api.patch<ArchiveResponse>(
-    `/vendor/products/${productId}/variants/${variantId}/digital/config`,
-    config,
-  );
-}
-
 // Service variant only — merge-patch the scheduling/peak config (duration,
 // buffers, bookingMode, maxBookings, peakHours). Mirrors the digital/config
 // endpoint above. Returns the updated variant.
@@ -547,13 +561,6 @@ export async function updateVariantServiceConfig(
 }
 
 // ─── Vectorisation ────────────────────────────────────────────────────────────
-
-export async function getVectorisationStatus(productId: string): Promise<VectorisationStatusDto> {
-  const res = await api.get<VectorisationActionResponse>(
-    `/vendor/products/${productId}/vectorisation/status`,
-  );
-  return res.data;
-}
 
 // Consolidated toggle — replaces the previous POST /vectorisation/enable and
 // POST /vectorisation/disable routes (both removed). Pass `enabled: true|false`.
@@ -591,6 +598,47 @@ export async function retryVectorisation(productId: string): Promise<Vectorisati
   return res.data;
 }
 
+// ─── Suspension ───────────────────────────────────────────────────────────────
+// A suspended product used to mean exactly one thing here — a delivery-agency
+// problem — and all three notices said so. Since 2026-08-24 a plan downgrade
+// suspends over-cap products too (api-doc/vendor/products.md § 11), and that one
+// needs the opposite advice: there is no agency to fix, and no restore endpoint
+// lifts it. Only room reappearing does.
+//
+// The three delivery-agency reasons keep their existing, screen-specific wording
+// (each names where the fix lives on that screen), so those return the caller's
+// fallback key rather than a generic replacement.
+
+const SUSPENSION_NOTICE_KEYS: Partial<Record<ProductSuspensionReason, TranslationKey>> = {
+  agency_storage_suspended: 'products.suspension.agencyStorage',
+  vendor_suspended: 'products.suspension.vendorSuspended',
+  platform_oversight: 'products.suspension.platformOversight',
+  plan_quota_exceeded: 'products.suspension.planQuota',
+};
+
+/**
+ * Which sentence explains this suspension.
+ *
+ * `fallback` is the screen's own delivery-agency copy — returned for the three
+ * agency-link reasons and when the backend sends no `suspension` at all, which is
+ * what every build before 2026-08-24 did. Guessing "delivery agency" there keeps
+ * the previous behaviour rather than inventing a cause.
+ */
+export function suspensionNoticeKey(
+  suspension: ApiProductSuspension | null | undefined,
+  fallback: TranslationKey,
+): TranslationKey {
+  if (!suspension) return fallback;
+  return SUSPENSION_NOTICE_KEYS[suspension.reason] ?? fallback;
+}
+
+/** Only a plan-quota suspension has an action the vendor can take from here. */
+export function isPlanQuotaSuspension(
+  suspension: ApiProductSuspension | null | undefined,
+): boolean {
+  return suspension?.reason === 'plan_quota_exceeded';
+}
+
 // ─── Activation pre-flight ────────────────────────────────────────────────────
 // 422 error codes from the status endpoint → the catalog key that explains them.
 // Keys rather than sentences: this module has no React context, so the call site
@@ -598,6 +646,11 @@ export async function retryVectorisation(productId: string): Promise<Vectorisati
 
 export const ACTIVATION_ERROR_KEYS: Record<string, TranslationKey> = {
   CATALOG_PRODUCT_INVALID_STATE: 'errors.codes.CATALOG_PRODUCT_INVALID_STATE',
+  // A 403, not a 422, and new to this map: since 2026-08-24 `PATCH /:id/status`
+  // out of `archived` and `POST /:id/duplicate` are both quota-gated, because a
+  // draft occupies a plan slot. `details.{limit,current,requested,available}`
+  // reach the string as interpolation params.
+  BILLING_LIMIT_EXCEEDED: 'products.activation.planLimitExceeded',
   CATALOG_PRODUCT_NO_DESCRIPTION: 'products.activation.noDescription',
   CATALOG_PRODUCT_NO_VARIANTS: 'errors.codes.CATALOG_PRODUCT_NO_VARIANTS',
   CATALOG_PRODUCT_VARIANT_ZERO_PRICE: 'products.activation.zeroPrice',
@@ -803,8 +856,11 @@ export const STATUS_TRANSITIONS: Record<ApiProductStatus, StatusTransition[]> = 
   ],
   // System-locked statuses — the backend rejects every vendor-triggered
   // transition with CATALOG_PRODUCT_INVALID_STATE. pending_review clears via
-  // admin moderation; suspended clears automatically once the delivery-agency
-  // cause is fixed (the product itself stays editable).
+  // admin moderation. `suspended` stays editable but is NOT one cause with one
+  // cure: `suspension.reason` decides who lifts it, and since 2026-08-24 that
+  // includes `plan_quota_exceeded`, which NO restore endpoint lifts — only room
+  // reappearing does (upgrade, or archive something older). Read the reason
+  // before telling the vendor anything; `suspensionNoticeKey` does that.
   pending_review: [],
   suspended: [],
 };

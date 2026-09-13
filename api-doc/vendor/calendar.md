@@ -139,6 +139,30 @@ says otherwise.
 **Prefer `/api/vendor/calendar/status`** unless you specifically want the product guards. It has
 more fields and one consistent shape.
 
+### 🚫 `vendor-dash` deliberately does not call this — verified against source 2026-09-09
+
+A route-coverage audit flags this as an uncovered route. It is uncovered **on purpose**, and there
+is nothing to build:
+
+- It is **not per-product state.** The handler's own header says so — *"Reports the VENDOR's
+  connection, not the product's"* — and both endpoints run the identical query,
+  `ConnectedCalendarAccount.findOne({ vendorId, provider: 'google' })`. The `:id` is an ownership
+  guard, not a key.
+- Its `syncStatus` **cannot express a desync.** It is literally `connected ? 'connected' :
+  'not_connected'` — a restatement of the boolean beside it, with no third state.
+- It **drops the one field that can**: `requiresReauth`. `InboundCalendarSyncWorker` sets that when
+  a vendor's token is revoked or refresh fails, and then *skips that account*
+  (`inbound-calendar-sync.service.ts:92,185-188`) — silent desync, exactly the condition worth
+  surfacing. Only `/api/vendor/calendar/status` carries it.
+
+**What shipped instead (2026-09-09):** `Services.tsx` reads the account-level status once at page
+level and passes `requiresReauth` into `ServicesListPanel`, which badges every **active** service
+with "Calendar not syncing" (`CalendarDesyncBadge`). Vendor-wide is the correct scope — the worker
+writes busy blocks for the whole account, so one dead token exposes every live service at once.
+
+Calling the per-product route would mean one request per row to re-derive strictly less than the
+page already knows.
+
 ---
 
 ## 5 · 🔴 A booking does NOT require a connected calendar

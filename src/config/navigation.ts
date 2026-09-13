@@ -25,6 +25,7 @@ import {
   Truck,
   Link2,
   Search,
+  Star,
   ScrollText,
   Receipt,
   SlidersHorizontal,
@@ -121,6 +122,9 @@ export const PRIMARY_NAV: NavItem[] = [
     children: [
       { id: 'agency-connection', labelKey: 'nav.items.connection', path: '/dashboard/agency/connections', icon: Link2 },
       { id: 'agency-browse', labelKey: 'nav.items.browse', path: '/dashboard/agency/browse', icon: Search },
+      // Deliveries this vendor has rated. Read-only and write-once — the rating
+      // itself is submitted from the order, not from here.
+      { id: 'agency-reviews', labelKey: 'nav.items.deliveryReviews', path: '/dashboard/agency/reviews', icon: Star },
     ],
   },
 ];

@@ -292,17 +292,6 @@ export const COMMON_TIMEZONES = [
   'Asia/Kolkata',
 ];
 
-// ─── Responsive sheet (mirrors the customers/tickets convention) ────────────────
-
-export function responsiveSheetProps(
-  isMobile: boolean,
-  desktopWidth = 'sm:max-w-xl',
-): { side: 'bottom' | 'right'; className: string } {
-  return isMobile
-    ? { side: 'bottom', className: 'h-[92vh] rounded-t-2xl' }
-    : { side: 'right', className: `w-full ${desktopWidth}` };
-}
-
 // ─── Service status transitions (mirrors products STATUS_TRANSITIONS) ────────────
 
 export interface ServiceStatusTransition {

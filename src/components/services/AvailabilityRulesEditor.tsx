@@ -383,7 +383,7 @@ export const AvailabilityRulesEditor = forwardRef<
                                 type="button"
                                 onClick={() => removeSet(day, set.uid)}
                                 aria-label={t('services.availability.removeHours')}
-                                className="rounded-md p-1.5 text-muted-foreground transition hover:bg-accent hover:text-destructive"
+                                className="rounded-md p-1.5 text-muted-foreground transition hover:bg-accent hover:text-destructive tap-target"
                               >
                                 <X className="h-4 w-4" />
                               </button>
@@ -401,7 +401,7 @@ export const AvailabilityRulesEditor = forwardRef<
                     <button
                       type="button"
                       onClick={() => addSet(day)}
-                      className="flex items-center gap-2 text-sm font-medium transition-colors hover:text-primary"
+                      className="flex items-center gap-2 text-sm font-medium transition-colors hover:text-primary tap-target"
                     >
                       <Plus className="h-4 w-4" />
                       {t('services.availability.addHours')}

@@ -8,6 +8,61 @@ export const agency = {
     tabSubtitles: {
         connections: 'Les agences de livraison avec lesquelles vous travaillez, et celle par défaut',
         browse: 'Trouvez de nouvelles agences de livraison à qui vous connecter',
+        reviews: 'Les évaluations de livraison que vous avez envoyées',
+    },
+
+    /**
+     * Évaluations de livraison rédigées par le vendeur.
+     *
+     * 🔴 Un vendeur évalue une LIVRAISON — jamais un produit, jamais un client.
+     * L’agent et l’agence sont notés, mais la vue de l’auteur ne les nomme pas :
+     * ce texte ne doit donc pas laisser entendre le contraire. Aucune formulation
+     * ne doit non plus suggérer une modification : l’envoi est définitif.
+     */
+    reviews: {
+        title: 'Vos évaluations de livraison',
+        hint: 'Les notes que vous avez envoyées depuis une commande. Évaluez une livraison depuis la commande concernée.',
+        writeOnceNotice:
+            'Une note ne peut plus être modifiée ni supprimée une fois envoyée. Une note seule est publiée immédiatement ; ajouter un commentaire la soumet d’abord à un modérateur.',
+        countSummary: plural({ one: '{{count}} évaluation', other: '{{count}} évaluations' }),
+        filterTitle: 'Filtrer',
+        deliveryRef: 'Livraison {{ref}}',
+        ratingOnly: 'Note seule',
+
+        status: {
+            published: 'Publiée',
+            pending: 'En attente de validation',
+            rejected: 'Non publiée',
+        },
+
+        columns: {
+            rating: 'Note',
+            delivery: 'Livraison',
+            comment: 'Commentaire',
+            submitted: 'Envoyée le',
+            status: 'Statut',
+        },
+
+        filters: {
+            status: 'Statut',
+            anyStatus: 'Tous les statuts',
+        },
+
+        empty: {
+            none: 'Vous n’avez pas encore évalué de livraison',
+            noneHint:
+                'Ouvrez une commande livrée et utilisez « Évaluer la livraison ». Les notes aident les agences à repérer les agents performants.',
+            filtered: 'Aucune évaluation ne correspond à ce filtre',
+            otherRolesOnly: 'Aucune évaluation de livraison sur cette page',
+        },
+        otherRolesHidden: plural({
+            one: '{{count}} avis rédigé sous un autre rôle est masqué ici.',
+            other: '{{count}} avis rédigés sous un autre rôle sont masqués ici.',
+        }),
+
+        errors: {
+            loadFailed: 'Nous n’avons pas pu charger vos évaluations. Réessayez.',
+        },
     },
 
     tabs: {

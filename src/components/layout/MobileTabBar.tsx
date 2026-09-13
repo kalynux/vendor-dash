@@ -27,7 +27,10 @@ function TabButton({ label, icon: Icon, active, badge, onClick }: TabButtonProps
     <button
       onClick={onClick}
       className={cn(
-        'relative flex flex-col items-center justify-center gap-0.5 flex-1 py-1 transition-colors',
+        // The bar is `h-16` but `items-center`, so a tab is only as tall as its
+        // icon + label (~43px). `tap-target` claims the spare bar height; the
+        // tab is already `flex-1` so nothing moves sideways.
+        'tap-target relative flex flex-col items-center justify-center gap-0.5 flex-1 py-1 transition-colors',
         active ? 'text-primary' : 'text-muted-foreground',
       )}
     >

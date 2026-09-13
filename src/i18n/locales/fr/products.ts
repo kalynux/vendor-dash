@@ -83,6 +83,12 @@ export const products = {
             other: 'Archiver {{count}} produits ?',
         }),
         partial: '{{success}} sur {{total}} traité(s) — {{failed}} ignoré(s).',
+        // L’opération s’est arrêtée en cours de route : nommer ce qui a bien été
+        // appliqué, car le vendeur va le chercher.
+        stoppedPartway: plural({
+            one: 'Arrêté après {{count}} produit. Les autres n’ont pas été modifiés.',
+            other: 'Arrêté après {{count}} produits. Les autres n’ont pas été modifiés.',
+        }),
         done: plural({
             one: '{{count}} produit archivé.',
             other: '{{count}} produits archivés.',
@@ -251,6 +257,26 @@ export const products = {
         },
     },
 
+    /**
+     * Motif de la suspension, indexé par `suspension.reason`.
+     *
+     * Les trois motifs liés au transporteur ne sont pas ici : chaque écran garde
+     * sa propre formulation, car elle indique où se trouve la correction sur cet
+     * écran-là.
+     */
+    suspension: {
+        agencyStorage:
+            "Ce produit est suspendu par l’agence qui l’entrepose. Elle seule peut lever la suspension — vous pouvez toujours le modifier ici.",
+        vendorSuspended:
+            'Ce produit est suspendu parce que votre compte vendeur est suspendu. Il revient automatiquement dès que votre compte est rétabli.',
+        platformOversight:
+            'Ce produit a été suspendu par un administrateur. Contactez le support — celle-ci ne peut pas être levée depuis le tableau de bord.',
+        // Rien n’a été supprimé : ne jamais parler de suppression ici.
+        planQuota:
+            "Ce produit dépasse la limite de produits actifs de votre forfait : il est masqué, mais rien n’a été supprimé. Changez de forfait, ou archivez un produit plus ancien, et il revient automatiquement.",
+        planQuotaAction: 'Changer de forfait',
+    },
+
     fields: {
         title: 'Titre',
         titlePlaceholder: 'ex. Casque Bluetooth sans fil',
@@ -279,10 +305,22 @@ export const products = {
         compareAtHigherHint: 'Affiché barré lorsqu’il est supérieur au prix.',
         compareAtTooLowHint:
             'Les clients ne voient une remise que si ce montant est supérieur au prix.',
-        bargainMaxPrice: 'Négociable jusqu’à',
-        bargainOptional: 'Facultatif — pas de négociation',
-        bargainHint: 'Les acheteurs peuvent proposer jusqu’ici. Vide = désactivé.',
-        bargainInertHint: 'Proposition jusqu’ici. Actif dès la découverte par IA.',
+        /**
+         * 🔴 Depuis le 2026-09-07, ce champ EST le prix affiché aux acheteurs.
+         * `price` devient un plancher jamais publié.
+         */
+        bargainMaxPrice: 'Prix affiché',
+        bargainOptional: 'Facultatif — vendre à votre prix',
+        bargainOn: 'Autoriser la négociation',
+        bargainHint:
+            'Les acheteurs voient ce prix et peuvent proposer moins, jusqu’à votre prix. Vide : la négociation est désactivée et votre prix s’affiche.',
+        bargainInertHint:
+            'Deviendra le prix affiché dès que la découverte par IA sera active. En attendant, votre prix s’affiche.',
+        bargainFloorHint: 'Votre plancher — jamais visible par les acheteurs.',
+        bargainCompareAtHidden:
+            'Votre prix barré n’est pas supérieur au prix affiché : les acheteurs ne verront aucun « ancien prix ». Passez-le au-dessus de {{max}}, ou baissez le prix affiché.',
+        bargainClearWarning:
+            'Désactiver la négociation fait passer le prix affiché de {{max}} à {{price}}.',
         unlimitedStock: 'Stock illimité',
         unlimitedStockHint: 'Ne s’épuise jamais.',
         unlimitedStockLockedHint:
@@ -360,15 +398,22 @@ export const products = {
     },
 
     bargain: {
-        title: 'Négociation du prix',
-        description: 'Les acheteurs peuvent proposer entre votre prix et ce plafond.',
-        ceilingLabel: 'Négociable jusqu’à',
+        title: 'Prix affiché et négociation',
+        description:
+            'Les acheteurs voient le prix affiché et peuvent proposer moins, jusqu’au prix de la variante, qui reste privé.',
+        ceilingLabel: 'Prix affiché',
         ceilingPlaceholder: 'Pas de négociation',
         /** The floor this variant's price implies, shown under the input. */
-        ceilingMin: 'Min {{min}} — 20 % au-dessus du prix',
-        badge: 'Jusqu’à {{max}}',
+        ceilingMin: 'Min {{min}} — 20 % au-dessus de votre prix',
+        badge: 'Affiché {{max}}',
         inertHint: 'Nécessite la découverte par IA.',
-        clearHint: 'Laissez une ligne vide pour désactiver sa négociation.',
+        clearHint: 'Laissez une ligne vide pour vendre à votre prix.',
+        /** Affiché avant un enregistrement qui retire un prix affiché en vigueur. */
+        clearConfirm:
+            'Désactiver la négociation baisse le prix vu par les acheteurs. Continuer ?',
+        clearConfirmRow: '{{variant}} : {{from}} → {{to}}',
+        shelfPriceNotice:
+            'C’est le prix affiché sur votre boutique — pas un plafond privé. Il détermine aussi la place du produit dans les tris et filtres par prix. Le prix de la variante devient un plancher que les acheteurs ne voient jamais.',
 
         summaryNone: 'Aucun plafond défini',
         summarySet: plural({
@@ -502,6 +547,9 @@ export const products = {
     },
 
     activation: {
+        // 403 BILLING_LIMIT_EXCEEDED. `available` est le nombre exploitable.
+        planLimitExceeded:
+            'Vous avez atteint la limite de produits actifs de votre forfait : celui-ci ne peut pas être publié. Il vous reste de la place pour {{available}}. Changez de forfait, ou archivez un produit que vous ne vendez plus.',
         notCreated: 'Le produit n’a pas encore été créé',
         noDescription: 'Une description du produit est obligatoire',
         noActiveVariant: 'Au moins une variante active est requise',

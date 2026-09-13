@@ -244,6 +244,8 @@ export const orders = {
             orderType: 'Type de commande',
             currency: 'Devise',
             placedAt: 'Passée le',
+            /** Affiché à la place de l’action Rembourser lorsque le serveur la refuse. `reason` vient de customers.refundReason.*. */
+            refundUnavailable: 'Remboursement impossible — {{reason}}',
         },
 
         dispute: {

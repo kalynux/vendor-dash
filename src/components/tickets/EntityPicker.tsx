@@ -176,7 +176,7 @@ function SearchablePicker({ entityType, value, onChange, onOrderSelected, invali
             onValueChange={setQuery}
             placeholder={t(copy.searchPlaceholder)}
           />
-          <CommandList className="max-h-[55vh]">
+          <CommandList className="max-h-[55dvh]">
             {error ? (
               <div className="flex flex-col items-center gap-2 py-10 text-center text-sm text-muted-foreground">
                 <AlertTriangle className="h-6 w-6 text-destructive" />

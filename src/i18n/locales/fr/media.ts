@@ -219,6 +219,18 @@ export const media = {
         stillReferenced: 'Ce fichier est encore utilisé. Détachez-le avant de le supprimer.',
         detachFirst: 'Détachez ce fichier de tout ce qui l’utilise avant de le supprimer.',
         notDownloadable: 'Ce fichier est stocké de façon privée et ne peut pas être téléchargé ici.',
+        blockedNotDownloadable:
+            'Ce fichier est bloqué par votre limite de stockage. Passez à un forfait supérieur pour le télécharger.',
+    },
+    // Un fichier qui dépasse la limite de stockage du forfait. Les octets et
+    // l’enregistrement sont intacts et une mise à niveau les restaure : ne jamais
+    // parler de suppression ici.
+    blocked: {
+        badge: 'Verrouillé',
+        title: 'Masqué par votre limite de stockage',
+        body: 'Ce fichier est toujours là. Votre limite de stockage le masque — passez à un forfait supérieur, ou supprimez un fichier plus ancien, pour le récupérer.',
+        action: 'Changer de forfait',
+        thumbnailHint: 'Verrouillé par votre limite de stockage',
     },
 };
 

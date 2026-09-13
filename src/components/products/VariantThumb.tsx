@@ -1,6 +1,7 @@
-import { ImageIcon } from 'lucide-react';
+import { ImageIcon, Lock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useTranslation } from '@/i18n';
+import { fileDisplayState } from '@/services/files.service';
 import type { ApiFileDetail } from '@/types/product.types';
 
 interface VariantThumbProps {
@@ -35,7 +36,7 @@ export function VariantThumb({ files, fallback, className }: VariantThumbProps) 
         className,
       )}
     >
-      {image ? (
+      {image?.url ? (
         <img
           src={image.url}
           alt={image.originalName ?? t('products.media.variantImageAlt')}
@@ -45,6 +46,10 @@ export function VariantThumb({ files, fallback, className }: VariantThumbProps) 
           draggable={false}
           className="size-full object-cover"
         />
+      ) : fileDisplayState(image) === 'blocked' ? (
+        // The vendor's storage plan is hiding this picture. Same reasoning as the
+        // media library: an empty square would read as "no image".
+        <Lock className="size-4 text-amber-600" aria-label={t('media.blocked.thumbnailHint')} />
       ) : (
         <ImageIcon className="size-4 text-muted-foreground/60" aria-hidden />
       )}

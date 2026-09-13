@@ -12,7 +12,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   Upload,
   Grid3X3,
@@ -44,6 +44,7 @@ import {
   ShieldCheck,
   LifeBuoy,
   Paperclip,
+  Lock,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -100,6 +101,7 @@ import {
   uploadMediaWithProgress,
   validateMediaSelection,
   resolveFileUrl,
+  fileDisplayState,
   kindFromMime,
   categoryFromKind,
 } from '@/services/files.service';
@@ -175,7 +177,7 @@ function statusBadgeClass(status?: string): string {
     case 'draft':
       return 'bg-muted text-muted-foreground border-transparent';
     case 'archived':
-      return 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20';
+      return 'bg-muted-foreground/10 text-muted-foreground border-muted-foreground/20';
     case 'pending_review':
       return 'bg-amber-500/10 text-amber-600 border-amber-500/20';
     case 'suspended':
@@ -249,6 +251,29 @@ function referenceProductId(ref: FileReference, detail: ApiFileDetail): string |
 
 // ─── File artwork ─────────────────────────────────────────────────────────────
 
+/**
+ * A file the vendor is over their storage cap for. Deliberately distinct from the
+ * plain icon tile: a blocked file and an unset slot both arrive as `url: null`, and
+ * rendering them identically is exactly how plan-quota enforcement became invisible
+ * on the one screen built to show storage (api-doc/vendor/storage.md § 3.1).
+ */
+function BlockedTile({ compact = false }: { compact?: boolean }) {
+  const { t } = useTranslation();
+  return (
+    <div
+      className="flex h-full w-full flex-col items-center justify-center gap-2 p-4 text-center"
+      title={t('media.blocked.thumbnailHint')}
+    >
+      <div className="rounded-xl bg-amber-500/10 p-4 text-amber-600">
+        <Lock className="h-8 w-8" />
+      </div>
+      {!compact && (
+        <span className="text-xs font-medium text-amber-700">{t('media.blocked.badge')}</span>
+      )}
+    </div>
+  );
+}
+
 function FileArtwork({
   file,
   className,
@@ -264,6 +289,17 @@ function FileArtwork({
   const Icon = kindIcon[kind];
   const [broken, setBroken] = useState(false);
   const url = resolveFileUrl(file);
+  const state = fileDisplayState(file);
+
+  // Quota-blocked outranks everything: the file is intact and the vendor's own
+  // plan is hiding it, which is a different message from "stored privately".
+  if (state === 'blocked') {
+    return (
+      <div className={cn('h-full w-full', className)}>
+        <BlockedTile compact={!controls} />
+      </div>
+    );
+  }
 
   // No URL means the file lives in an authorized-access tree and there is nothing
   // to point a tag at. Fall through to the icon tile — the same place a load
@@ -338,6 +374,26 @@ function FilePreview({ file }: { file: ApiFile }) {
   const { t } = useTranslation();
   const kind = kindFromMime(file.mimeType);
   const url = resolveFileUrl(file);
+
+  // The detail view is where the vendor can actually act, so this is the one place
+  // that explains the block and offers the way out. Checked before the image/video
+  // hand-off so those get the explanation too, not just the lock tile.
+  if (fileDisplayState(file) === 'blocked') {
+    return (
+      <div className="flex h-full w-full flex-col items-center justify-center gap-3 p-6 text-center">
+        <div className="rounded-xl bg-amber-500/10 p-4 text-amber-600">
+          <Lock className="h-8 w-8" />
+        </div>
+        <div className="space-y-1">
+          <p className="text-sm font-medium">{t('media.blocked.title')}</p>
+          <p className="max-w-xs text-xs text-muted-foreground">{t('media.blocked.body')}</p>
+        </div>
+        <Button asChild size="sm" variant="outline">
+          <Link to="/dashboard/account/billing">{t('media.blocked.action')}</Link>
+        </Button>
+      </div>
+    );
+  }
 
   if (kind === 'image' || kind === 'video') {
     return <FileArtwork file={file} controls />;
@@ -698,6 +754,12 @@ export function MediaGallery() {
   const handleDownload = useCallback(
     async (file: ApiFile) => {
       const url = resolveFileUrl(file);
+      // A blocked file is the vendor's own plan hiding their bytes — an upgrade
+      // brings it back. Distinct from "stored privately", which never will.
+      if (fileDisplayState(file) === 'blocked') {
+        toast.error(t('media.errors.blockedNotDownloadable'));
+        return;
+      }
       // Authorized-access trees have no reader a vendor can reach, so there is no
       // URL to hand the downloader. Say so instead of failing mid-transfer.
       if (!url) {
@@ -1219,7 +1281,7 @@ export function MediaGallery() {
           <Sheet open={!!inspectId} onOpenChange={(o) => !o && setInspectId(null)}>
             <SheetContent
               side="bottom"
-              className="h-[90vh] p-0 rounded-t-2xl [&>button]:top-4 [&>button]:right-3"
+              className="h-[90dvh] p-0 rounded-t-2xl pb-[env(safe-area-inset-bottom)] [&>button]:top-4 [&>button]:right-3"
             >
               <SheetHeader className="border-b p-4 pr-12">
                 <SheetTitle>{t('media.details.title')}</SheetTitle>

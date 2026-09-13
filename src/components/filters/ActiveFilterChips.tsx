@@ -32,7 +32,7 @@ export function ActiveFilterChips({
           key={chip.key}
           type="button"
           onClick={chip.onRemove}
-          className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 py-1 pl-3 pr-2 text-xs font-medium text-foreground transition-colors hover:bg-primary/15"
+          className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 py-1 pl-3 pr-2 text-xs font-medium text-foreground transition-colors hover:bg-primary/15 tap-target"
         >
           <span className="truncate">{chip.label}</span>
           <X className="h-3 w-3 shrink-0 text-muted-foreground" />
@@ -42,7 +42,7 @@ export function ActiveFilterChips({
         <button
           type="button"
           onClick={onClearAll}
-          className="text-xs font-medium text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline"
+          className="text-xs font-medium text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline tap-target"
         >
           {t('common.actions.clearAll')}
         </button>

@@ -72,7 +72,7 @@ Query: `isRead` (see above), `page` (1), `limit` (20, **max 50**).
     "message": "…",
     "aggregateType": "order",
     "aggregateId": "66c2…",
-    "action": { "label": "View order", "path": "/dashboard/orders/66c2…", "url": "https://…" } | null,
+    "action": { "label": "View order", "path": "orders/66c2…", "url": "https://…" } | null,
     "isRead": false,
     "deliveredVia": ["in-app", "push"],
     "createdAt": "…"
@@ -86,7 +86,18 @@ Query: `isRead` (see above), `page` (1), `limit` (20, **max 50**).
 unfiltered count, so it is correct regardless of `isRead`, `page` or `limit` — use it for the badge.
 
 `action.url` appears only when the backend has an app URL configured; the whole `action` is `null`
-when the notification has none. Prefer `action.path` for in-app routing.
+when the notification has none.
+
+⚠ **`action.path` is a LABEL, not a route** — no leading slash, no `dashboard/` prefix, no locale,
+and at most one id, always last. The example above printed `"/dashboard/orders/66c2…"` until
+2026-09-09, which contradicted rules 1 and 2 of
+[notifications/deep-links.md](../notifications/deep-links.md) — a page pinned by the backend's own
+`test:notification-deeplinks` (13 passing), so the doc was corrected here rather than there.
+
+The eight labels this app can receive, and the routes they translate to, are in that page.
+`src/lib/notifications.utils.ts` holds both directions: `notificationRoute` (from `aggregateType` +
+`aggregateId`, used by the in-app inbox and push) and `routeFromNotificationPath` (from `path`, used
+by the SPA catch-all so an emailed button lands on the right screen).
 
 ### The 23 notification types
 

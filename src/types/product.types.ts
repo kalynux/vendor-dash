@@ -1,7 +1,7 @@
 // ─── Product Types & Status ───────────────────────────────────────────────────
 
 import type { RichDoc } from '@/lib/richtext';
-import type { ApiFile, FileRef } from '@/types/file.types';
+import type { ApiFile, FileAccess, FileRef } from '@/types/file.types';
 // Service variants carry serviceConfig. Type-only import (erased at compile) —
 // no runtime circular dependency with services.types.
 import type { ServiceConfig } from '@/types/services.types';
@@ -25,6 +25,41 @@ export type ApiProductStatus =
   | 'archived'
   | 'pending_review'
   | 'suspended';
+
+/**
+ * Why a product is `suspended` (api-doc/vendor/products.md § 11, source
+ * `product.model.ts:85-93`). Seven values, and they differ in WHO can lift them
+ * — which is the only thing the vendor actually needs told.
+ *
+ * The first three fix themselves once the agency link works again; the storage
+ * agency lifts the fourth; the platform's vendor restore lifts the fifth; only
+ * an administrator lifts the sixth.
+ *
+ * 🔴 `plan_quota_exceeded` is the odd one out and is NEW since 2026-08-24: no
+ * restore endpoint lifts it, not even an administrator's. Only room reappearing
+ * does — an upgrade, or archiving something older, which publishes a
+ * capacity-freed signal that brings the next-oldest suspended product back on
+ * its own. It is also the only reason that can attach to a `draft`, because a
+ * draft occupies a plan slot too.
+ */
+export type ProductSuspensionReason =
+  | 'default_delivery_agency_removed'
+  | 'product_delivery_agency_removed'
+  | 'agency_connection_paused'
+  | 'agency_storage_suspended'
+  | 'vendor_suspended'
+  | 'platform_oversight'
+  | 'plan_quota_exceeded';
+
+/**
+ * Present only while `status === 'suspended'`. Nothing is deleted when a
+ * product is suspended — `previousStatus` is exactly what it returns to.
+ */
+export interface ApiProductSuspension {
+  reason: ProductSuspensionReason;
+  previousStatus: ApiProductStatus;
+  suspendedAt: string;
+}
 
 export type ApiVectorisationStatus = 'not_started' | 'pending' | 'completed' | 'failed';
 
@@ -134,15 +169,17 @@ export interface ApiVariantDigital {
   expiresAfterDays: number | null;
 }
 
-// Fully-populated file object returned by single-resource endpoints
-export interface ApiFileDetail {
-  id: string;
-  key: string;
-  url: string;
-  mimeType: string;
-  size: number;
-  originalName?: string;
-}
+/**
+ * Fully-populated file object returned by single-resource endpoints.
+ *
+ * This is exactly `FileRef` — the platform-wide resolved-file shape — and it is
+ * aliased rather than re-declared so the two cannot drift again. It used to
+ * declare `url: string` with no `access`, which survived the 2026-09-08
+ * `url`/`access` refactor because it lives in this file rather than in
+ * `file.types.ts`. `url` is `string | null` and `access` says why
+ * (api-doc/files/private-files.md).
+ */
+export type ApiFileDetail = FileRef;
 
 // Shape returned by the list endpoint and mutation endpoints (PATCH, POST)
 // that have not yet migrated to returning populated files
@@ -151,6 +188,13 @@ export interface ApiProduct {
   vendorId: string;
   type: ApiProductType;
   status: ApiProductStatus;
+  /**
+   * Why the platform suspended this product. Only meaningful while
+   * `status === 'suspended'`; absent otherwise. Never assume a delivery-agency
+   * cause — since 2026-08-24 a plan downgrade suspends over-cap products too,
+   * and the two need opposite advice. See `ProductSuspensionReason`.
+   */
+  suspension?: ApiProductSuspension | null;
   /**
    * Optional on the wire on purpose: a backend build that predates simple mode
    * omits it, and every consumer must degrade to 'advanced' rather than crash.
@@ -312,11 +356,19 @@ export interface ProductListItem {
   title: string;
   type: ApiProductType;
   status: ApiProductStatus;
+  /** Only while `status === 'suspended'`. See `ApiProductSuspension`. */
+  suspension?: ApiProductSuspension | null;
   /** Routes the Edit action to the right editor. Defaults to 'advanced'. */
   mode: ProductMode;
   category: string;
   tags: string[];
   firstFileUrl: string | null; // URL of the first file, used for the thumbnail
+  /**
+   * Why `firstFileUrl` is null, when it is. A `quota_blocked` thumbnail is the
+   * vendor's own plan hiding their photo — visually identical to "no image" if
+   * you only look at the URL, which is the bug this field exists to prevent.
+   */
+  firstFileAccess: FileAccess | null;
   hasVariants: boolean;
   defaultVariantId: string | null;
   createdAt: string;

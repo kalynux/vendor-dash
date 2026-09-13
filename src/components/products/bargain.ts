@@ -138,6 +138,34 @@ export function validateCeilings(
 }
 
 /**
+ * The rows where a live asking price is being removed.
+ *
+ * 🔴 Since 2026-09-07 a bargainable variant is displayed on the shop at
+ * `bargain.maxPrice`, so clearing the window does not merely "switch negotiation
+ * off" — it **lowers the published price** to `variant.price`, which until then
+ * was a private floor. That is a pricing change the vendor did not think they
+ * were making, so it is worth a confirmation.
+ *
+ * Only counts rows that were actually bargainable: a stored-but-inert window
+ * (vectorisation off) was never on the shelf, so removing it changes nothing a
+ * shopper can see.
+ */
+export function clearedCeilings(
+  variants: ApiVariant[],
+  edits: BargainCeilingEdit[],
+): { label: string; from: number; to: number }[] {
+  const byId = new Map(variants.map((v) => [v.id, v]));
+  const cleared: { label: string; from: number; to: number }[] = [];
+  for (const e of edits) {
+    if (e.maxPrice !== null) continue;
+    const v = byId.get(e.variantId);
+    if (!v?.bargain || !v.bargainable) continue;
+    cleared.push({ label: e.label, from: v.bargain.maxPrice, to: v.price });
+  }
+  return cleared;
+}
+
+/**
  * Reduce the panel's inputs to the set of changes worth sending. Rows the vendor
  * did not touch are never emitted, so a 40-variant product where one number was
  * typed produces exactly one PATCH.

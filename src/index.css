@@ -178,6 +178,73 @@
   padding-bottom: env(safe-area-inset-bottom);
 }
 
+/* ── Touch behaviour (WebView polish) ────────────────────────────────────────
+   The four properties that separate an app from a website rendered inside one.
+   Two are safe everywhere; two are scoped to `html.native` — the class
+   `main.tsx` stamps on when `isNative` — because on mobile web they would take
+   away affordances the browser genuinely owns. */
+
+/* Everywhere. The grey box Android paints over anything it thinks is tappable
+   the instant it is touched. We have `:active` and `:focus-visible` styles of
+   our own, so the flash is pure noise. It inherits, so `html` covers the tree. */
+html {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Everywhere. Drops the ~300ms a touch browser spends deciding whether a tap on
+   a control was the first half of a double-tap-to-zoom. Only double-tap zoom is
+   given up, and only on the control itself — panning and pinch-zoom still work,
+   here and on the page at large, so this is not `user-scalable=no` by the back
+   door. */
+button,
+a,
+label,
+select,
+summary,
+[role="button"],
+[role="tab"],
+[role="menuitem"],
+[role="option"],
+input[type="checkbox"],
+input[type="radio"] {
+  touch-action: manipulation;
+}
+
+/* Native only. Kills the rubber-band / glow at the ends of the document and
+   Chrome's pull-to-refresh with it. Inside the shell there is nothing to
+   refresh to and the bounce reads as broken chrome — but on the web
+   pull-to-refresh is a real affordance a vendor may be reaching for, so the
+   browser keeps it. Nested scrollers are left alone deliberately: chaining out
+   of a finished list into the page is the behaviour you want. */
+html.native,
+html.native body {
+  overscroll-behavior: none;
+}
+
+/* Native only, and chrome only. Long-pressing a button should not select its
+   label; long-pressing an order number still should — so this names controls,
+   nav and tab strips, never content. */
+html.native button,
+html.native nav,
+html.native label,
+html.native [role="button"],
+html.native [role="tab"],
+html.native [role="tablist"],
+html.native [role="menuitem"] {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* `user-select` inherits, and WebKit lets an ancestor's `none` reach into a
+   field, so fields — including the rich-text editor's contenteditable — take
+   it back explicitly. */
+html.native input,
+html.native textarea,
+html.native [contenteditable="true"] {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
 /* Custom scrollbar — brand-tinted */
 ::-webkit-scrollbar {
   width: 8px;
@@ -238,4 +305,63 @@ textarea:focus-visible {
 
 .animate-slide-in {
   animation: slideIn 0.4s ease-out;
+}
+
+/* ─── Touch hit targets ─────────────────────────────────────────────────────
+ *
+ * Material and the Apple HIG both put the minimum interactive target at 44–48px.
+ * The house `Button` sizes top out at 40px (`icon-lg`) and most controls sit at
+ * 32–36px, which is right for a mouse and too small for a thumb.
+ *
+ * `.tap-target` fixes that WITHOUT changing layout: the element keeps its
+ * painted size and an invisible `::after` extends the touchable region to 44px.
+ * Nothing reflows, so dense table rows and toolbars are untouched.
+ *
+ * Named `tap-` and not `touch-` on purpose: `touch-*` is a real Tailwind
+ * namespace (`touch-manipulation`, `touch-pan-y`, …) and `cn()` runs
+ * tailwind-merge, which drops earlier classes it believes are in the same
+ * group. `tap-` collides with nothing.
+ *
+ * Gated on `(pointer: coarse)`, deliberately NOT on a width breakpoint:
+ *
+ *   - `md:` is 768px, but this app hands 768–1023 the *desktop* shell (a
+ *     collapsed sidebar rail, and e.g. the desktop variant table). Tablets live
+ *     in that range and are touch, so a `max-md:` gate would miss every one.
+ *   - A narrow desktop window is still a mouse and does not want the halo.
+ *   - The Capacitor Android shell always reports coarse.
+ *
+ * Two details that are load-bearing:
+ *
+ *   - `position` is set through `:where()` so it has zero specificity. A call
+ *     site that positions the control itself (`.absolute`, `.fixed`, …) still
+ *     wins; only an unpositioned element picks up `relative`. Setting it at
+ *     normal specificity would rip absolutely-positioned buttons out of place.
+ *   - `pointer-events` is left alone on purpose. It inherits, so a disabled
+ *     control's `pointer-events: none` reaches the pseudo-element and the halo
+ *     goes dead with it. Forcing `pointer-events: auto` here would make every
+ *     disabled button tappable again around its edges.
+ *
+ * The halo is transparent and paints nothing, so it does not interact with the
+ * `focus-visible` ring (a box-shadow on the control itself). An ancestor with
+ * `overflow: hidden` clips it — that degrades the class to a no-op, it never
+ * breaks anything, but it is why a few call sites are sized up instead.
+ */
+@layer utilities {
+  @media (pointer: coarse) {
+    :where(.tap-target) {
+      position: relative;
+    }
+
+    .tap-target::after {
+      content: "";
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 100%;
+      height: 100%;
+      min-width: 44px;
+      min-height: 44px;
+      transform: translate(-50%, -50%);
+    }
+  }
 }

@@ -45,7 +45,7 @@ export function ResponsiveModal({
       <Sheet open={open} onOpenChange={handleOpenChange}>
         <SheetContent
           side="bottom"
-          className={cn('flex h-[92vh] flex-col gap-0 rounded-t-2xl p-0', mobileClassName)}
+          className={cn('flex h-[92dvh] flex-col gap-0 rounded-t-2xl p-0', mobileClassName)}
           onInteractOutside={(e) => disableClose && e.preventDefault()}
           onEscapeKeyDown={(e) => disableClose && e.preventDefault()}
         >
@@ -67,7 +67,7 @@ export function ResponsiveModal({
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
-        className={cn('flex max-h-[85vh] flex-col gap-0 p-0', desktopClassName)}
+        className={cn('flex max-h-[85dvh] flex-col gap-0 p-0', desktopClassName)}
         onInteractOutside={(e) => disableClose && e.preventDefault()}
         onEscapeKeyDown={(e) => disableClose && e.preventDefault()}
       >

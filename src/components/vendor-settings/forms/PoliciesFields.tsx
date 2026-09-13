@@ -695,7 +695,7 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
                                         type="button"
                                         onClick={() => removeChannel(index)}
                                         aria-label={t('settings.policies.support.removeChannel', { type: field.type })}
-                                        className="text-muted-foreground hover:text-destructive transition-colors shrink-0"
+                                        className="text-muted-foreground hover:text-destructive transition-colors shrink-0 tap-target"
                                     >
                                         <Trash2 className="w-4 h-4" />
                                     </button>
@@ -878,7 +878,7 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
                                     type="button"
                                     onClick={() => handleRemoveDoc(url)}
                                     aria-label={t('settings.policies.documents.remove')}
-                                    className="text-muted-foreground hover:text-destructive transition-colors shrink-0"
+                                    className="text-muted-foreground hover:text-destructive transition-colors shrink-0 tap-target"
                                 >
                                     <X className="w-3.5 h-3.5" />
                                 </button>

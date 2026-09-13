@@ -51,10 +51,14 @@ import { DeliveryRejectionNotice } from './DeliveryRejectionNotice';
 import { ReassignAgencyPopover } from './ReassignAgencyPopover';
 import { cn } from '@/lib/utils';
 import { useOrderStore } from '@/store';
-import { addNote, revokeEntitlement, restoreEntitlement, fetchNote, dispatchOrder, getOrderErrorMessage, isOrderFrozen } from '@/services/orders.service';
+import { addNote, revokeEntitlement, restoreEntitlement, fetchNote, dispatchOrder, fetchOrderById, getOrderErrorMessage, isOrderFrozen } from '@/services/orders.service';
+import { RefundDialog } from '@/components/customers/RefundDialog';
+import { REFUND_REASON_KEYS } from '@/components/customers/customer.constants';
+import { useRefundEligibility } from '@/hooks/use-refund-eligibility';
 import { getNextStatuses, STATUS_ACTION_KEYS, ORDER_STATUS_KEYS, canDispatchOrder } from '@/lib/orderStatus';
 import { ApiError } from '@/types/api';
 import { toast } from 'sonner';
+import { CustomerAvatar } from '@/components/customers/CustomerAvatar';
 import { formatPhoneInternational } from '@/lib/phone';
 import { useProductImages } from '@/hooks/use-product-images';
 import { useTranslation, useFormatters, Trans, type TranslationKey } from '@/i18n';
@@ -150,6 +154,9 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
   const [actionReason, setActionReason] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
 
+  // Refund — the action is offered only once the server confirms eligibility.
+  const [refundOpen, setRefundOpen] = useState(false);
+
   useEffect(() => {
     if (open) {
       setActiveTab('details');
@@ -160,6 +167,8 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
   // Order items ship without a thumbnail — resolve one per product from the catalog.
   // Called before the early return below so the hook order stays stable.
   const productImages = useProductImages(order?.items.map((item) => item.productId) ?? []);
+  // Likewise called before the early return — hooks may not sit behind a branch.
+  const refund = useRefundEligibility(order);
 
   if (!order) return null;
 
@@ -249,6 +258,18 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
 
   const handleItemReassigned = (updated: Order) => {
     setOrder(updated);
+  };
+
+  const handleRefunded = async () => {
+    // A full refund flips paymentStatus and both write a timeline entry, so the
+    // order is re-read rather than patched locally. Eligibility moves too: a
+    // partial refund leaves the order `paid` with a smaller balance.
+    refund.refresh();
+    try {
+      setOrder(await fetchOrderById(order.id));
+    } catch (err) {
+      toast.error(getOrderErrorMessage(err));
+    }
   };
 
   const handleAddNote = async () => {
@@ -351,7 +372,7 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
   return (
     <>
       <Sheet open={open} onOpenChange={onOpenChange}>
-        <SheetContent side="bottom" className="h-[90vh] p-0 rounded-t-2xl [&>button]:top-3 [&>button]:right-3">
+        <SheetContent side="bottom" className="h-[90dvh] p-0 rounded-t-2xl pb-[env(safe-area-inset-bottom)] [&>button]:top-3 [&>button]:right-3">
           {isDetailLoading ? (
             <div className="flex items-center justify-center h-40">
               <Loader2 className="w-10 h-10 animate-spin text-primary" />
@@ -421,17 +442,17 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                       action={
                         <button
                           onClick={() => setCustomerSheetOpen(true)}
-                          className="w-7 h-7 rounded-full bg-muted flex items-center justify-center hover:bg-accent transition-colors flex-shrink-0"
+                          className="w-7 h-7 rounded-full bg-muted flex items-center justify-center hover:bg-accent transition-colors flex-shrink-0 tap-target"
                         >
                           <Info className="w-3.5 h-3.5 text-muted-foreground" />
                         </button>
                       }
                     >
                       <div className="flex items-center gap-3">
-                        <img
-                          src={customer.avatar || `https://i.pravatar.cc/150?u=${customer.id}`}
-                          alt={customer.name}
-                          className="w-10 h-10 rounded-full object-cover flex-shrink-0"
+                        <CustomerAvatar
+                          name={customer.name}
+                          avatar={customer.avatar}
+                          className="h-10 w-10 flex-shrink-0"
                         />
                         <div className="min-w-0">
                           <p className="font-medium truncate">{customer.name}</p>
@@ -741,6 +762,14 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                           <p className="text-sm font-medium">{formatDate(order.createdAt)}</p>
                         </div>
                       </div>
+                      {/* Why the Refund action isn't offered — the vendor looks here for it. */}
+                      {refund.reasonCode && (
+                        <p className="mt-3 text-xs text-muted-foreground">
+                          {t('orders.detail.payment.refundUnavailable', {
+                            reason: t(REFUND_REASON_KEYS[refund.reasonCode]),
+                          })}
+                        </p>
+                      )}
                       {frozen && (
                         <div className="mt-3 flex items-start gap-2 rounded-md bg-orange-50 border border-orange-100 p-2.5 text-xs">
                           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-orange-600" />
@@ -773,8 +802,8 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                           {/* Top row */}
                           <div className="flex items-start justify-between gap-2">
                             <div className="flex items-center gap-2.5 min-w-0">
-                              <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${entitlement.isRevoked ? 'bg-red-100' : entitlement.isExpired ? 'bg-gray-100' : 'bg-violet-100'}`}>
-                                <Download className={`w-4 h-4 ${entitlement.isRevoked ? 'text-red-600' : entitlement.isExpired ? 'text-gray-500' : 'text-violet-700'}`} />
+                              <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${entitlement.isRevoked ? 'bg-red-100' : entitlement.isExpired ? 'bg-muted' : 'bg-violet-100'}`}>
+                                <Download className={`w-4 h-4 ${entitlement.isRevoked ? 'text-red-600' : entitlement.isExpired ? 'text-muted-foreground' : 'text-violet-700'}`} />
                               </div>
                               <div className="min-w-0">
                                 <p className="text-sm font-medium truncate">{entitlement.productTitle}</p>
@@ -870,6 +899,12 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                     {t('orders.actions.dispatchToAgency')}
                   </Button>
                 )}
+                {refund.canRefund && (
+                  <Button variant="outline" className="w-full gap-2" onClick={() => setRefundOpen(true)}>
+                    <RotateCcw className="w-4 h-4" />
+                    {t('orders.actions.refund')}
+                  </Button>
+                )}
                 {nextStatuses.length > 0 ? (
                   <DropdownMenu modal={false}>
                     <DropdownMenuTrigger asChild>
@@ -910,17 +945,17 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
 
       {/* Customer info sheet */}
       <Sheet open={customerSheetOpen} onOpenChange={setCustomerSheetOpen}>
-        <SheetContent side="bottom" className="p-0 rounded-t-2xl [&>button]:top-3 [&>button]:right-3">
+        <SheetContent side="bottom" className="p-0 rounded-t-2xl pb-[env(safe-area-inset-bottom)] [&>button]:top-3 [&>button]:right-3">
           <div className="flex flex-col">
             <div className="px-4 pt-4 pb-3 border-b pr-12">
               <h3 className="text-base font-bold">{t('orders.detail.customer.infoTitle')}</h3>
             </div>
-            <div className="overflow-y-auto max-h-[70vh]">
+            <div className="overflow-y-auto max-h-[70dvh]">
               <div className="flex items-center gap-3 border-b px-4 py-4">
-                <img
-                  src={customer.avatar || `https://i.pravatar.cc/150?u=${customer.id}`}
-                  alt={customer.name}
-                  className="w-14 h-14 rounded-full object-cover flex-shrink-0 border"
+                <CustomerAvatar
+                  name={customer.name}
+                  avatar={customer.avatar}
+                  className="h-14 w-14 flex-shrink-0 border"
                 />
                 <div className="min-w-0">
                   <p className="font-semibold text-base truncate">{customer.name}</p>
@@ -982,6 +1017,15 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
           </div>
         </SheetContent>
       </Sheet>
+
+      {/* Refund dialog — amount + reason, re-checking eligibility on open */}
+      <RefundDialog
+        orderId={order.id}
+        orderNumber={order.orderNumber}
+        open={refundOpen}
+        onOpenChange={setRefundOpen}
+        onRefunded={handleRefunded}
+      />
 
       {/* Revoke / Restore dialog */}
       <Dialog open={!!actionDialog} onOpenChange={(open) => !open && setActionDialog(null)}>

@@ -30,14 +30,14 @@ export function DeliveryStatusBadge({ status, size = 'sm' }: DeliveryStatusBadge
       className={cn(
         'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 font-medium capitalize',
         size === 'xs' ? 'text-[10px]' : 'text-xs',
-        config?.class ?? 'border-gray-300 text-gray-600 bg-gray-50',
+        config?.class ?? 'border-border text-muted-foreground bg-muted',
       )}
     >
       <span
         className={cn(
           'rounded-full flex-shrink-0',
           size === 'xs' ? 'w-1.5 h-1.5' : 'w-2 h-2',
-          config?.dot ?? 'bg-gray-400',
+          config?.dot ?? 'bg-muted-foreground',
         )}
       />
       {config ? t(config.labelKey) : status}

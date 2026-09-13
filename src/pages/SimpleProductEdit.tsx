@@ -38,10 +38,18 @@ import {
   getAllowedStatusTransitions,
   getSimpleProductErrorMessage,
   getDeliveryErrorMessage,
+  suspensionNoticeKey,
+  isPlanQuotaSuspension,
   type SimpleProductResult,
 } from '@/services/products.service';
 import { fetchStockRequests, withdrawStockRequest } from '@/services/stockRequests.service';
-import { useApiError, useMessage, useTranslation, type TranslationKey } from '@/i18n';
+import {
+  useApiError,
+  useFormatters,
+  useMessage,
+  useTranslation,
+  type TranslationKey,
+} from '@/i18n';
 import type {
   ApiProductDetail,
   ApiPickupLocation,
@@ -57,6 +65,7 @@ export function SimpleProductEdit() {
 
   const { t } = useTranslation();
   const m = useMessage();
+  const fmt = useFormatters();
   const apiError = useApiError();
   const [product, setProduct] = useState<ApiProductDetail | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -132,6 +141,13 @@ export function SimpleProductEdit() {
   }, [id, navigate]);
 
   const productStatus = product?.status ?? null;
+  // Which sentence the suspension banner shows. Falls back to this screen's own
+  // delivery-agency wording, which names the fix's location on this page.
+  const suspensionKey = suspensionNoticeKey(
+    product?.suspension,
+    'products.simple.suspendedNotice',
+  );
+  const suspensionIsQuota = isPlanQuotaSuspension(product?.suspension);
   const isLockedForVectorisation = product?.vectorisationStatus === 'pending';
   // archived/pending_review reject content updates; suspended stays editable
   // because assigning a working agency is the way out of suspension.
@@ -218,6 +234,28 @@ export function SimpleProductEdit() {
         return;
       }
 
+      // Removing a live asking price is a price CUT on the storefront: the shop
+      // was quoting `bargain.maxPrice` and drops back to `price`, which until now
+      // was a private floor. Only ask when the window was actually on the shelf —
+      // an inert one (AI discovery off) was never quoted to anyone.
+      //
+      // The previous ceiling comes from the form's initial values rather than
+      // from the variant, because that IS what was stored — and `bargainable` is
+      // `vectorisationEnabled && bargain != null` by definition, so the product
+      // flag answers the "was it on the shelf" half without a variant read.
+      const previousAsking = initialValuesRef.current.bargainMaxPrice;
+      if (
+        'bargain' in payload &&
+        payload.bargain === null &&
+        typeof previousAsking === 'number' &&
+        previousAsking > 0 &&
+        product.vectorisationEnabled === true
+      ) {
+        const from = fmt.currency(previousAsking);
+        const to = fmt.currency(values.price);
+        if (!confirm(`${t('products.bargain.clearConfirm')}\n\n${from} → ${to}`)) return;
+      }
+
       const wasActive = product.status === 'active';
       setIsSubmitting(true);
       setFormError(null);
@@ -280,7 +318,7 @@ export function SimpleProductEdit() {
         setIsSubmitting(false);
       }
     },
-    [product, applyResult],
+    [product, applyResult, fmt, t],
   );
 
   // ─── Delivery ───────────────────────────────────────────────────────────────
@@ -505,8 +543,15 @@ export function SimpleProductEdit() {
         <div className="px-4 md:px-0">
           <Alert>
             <AlertCircle className="w-4 h-4" />
-            <AlertDescription>
-              {t('products.simple.suspendedNotice')}
+            <AlertDescription className="space-y-2">
+              <span className="block">{t(suspensionKey)}</span>
+              {suspensionIsQuota && (
+                <Button asChild size="sm" variant="outline">
+                  <Link to="/dashboard/account/billing">
+                    {t('products.suspension.planQuotaAction')}
+                  </Link>
+                </Button>
+              )}
             </AlertDescription>
           </Alert>
         </div>

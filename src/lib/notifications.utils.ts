@@ -83,6 +83,62 @@ export function notificationRoute(
   }
 }
 
+/**
+ * The backend's deep-link vocabulary → this app's routes.
+ *
+ * `notificationRoute` above covers the in-app inbox and push, where we get an
+ * `aggregateType`. Email, WhatsApp and Telegram cannot carry structured data, so
+ * their button is a bare URL — `{VENDOR_APP_URL}/{path}` — and `path` is one of
+ * exactly eight labels (api-doc/notifications/deep-links.md). Without this,
+ * `https://vendor.wi-mall.com/orders/665f…` hits App.tsx's catch-all and
+ * redirects to `/dashboard`, losing the id: a silent wrong page rather than a
+ * 404, which is worse.
+ *
+ * The contract's rules, which this relies on: no leading or trailing slash, no
+ * route prefix, no locale, and **at most one id, always last** — so switching on
+ * the literal segments is enough and nobody needs a parser.
+ *
+ * 🔴 **An unknown path is "no destination", never an error.** That is what lets
+ * the backend add a label before this app ships a case for it: the worst outcome
+ * is a fall through to `/dashboard`, in a build that has not been updated yet.
+ */
+export function routeFromNotificationPath(path: string): string | null {
+  const clean = path.replace(/^\/+|\/+$/g, '');
+  if (!clean) return null;
+  const [head, tail] = clean.split('/');
+  const view = tail ? `?view=${encodeURIComponent(tail)}` : '';
+
+  switch (head) {
+    case 'orders':
+      return `/dashboard/orders${view}`;
+    case 'bookings':
+      return `/dashboard/services/appointments${view}`;
+    case 'products':
+      return tail
+        ? `/dashboard/product-edit/${encodeURIComponent(tail)}`
+        : '/dashboard/products';
+    case 'agency-connections':
+      return '/dashboard/agency/connections';
+    case 'stock-requests':
+      return `/dashboard/inventory/requests${view}`;
+    case 'tickets':
+      // Sent by the three `payout.*` events. The PATH carries a Ticket id while
+      // `aggregateId` on the same notification carries the PayoutRequest id —
+      // two different things. Here we only have the path, so the ticket list is
+      // the honest destination; the in-app route above still prefers payouts.
+      return '/dashboard/tickets';
+    case 'plans':
+      return '/dashboard/account/billing';
+    case 'settings':
+      // Only `settings/storage` exists in the vocabulary. The media-storage quota
+      // is rendered on Account → Billing, not under Settings — see
+      // `config/navigation.ts`, which records the same split.
+      return tail === 'storage' ? '/dashboard/account/billing' : null;
+    default:
+      return null;
+  }
+}
+
 /** Action-button label per aggregate, e.g. an order notification → "View order". */
 const AGGREGATE_ACTION_LABEL: Record<NotificationAggregateType, TranslationKey> = {
   order: 'notifications.actionLabels.order',

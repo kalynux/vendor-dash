@@ -242,6 +242,8 @@ export const orders = {
             orderType: 'Order Type',
             currency: 'Currency',
             placedAt: 'Placed At',
+            /** Shown in place of the Refund action when the server says no. `reason` is a customers.refundReason.* sentence. */
+            refundUnavailable: 'Refund unavailable — {{reason}}',
         },
 
         dispute: {

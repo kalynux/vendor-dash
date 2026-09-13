@@ -54,8 +54,12 @@ function hasActiveChild(item: NavItem, pathname: string): boolean {
   return item.children?.some((c) => isLeafActive(c, item, pathname)) ?? false;
 }
 
+// ~40px tall (py-2.5 + text-sm). `tap-target` lifts every sidebar row to the
+// 44px touch floor: rows are `w-full`, so the halo only grows vertically, into
+// the 4px `space-y-1` gap it shares with its neighbour. This matters at
+// 768–1023, where the sidebar collapses to an icon rail on a touch tablet.
 const rowBase =
-  'relative w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground';
+  'tap-target relative w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground';
 
 // Footer nav geometry — keep in sync with the wrapper's `py-3` and the rows'
 // `space-y-1`. Used to floor the drag at exactly the two main rows.

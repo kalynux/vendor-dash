@@ -9,6 +9,7 @@ import { useOnboarding } from '@/onboarding/store/onboarding.store';
 import { onboardingService } from '@/services/onboarding.service';
 import { AgencyConnectionBrowser } from '@/components/delivery/AgencyConnectionBrowser';
 import { ConnectionsList } from '@/components/delivery/ConnectionsList';
+import { VendorReviewsTab } from '@/components/reviews/VendorReviewsTab';
 import { mapProfileError } from '@/components/vendor-settings/errors';
 import { MobilePageHeader } from '@/components/layout/MobilePageHeader';
 import { SubPageHeader } from '@/components/layout/SubPageHeader';
@@ -23,9 +24,13 @@ import { cn } from '@/lib/utils';
 import { type DeliveryAgency } from '@/types/api';
 import { useTranslation, type TranslationKey } from '@/i18n';
 
-const VALID_TABS = ['connections', 'browse'] as const;
+// `reviews` lives here rather than under Orders because what a vendor rates is a
+// DELIVERY — the agent and agency who carried it — which is this section's
+// subject. The rating is still *written* from the order it belongs to; this is
+// only the record of what was submitted.
+const VALID_TABS = ['connections', 'browse', 'reviews'] as const;
 
-/** The same two, as routes — what a sideways swipe walks. Order matters. */
+/** The same three, as routes — what a sideways swipe walks. Order matters. */
 const TAB_RING = VALID_TABS.map((tab) => `/dashboard/agency/${tab}`);
 const DEFAULT_TAB = 'connections';
 
@@ -35,11 +40,13 @@ type AgencyTab = (typeof VALID_TABS)[number];
 const TAB_LABEL_KEYS: Record<AgencyTab, TranslationKey> = {
     connections: 'nav.items.connection',
     browse: 'nav.items.browse',
+    reviews: 'nav.items.deliveryReviews',
 };
 
 const TAB_SUBTITLE_KEYS: Record<AgencyTab, TranslationKey> = {
     connections: 'agency.tabSubtitles.connections',
     browse: 'agency.tabSubtitles.browse',
+    reviews: 'agency.tabSubtitles.reviews',
 };
 
 /**
@@ -189,6 +196,12 @@ export function Agency() {
                     listHeightClass="h-[48vh] min-h-[200px]"
                     scrollable={!isMobile}
                 />
+            </TabsContent>
+
+            <TabsContent value="reviews" className={cn('space-y-2 mt-0', isMobile && 'px-4 py-4')}>
+                <p className="text-sm font-medium">{t('agency.reviews.title')}</p>
+                <p className="text-xs text-muted-foreground">{t('agency.reviews.hint')}</p>
+                <VendorReviewsTab />
             </TabsContent>
         </Tabs>
     );

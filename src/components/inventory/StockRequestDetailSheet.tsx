@@ -10,6 +10,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
+import { responsiveSheetProps } from '@/components/ui/responsive-sheet';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -21,6 +22,7 @@ import {
   shortVariantId,
 } from './stockRequest.constants';
 import { fetchStockRequestById } from '@/services/stockRequests.service';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 import type { StockRequestDto } from '@/types/stock-requests.types';
 import { useApiError, useFormatters, useTranslation } from '@/i18n';
@@ -60,6 +62,10 @@ export function StockRequestDetailSheet({
   const { t } = useTranslation();
   const fmt = useFormatters();
   const apiError = useApiError();
+  const isMobile = useIsMobile();
+  // A bottom sheet on a phone, like every sibling detail screen. Left to the
+  // SheetContent default this arrived as a 75%-wide right-edge drawer.
+  const sheet = responsiveSheetProps(isMobile, 'sm:max-w-lg');
 
   const [fetched, setFetched] = useState<StockRequestDto | null>(null);
   const [loading, setLoading] = useState(false);
@@ -108,7 +114,7 @@ export function StockRequestDetailSheet({
 
   return (
     <Sheet open={!!requestId} onOpenChange={onOpenChange}>
-      <SheetContent className="sm:max-w-lg">
+      <SheetContent side={sheet.side} className={sheet.className}>
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2">
             <PackageSearch className="w-4 h-4 shrink-0" />

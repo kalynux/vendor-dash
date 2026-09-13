@@ -243,7 +243,7 @@ export function ProfileSettings() {
                     type="button"
                     onClick={() => setAvatarPickerOpen(true)}
                     aria-label={t('account.profile.changePhoto')}
-                    className="absolute bottom-0 right-0 p-2 rounded-full bg-primary text-primary-foreground shadow-md hover:opacity-90 transition-opacity"
+                    className="absolute bottom-0 right-0 p-2 rounded-full bg-primary text-primary-foreground shadow-md hover:opacity-90 transition-opacity tap-target"
                   >
                     <Camera className="w-4 h-4" />
                   </button>

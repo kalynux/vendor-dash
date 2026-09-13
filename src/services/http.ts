@@ -52,6 +52,7 @@ export function errorFromBody(
     status: number,
     body: Record<string, unknown>,
     retryAfterHeader?: string | null,
+    requestIdHeader?: string | null,
 ): ApiError {
     const error = (body.error ?? body) as Record<string, unknown>;
     const message =
@@ -59,7 +60,14 @@ export function errorFromBody(
         (body.message as string) ??
         `Request failed with status ${status}`;
     const code = (error.code as string) ?? String(status);
-    const requestId = (body.requestId as string) ?? undefined;
+    // The body's copy first, then the `X-Request-Id` header — which the backend
+    // sets on EVERY response and is the only header it exposes cross-origin. The
+    // header is what saves a 5xx whose body never parsed as JSON: on those the
+    // request id is the only handle anyone has, and it is what makes an
+    // unactionable "something went wrong" into a support conversation.
+    //
+    // ⚠ It is a UUIDv4, not a `req_`-prefixed string. Never pattern-match a prefix.
+    const requestId = (body.requestId as string) ?? requestIdHeader ?? undefined;
     // Present on every error since Phase 16 — the default branch for a code we
     // have no specific handling for. Not narrowed at runtime: an unrecognised
     // value simply misses the category lookup and falls through to the status.
@@ -154,6 +162,17 @@ function normalizeFieldErrors(rawDetails: unknown): ApiErrorDetail[] | undefined
  * Seconds to wait after a 429. The header is authoritative (it is what the
  * gateway actually enforces); `details.retryAfterSeconds` is the convenience
  * copy. `Retry-After` may also be an HTTP-date — convert that to a delay.
+ *
+ * ⚠ **In a browser build the header is never readable.** The backend's CORS
+ * `exposedHeaders` is `['X-Request-Id']` and nothing else, so `Retry-After` and
+ * the `RateLimit-*` family are invisible cross-origin and this always falls
+ * through to the body's value — which is the whole 60-second window rather than
+ * the real time to reset. Native/Capacitor builds are same-origin enough to read
+ * it. Keep the preference order anyway: it costs nothing and is right where it
+ * works (api-doc/rate-limits.md).
+ *
+ * ⚠ Header ABSENCE means unlimited, not blocked: when the rate-limit store is
+ * degraded the backend fails open and emits no `RateLimit-*` headers at all.
  */
 function readRetryAfter(
     header: string | null | undefined,
@@ -177,5 +196,10 @@ export async function buildApiError(res: Response): Promise<ApiError> {
     } catch {
         // response body may not be JSON
     }
-    return errorFromBody(res.status, body, res.headers.get('Retry-After'));
+    return errorFromBody(
+        res.status,
+        body,
+        res.headers.get('Retry-After'),
+        res.headers.get('X-Request-Id'),
+    );
 }

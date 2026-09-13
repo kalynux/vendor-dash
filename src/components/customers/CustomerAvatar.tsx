@@ -12,7 +12,7 @@ interface CustomerAvatarProps {
 export function CustomerAvatar({ name, avatar, className }: CustomerAvatarProps) {
   return (
     <Avatar className={cn('h-10 w-10', className)}>
-      {avatar && <AvatarImage src={avatar} alt={name} />}
+      {avatar && <AvatarImage src={avatar} alt={name} className="object-cover" />}
       <AvatarFallback className="bg-primary/10 text-xs font-medium text-primary">
         {nameInitials(name)}
       </AvatarFallback>

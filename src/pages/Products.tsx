@@ -25,6 +25,7 @@ import {
   TriangleAlert,
   Globe,
   EyeOff,
+  Lock,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -81,6 +82,7 @@ import {
   bulkArchiveProducts,
   bulkUpdateProductStatus,
   ACTIVATION_ERROR_KEYS,
+  BulkPartialError,
   type StatusTransition,
   type StatusTransitionIntent,
 } from '@/services/products.service';
@@ -420,6 +422,28 @@ export function Products() {
     [t],
   );
 
+  /**
+   * A bulk run that stopped partway. `bulk/status` with `draft` is quota-gated and
+   * refuses the WHOLE request with 403, so on a selection past one 50-id chunk the
+   * earlier chunks have already applied. Saying "that failed" would send the vendor
+   * looking for changes that did happen.
+   */
+  const reportBulkFailure = useCallback(
+    (err: unknown, fallbackKey: TranslationKey) => {
+      const partial = err instanceof BulkPartialError ? err : null;
+      const message = apiError.resolve(partial ? partial.cause : err, { fallbackKey });
+      if (partial && partial.totals.success > 0) {
+        toast.warning(
+          t('products.bulk.stoppedPartway', { success: partial.totals.success }),
+          { description: message },
+        );
+        return;
+      }
+      toast.error(message);
+    },
+    [apiError, t],
+  );
+
   const handleBulkArchive = useCallback(async () => {
     if (bulkBusy || selectedProducts.length === 0) return;
     if (!confirm(t('products.bulk.confirm', { count: selectedProducts.length }))) return;
@@ -429,11 +453,11 @@ export function Products() {
       clearSelection();
       reloadList();
     } catch (err: unknown) {
-      toast.error(apiError.resolve(err, { fallbackKey: 'products.errors.bulkArchiveFailed' }));
+      reportBulkFailure(err, 'products.errors.bulkArchiveFailed');
     } finally {
       setBulkBusy(null);
     }
-  }, [bulkBusy, selectedProducts, clearSelection, reloadList, reportBulk, t, apiError]);
+  }, [bulkBusy, selectedProducts, clearSelection, reloadList, reportBulk, reportBulkFailure, t]);
 
   /**
    * Bulk publish / unpublish through POST /vendor/products/bulk/status.
@@ -454,12 +478,12 @@ export function Products() {
         clearSelection();
         reloadList();
       } catch (err: unknown) {
-        toast.error(apiError.resolve(err, { fallbackKey: 'products.errors.bulkStatusFailed' }));
+        reportBulkFailure(err, 'products.errors.bulkStatusFailed');
       } finally {
         setBulkBusy(null);
       }
     },
-    [bulkBusy, selectedProducts, clearSelection, reloadList, reportBulk, apiError],
+    [bulkBusy, selectedProducts, clearSelection, reloadList, reportBulk, reportBulkFailure],
   );
 
   const requestStatusTransition = useCallback(
@@ -854,7 +878,7 @@ export function Products() {
                           e.stopPropagation();
                           setActionsSheetProduct(product);
                         }}
-                        className="w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-full hover:bg-accent transition-colors -mr-1"
+                        className="w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-full hover:bg-accent transition-colors -mr-1 tap-target"
                         aria-label={t('products.actions.productActions')}
                       >
                         <MoreHorizontal className="w-5 h-5 text-muted-foreground" />
@@ -884,7 +908,7 @@ export function Products() {
             if (!open) setActionsSheetProduct(null);
           }}
         >
-          <SheetContent side="bottom" className="p-0">
+          <SheetContent side="bottom" className="p-0 pb-[env(safe-area-inset-bottom)]">
             {actionsSheetProduct && (() => {
               const p = actionsSheetProduct;
               const close = () => setActionsSheetProduct(null);
@@ -1280,7 +1304,11 @@ export function Products() {
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 function ProductThumbnail({ product, size }: { product: ProductListItem; size: 'md' | 'lg' }) {
+  const { t } = useTranslation();
   const dim = size === 'lg' ? 'w-16 h-16 rounded-xl' : 'w-12 h-12 rounded';
+  // `firstFileAccess` is why the URL is missing. Without it a photo the vendor's
+  // storage plan is hiding looks exactly like a product that has no photo.
+  const blocked = product.firstFileAccess === 'quota_blocked';
   return (
     <div className={`${dim} bg-muted flex-shrink-0 flex items-center justify-center overflow-hidden`}>
       {product.firstFileUrl ? (
@@ -1289,6 +1317,10 @@ function ProductThumbnail({ product, size }: { product: ProductListItem; size: '
           alt={product.title}
           className="w-full h-full object-cover"
         />
+      ) : blocked ? (
+        <span className="text-amber-600" title={t('media.blocked.thumbnailHint')}>
+          <Lock className="w-5 h-5" />
+        </span>
       ) : product.type === 'digital' ? (
         <FileDigit className="w-5 h-5 text-muted-foreground" />
       ) : (
@@ -1332,6 +1364,16 @@ function ProductGridCard({
               alt={product.title}
               className="absolute inset-0 w-full h-full object-cover"
             />
+          ) : product.firstFileAccess === 'quota_blocked' ? (
+            // The vendor's storage plan is hiding this photo — say so rather than
+            // showing the same empty tile a product with no image gets.
+            <div
+              className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-amber-600"
+              title={t('media.blocked.thumbnailHint')}
+            >
+              <Lock className="w-10 h-10" />
+              <span className="text-xs font-medium">{t('media.blocked.badge')}</span>
+            </div>
           ) : (
             <div className="absolute inset-0 flex items-center justify-center">
               {product.type === 'digital' ? (

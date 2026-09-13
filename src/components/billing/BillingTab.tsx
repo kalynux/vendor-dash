@@ -13,6 +13,7 @@ import {
   verifyTopup,
 } from '@/services/billing.service';
 import { fetchProducts } from '@/services/products.service';
+import { useProductStore } from '@/store';
 import { fetchStorageUsage } from '@/services/files.service';
 import { useTranslation, useFormatters, useApiError, type TranslationKey } from '@/i18n';
 import type {
@@ -57,6 +58,9 @@ interface PaymentRequest {
 
 export function BillingTab() {
   const { t } = useTranslation();
+  // The shared list the Products page renders — refreshed after a plan change so
+  // the quota sweep's un-suspensions are visible when the vendor walks back.
+  const { fetchProducts: refreshProducts } = useProductStore();
   const fmt = useFormatters();
   const apiError = useApiError();
   const [current, setCurrent] = useState<CurrentPlanData | null>(null);
@@ -170,7 +174,14 @@ export function BillingTab() {
     } catch {
       // best-effort
     }
-  }, []);
+    // A plan change re-runs the quota sweep, which un-suspends products and
+    // un-blocks files — but it is NOT on the request path, so the purchase
+    // response predates it. The store keeps the product list across navigation
+    // (Products only fetches on mount when it is empty), so without this the
+    // vendor walks back to a list still showing everything as suspended.
+    // Best-effort and deliberately un-awaited: it must not delay the receipt.
+    void refreshProducts().catch(() => {});
+  }, [refreshProducts]);
 
   const scrollToPlans = useCallback(() => {
     plansRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });

@@ -10,6 +10,7 @@ import { MobilePageHeader } from '@/components/layout/MobilePageHeader';
 import { SubPageHeader } from '@/components/layout/SubPageHeader';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useRouteSwipe } from '@/hooks/use-route-swipe';
+import { fetchCalendarStatus } from '@/services/services.service';
 import type { CalendarStatus } from '@/types/services.types';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { closeExternal } from '@/platform/browser';
@@ -78,7 +79,25 @@ export function Services() {
 
   const [reloadToken] = useState(0);
   const [calendarRefreshKey, setCalendarRefreshKey] = useState(0);
-  const [connected, setConnected] = useState<boolean | null>(null);
+  const [calendar, setCalendar] = useState<CalendarStatus | null>(null);
+
+  /**
+   * The calendar connection, read once for the whole page.
+   *
+   * It used to arrive only through `CalendarConnectionPanel`'s `onStatusChange`,
+   * but that panel sits inside `TabsContent value="calendar"` and Radix unmounts
+   * inactive tabs — so on the Services tab it had never mounted, the status was
+   * still `null`, and both readers below were dead on a first visit. Fetching it
+   * here makes it tab-independent; the panel still pushes its own result back so
+   * a connect/disconnect updates the banner and badges without a reload.
+   */
+  useEffect(() => {
+    let cancelled = false;
+    fetchCalendarStatus()
+      .then((s) => { if (!cancelled) setCalendar(s); })
+      .catch(() => { if (!cancelled) setCalendar(null); });
+    return () => { cancelled = true; };
+  }, [calendarRefreshKey]);
 
   // Route to the create wizard when navigated with `state.create` (quick actions).
   useEffect(() => {
@@ -157,7 +176,7 @@ export function Services() {
     return <Navigate to="/dashboard/services" replace />;
   }
 
-  const showConnectBanner = connected === false && tab !== 'calendar';
+  const showConnectBanner = calendar?.connected === false && tab !== 'calendar';
 
   const connectBanner = showConnectBanner && (
     <button
@@ -178,6 +197,7 @@ export function Services() {
           onOpenDetail={goToManage}
           onCreate={goToCreate}
           reloadToken={reloadToken}
+          calendarDesynced={calendar?.requiresReauth ?? false}
         />
       </TabsContent>
 
@@ -188,7 +208,7 @@ export function Services() {
       <TabsContent value="calendar" className="mt-0 max-w-2xl">
         <CalendarConnectionPanel
           refreshKey={calendarRefreshKey}
-          onStatusChange={(s: CalendarStatus) => setConnected(s.connected)}
+          onStatusChange={(s: CalendarStatus) => setCalendar(s)}
         />
       </TabsContent>
     </Tabs>

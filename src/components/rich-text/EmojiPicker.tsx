@@ -73,7 +73,7 @@ export function EmojiPicker({ onPick, disabled }: EmojiPickerProps) {
           <Smile />
         </ToolbarButton>
         <Sheet open={open} onOpenChange={setOpen}>
-          <SheetContent side="bottom" className={cn('flex h-[60vh] flex-col gap-0 rounded-t-2xl p-0')}>
+          <SheetContent side="bottom" className={cn('flex h-[60dvh] flex-col gap-0 rounded-t-2xl p-0 pb-[env(safe-area-inset-bottom)]')}>
             <SheetHeader className="border-b pr-12">
               <SheetTitle>{t('products.editor.emoji.title')}</SheetTitle>
             </SheetHeader>

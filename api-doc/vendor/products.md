@@ -1,6 +1,6 @@
 # Products — core CRUD
 
-**Verified against source on 2026-09-08** — third pass (R7) — the whole claim list re-read, not a sample. `ProductQuerySchema` (`product.validator.ts:162-174`), the bulk 50-cap and its vendor-only three-status enum (`:179-207`), the transition map (`ProductStatusValidationService.ts:47-53`), the silent demote (`:439-453`), the image limits (`domain/services/media/image-limits.ts:14-29`), the duplicate split by `mode` (`ProductDuplicateService.ts:13-152`), the quota slot filter (`product.repository.mongo.ts:86-93`), the bulk all-or-nothing gate (`ProductBulkOperationsService.ts:53-72`), the five vectorisation statuses (`product.model.ts:26`) and the 900/1200 rate ceilings (`api/rate-limit/policy.ts:88-123`). **No defects found — every claim held.** The unescaped `$regex` on `q` is confirmed live at four sites (`product.repository.mongo.ts:219-220,269-270`) and is filed as a backend defect, not a doc defect.
+**Verified against source on 2026-09-08** — third pass (R7) — the whole claim list re-read, not a sample. `ProductQuerySchema` (`product.validator.ts:162-174`), the bulk 50-cap and its vendor-only three-status enum (`:179-207`), the transition map (`ProductStatusValidationService.ts:47-53`), the silent demote (`:439-453`), the image limits (`domain/services/media/image-limits.ts:14-29`), the duplicate split by `mode` (`ProductDuplicateService.ts:13-152`), the quota slot filter (`product.repository.mongo.ts:86-93`), the bulk all-or-nothing gate (`ProductBulkOperationsService.ts:53-72`), the five vectorisation statuses (`product.model.ts:26`) and the 900/1200 rate ceilings (`api/rate-limit/policy.ts:88-123`). **No defects found — every claim held.** The unescaped `$regex` on `q` was confirmed live at four sites (`product.repository.mongo.ts:219-220,269-270`) and filed as a backend defect, not a doc defect. ✅ **Fixed at source 2026-09-09** (DOC-PROGRAM close-out § 6, item 1): both search paths now build the pattern with `buildSearchRegex`, so `q` is escaped and trimmed. Two consequences for a caller — a term containing regex metacharacters (`.`, `*`, `(`, `+`) now matches those characters **literally** instead of behaving as a pattern, and leading/trailing whitespace is trimmed. Same change, same helper, as the vendor order search.
 
 **Verified against backend source on 2026-08-24.** Every statement below was read out of
 `jovi-mall/src/`, not out of a document. Where the backend's own `api-doc/vendor/products.md`
@@ -133,13 +133,19 @@ The schema is **not** `.strict()`, so an unknown query key is silently dropped r
 
 ### ⚠ Two source-level cautions
 
-- **`q` is interpolated into a MongoDB `$regex` without escaping** — re-verified 2026-09-08 at
-  `src/modules/catalog/repositories/mongo/product.repository.mongo.ts:219-220` **and 269-270**
-  (four sites, two query paths; the path and line numbers on this bullet were both stale). A term containing
-  regex metacharacters behaves unpredictably, and a catastrophic-backtracking term such as
-  `(a+)+$` is a live denial-of-service vector against this endpoint. **Do not offer a raw
-  free-text box straight to this parameter without client-side length limiting**, and do not
-  build features that fire it per keystroke. Filed as a backend defect.
+- **`q` is matched LITERALLY, and is escaped and trimmed before it reaches Mongo.** A term
+  containing `.`, `*`, `(`, `+` or any other regex metacharacter finds products containing those
+  characters; it is not a pattern language, so there is nothing a user can type here that changes
+  how the search behaves. Leading and trailing whitespace is stripped.
+
+  > ✅ **Fixed at source 2026-09-09; this bullet said the opposite until then.** `q` was
+  > interpolated into a MongoDB `$regex` unescaped at four sites across two query paths
+  > (`product.repository.mongo.ts:219-220` and `269-270`), which made a metacharacter behave
+  > unpredictably and a catastrophic-backtracking term such as `(a+)+$` a live denial-of-service
+  > vector against this endpoint. Both paths now build the pattern with `buildSearchRegex`.
+  > The advice that followed — no raw free-text box without client-side length limiting, nothing
+  > that fires per keystroke — is **withdrawn as a safety measure**. Debouncing is still worth
+  > doing, for the ordinary reason that it is an unindexed substring scan.
 - The handler `console.log`s the whole page payload on every request
   (`vendor-product.controller.ts:171`). Harmless to you; expect noisy backend logs.
 

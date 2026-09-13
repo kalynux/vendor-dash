@@ -311,7 +311,14 @@ export interface BookingListMeta {
   totalPages: number;
 }
 
-// Calendar view (GET /vendor/bookings/calendar) — grouped by YYYY-MM-DD (UTC).
+// Calendar view (GET /vendor/bookings/calendar) — grouped by YYYY-MM-DD in the
+// VENDOR's timezone, which arrives beside the data as `meta.timezone`.
+//
+// ⚠ It is a wall-clock day, not an instant, and it used to be computed in the
+// SERVER's local zone while being documented as UTC — a defect fixed at source on
+// 2026-09-09, which is when `meta.timezone` appeared. Do NOT re-derive the key
+// from `startAt` with local-time getters: off the vendor's zone the two disagree
+// and a booking near a day boundary lands in the wrong cell.
 export interface BookingCalendarEntry {
   bookingId: string;
   startAt: string;
@@ -437,6 +444,13 @@ export interface BookingDetailResponse {
 export interface BookingCalendarResponse {
   success: boolean;
   data: BookingCalendarDay[];
+  /**
+   * New 2026-09-09, and the only reliable way to re-derive a `date` key: the IANA
+   * zone the keys were computed in. Optional because a backend from before that
+   * change sends no `meta` at all — callers fall back to the browser's zone,
+   * which is what this app did for its whole life until now.
+   */
+  meta?: { timezone: string };
 }
 
 export interface MarkPaidResponse {

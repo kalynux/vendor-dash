@@ -13,7 +13,7 @@ import { useTranslation, useFormatters, useApiError } from '@/i18n';
 import {
   fetchAvailability, lockSlot, unlockSlot, rescheduleBooking,
 } from '@/services/services.service';
-import { responsiveSheetProps } from '@/components/services/service.constants';
+import { responsiveSheetProps } from '@/components/ui/responsive-sheet';
 import type { AvailabilitySlot } from '@/types/services.types';
 
 interface RescheduleSheetProps {

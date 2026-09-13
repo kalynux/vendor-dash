@@ -24,8 +24,9 @@ import {
 } from '@/components/customers/schemas/customer.schemas';
 import {
   FLAG_COLOR_PRESETS, DEFAULT_FLAG_COLOR, FLAG_NAME_MAX, FLAG_DESCRIPTION_MAX,
-  contrastColor, responsiveSheetProps,
+  contrastColor,
 } from '@/components/customers/customer.constants';
+import { responsiveSheetProps } from '@/components/ui/responsive-sheet';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useTranslation, useMessage, useApiError } from '@/i18n';
 import { createFlag, updateFlag, deleteFlag } from '@/services/customers.service';
@@ -82,7 +83,7 @@ export function FlagsManagerSheet({ open, onOpenChange, flags, onChanged }: Flag
                 type="button"
                 onClick={() => setEditor(null)}
                 aria-label={t('customers.flags.back')}
-                className="-ml-1 inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent"
+                className="-ml-1 inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent tap-target"
               >
                 <ArrowLeft className="h-4 w-4" />
               </button>
@@ -153,7 +154,7 @@ export function FlagsManagerSheet({ open, onOpenChange, flags, onChanged }: Flag
                         type="button"
                         onClick={() => setEditor({ mode: 'edit', flag })}
                         aria-label={t('customers.flags.editAria', { name: flag.name })}
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent"
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent tap-target"
                       >
                         <Pencil className="h-4 w-4" />
                       </button>
@@ -161,7 +162,7 @@ export function FlagsManagerSheet({ open, onOpenChange, flags, onChanged }: Flag
                         type="button"
                         onClick={() => setPendingDelete(flag)}
                         aria-label={t('customers.flags.deleteAria', { name: flag.name })}
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive"
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive tap-target"
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>
@@ -310,7 +311,7 @@ function FlagEditor({
                   onClick={() => setValue('color', preset.value, { shouldValidate: true })}
                   aria-label={t(preset.nameKey)}
                   className={cn(
-                    'flex h-8 w-8 items-center justify-center rounded-full ring-offset-background transition',
+                    'tap-target flex h-8 w-8 items-center justify-center rounded-full ring-offset-background transition',
                     active && 'ring-2 ring-ring ring-offset-2',
                   )}
                   style={{ backgroundColor: preset.value }}

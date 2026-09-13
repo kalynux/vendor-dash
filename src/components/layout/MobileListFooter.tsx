@@ -18,10 +18,13 @@ interface MobileListFooterProps {
 
 /**
  * Sticky mobile footer that reports list progress, e.g.
- * "Showing 1–20 of 247 orders". Sits just above the MobileTabBar (h-16).
+ * "Showing 1–20 of 247 orders". Sits just above the
+ * MobileTabBar, whose height is `h-16` PLUS `pb-safe` — so the offset has to
+ * carry that same bottom inset, or on any device with a non-zero one the
+ * footer's lower edge sits behind the bar.
  *
  * While the on-screen keyboard is up the tab bar hides itself
- * (CAPACITOR-PLAN.md → P3.2), so `bottom-16` would leave this stranded 4rem
+ * (CAPACITOR-PLAN.md → P3.2), so that allowance would leave this stranded
  * above the keys with nothing underneath it. It drops to the bottom of the
  * resized viewport instead — which is where the vendor wants it anyway, since
  * the surface that raises a keyboard on these pages is the search field and this
@@ -42,7 +45,7 @@ export function MobileListFooter({
     <div
       className={cn(
         'fixed left-0 right-0 z-40 border-t bg-background/90 px-4 py-2 text-center text-xs text-muted-foreground backdrop-blur-sm',
-        keyboardOpen ? 'bottom-0' : 'bottom-16',
+        keyboardOpen ? 'bottom-0' : 'bottom-[calc(4rem+env(safe-area-inset-bottom))]',
         className,
       )}
     >

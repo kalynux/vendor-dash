@@ -31,7 +31,7 @@ export function FlagBadge({ flag, onRemove, className }: FlagBadgeProps) {
             e.stopPropagation();
             onRemove();
           }}
-          className="-mr-0.5 inline-flex h-3.5 w-3.5 items-center justify-center rounded-full opacity-80 transition hover:opacity-100"
+          className="-mr-0.5 inline-flex h-3.5 w-3.5 items-center justify-center rounded-full opacity-80 transition hover:opacity-100 tap-target"
           style={{ color: fg }}
           aria-label={t('customers.flags.removeFlag', { name: flag.name })}
         >

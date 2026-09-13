@@ -163,7 +163,7 @@ export function MobilePageHeader({
             type="button"
             onClick={onBack}
             aria-label={t('common.a11y.goBack')}
-            className="-ml-2 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-foreground hover:bg-accent transition-colors"
+            className="-ml-2 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-foreground hover:bg-accent transition-colors tap-target"
           >
             <ArrowLeft className="h-5 w-5" />
           </button>
@@ -245,7 +245,7 @@ export function MobilePageHeader({
           reach, and it has room for each action's label, which an icon in the
           bar does not. */}
       <Sheet open={overflowOpen} onOpenChange={setOverflowOpen}>
-        <SheetContent side="bottom" className="gap-0 rounded-t-2xl p-0">
+        <SheetContent side="bottom" className="gap-0 rounded-t-2xl p-0 pb-[env(safe-area-inset-bottom)]">
           <SheetHeader className="border-b px-4 pb-2 pt-4">
             <SheetTitle className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
               {title}
@@ -298,13 +298,17 @@ export function MobilePageHeader({
 /** One icon button in the bar. 36px — the whole reason the budget is four. */
 function HeaderIconButton({ action }: { action: MobileHeaderAction }) {
   const { icon: Icon, label, onClick, disabled, busy, badge } = action;
+  // The bar buttons sit on a `gap-0.5`, so the 44px halo mostly buys height
+  // inside the h-14 bar; sideways it meets the neighbour's own halo in the 2px
+  // gap. `disabled:pointer-events-none` still reaches the halo, which inherits
+  // it — that is why the utility never sets `pointer-events`.
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled || busy}
       aria-label={label}
-      className="relative flex h-9 w-9 items-center justify-center rounded-full transition-colors hover:bg-accent disabled:pointer-events-none disabled:opacity-40"
+      className="relative flex h-9 w-9 items-center justify-center rounded-full transition-colors hover:bg-accent disabled:pointer-events-none disabled:opacity-40 tap-target"
     >
       {busy ? <Loader2 className="h-5 w-5 animate-spin" /> : <Icon className="h-5 w-5" />}
       {!!badge && badge > 0 && (

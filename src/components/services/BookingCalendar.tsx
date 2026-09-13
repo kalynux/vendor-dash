@@ -14,8 +14,43 @@ interface BookingCalendarProps {
   reloadToken: number;
 }
 
+/**
+ * The calendar-day label for a grid cell.
+ *
+ * Safe with local getters *because the cell is not an instant*: it was built with
+ * `new Date(y, m, d)` from local components, so these read back the same numbers
+ * that went in. This is the square's own label, not a conversion.
+ */
 function ymd(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/**
+ * Today's wall-clock day in `timeZone`, as `YYYY-MM-DD`.
+ *
+ * ⚠ This one genuinely needs the zone. The server's `date` keys are wall-clock
+ * days in the VENDOR's timezone, and a vendor abroad — or simply a browser set to
+ * another zone — has a different "today" from the calendar they are looking at,
+ * so the highlighted square would be the wrong one for hours either side of
+ * midnight.
+ *
+ * `en-CA` is passed as a literal because it formats as `YYYY-MM-DD`; never pass
+ * `undefined` as the locale (a standing rule here), and never the display locale
+ * either — this is a map key, not something a person reads.
+ */
+function todayIn(timeZone: string | null): string {
+  try {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: timeZone ?? undefined,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date());
+  } catch {
+    // An unknown IANA zone throws rather than falling back. The browser's own
+    // zone is the same answer this component gave before `meta.timezone` existed.
+    return ymd(new Date());
+  }
 }
 
 export function BookingCalendar({ onOpenBooking, reloadToken }: BookingCalendarProps) {
@@ -29,6 +64,9 @@ export function BookingCalendar({ onOpenBooking, reloadToken }: BookingCalendarP
     return new Date(now.getFullYear(), now.getMonth(), 1);
   });
   const [days, setDays] = useState<Record<string, BookingCalendarDay['bookings']>>({});
+  // The zone the server grouped its `date` keys in. `null` until the first load
+  // lands, and on a backend from before 2026-09-09 that sends no `meta`.
+  const [timezone, setTimezone] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -38,12 +76,22 @@ export function BookingCalendar({ onOpenBooking, reloadToken }: BookingCalendarP
     setLoading(true);
     setError(null);
     try {
-      const start = new Date(monthStart.getFullYear(), monthStart.getMonth(), 1);
-      const end = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0, 23, 59, 59);
-      const data = await fetchBookingCalendar(start.toISOString(), end.toISOString());
+      // ⚠ Widened by a day at each end. The bounds are instants (`toISOString`
+      // converts local midnight to UTC) while the response groups by the
+      // VENDOR's wall-clock day, so an exact month sent from a browser in a
+      // different zone clips the first or last day of that month. Every offset
+      // is under 24h, so one day of slack covers all of them, and the extra days
+      // are simply never looked up. Far more robust than doing the arithmetic.
+      const start = new Date(monthStart.getFullYear(), monthStart.getMonth(), 0);
+      const end = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 1, 23, 59, 59);
+      const { days: data, timezone: tz } = await fetchBookingCalendar(
+        start.toISOString(),
+        end.toISOString(),
+      );
       const map: Record<string, BookingCalendarDay['bookings']> = {};
       for (const d of data) map[d.date] = d.bookings;
       setDays(map);
+      setTimezone(tz);
     } catch (err) {
       setError(apiError.resolve(err, { fallbackKey: 'services.errors.loadCalendarFailed' }));
     } finally {
@@ -67,7 +115,8 @@ export function BookingCalendar({ onOpenBooking, reloadToken }: BookingCalendarP
     });
   }, [anchor]);
 
-  const todayKey = ymd(new Date());
+  // Which square to highlight — the vendor's today, not the browser's.
+  const todayKey = todayIn(timezone);
 
   return (
     <div className="space-y-3">

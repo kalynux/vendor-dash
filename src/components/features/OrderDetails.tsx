@@ -41,7 +41,10 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { useOrderStore } from '@/store';
-import { addNote, fetchNote, revokeEntitlement, restoreEntitlement, dispatchOrder, getOrderErrorMessage, isOrderFrozen } from '@/services/orders.service';
+import { addNote, fetchNote, revokeEntitlement, restoreEntitlement, dispatchOrder, fetchOrderById, getOrderErrorMessage, isOrderFrozen } from '@/services/orders.service';
+import { RefundDialog } from '@/components/customers/RefundDialog';
+import { REFUND_REASON_KEYS } from '@/components/customers/customer.constants';
+import { useRefundEligibility } from '@/hooks/use-refund-eligibility';
 import { PaymentStatusBadge } from '@/components/orders/PaymentStatusBadge';
 import { OrderStatusBadge } from '@/components/orders/OrderStatusBadge';
 import { DeliveryStatusBadge } from '@/components/orders/DeliveryStatusBadge';
@@ -50,6 +53,7 @@ import { ReassignAgencyPopover } from '@/components/orders/ReassignAgencyPopover
 import { ShipmentReviewControl } from '@/components/reviews/ShipmentReviewControl';
 import { ApiError } from '@/types/api';
 import { toast } from 'sonner';
+import { CustomerAvatar } from '@/components/customers/CustomerAvatar';
 import { formatPhoneInternational } from '@/lib/phone';
 import { useProductImages } from '@/hooks/use-product-images';
 import { useTranslation, useFormatters, Trans } from '@/i18n';
@@ -107,6 +111,10 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
   } | null>(null);
   const [actionReason, setActionReason] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
+
+  // Refund — the action is offered only once the server confirms eligibility.
+  const [refundOpen, setRefundOpen] = useState(false);
+  const refund = useRefundEligibility(currentOrder);
 
   // Order items ship without a thumbnail — resolve one per product from the catalog.
   const productImages = useProductImages(currentOrder.items.map((item) => item.productId));
@@ -190,6 +198,20 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
   const handleItemReassigned = (updated: Order) => {
     setCurrentOrder(updated);
     onOrderUpdated?.(updated);
+  };
+
+  const handleRefunded = async () => {
+    // A full refund flips paymentStatus and both write a timeline entry, so the
+    // order is re-read rather than patched locally. Eligibility moves too: a
+    // partial refund leaves the order `paid` with a smaller balance.
+    refund.refresh();
+    try {
+      const updated = await fetchOrderById(currentOrder.id);
+      setCurrentOrder(updated);
+      onOrderUpdated?.(updated);
+    } catch (err) {
+      toast.error(getOrderErrorMessage(err));
+    }
   };
 
   const handleAddNote = async () => {
@@ -324,6 +346,12 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
               {t('orders.actions.dispatchToAgency')}
             </Button>
           )}
+          {refund.canRefund && (
+            <Button variant="outline" size="sm" className="gap-2" onClick={() => setRefundOpen(true)}>
+              <RotateCcw className="w-4 h-4" />
+              {t('orders.actions.refund')}
+            </Button>
+          )}
           {nextStatuses.length > 0 ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -393,10 +421,10 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
               </CardHeader>
               <CardContent className="px-4 pb-4 space-y-3">
                 <div className="flex items-center gap-3">
-                  <img
-                    src={currentOrder.customer.avatar || `https://i.pravatar.cc/150?u=${currentOrder.customer.id}`}
-                    alt={currentOrder.customer.name}
-                    className="w-10 h-10 rounded-full object-cover"
+                  <CustomerAvatar
+                    name={currentOrder.customer.name}
+                    avatar={currentOrder.customer.avatar}
+                    className="h-10 w-10"
                   />
                   <div>
                     <p className="font-semibold text-sm">{currentOrder.customer.name}</p>
@@ -786,6 +814,15 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
                 </div>
               </div>
 
+              {/* Why the Refund action isn't offered — the vendor looks here for it. */}
+              {refund.reasonCode && (
+                <p className="text-xs text-muted-foreground">
+                  {t('orders.detail.payment.refundUnavailable', {
+                    reason: t(REFUND_REASON_KEYS[refund.reasonCode]),
+                  })}
+                </p>
+              )}
+
               {frozen && (
                 <div className="flex items-start gap-2 rounded-md bg-orange-50 border border-orange-100 p-3 text-sm">
                   <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-orange-600" />
@@ -821,8 +858,8 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
                   <CardContent className="p-5">
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex items-center gap-3 min-w-0">
-                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${entitlement.isRevoked ? 'bg-red-100' : entitlement.isExpired ? 'bg-gray-100' : 'bg-violet-100'}`}>
-                          <Download className={`w-4 h-4 ${entitlement.isRevoked ? 'text-red-600' : entitlement.isExpired ? 'text-gray-500' : 'text-violet-700'}`} />
+                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${entitlement.isRevoked ? 'bg-red-100' : entitlement.isExpired ? 'bg-muted' : 'bg-violet-100'}`}>
+                          <Download className={`w-4 h-4 ${entitlement.isRevoked ? 'text-red-600' : entitlement.isExpired ? 'text-muted-foreground' : 'text-violet-700'}`} />
                         </div>
                         <div className="min-w-0">
                           <div className="flex items-center gap-2 min-w-0">
@@ -919,6 +956,15 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
           </TabsContent>
         )}
       </Tabs>
+
+      {/* Refund dialog ── amount + reason, re-checking eligibility on open */}
+      <RefundDialog
+        orderId={currentOrder.id}
+        orderNumber={currentOrder.orderNumber}
+        open={refundOpen}
+        onOpenChange={setRefundOpen}
+        onRefunded={handleRefunded}
+      />
 
       {/* Revoke / Restore dialog ── */}
       <Dialog open={!!actionDialog} onOpenChange={(open) => !open && setActionDialog(null)}>

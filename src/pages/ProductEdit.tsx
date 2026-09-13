@@ -1,10 +1,11 @@
 import { useReducer, useCallback, useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { Link, useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { AlertCircle, Box, Package, ImageIcon, Tag, FileDigit, CheckSquare, Eye, Share2 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
 import { EditorPageShell } from '@/components/layout/EditorPageShell';
 import { useOpenPreview } from '@/components/preview';
 import { ShareProductDialog } from '@/components/products/ShareProductDialog';
@@ -40,8 +41,13 @@ import {
   applyBargainEdits,
   wasSilentlyDemoted,
 } from '@/services/products.service';
-import { ACTIVATION_ERROR_KEYS, getDeliveryErrorMessage } from '@/services/products.service';
-import type { BargainCeilingEdit } from '@/components/products/bargain';
+import {
+  ACTIVATION_ERROR_KEYS,
+  getDeliveryErrorMessage,
+  suspensionNoticeKey,
+  isPlanQuotaSuspension,
+} from '@/services/products.service';
+import { clearedCeilings, type BargainCeilingEdit } from '@/components/products/bargain';
 import { fetchStockRequests } from '@/services/stockRequests.service';
 import type { PendingStockInfo } from '@/components/inventory/PendingStockBadge';
 import { useApiError, useFormatters, useTranslation, type TranslationKey } from '@/i18n';
@@ -263,6 +269,14 @@ export function ProductEdit() {
   // CATALOG_PRODUCT_INVALID_STATE; suspended products stay editable (editing
   // the delivery agency is the way out of suspension). See products.md.
   const productStatus = state.serverProduct?.status ?? null;
+  // Falls back to this wizard's own delivery-agency wording, which points at the
+  // Review step. Any other reason gets its own sentence — see § 11 of
+  // api-doc/vendor/products.md.
+  const suspensionKey = suspensionNoticeKey(
+    state.serverProduct?.suspension,
+    'products.wizard.suspendedNotice',
+  );
+  const suspensionIsQuota = isPlanQuotaSuspension(state.serverProduct?.suspension);
   const isReadOnlyStatus = productStatus === 'archived' || productStatus === 'pending_review';
 
   /**
@@ -775,6 +789,23 @@ export function ProductEdit() {
    */
   const flushBargainEdits = useCallback(
     async (productId: string, edits: BargainCeilingEdit[]): Promise<boolean> => {
+      // Clearing a live window is a price CUT on the storefront, not just
+      // "negotiation off" — the shop was quoting `maxPrice` and drops back to
+      // `price`. Confirm it rather than letting the vendor discover it.
+      const cleared = clearedCeilings(state.serverVariants ?? [], edits);
+      if (cleared.length > 0) {
+        const lines = cleared
+          .map((c) =>
+            t('products.bargain.clearConfirmRow', {
+              variant: c.label,
+              from: fmt.currency(c.from),
+              to: fmt.currency(c.to),
+            }),
+          )
+          .join('\n');
+        if (!confirm(`${t('products.bargain.clearConfirm')}\n\n${lines}`)) return false;
+      }
+
       const failures = await applyBargainEdits(productId, edits);
       if (failures.length === 0) return true;
 
@@ -805,7 +836,7 @@ export function ProductEdit() {
       }
       return false;
     },
-    [apiError, fmt, t],
+    [apiError, fmt, t, state.serverVariants],
   );
 
   const handlePublish = useCallback(
@@ -1040,8 +1071,15 @@ export function ProductEdit() {
         <div className="px-4 md:px-0">
           <Alert>
             <AlertCircle className="w-4 h-4" />
-            <AlertDescription>
-              {t('products.wizard.suspendedNotice')}
+            <AlertDescription className="space-y-2">
+              <span className="block">{t(suspensionKey)}</span>
+              {suspensionIsQuota && (
+                <Button asChild size="sm" variant="outline">
+                  <Link to="/dashboard/account/billing">
+                    {t('products.suspension.planQuotaAction')}
+                  </Link>
+                </Button>
+              )}
             </AlertDescription>
           </Alert>
         </div>

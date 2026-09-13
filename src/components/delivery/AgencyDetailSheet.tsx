@@ -48,7 +48,7 @@ export function AgencyDetailSheet({ agency, open, onOpenChange, footerSlot }: Ag
         <Sheet open={open} onOpenChange={onOpenChange}>
             <SheetContent
                 side="bottom"
-                className="max-h-[85vh] flex flex-col rounded-t-2xl px-0 pb-0"
+                className="max-h-[85dvh] flex flex-col rounded-t-2xl px-0 pb-[env(safe-area-inset-bottom)]"
             >
                 <div className="mx-auto w-10 h-1 bg-muted rounded-full mt-2 mb-1 flex-shrink-0" />
 

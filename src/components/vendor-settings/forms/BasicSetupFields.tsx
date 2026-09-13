@@ -48,10 +48,10 @@ function withNormalizedPhones(values: Step1FormValues): Step1FormValues {
 
 const selectTriggerClass = (hasError?: boolean) =>
     cn(
-        'h-11 w-full rounded-lg border text-sm bg-slate-50 dark:bg-zinc-800',
-        'border-slate-200 dark:border-zinc-700 text-slate-900 dark:text-white',
+        'h-11 w-full rounded-lg border text-sm bg-muted',
+        'border-border text-foreground',
         'focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary',
-        'placeholder:text-slate-400 transition-colors duration-150',
+        'placeholder:text-muted-foreground transition-colors duration-150',
         hasError && 'border-red-400 focus:ring-red-200 focus:border-red-400',
     );
 
@@ -66,7 +66,7 @@ function FieldRow({ label, labelId, required, error, children }: {
     const m = useMessage();
     return (
         <div className="space-y-1.5">
-            <label id={labelId} className="block text-xs font-semibold text-slate-500 uppercase tracking-wide">
+            <label id={labelId} className="block text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                 {label}{required && <span className="text-red-500 ml-0.5">*</span>}
             </label>
             {children}

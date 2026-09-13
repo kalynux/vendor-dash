@@ -138,7 +138,7 @@ export function AttachmentsPanel({
                     type="button"
                     onClick={() => void saveAttachment(att)}
                     disabled={savingId === att.id}
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50 tap-target"
                     aria-label={t('tickets.detail.download', { name: att.fileName })}
                   >
                     {savingId === att.id ? (

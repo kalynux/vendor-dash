@@ -28,8 +28,9 @@ import {
   PRIORITY_LABEL_KEYS, PRIORITY_BADGE_CLASSES, PRIORITY_DOT_CLASSES, TICKET_PRIORITIES,
   IMPORTANCE_LABEL_KEYS, IMPORTANCE_BADGE_CLASSES, WAITING_STATUS_ROLE,
   ticketTypeKey, ROLE_LABEL_KEYS, getTypeVisual, shortTicketRef, relativeTime,
-  responsiveSheetProps, DESCRIPTION_UPDATE_MAX,
+  DESCRIPTION_UPDATE_MAX,
 } from '@/components/tickets/ticket.constants';
+import { responsiveSheetProps } from '@/components/ui/responsive-sheet';
 import { useIsMobile } from '@/hooks/use-mobile';
 import {
   fetchTicketById, updateTicket, updateTicketStatus, updateTicketPriority, closeTicket,
@@ -217,7 +218,7 @@ export function TicketDetailSheet({ ticketId, open, onOpenChange, onUpdated }: T
             <button
               type="button"
               onClick={() => setEditing((e) => !e)}
-              className="absolute right-12 top-4 inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground opacity-70 transition hover:bg-accent hover:opacity-100"
+              className="absolute right-12 top-4 inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground opacity-70 transition hover:bg-accent hover:opacity-100 tap-target"
               aria-label={t('tickets.detail.edit')}
             >
               <Pencil className="h-4 w-4" />

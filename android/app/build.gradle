@@ -1,5 +1,20 @@
 apply plugin: 'com.android.application'
 
+// Release signing credentials, kept out of git (android/keystore.properties).
+//
+// Loaded conditionally on purpose: a fresh clone or a CI runner has no
+// keystore, and a hard failure there would break assembleDebug too — debug
+// is signed with the SDK's own debug key and needs none of this. When the file
+// is absent, signingConfigs.release is simply never created and the release
+// build type falls back to unsigned, which is loud at install time rather than
+// silent at build time.
+def keystorePropertiesFile = rootProject.file('keystore.properties')
+def keystoreProperties = new Properties()
+def hasReleaseKeystore = keystorePropertiesFile.exists()
+if (hasReleaseKeystore) {
+    keystorePropertiesFile.withInputStream { keystoreProperties.load(it) }
+}
+
 android {
     namespace = "com.wi_mall.vendor"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -8,7 +23,7 @@ android {
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
-        versionName "1.0"
+        versionName "1.0.1"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -16,10 +31,32 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        // Only declared when android/keystore.properties is present — see the
+        // loader at the top of this file.
+        if (hasReleaseKeystore) {
+            release {
+                storeFile file(keystoreProperties['storeFile'])
+                storePassword keystoreProperties['storePassword']
+                keyAlias keystoreProperties['keyAlias']
+                keyPassword keystoreProperties['keyPassword']
+            }
+        }
+    }
+
     buildTypes {
         release {
+            // minifyEnabled true is NOT a free win here. Capacitor resolves
+            // plugin classes reflectively from capacitor.plugins.json, so R8
+            // strips them with no build-time error and the app fails on the
+            // first plugin call instead. Turning it on means writing keep rules
+            // for every plugin in proguard-rules.pro first.
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+
+            if (hasReleaseKeystore) {
+                signingConfig signingConfigs.release
+            }
         }
     }
 }

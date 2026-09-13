@@ -53,7 +53,7 @@ export function StarRatingInput({ value, onChange, disabled }: StarRatingInputPr
             onFocus={() => setHovered(star)}
             onBlur={() => setHovered(0)}
             className={cn(
-              'rounded-md p-1 transition-transform',
+              'tap-target rounded-md p-1 transition-transform',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
               !disabled && 'hover:scale-110',
               disabled && 'pointer-events-none opacity-60',

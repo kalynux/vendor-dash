@@ -408,7 +408,7 @@ function ValueBadge({ value, onRemove, onRename }: ValueBadgeProps) {
           e.stopPropagation();
           onRemove();
         }}
-        className="ml-0.5 hover:text-destructive transition-colors"
+        className="ml-0.5 hover:text-destructive transition-colors tap-target"
       >
         <X className="h-3 w-3" />
       </button>

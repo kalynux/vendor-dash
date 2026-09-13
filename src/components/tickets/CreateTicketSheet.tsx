@@ -21,9 +21,10 @@ import {
 } from '@/components/tickets/schemas/ticket.schemas';
 import {
   TICKET_TYPE_GROUPS, TICKET_IMPORTANCES, IMPORTANCE_LABEL_KEYS, ENTITY_TYPES, ENTITY_TYPE_LABEL_KEYS,
-  responsiveSheetProps, DESCRIPTION_CREATE_MAX, TRACKING_NUMBER_MAX, MAX_CREATE_ATTACHMENTS,
+  DESCRIPTION_CREATE_MAX, TRACKING_NUMBER_MAX, MAX_CREATE_ATTACHMENTS,
   ENTITY_TYPES_WITHOUT_PICKER, humanizeEnum,
 } from '@/components/tickets/ticket.constants';
+import { responsiveSheetProps } from '@/components/ui/responsive-sheet';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useOnboarding } from '@/onboarding/store/onboarding.store';
 import { createTicket } from '@/services/tickets.service';
@@ -488,7 +489,7 @@ export function CreateTicketSheet({ open, onOpenChange, onCreated }: CreateTicke
                         <button
                           type="button"
                           onClick={() => removeFile(f.id)}
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground tap-target"
                           aria-label={t('tickets.create.removeFile', {
                             name: f.originalName ?? t('tickets.create.fileFallback'),
                           })}

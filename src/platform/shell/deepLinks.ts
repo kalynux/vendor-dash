@@ -25,7 +25,7 @@ import { PushNotifications } from '@capacitor/push-notifications';
 import type { PluginListenerHandle } from '@capacitor/core';
 import { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { notificationRoute } from '@/lib/notifications.utils';
+import { notificationRoute, routeFromNotificationPath } from '@/lib/notifications.utils';
 import type { NotificationAggregateType } from '@/types/notifications.types';
 import { closeExternal } from '../browser';
 import { isNative } from '../env';
@@ -84,6 +84,16 @@ export function routeFromUrl(rawUrl: string): string | null {
   const raw = isWebLink ? url.pathname : `${url.host}${url.pathname}`;
   const path = raw.replace(/\/{2,}/g, '/').replace(/^\/+|\/+$/g, '');
   if (!path) return null;
+
+  // A link minted by a NOTIFICATION rather than by this app speaks the backend's
+  // eight-label vocabulary, not our route tree — `orders/665f…`, never
+  // `orders?view=665f…` (api-doc/notifications/deep-links.md). Try that first, on
+  // the dashboard-relative form of whichever shape arrived: without it
+  // `wivendor://orders/665f…` becomes `/dashboard/orders/665f…`, which matches no
+  // route and falls through to the overview with the id lost.
+  const relative = isWebLink ? path.replace(/^dashboard\/?/, '') : path;
+  const translated = routeFromNotificationPath(relative);
+  if (translated) return translated.includes('?') ? translated : `${translated}${url.search}`;
 
   return `${isWebLink ? `/${path}` : `/dashboard/${path}`}${url.search}`;
 }

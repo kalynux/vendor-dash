@@ -183,7 +183,7 @@ function ChannelSwitch({
             aria-pressed={active}
             onClick={() => onPick(id)}
             className={cn(
-              'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold leading-none text-white',
+              'tap-target inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold leading-none text-white',
               'transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-offset-background',
               plate,
               active ? 'shadow-sm' : 'opacity-40 hover:opacity-75',

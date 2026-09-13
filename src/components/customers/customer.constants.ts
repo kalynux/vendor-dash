@@ -110,16 +110,3 @@ export function contrastColor(hex: string): string {
   const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
   return luminance > 0.6 ? '#111827' : '#ffffff';
 }
-
-/**
- * Responsive props for a Sheet: a bottom sheet on mobile, a right-side panel on
- * desktop. Mirrors the tickets module convention.
- */
-export function responsiveSheetProps(
-  isMobile: boolean,
-  desktopWidth = 'sm:max-w-xl',
-): { side: 'bottom' | 'right'; className: string } {
-  return isMobile
-    ? { side: 'bottom', className: 'h-[92vh] rounded-t-2xl' }
-    : { side: 'right', className: `w-full ${desktopWidth}` };
-}

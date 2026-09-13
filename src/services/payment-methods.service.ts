@@ -4,7 +4,6 @@ import type {
   AddPaymentMethodPayload,
   PaymentMethodsListResponse,
   PaymentMethodResponse,
-  DefaultPaymentMethodResponse,
 } from '@/types/payment-method.types';
 
 // Shared, role-agnostic API — mounted at `/me/payment-methods` (NOT under `/vendor`).
@@ -14,12 +13,6 @@ const BASE = '/me/payment-methods';
 /** List all of the caller's saved methods (default first, then newest). */
 export async function fetchPaymentMethods(): Promise<SavedPaymentMethod[]> {
   const res = await api.get<PaymentMethodsListResponse>(BASE);
-  return res.data;
-}
-
-/** Get the caller's default method, or `null` if they have none. */
-export async function fetchDefaultPaymentMethod(): Promise<SavedPaymentMethod | null> {
-  const res = await api.get<DefaultPaymentMethodResponse>(`${BASE}/default`);
   return res.data;
 }
 

@@ -459,7 +459,7 @@ function VariantRowComponent({
         <td className="p-2 text-right">
           <button
             onClick={onToggleExpand}
-            className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring rounded px-1.5 py-1 hover:bg-muted"
+            className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring rounded px-1.5 py-1 hover:bg-muted tap-target"
           >
             <span>{t(isExpanded ? 'products.variantTable.less' : 'products.variantTable.more')}</span>
             <ChevronDown
@@ -625,7 +625,7 @@ function VariantRowCard({
       <button
         type="button"
         onClick={onToggleExpand}
-        className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline px-1 py-1 -mx-1 -mb-1"
+        className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline px-1 py-1 -mx-1 -mb-1 tap-target"
       >
         <span>
           {t(isExpanded
