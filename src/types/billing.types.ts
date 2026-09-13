@@ -146,6 +146,14 @@ export interface PaymentChannel {
 export interface GatewayInstructions {
   // Mobile money (NotchPay / MyCoolPay)
   ussdCode?: string;
+  /**
+   * My-CoolPay + Orange Money only: the buyer was SMSed a one-time code and
+   * **nothing has been charged yet** — the gateway does nothing at all until that
+   * code is relayed back through the row's own `/authorize` endpoint. It arrives
+   * with no `ussdCode`, which is what separates this branch from every other
+   * mobile-money one, where the USSD prompt *is* the authorisation.
+   */
+  requiresOtp?: boolean;
   expiresAt?: string;
   // Stripe (card) — charge is in USD while the catalog price stays XAF.
   /** PaymentIntent client secret — bind Stripe Elements + confirm the card with it. */
@@ -169,6 +177,11 @@ export interface TopupInitPayload {
 export interface PlanPurchasePayload {
   gateway: PaymentGateway;
   channel?: PaymentChannel;
+}
+
+/** The SMS code relayed to a row's `/authorize` endpoint. 4-8 digits. */
+export interface PaymentAuthorizePayload {
+  code: string;
 }
 
 // ─── Settings ───────────────────────────────────────────────────────────────────
@@ -215,6 +228,18 @@ export interface PlanPurchaseVerifyResponse {
   success: boolean;
   data: { purchase: PlanPurchase; subscriberPlan: SubscriberPlan | null };
 }
+// Both authorize routes answer in the **billing** envelope — the row plus fresh
+// `instructions` — not the flatter `/payments/*` one. See api-doc/vendor/billing.md.
+export interface TopupAuthorizeResponse {
+  success: boolean;
+  data: { topup: CreditTopup; instructions: GatewayInstructions | null };
+  message?: string;
+}
+export interface PlanPurchaseAuthorizeResponse {
+  success: boolean;
+  data: { purchase: PlanPurchase; instructions: GatewayInstructions | null };
+  message?: string;
+}
 export interface BillingSettingsResponse {
   success: boolean;
   data: BillingSettings;
@@ -226,6 +251,20 @@ export interface BillingSettingsResponse {
 /** Normalised result of initiating any gateway payment (top-up or plan purchase). */
 export interface PaymentInitResult {
   id: string;
+  status: PaymentStatus;
+  instructions: GatewayInstructions | null;
+}
+
+/**
+ * Normalised result of relaying an OTP, for either flow.
+ *
+ * 🔴 **A 200 here does not mean paid.** `status` stays `pending`, and that is
+ * correct: the code only authorises the charge — the buyer still confirms it on
+ * the handset, and the row settles from the gateway callback or the `/verify`
+ * poll. The returned `instructions` carry the confirmation prompt (and, on this
+ * branch, the `ussdCode` that the initiating call had no way to supply yet).
+ */
+export interface PaymentAuthorizeResult {
   status: PaymentStatus;
   instructions: GatewayInstructions | null;
 }

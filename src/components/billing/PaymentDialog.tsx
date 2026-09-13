@@ -46,6 +46,7 @@ import {
 } from '@/components/payment-methods';
 import { useTranslation, useFormatters, useApiError, type TranslationKey } from '@/i18n';
 import type {
+  PaymentAuthorizeResult,
   PaymentChannel,
   PaymentGateway,
   PaymentInitResult,
@@ -61,15 +62,21 @@ import {
   GATEWAYS,
   MOBILE_MONEY_GATEWAY,
   MOBILE_MONEY_GATEWAYS,
+  OTP_CODE_MAX_LENGTH,
   PAYMENT_POLL_INTERVAL_MS,
   PAYMENT_POLL_TIMEOUT_MS,
   formatCharged,
+  isOtpAttemptsExceeded,
+  isOtpReconcileError,
+  isValidOtpCode,
+  otpAttemptsRemaining,
+  requiresOtpStep,
   saveStripeResume,
   clearStripeResume,
   type StripeResumeKind,
 } from './billing.constants';
 
-type Phase = 'form' | 'card' | 'processing' | 'success' | 'failed' | 'timeout';
+type Phase = 'form' | 'card' | 'otp' | 'processing' | 'success' | 'failed' | 'timeout';
 
 /** Stripe init details carried from `form` into the `card` (Payment Element) phase. */
 interface StripeInit {
@@ -91,6 +98,15 @@ export interface PaymentDialogProps {
   paymentKind: StripeResumeKind;
   /** Initiate the gateway payment. Returns the normalised init result. */
   initiate: (gateway: PaymentGateway, channel: PaymentChannel) => Promise<PaymentInitResult>;
+  /**
+   * Relay the SMS code for a payment whose `initiate` answered `requiresOtp`
+   * with no `ussdCode` — My-CoolPay + Orange Money, the one gateway/operator
+   * pair with an OTP step. Required rather than optional: the plan and top-up
+   * flows each have their own `/authorize` route, and a caller that quietly
+   * omitted one would leave that flow's Orange Money payments unable to
+   * complete at all — which is the bug this step exists to fix.
+   */
+  authorize: (id: string, code: string) => Promise<PaymentAuthorizeResult>;
   /** Poll a pending payment; resolves with its current status. */
   verify: (id: string) => Promise<{ status: PaymentStatus }>;
   /** Called once the payment is confirmed paid (refresh balances/plan). */
@@ -126,6 +142,7 @@ export function PaymentDialog({
   currency,
   paymentKind,
   initiate,
+  authorize,
   verify,
   onPaid,
   successLabelKey = 'billing.checkout.successTitle',
@@ -151,6 +168,18 @@ export function PaymentDialog({
   const [ussd, setUssd] = useState<string | null>(null);
   const [stripeInit, setStripeInit] = useState<StripeInit | null>(null);
   const [cardReady, setCardReady] = useState(false);
+
+  // The row (`purchase._id` / `topup._id`) that the OTP relay and the verify
+  // poll both address. There is no second id to track — the initiating call is
+  // the only thing that mints one.
+  const [paymentId, setPaymentId] = useState<string | null>(null);
+  const [otpCode, setOtpCode] = useState('');
+  const [otpError, setOtpError] = useState<string | null>(null);
+  const [otpAttemptsLeft, setOtpAttemptsLeft] = useState<number | null>(null);
+  // Set only when too many wrong codes burned the row: the backend has already
+  // marked it `failed`, so the failed state has to send the vendor into a NEW
+  // purchase rather than offer a retry of this one.
+  const [failedReason, setFailedReason] = useState<string | null>(null);
 
   // Saved methods power the quick-select chip row + autofill.
   const [savedMethods, setSavedMethods] = useState<SavedPaymentMethod[]>([]);
@@ -183,6 +212,11 @@ export function PaymentDialog({
       setStripeInit(null);
       setCardReady(false);
       setSelectedSavedId(null);
+      setPaymentId(null);
+      setOtpCode('');
+      setOtpError(null);
+      setOtpAttemptsLeft(null);
+      setFailedReason(null);
     }
     return stopPolling;
   }, [open]);
@@ -313,7 +347,11 @@ export function PaymentDialog({
         return;
       }
 
-      // pending. For Stripe, mount the Payment Element and confirm the card next.
+      // Pending. Hold the row id for whatever comes next — the OTP relay, the
+      // verify poll, or both.
+      setPaymentId(result.id);
+
+      // For Stripe, mount the Payment Element and confirm the card next.
       if (isStripe && result.instructions?.clientSecret) {
         setStripeInit({
           id: result.id,
@@ -324,6 +362,18 @@ export function PaymentDialog({
         setCardError(null);
         setCardReady(false);
         setPhase('card');
+        return;
+      }
+
+      // My-CoolPay + Orange Money: the buyer has been SMSed a one-time code and
+      // NOTHING has been charged — the gateway sits idle until that code comes
+      // back. There is nothing to poll for yet, so collect it first.
+      if (requiresOtpStep(result.instructions)) {
+        setOtpCode('');
+        setOtpError(null);
+        setOtpAttemptsLeft(null);
+        setInstructionMsg(result.instructions?.message ?? null);
+        setPhase('otp');
         return;
       }
 
@@ -338,6 +388,68 @@ export function PaymentDialog({
       setFormError(
         apiError.resolve(err, { context: 'billing', fallbackKey: 'billing.errors.paymentFailed' }),
       );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  /**
+   * Step 2 (My-CoolPay + Orange Money only): relay the SMS code, then poll.
+   *
+   * 🔴 **A 200 here is not a payment.** The row comes back still `pending`, and
+   * that is correct — the code only authorises the charge, and the buyer has
+   * still to confirm it on the handset. So this drops straight into the same
+   * verify poll every other branch uses: no success state, no `onPaid()`, no
+   * wallet or plan refresh. The gateway callback or the poll settles it.
+   */
+  async function handleAuthorize() {
+    if (!paymentId) return;
+    const code = otpCode.trim();
+    if (!isValidOtpCode(code)) {
+      setOtpError(t('billing.validation.otpCode'));
+      return;
+    }
+
+    setOtpError(null);
+    setSubmitting(true);
+    try {
+      const result = await authorize(paymentId, code);
+      // `result.status` is deliberately not branched on. It is `pending` by
+      // contract, and even a surprising terminal value is better read off the
+      // poll below than acted on here — that keeps ONE place in this dialog that
+      // can declare a payment settled.
+      //
+      // The authorize response is also where the USSD prompt finally appears on
+      // this branch: the initiating call had none to give.
+      setUssd(result.instructions?.ussdCode ?? null);
+      setInstructionMsg(result.instructions?.message ?? t('billing.checkout.phonePrompt'));
+      setPhase('processing');
+      startPolling(paymentId);
+    } catch (err) {
+      if (isOtpAttemptsExceeded(err)) {
+        // Out of attempts — the backend has already failed the row. Another code
+        // against it could only ever conflict, so the one way on is a new purchase.
+        setFailedReason(t('billing.checkout.otpAttemptsExceeded'));
+        setPhase('failed');
+        return;
+      }
+      if (isOtpReconcileError(err)) {
+        // This row is not waiting on a code: already settled, not yet charged, or
+        // a gateway with no OTP step at all. Reconcile with the idempotent verify
+        // poll rather than resubmit — a second accepted code is a second charge.
+        setUssd(null);
+        setInstructionMsg(t('billing.checkout.otpReconciling'));
+        setPhase('processing');
+        startPolling(paymentId);
+        return;
+      }
+      // Wrong code (or anything else): stay put and let them try again. Clearing
+      // the field is deliberate — the next code is a fresh one, not an edit.
+      setOtpAttemptsLeft(otpAttemptsRemaining(err));
+      setOtpError(
+        apiError.resolve(err, { context: 'billing', fallbackKey: 'billing.errors.paymentFailed' }),
+      );
+      setOtpCode('');
     } finally {
       setSubmitting(false);
     }
@@ -387,6 +499,14 @@ export function PaymentDialog({
     setCardError(null);
     setCardReady(false);
     setSubmitting(false);
+    // A burned or abandoned row is never reused: going back to the form means
+    // the next Confirm initiates a fresh purchase, which is exactly what an
+    // attempts-exceeded failure requires.
+    setPaymentId(null);
+    setOtpCode('');
+    setOtpError(null);
+    setOtpAttemptsLeft(null);
+    setFailedReason(null);
     setPhase('form');
   }
 
@@ -647,6 +767,83 @@ export function PaymentDialog({
           </div>
         )}
 
+        {phase === 'otp' && (
+          <div className="space-y-4">
+            <div className="space-y-1">
+              <p className="font-medium">{t('billing.checkout.otpTitle')}</p>
+              <p className="text-sm text-muted-foreground">
+                {instructionMsg ?? t('billing.checkout.otpPrompt')}
+              </p>
+            </div>
+
+            {/* Nothing has moved yet on this branch. Say so plainly: a vendor who
+                loses the SMS otherwise assumes they have already been charged and
+                goes looking for a refund rather than starting again. */}
+            <div className="flex gap-2 rounded-lg border border-blue-500/30 bg-blue-500/5 p-3 text-xs text-muted-foreground">
+              <Info className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
+              <span>{t('billing.checkout.otpNoCharge')}</span>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="pay-otp">{t('billing.checkout.otpLabel')}</Label>
+              <Input
+                id="pay-otp"
+                value={otpCode}
+                onChange={(e) => {
+                  // The field only ever holds a code, so non-digits are dropped as
+                  // they are typed rather than rejected on submit.
+                  setOtpCode(e.target.value.replace(/[^0-9]/g, '').slice(0, OTP_CODE_MAX_LENGTH));
+                  setOtpError(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key !== 'Enter' || submitting) return;
+                  e.preventDefault();
+                  void handleAuthorize();
+                }}
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                autoFocus
+                maxLength={OTP_CODE_MAX_LENGTH}
+                placeholder={t('billing.checkout.otpPlaceholder')}
+                aria-invalid={!!otpError}
+                aria-describedby={otpError ? 'pay-otp-error' : undefined}
+                disabled={submitting}
+                className="text-center text-lg tracking-[0.4em]"
+              />
+            </div>
+
+            {otpError && (
+              <p id="pay-otp-error" className="text-sm text-destructive" role="alert">
+                {otpError}
+                {/* Only when the backend actually said so — an invented number here
+                    is worse than none. */}
+                {otpAttemptsLeft !== null && (
+                  <>{' '}{t('billing.checkout.otpAttemptsLeft', { count: otpAttemptsLeft })}</>
+                )}
+              </p>
+            )}
+
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => handleClose(false)}
+                disabled={submitting}
+                className="max-sm:w-full"
+              >
+                {t('common.actions.cancel')}
+              </Button>
+              <Button
+                onClick={handleAuthorize}
+                disabled={submitting || !isValidOtpCode(otpCode)}
+                className="max-sm:w-full"
+              >
+                {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {t('billing.checkout.otpSubmit')}
+              </Button>
+            </DialogFooter>
+          </div>
+        )}
+
         {phase === 'processing' && (
           <div className="space-y-4 py-2 text-center">
             <Loader2 className="mx-auto h-10 w-10 animate-spin text-primary" />
@@ -677,13 +874,18 @@ export function PaymentDialog({
           <ResultState
             icon={<XCircle className="mx-auto h-10 w-10 text-destructive" />}
             title={t('billing.checkout.failedTitle')}
-            description={t('billing.checkout.failedDescription')}
+            // The default line promises no charge was made and offers a retry.
+            // Both are wrong for a row burned by too many wrong codes: that row
+            // is `failed` server-side and only a new purchase can go anywhere.
+            description={failedReason ?? t('billing.checkout.failedDescription')}
             action={
               <>
                 <Button variant="outline" onClick={() => handleClose(false)}>
                   {t('common.actions.close')}
                 </Button>
-                <Button onClick={backToForm}>{t('common.actions.retry')}</Button>
+                <Button onClick={backToForm}>
+                  {failedReason ? t('billing.checkout.startOver') : t('common.actions.retry')}
+                </Button>
               </>
             }
           />

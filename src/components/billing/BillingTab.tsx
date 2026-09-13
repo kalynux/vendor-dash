@@ -8,8 +8,10 @@ import {
   fetchCreditBalance,
   fetchCreditPacks,
   initiatePlanPurchase,
+  authorizePlanPurchase,
   verifyPlanPurchase,
   initiateTopup,
+  authorizeTopup,
   verifyTopup,
 } from '@/services/billing.service';
 import { fetchProducts } from '@/services/products.service';
@@ -20,6 +22,7 @@ import type {
   CurrentPlanData,
   PricingPlan,
   CreditPack,
+  PaymentAuthorizeResult,
   PaymentChannel,
   PaymentGateway,
   PaymentInitResult,
@@ -53,6 +56,10 @@ interface PaymentRequest {
   successLabelKey: TranslationKey;
   paymentKind: StripeResumeKind;
   initiate: (gateway: PaymentGateway, channel: PaymentChannel) => Promise<PaymentInitResult>;
+  // Plans and top-ups authorize on their OWN route — `/plan-purchases/:id/authorize`
+  // and `/credits/topups/:id/authorize`. Neither is `POST /payments/:id/authorize`,
+  // which only knows `PaymentTransaction` rows and 404s on everything billing.
+  authorize: (id: string, code: string) => Promise<PaymentAuthorizeResult>;
   verify: (id: string) => Promise<{ status: PaymentStatus }>;
 }
 
@@ -201,6 +208,7 @@ export function BillingTab() {
       successLabelKey: 'billing.toast.planPurchased',
       paymentKind: 'plan',
       initiate: (gateway, channel) => initiatePlanPurchase(plan._id, { gateway, channel }),
+      authorize: authorizePlanPurchase,
       verify: verifyPlanPurchase,
     });
     setPaymentOpen(true);
@@ -216,6 +224,7 @@ export function BillingTab() {
       successLabelKey: 'billing.toast.creditsAdded',
       paymentKind: 'topup',
       initiate: (gateway, channel) => initiateTopup({ packCode: pack.code, gateway, channel }),
+      authorize: authorizeTopup,
       verify: verifyTopup,
     });
     setPaymentOpen(true);
@@ -283,6 +292,7 @@ export function BillingTab() {
           successLabelKey={payment.successLabelKey}
           paymentKind={payment.paymentKind}
           initiate={payment.initiate}
+          authorize={payment.authorize}
           verify={payment.verify}
           onPaid={refreshAfterPayment}
         />

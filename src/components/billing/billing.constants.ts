@@ -3,8 +3,13 @@
 // User-visible labels are exported as `TranslationKey`s and resolved by the call
 // site: this module has no React context of its own. See src/i18n/README.md.
 
+import { ApiError } from '@/types/api';
 import type { TranslationKey } from '@/i18n';
-import type { PaymentGateway, SubscriberPlanStatus } from '@/types/billing.types';
+import type {
+    GatewayInstructions,
+    PaymentGateway,
+    SubscriberPlanStatus,
+} from '@/types/billing.types';
 import type { PaymentMethodType } from '@/types/payment-method.types';
 
 type Translate = (key: TranslationKey, params?: Record<string, string | number>) => string;
@@ -20,6 +25,75 @@ export const NOTIFY_DAYS_MAX = 90;
 export const PAYMENT_POLL_INTERVAL_MS = 4000;
 /** Give up polling after this long (mobile money can take a couple of minutes). */
 export const PAYMENT_POLL_TIMEOUT_MS = 3 * 60 * 1000;
+
+// ─── Mobile-money OTP relay ─────────────────────────────────────────────────────
+// My-CoolPay + Orange Money is the one gateway/operator pair with an OTP step:
+// the initiate call answers `requiresOtp` with no `ussdCode`, the buyer is SMSed
+// a one-time code, and NOTHING IS CHARGED until that code is relayed back to the
+// row's `/authorize` endpoint. Every other pair authorises via the USSD prompt
+// and never reaches this branch.
+
+/** The backend accepts 4-8 digits; reject anything else before it leaves the client. */
+const OTP_CODE_PATTERN = /^\d{4,8}$/;
+
+export const OTP_CODE_MIN_LENGTH = 4;
+export const OTP_CODE_MAX_LENGTH = 8;
+
+export function isValidOtpCode(code: string): boolean {
+    return OTP_CODE_PATTERN.test(code.trim());
+}
+
+/**
+ * Does this payment need the SMS code relayed before anything is charged?
+ *
+ * Gated on `requiresOtp` **and** the absence of a `ussdCode` — the two travel
+ * together on this branch, and a row that somehow carries both is better served
+ * by the USSD prompt it can act on immediately than by a code it may never be
+ * sent.
+ */
+export function requiresOtpStep(instructions: GatewayInstructions | null | undefined): boolean {
+    return instructions?.requiresOtp === true && !instructions.ussdCode;
+}
+
+/**
+ * Codes that mean "this row is not waiting on a code" — so stop asking for one
+ * and reconcile against the row's real state instead of resubmitting.
+ *
+ * The two `*_INVALID_STATE` conflicts are a settled row (a second code would be
+ * a second charge) or one with no gateway reference yet; `PAYMENT_OTP_NOT_REQUIRED`
+ * is a gateway with no OTP step at all, and should be unreachable while the
+ * screen is gated on `requiresOtpStep`. In all three the verify poll — idempotent
+ * by contract — is the reconciliation.
+ */
+const OTP_RECONCILE_CODES = new Set([
+    'BILLING_TOPUP_INVALID_STATE',
+    'BILLING_PURCHASE_INVALID_STATE',
+    'PAYMENT_OTP_NOT_REQUIRED',
+]);
+
+export function isOtpReconcileError(err: unknown): boolean {
+    return err instanceof ApiError && OTP_RECONCILE_CODES.has(err.code);
+}
+
+/**
+ * Out of attempts: the backend has already marked the row `failed`. Retrying the
+ * same row is pointless — the vendor has to start a new purchase, which is what
+ * the dialog's failed state offers.
+ */
+export function isOtpAttemptsExceeded(err: unknown): boolean {
+    return err instanceof ApiError && err.code === 'PAYMENT_OTP_ATTEMPTS_EXCEEDED';
+}
+
+/**
+ * `details.attemptsRemaining` off a `PAYMENT_OTP_INVALID` — how many tries are
+ * left before the row is burned. `null` when the backend did not send it, which
+ * is a reason to say nothing rather than to guess a number.
+ */
+export function otpAttemptsRemaining(err: unknown): number | null {
+    if (!(err instanceof ApiError) || err.code !== 'PAYMENT_OTP_INVALID') return null;
+    const value = err.detailsObject?.attemptsRemaining;
+    return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
 
 // ─── Mobile-money operators ──────────────────────────────────────────────────────
 // The operator list itself now lives in `@/components/payment-methods` —

@@ -190,6 +190,30 @@ export const billing = {
         completingFor: 'Completing payment for {{summary}} ({{amount}})',
         pay: 'Pay {{amount}}',
         payNow: 'Pay now',
+        /**
+         * The Orange Money SMS step (My-CoolPay). It is the only checkout branch
+         * where the vendor has NOT been charged by the time they see a prompt —
+         * the code is what starts the charge — so the copy has to say that
+         * outright, and must never imply the code completes the payment.
+         */
+        otpTitle: 'Enter the code we texted you',
+        otpPrompt:
+            'Orange Money has sent a one-time code to your phone. Enter it here to start the ' +
+            'payment.',
+        otpNoCharge:
+            "You haven't been charged yet. Entering the code opens the payment prompt on your " +
+            'phone — you still confirm it there.',
+        otpLabel: 'SMS code',
+        otpPlaceholder: '123456',
+        otpSubmit: 'Continue',
+        otpAttemptsLeft: plural({
+            one: '{{count}} attempt left.',
+            other: '{{count}} attempts left.',
+        }),
+        otpAttemptsExceeded:
+            'Too many incorrect codes, so this payment was cancelled. Nothing was charged — ' +
+            'start again to get a new code.',
+        otpReconciling: 'This payment is no longer waiting for a code. Checking where it got to…',
         waiting: 'Waiting for payment…',
         phonePrompt: 'Confirm the payment prompt on your phone.',
         dialUssd: 'Dial {{code}} to approve.',
@@ -252,6 +276,7 @@ export const billing = {
         daysMin: 'Must be at least 0',
         daysMax: 'Must be at most 90',
         email: 'Enter a valid email, or leave it blank.',
+        otpCode: 'Enter the 4 to 8 digit code from the SMS.',
     },
 
     toast: {

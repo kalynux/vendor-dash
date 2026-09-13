@@ -183,6 +183,25 @@ export const billing = {
         completingFor: 'Finalisation du paiement pour {{summary}} ({{amount}})',
         pay: 'Payer {{amount}}',
         payNow: 'Payer maintenant',
+        otpTitle: 'Saisissez le code reçu par SMS',
+        otpPrompt:
+            'Orange Money a envoyé un code à usage unique sur votre téléphone. Saisissez-le ici ' +
+            'pour lancer le paiement.',
+        otpNoCharge:
+            'Vous n’avez pas encore été débité. La saisie du code déclenche l’invite de paiement ' +
+            'sur votre téléphone — c’est là que vous confirmez.',
+        otpLabel: 'Code SMS',
+        otpPlaceholder: '123456',
+        otpSubmit: 'Continuer',
+        otpAttemptsLeft: plural({
+            one: 'Il reste {{count}} tentative.',
+            other: 'Il reste {{count}} tentatives.',
+        }),
+        otpAttemptsExceeded:
+            'Trop de codes incorrects : ce paiement a été annulé. Aucun débit n’a été effectué — ' +
+            'recommencez pour recevoir un nouveau code.',
+        otpReconciling:
+            'Ce paiement n’attend plus de code. Vérification de son état en cours…',
         waiting: 'En attente du paiement…',
         phonePrompt: 'Confirmez l’invite de paiement sur votre téléphone.',
         dialUssd: 'Composez {{code}} pour approuver.',
@@ -243,6 +262,7 @@ export const billing = {
         daysMin: 'Doit être au moins 0',
         daysMax: 'Doit être au plus 90',
         email: 'Saisissez un e-mail valide, ou laissez le champ vide.',
+        otpCode: 'Saisissez le code à 4 à 8 chiffres reçu par SMS.',
     },
 
     toast: {

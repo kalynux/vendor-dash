@@ -6,6 +6,7 @@ import type {
   BillingSettings,
   TopupInitPayload,
   PlanPurchasePayload,
+  PaymentAuthorizeResult,
   PaymentInitResult,
   PaymentStatus,
   PlansResponse,
@@ -14,8 +15,10 @@ import type {
   CreditPacksResponse,
   TopupInitResponse,
   TopupVerifyResponse,
+  TopupAuthorizeResponse,
   PlanPurchaseInitResponse,
   PlanPurchaseVerifyResponse,
+  PlanPurchaseAuthorizeResponse,
   BillingSettingsResponse,
 } from '@/types/billing.types';
 
@@ -82,6 +85,29 @@ export async function initiateTopup(payload: TopupInitPayload): Promise<PaymentI
   return { id: topup._id, status: topup.status, instructions: res.data.instructions };
 }
 
+/**
+ * Relay the SMS code for a top-up (My-CoolPay + Orange Money only — the one
+ * gateway/operator pair whose initiate answers `instructions.requiresOtp`).
+ *
+ * 🔴 **NOT `POST /payments/:transactionId/authorize`.** That route is for order,
+ * cart and booking payments: it resolves its argument with `PaymentTransaction`,
+ * and a billing row deliberately creates none — so it answers `404
+ * PAYMENT_TRANSACTION_NOT_FOUND` for everything on this surface. Billing's own
+ * OTP relay is owner-scoped and sits beside the `/verify` we already poll.
+ *
+ * 🔴 **A 200 does not mean paid.** The returned `status` is still `pending`;
+ * the wallet is credited by the callback or by `/verify`, never by this call.
+ */
+export async function authorizeTopup(
+  id: string,
+  code: string,
+): Promise<PaymentAuthorizeResult> {
+  const res = await api.post<TopupAuthorizeResponse>(`${BASE}/credits/topups/${id}/authorize`, {
+    code,
+  });
+  return { status: res.data.topup.status, instructions: res.data.instructions };
+}
+
 export async function verifyTopup(id: string): Promise<{ status: PaymentStatus }> {
   const res = await api.post<TopupVerifyResponse>(`${BASE}/credits/topups/${id}/verify`);
   return { status: res.data.status };
@@ -94,6 +120,22 @@ export async function initiatePlanPurchase(
   const res = await api.post<PlanPurchaseInitResponse>(`${BASE}/plans/${planId}/purchase`, payload);
   const purchase = normalizeId(res.data.purchase);
   return { id: purchase._id, status: purchase.status, instructions: res.data.instructions };
+}
+
+/**
+ * Relay the SMS code for a plan purchase. The top-up twin above carries the two
+ * things worth knowing: this is not the `/payments/*` authorize route, and a
+ * 200 leaves the row `pending` — carry on to the verify poll.
+ */
+export async function authorizePlanPurchase(
+  id: string,
+  code: string,
+): Promise<PaymentAuthorizeResult> {
+  const res = await api.post<PlanPurchaseAuthorizeResponse>(
+    `${BASE}/plan-purchases/${id}/authorize`,
+    { code },
+  );
+  return { status: res.data.purchase.status, instructions: res.data.instructions };
 }
 
 export async function verifyPlanPurchase(id: string): Promise<{ status: PaymentStatus }> {
