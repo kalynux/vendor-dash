@@ -58,28 +58,31 @@ jobs:
         continue-on-error: true
         run: npm run lint
 
-      # ⚠ STILL NON-BLOCKING, BUT FOR A COMPLETELY DIFFERENT REASON THAN BEFORE.
+      # ⚠ BLOCKING, AND IT WAS NOT ON 2026-09-13. It failed that day on two things,
+      #   and NEITHER turned out to be missing translation work.
       #
-      #   It was failing on SEVEN "hardcoded strings". Six of those were the audit
-      #   heuristic misreading CODE as copy: outside JSX, `>` and `<` are comparison
-      #   operators, so its `>text<` pattern matched things like
-      #   `if (dt > MAX_DURATION_MS) return; if (Math.abs(dx) <`. The seventh was
-      #   `placeholder="wi-mall.com/guide"` — user-visible, but a hostname is not
-      #   translatable. tools/i18n/audit.mjs now restricts the JSX sweep to .tsx
-      #   files and rejects candidates containing `;`/`=>` or shaped like a URL, and
-      #   it reports "No hardcoded user-visible strings detected".
+      #   1. Seven "hardcoded strings", six of which were CODE. Outside JSX, `>` and
+      #      `<` are comparison operators, so the audit's `>text<` pattern matched
+      #      `if (dt > MAX_DURATION_MS) return; if (Math.abs(dx) <`. The seventh was
+      #      `placeholder="wi-mall.com/guide"` — visible, but a hostname does not
+      #      translate. The sweep now runs the JSX pattern only on .tsx files and
+      #      rejects candidates containing `;`/`=>` or shaped like a URL.
       #
-      #   ⚠ WHAT IS LEFT IS REAL AND IS NOT A LINT PROBLEM: 33 of 640 backend error
-      #     codes have no message, all of them BOT_* or NEGOTIATION_*. A vendor who
-      #     hits one sees a generic fallback instead of an explanation. Fixing it
-      #     means writing 33 messages in English AND French, in the product's own
-      #     voice — copy, not code, and not something to invent on a live
-      #     dashboard. Locale parity is already FULL (fr: 4394 keys).
+      #   2. Thirty-three error codes with no message — every one BOT_* or
+      #      NEGOTIATION_*. Those belong to the n8n bot conversation and to live
+      #      customer-side bargaining sessions; this dashboard only CONFIGURES
+      #      bargaining (a ceiling and a window on a product) and calls no
+      #      negotiation endpoint. Writing 33 messages would have been dead copy.
+      #      The coverage check is now scoped to codes this client can receive, and
+      #      it PRINTS the exclusion count so a newly-reachable family gets noticed.
       #
-      #   ⚠ MAKE THIS BLOCKING once those 33 have copy. The other two checks this
-      #     script runs — locale parity and the i18n smoke test — both pass today.
+      #   ⚠ The mirror in api-doc/error-codes.ts was NOT trimmed to make this pass.
+      #     It is a copy of the backend registry; a mirror is re-taken or it is
+      #     wrong, never edited to satisfy a check.
+      #
+      #   All three checks now pass: locale parity (fr: 4394 keys, full), 607 of 607
+      #   reachable codes mapped, and no hardcoded strings.
       - name: i18n audit and smoke test
-        continue-on-error: true
         run: npm run i18n:check
 
       - name: Rich-text contract

@@ -9,9 +9,11 @@
  *     (usually a rename that was only half-applied). Only locales marked
  *     `complete` in `src/i18n/config.ts` are required to be at parity.
  *
- *  2. **Error-code coverage** — every code in `api-doc/error-codes.ts` must
- *     have a message in `errors.codes`. A missing one means a real backend
- *     failure would fall back to a generic message.
+ *  2. **Error-code coverage** — every code in `api-doc/error-codes.ts` that this
+ *     client can actually RECEIVE must have a message in `errors.codes`. A missing
+ *     one means a real backend failure would fall back to a generic message.
+ *     `UNREACHABLE_PREFIXES` below carves out the families that belong to other
+ *     surfaces (the n8n bot, and customer-side bargaining sessions) and states why.
  *
  *  3. **Hardcoded strings** — a heuristic sweep of `src/` for user-visible
  *     English that never made it into a catalog: JSX text nodes and the
@@ -177,17 +179,61 @@ for (const locale of allLocales) {
 // ─── 2. Backend error-code coverage ──────────────────────────────────────────
 
 console.log('\n── Backend error codes ────────────────────────────────────────');
-const docCodes = [...readFileSync(ERROR_CODES_FILE, 'utf8').matchAll(/^\s{4}([A-Z][A-Z0-9_]+):\s*'/gm)].map(
+/**
+ * Families of code this client can never receive, so a message for one would be
+ * copy that is never read.
+ *
+ * The registry mirrored in api-doc/error-codes.ts is the WHOLE platform's, and the
+ * platform is larger than this dashboard. Two families in it belong to surfaces a
+ * vendor never touches:
+ *
+ *   BOT_*          raised inside the n8n bot conversation — identity resolution,
+ *                  onboarding steps, support scope. No request this app makes can
+ *                  produce one; they are answered to a WhatsApp or Telegram user.
+ *
+ *   NEGOTIATION_*  a live bargaining SESSION between a customer and the bot: price
+ *                  locks, session expiry, floor and ask violations. This dashboard
+ *                  only ever *configures* bargaining — the per-variant ceiling and
+ *                  the window, on a product — and verified: nothing in src/services
+ *                  calls a negotiation endpoint.
+ *
+ * ⚠ MEASURED BEFORE BEING TRUSTED, 2026-09-13. All 33 unmapped codes carried one of
+ *   these two prefixes and NOT ONE code with either prefix was already mapped. A
+ *   clean split both ways is what makes a prefix rule honest here — a half-mapped
+ *   family would have meant somebody had started the work and this would be hiding
+ *   it.
+ *
+ * ⚠ THE MIRROR IS NOT EDITED TO SATISFY THIS CHECK. The obvious alternative —
+ *   deleting the codes from api-doc/error-codes.ts — would break the one property
+ *   that file has: it is a copy of the backend's registry and can be re-copied. A
+ *   mirror is re-taken or it is wrong; it is never trimmed to make a test pass.
+ *
+ * ⚠ THE COUNT IS PRINTED, NOT SWALLOWED. If one of these ever does become reachable
+ *   — a vendor-facing bargaining screen, say — the exclusion has to be narrowed
+ *   deliberately, and the line below is what makes it visible enough to notice.
+ */
+const UNREACHABLE_PREFIXES = ['BOT_', 'NEGOTIATION_'];
+const isUnreachable = (code) => UNREACHABLE_PREFIXES.some((pre) => code.startsWith(pre));
+
+const allDocCodes = [...readFileSync(ERROR_CODES_FILE, 'utf8').matchAll(/^\s{4}([A-Z][A-Z0-9_]+):\s*'/gm)].map(
     (m) => m[1],
 );
+const docCodes = allDocCodes.filter((c) => !isUnreachable(c));
+const excluded = allDocCodes.length - docCodes.length;
 const enErrors = readFileSync(join(LOCALES_DIR, 'en', 'errors.ts'), 'utf8');
 const mapped = new Set([...enErrors.matchAll(/^\s{8}([A-Z][A-Z0-9_]+):/gm)].map((m) => m[1]));
 const unmapped = docCodes.filter((c) => !mapped.has(c));
 
+const suffix = excluded
+    ? ` (${excluded} excluded as unreachable from this client: ${UNREACHABLE_PREFIXES.join(', ')})`
+    : '';
+
 if (unmapped.length === 0) {
-    console.log(`${GREEN}All ${docCodes.length} codes in api-doc/error-codes.ts are mapped.${RESET}`);
+    console.log(
+        `${GREEN}All ${docCodes.length} reachable codes in api-doc/error-codes.ts are mapped.${RESET}${DIM}${suffix}${RESET}`,
+    );
 } else {
-    console.log(`${RED}${unmapped.length} of ${docCodes.length} codes have no message:${RESET}`);
+    console.log(`${RED}${unmapped.length} of ${docCodes.length} reachable codes have no message:${RESET}`);
     unmapped.forEach((c) => console.log(`    ${c}`));
     failed = true;
 }
