@@ -101,7 +101,12 @@ check('fr number groups with NBSP', formatNumber('fr', 1234567.5).includes(','),
 // XAF renders as its local symbol "FCFA", and Intl places it per locale:
 // prefixed in English, suffixed in French. No decimals either way.
 // Intl separates symbol from amount with a non-breaking space (U+00A0).
-const nbsp = (s: string) => s.replace(/ | /g, ' ');
+// U+00A0 NO-BREAK SPACE and U+202F NARROW NO-BREAK SPACE, as escapes rather
+// than literal characters. They used to be written literally inside the
+// pattern, where they are indistinguishable from an ordinary space — so the
+// regex could not be reviewed by reading it, and a copy-paste through any
+// editor that normalises whitespace would silently change what it matches.
+const nbsp = (s: string) => s.replace(/[\u00A0\u202F]/g, ' ');
 check('en XAF', nbsp(formatCurrency('en', 45000, 'XAF')), 'FCFA 45,000');
 check('fr XAF is suffixed', formatCurrency('fr', 45000, 'XAF').endsWith('FCFA'), true);
 check('fr XAF has no decimals', formatCurrency('fr', 45000, 'XAF').includes(','), false);

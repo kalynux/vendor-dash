@@ -223,12 +223,27 @@ for (const file of walk(SRC_DIR)) {
     const rel = relative(ROOT, file);
     if (SKIP.some((s) => rel.startsWith(s))) continue;
 
+    /**
+     * Only a .tsx file can contain JSX, and that matters to JSX_TEXT.
+     *
+     * ⚠ OUTSIDE JSX, `>` AND `<` ARE COMPARISON OPERATORS, so `>…<` matches
+     *   ordinary arithmetic. In src/hooks/use-swipe-navigate.ts the pattern read
+     *
+     *     if (dt > MAX_DURATION_MS) return; if (Math.abs(dx) < …
+     *
+     *   as one "text node" and reported it as untranslated copy. TypeScript
+     *   requires the .tsx extension for JSX, so restricting the pattern by
+     *   extension removes that entire class of false positive rather than
+     *   filtering its symptoms.
+     */
+    const canHoldJsx = /\.tsx$/.test(file);
+
     const source = readFileSync(file, 'utf8')
         .replace(/\/\*[\s\S]*?\*\//g, '')
         .replace(/(^|[^:])\/\/.*$/gm, '$1');
 
     const hits = [];
-    for (const re of [TEXT_PROPS, JSX_TEXT, TOAST]) {
+    for (const re of canHoldJsx ? [TEXT_PROPS, JSX_TEXT, TOAST] : [TEXT_PROPS, TOAST]) {
         re.lastIndex = 0;
         for (const m of source.matchAll(re)) {
             // Collapse the newlines a multi-line JSX node carries so `-v` output
@@ -240,6 +255,27 @@ for (const file of walk(SRC_DIR)) {
             if (!/[a-z]/.test(text)) continue;
             // A single short word is almost always an identifier fragment.
             if (!/\s/.test(text) && text.length < 8) continue;
+            /**
+             * A semicolon or an arrow means this is code, not copy.
+             *
+             * Inside a .tsx file the JSX_TEXT pattern still spans expressions —
+             * `count > LIMIT ? 'a' : 'b'; return (` begins with a `>` and ends at
+             * the next `<`. Four findings in ChatRichTextEditor, PreferencesSettings,
+             * Analytics and Orders were exactly that.
+             *
+             * ⚠ Deliberately NOT filtering on parentheses: real copy contains them
+             *   ("Price (XAF)"), and every code fragment seen here carried a
+             *   semicolon anyway. Narrow beats thorough in a heuristic whose whole
+             *   risk is hiding genuine copy.
+             */
+            if (/;|=>/.test(text)) continue;
+            /**
+             * A bare URL or domain is user-visible and still not translatable — a
+             * hostname does not change per language. `placeholder="wi-mall.com/guide"`
+             * in the link dialog is the example: correct as it stands, and it would
+             * be wrong to put it in a catalog.
+             */
+            if (/^[\w.-]+\.[a-z]{2,}(\/\S*)?$/i.test(text)) continue;
             hits.push(text);
         }
     }

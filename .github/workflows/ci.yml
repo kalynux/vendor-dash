@@ -26,41 +26,58 @@ jobs:
 
       - run: npm ci
 
-      # ⚠ NON-BLOCKING, AND THE REASON IS A MEASUREMENT, NOT A PREFERENCE.
-      #   Measured on 2026-09-13, before any deployment change: this repository's
-      #   lint is ALREADY RED — 34 errors and 46 warnings, none of them in anything
-      #   the deployment touches. The bulk is 17 x react-refresh/only-export-components
-      #   plus 8 React Compiler errors (setState in an effect, refs read during
-      #   render) spread across ~20 components, and 2 irregular-whitespace errors in
-      #   tools/i18n/smoke.ts.
+      # ⚠ STILL NON-BLOCKING, AND THE NUMBER IS SMALLER THAN IT WAS. 34 errors on
+      #   2026-09-13 before any deployment change; 22 after the pass that day.
       #
-      #   Making this blocking on day one would hand you a permanently red pipeline
-      #   for faults that predate it, and a pipeline nobody believes is worse than no
-      #   pipeline. Removing the step would hide a real signal. So it runs, it
-      #   reports, and it does not gate.
+      #   What was fixed, and why those twelve were the right twelve:
+      #     7  react-refresh in src/components/ui/* — generated shadcn output, which
+      #        ships variants and hooks beside the component. The rule is now off for
+      #        that directory: satisfying it means hand-editing generated files and
+      #        losing regeneration, and the rule only protects dev Fast Refresh.
+      #     3  no-unused-vars where the code ALREADY used the leading-underscore
+      #        convention and the config did not know it. Config fixed, not code.
+      #     2  no-irregular-whitespace — U+00A0 and U+202F written as LITERAL
+      #        characters inside a regex in tools/i18n/smoke.ts. Now escapes, which
+      #        is the same pattern and actually reviewable. i18n:smoke still passes.
       #
-      #   ⚠ TURN THIS BLOCKING — delete the continue-on-error line — as soon as the
-      #     count reaches zero. That is the point of recording the number here: a
-      #     baseline with no date and no figure is how "temporarily non-blocking"
-      #     becomes permanent. The sibling dashboards are both clean (admin-dash 0
-      #     errors, agency-dash 0 errors / 3 warnings), so this is not a
-      #     house-style problem — it is this repository's backlog.
+      #   ⚠ THE REMAINING 22 ARE NOT TRIVIAL, WHICH IS WHY THEY ARE STILL HERE:
+      #     12 react-refresh in src/store/index.tsx, onboarding.store.tsx and App.tsx.
+      #        The fix is the split admin-dash uses (provider in one file, context and
+      #        hooks in another) and it changes imports in ~32 files. Mechanical, but
+      #        it is a refactor of the state layer of a LIVE app and deserves its own
+      #        change rather than riding along with a deployment.
+      #     10 react-hooks rules (refs, set-state-in-effect, purity,
+      #        preserve-manual-memoization) across product media, the variant table,
+      #        the media gallery and the storefront preview. Each is a real finding
+      #        about render-time behaviour and each needs its component re-reasoned.
+      #
+      #   ⚠ MAKE THIS BLOCKING once those land. landing did exactly this sweep on the
+      #     same day and reached zero, so its gate is already on — this one is the
+      #     remaining half, not an accepted permanent state.
       - name: Lint
         continue-on-error: true
         run: npm run lint
 
-      # ⚠ ALSO NON-BLOCKING, AND ALSO A MEASUREMENT. Measured 2026-09-13, before
-      #   any deployment change: `i18n:audit` exits 1 on SEVEN hardcoded user-facing
-      #   strings, in use-swipe-navigate.ts (2), ChatRichTextEditor.tsx, LinkDialog.tsx,
-      #   PreferencesSettings.tsx, Analytics.tsx and Orders.tsx. None is in anything
-      #   the deployment touches.
+      # ⚠ STILL NON-BLOCKING, BUT FOR A COMPLETELY DIFFERENT REASON THAN BEFORE.
       #
-      #   The smoke half of `i18n:check` passes, as do `richtext:verify` and
-      #   `mobileauth:verify` below — so this is a known backlog of seven strings,
-      #   not a broken guard.
+      #   It was failing on SEVEN "hardcoded strings". Six of those were the audit
+      #   heuristic misreading CODE as copy: outside JSX, `>` and `<` are comparison
+      #   operators, so its `>text<` pattern matched things like
+      #   `if (dt > MAX_DURATION_MS) return; if (Math.abs(dx) <`. The seventh was
+      #   `placeholder="wi-mall.com/guide"` — user-visible, but a hostname is not
+      #   translatable. tools/i18n/audit.mjs now restricts the JSX sweep to .tsx
+      #   files and rejects candidates containing `;`/`=>` or shaped like a URL, and
+      #   it reports "No hardcoded user-visible strings detected".
       #
-      #   ⚠ DELETE THE continue-on-error LINE once the count is zero. Seven is a
-      #     morning's work; the figure is recorded so it stays visible.
+      #   ⚠ WHAT IS LEFT IS REAL AND IS NOT A LINT PROBLEM: 33 of 640 backend error
+      #     codes have no message, all of them BOT_* or NEGOTIATION_*. A vendor who
+      #     hits one sees a generic fallback instead of an explanation. Fixing it
+      #     means writing 33 messages in English AND French, in the product's own
+      #     voice — copy, not code, and not something to invent on a live
+      #     dashboard. Locale parity is already FULL (fr: 4394 keys).
+      #
+      #   ⚠ MAKE THIS BLOCKING once those 33 have copy. The other two checks this
+      #     script runs — locale parity and the i18n smoke test — both pass today.
       - name: i18n audit and smoke test
         continue-on-error: true
         run: npm run i18n:check
