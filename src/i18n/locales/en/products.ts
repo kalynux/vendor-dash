@@ -630,6 +630,15 @@ export const products = {
     blockers: {
         savedAsDraft: 'Saved as a draft',
         demoted: 'This product was moved back to draft',
+        // Counted from `meta.activation.blockers` rather than taken from the
+        // response's own `message`, which the backend only writes in English.
+        summary: plural({
+            one: 'Resolve {{count}} issue to publish.',
+            other: 'Resolve {{count}} issues to publish.',
+        }),
+        // A blocker whose code this app has no copy for. The English original is
+        // deliberately not shown in its place.
+        unknown: 'Something else still needs fixing before this product can go live.',
         done: 'Done, back to products',
         retryPublish: 'Try publishing again',
     },

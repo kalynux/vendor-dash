@@ -249,7 +249,11 @@ export interface SimpleProductResult {
    * an initial quantity is a declaration, not an adjustment, and is not gated.
    */
   stockAdjustment: StockAdjustmentMeta | null;
-  message?: string;
+  // The response's own `message` is deliberately not carried through. The
+  // backend writes it for a vendor to read ("Product saved as a draft. Resolve
+  // 1 issue(s) to publish.") but only ever in English, and every outcome it
+  // describes already has localized copy — the checklist itself is rebuilt from
+  // `activation.blockers` in ActivationBlockersPanel.
 }
 
 // A response without `meta` shouldn't happen, but the product still exists — so
@@ -271,7 +275,6 @@ export async function createSimpleProduct(
     product: res.data,
     activation: res.meta?.activation ?? fallbackActivation(res.data),
     stockAdjustment: res.meta?.stockAdjustment ?? null,
-    message: res.message,
   };
 }
 
@@ -292,7 +295,6 @@ export async function updateSimpleProduct(
     product: res.data,
     activation: res.meta?.activation ?? fallbackActivation(res.data),
     stockAdjustment: res.meta?.stockAdjustment ?? null,
-    message: res.message,
   };
 }
 

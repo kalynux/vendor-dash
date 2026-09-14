@@ -567,6 +567,11 @@ export const products = {
     blockers: {
         savedAsDraft: 'Enregistré en brouillon',
         demoted: 'Ce produit est repassé en brouillon',
+        summary: plural({
+            one: 'Corrigez {{count}} point pour publier.',
+            other: 'Corrigez {{count}} points pour publier.',
+        }),
+        unknown: 'Il reste quelque chose à corriger avant que ce produit puisse être mis en vente.',
         done: 'Terminé, retour aux produits',
         retryPublish: 'Réessayer de publier',
     },

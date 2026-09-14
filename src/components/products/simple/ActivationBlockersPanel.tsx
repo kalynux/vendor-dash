@@ -8,8 +8,6 @@ import type { ApiPickupLocation, SimpleActivationMeta } from '@/types/product.ty
 
 interface ActivationBlockersPanelProps {
   activation: SimpleActivationMeta;
-  /** The server's own summary, e.g. "Product saved as a draft. Resolve 2 issue(s) to publish." */
-  message?: string;
   /** True when reporting a demotion caused by an edit rather than a fresh create. */
   demoted?: boolean;
   isBusy?: boolean;
@@ -24,17 +22,30 @@ interface ActivationBlockersPanelProps {
  */
 export function ActivationBlockersPanel({
   activation,
-  message,
   demoted = false,
   isBusy = false,
   onRetryPublish,
   onPickupLocationChosen,
   onDone,
 }: ActivationBlockersPanelProps) {
-  const { t } = useTranslation();
+  const { t, tDynamic, hasKey } = useTranslation();
   if (activation.published) return null;
 
   const guidance = getPickupGuidance(activation.pickupReason);
+
+  // Deduplicated because the backend emits one blocker per offending variant for
+  // some codes, and they collapse onto the same sentence once localized.
+  const lines = Array.from(
+    new Set(
+      activation.blockers.map((blocker) => {
+        const contextKey = `errors.contexts.simpleProduct.${blocker.code}`;
+        if (hasKey(contextKey)) return tDynamic(contextKey);
+        const codeKey = `errors.codes.${blocker.code}`;
+        if (hasKey(codeKey)) return tDynamic(codeKey);
+        return t('products.blockers.unknown');
+      }),
+    ),
+  );
 
   return (
     <div className="rounded-xl border border-border bg-muted/30 p-5 space-y-4">
@@ -44,18 +55,23 @@ export function ActivationBlockersPanel({
           <p className="font-medium text-sm">
             {t(demoted ? 'products.blockers.demoted' : 'products.blockers.savedAsDraft')}
           </p>
-          {message && <p className="text-sm text-muted-foreground mt-0.5">{message}</p>}
+          {lines.length > 0 && (
+            <p className="text-sm text-muted-foreground mt-0.5">
+              {t('products.blockers.summary', { count: lines.length })}
+            </p>
+          )}
         </div>
       </div>
 
-      {activation.blockers.length > 0 && (
-        // The backend writes these for a vendor to read, and they are more
-        // specific than anything we could remap them to — render verbatim.
+      {lines.length > 0 && (
+        // Localized from `blocker.code` rather than rendered from
+        // `blocker.message`: the backend writes that message for a vendor to
+        // read, but only ever in English.
         <ul className="space-y-2 pl-8">
-          {activation.blockers.map((blocker) => (
-            <li key={blocker.code} className="flex items-start gap-2 text-sm">
+          {lines.map((line) => (
+            <li key={line} className="flex items-start gap-2 text-sm">
               <CircleDashed className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
-              <span>{blocker.message}</span>
+              <span>{line}</span>
             </li>
           ))}
         </ul>

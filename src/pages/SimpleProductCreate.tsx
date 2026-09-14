@@ -51,12 +51,12 @@ export function SimpleProductCreate() {
       try {
         const res = await createSimpleProduct(toCreatePayload(values, publish));
         if (res.activation.published) {
-          toast.success(res.message ?? t('products.quickAdd.createdPublished'));
+          toast.success(t('products.quickAdd.createdPublished'));
           goToList();
           return;
         }
         if (!publish) {
-          toast.success(res.message ?? t('products.quickAdd.savedAsDraft'));
+          toast.success(t('products.quickAdd.savedAsDraft'));
           goToList();
           return;
         }
@@ -103,7 +103,7 @@ export function SimpleProductCreate() {
       try {
         const res = await updateSimpleProduct(result.product.id, payload);
         if (res.activation.published) {
-          toast.success(res.message ?? t('products.quickAdd.published'));
+          toast.success(t('products.quickAdd.published'));
           goToList();
           return;
         }
@@ -150,7 +150,6 @@ export function SimpleProductCreate() {
           {result ? (
             <ActivationBlockersPanel
               activation={result.activation}
-              message={result.message}
               isBusy={isSubmitting}
               onRetryPublish={handleRetryPublish}
               onPickupLocationChosen={handlePickupLocationChosen}

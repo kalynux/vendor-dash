@@ -74,7 +74,6 @@ export function SimpleProductEdit() {
   const [formError, setFormError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<SimpleFieldErrors | undefined>();
   const [activation, setActivation] = useState<SimpleActivationMeta | null>(null);
-  const [activationMessage, setActivationMessage] = useState<string | undefined>();
   const [demoted, setDemoted] = useState(false);
   const [convertOpen, setConvertOpen] = useState(false);
   /** The single variant, kept so the pickup picker can see its stock mode. */
@@ -199,7 +198,6 @@ export function SimpleProductEdit() {
   const applyResult = useCallback((res: SimpleProductResult, wasActive: boolean) => {
     setProduct(res.product);
     setActivation(res.activation);
-    setActivationMessage(res.message);
     // `defaultVariant` is the server's truth for the variant half of the write —
     // including a stock figure it declined to change.
     const saved = res.product.defaultVariant;
@@ -305,9 +303,9 @@ export function SimpleProductEdit() {
             }),
           );
         } else if (wasDemoted) {
-          toast.warning(res.message ?? t('products.blockers.demoted'));
+          toast.warning(t('products.blockers.demoted'));
         } else {
-          toast.success(res.message ?? t('products.toast.changesSaved'));
+          toast.success(t('products.toast.changesSaved'));
         }
       } catch (err: unknown) {
         const projection = projectSimpleError(err);
@@ -561,7 +559,6 @@ export function SimpleProductEdit() {
         <div className="px-4 md:px-0">
           <ActivationBlockersPanel
             activation={activation}
-            message={activationMessage}
             demoted={demoted}
             isBusy={isSubmitting}
             onRetryPublish={handleRetryPublish}
