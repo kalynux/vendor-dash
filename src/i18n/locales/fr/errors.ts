@@ -959,7 +959,21 @@ export const errors = {
         CONTACT_CHANGE_TOKEN_INVALID:
             'Ce lien de confirmation n’est plus valide. Veuillez recommencer.',
         CONTACT_CHANGE_PHONE_UNPROVEN:
-            'Connectez d’abord WhatsApp avec le nouveau numéro, puis confirmez la modification.',
+            'Connectez d’abord WhatsApp avec le nouveau numéro, ou vérifiez-le plutôt avec un code.',
+
+        PHONE_VERIFICATION_NO_TARGET:
+            'Aucun numéro de téléphone n’est encore associé à votre compte. Ajoutez-en un, puis vérifiez-le.',
+        PHONE_VERIFICATION_CODE_INVALID:
+            'Ce code n’est pas correct. Vérifiez-le et réessayez.',
+        PHONE_VERIFICATION_CODE_EXPIRED:
+            'Ce code a expiré. Demandez-en un nouveau et saisissez-le dans les 10 minutes.',
+        PHONE_VERIFICATION_TOO_MANY_ATTEMPTS:
+            'Trop de codes incorrects : celui-ci ne fonctionne plus. Demandez un nouveau code.',
+        PHONE_VERIFICATION_RESEND_TOO_SOON:
+            'Un code vient d’être envoyé. Patientez un instant avant d’en demander un autre.',
+        PHONE_VERIFICATION_DELIVERY_FAILED:
+            'Nous n’avons pas pu envoyer le code sur WhatsApp. Envoyez un message à notre bot depuis ' +
+            'ce numéro, puis redemandez le code.',
 
         ACCOUNT_CLOSURE_ROLE_NOT_ELIGIBLE:
             'Votre compte vendeur doit être fermé par le support avant de pouvoir fermer ce compte.',

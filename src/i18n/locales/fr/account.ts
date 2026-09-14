@@ -211,18 +211,43 @@ export const account = {
 
         newPhoneLabel: 'Nouveau numéro de téléphone',
         whatsappRequired:
-            'Changer votre numéro de téléphone nécessite un compte WhatsApp lié utilisant le nouveau numéro. Un compte Telegram lié ne suffit pas.',
+            'Nous prouvons un numéro de téléphone via WhatsApp : le numéro que vous utilisez doit donc disposer de WhatsApp. Si WhatsApp est déjà lié à ce numéro, vous pouvez confirmer sans code.',
         whatsappNumberMismatch:
-            "Votre numéro WhatsApp lié se termine par {{hint}}, ce qui ne correspond pas à celui-ci. Liez WhatsApp avec le nouveau numéro d'abord, sinon la confirmation sera refusée.",
+            'Votre numéro WhatsApp lié se termine par {{hint}}, ce qui ne correspond pas à celui-ci. Vous pouvez tout de même vérifier ce numéro avec un code.',
         manageConnections: 'Gérer les connexions',
         phoneFlowHint:
-            "Vous confirmerez ensuite depuis cette page — nous vérifions que votre compte WhatsApp lié utilise ce numéro. Aucun code à saisir. Vous avez 24 heures.",
-        phoneChangeRequested: 'Confirmez maintenant la modification pour terminer.',
+            'Nous enverrons ensuite un code à six chiffres au nouveau numéro sur WhatsApp, et la modification prendra effet dès que vous le saisirez. Vous avez 24 heures pour terminer.',
+        phoneChangeRequested: 'Vérifiez maintenant le nouveau numéro pour terminer.',
         phoneChangeCancelled: 'Modification du numéro annulée.',
         phoneChanged: 'Votre numéro de téléphone a été modifié.',
-        confirmPhone: 'Confirmer la modification',
+        confirmPhone: 'Confirmer avec WhatsApp',
         phonePendingNotice:
             "Continuez à vous connecter avec votre numéro actuel jusqu'à la confirmation.",
+
+        verify: 'Vérifier',
+        verified: 'Vérifié',
+        verifyPrompt:
+            "Votre numéro n'est pas encore vérifié. Le vérifier nous permet de vous joindre au sujet des commandes et des versements.",
+        sendCode: 'Envoyer le code',
+        resendCode: 'Envoyer un nouveau code',
+        resendIn: 'Nouveau code dans {{seconds}} s',
+        codeLabel: 'Code à six chiffres',
+        codePlaceholder: '123456',
+        codeSentTo: 'Nous avons envoyé un code sur WhatsApp au {{phone}}.',
+        codeExpires: 'Il expire {{when}}.',
+        codeCompletesChange:
+            'En le saisissant, votre numéro de connexion devient le nouveau.',
+        codeVerifiesCurrent: 'En le saisissant, vous confirmez le numéro déjà associé à votre compte.',
+        submitCode: 'Vérifier le numéro',
+        attemptsLeft: plural({
+            one: 'Il reste {{count}} tentative.',
+            other: 'Il reste {{count}} tentatives.',
+        }),
+        codeSent: 'Code envoyé sur WhatsApp.',
+        phoneVerified: 'Votre numéro de téléphone est vérifié.',
+        phoneChangedAndVerified: 'Votre numéro de téléphone a été modifié et vérifié.',
+        codeDeliveryHint:
+            "Si le code n'arrive pas, envoyez un message à notre bot WhatsApp depuis ce numéro, puis demandez-en un nouveau.",
 
         pendingTarget: 'En attente de passage à {{target}}',
         pendingExpires: 'Expire {{when}}.',

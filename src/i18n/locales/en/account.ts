@@ -230,20 +230,64 @@ export const account = {
             'Keep signing in with your current email until you confirm this from the link we sent.',
 
         newPhoneLabel: 'New phone number',
-        /** 🔴 There is no SMS code — the WhatsApp connection IS the proof. */
+        /**
+         * 🔴 Not "you need a linked WhatsApp account" any more — that was true
+         * when a connection was the only proof. A code sent over WhatsApp now
+         * works too, so this says what is actually required: the number has to be
+         * able to receive WhatsApp messages.
+         */
         whatsappRequired:
-            'Changing your phone number needs a linked WhatsApp account using the new number. A linked Telegram account does not count.',
+            'We prove a phone number over WhatsApp, so the number you use must have WhatsApp on it. If you already have WhatsApp linked on that number, you can confirm without a code.',
         whatsappNumberMismatch:
-            "Your linked WhatsApp number ends in {{hint}}, which doesn't match this one. Link WhatsApp with the new number first, or the confirmation will be refused.",
+            "Your linked WhatsApp number ends in {{hint}}, which doesn't match this one. You can still verify this number with a code.",
         manageConnections: 'Manage connections',
         phoneFlowHint:
-            "Next you'll confirm from this page — we check that your linked WhatsApp account uses this number. There is no code to type. You have 24 hours.",
-        phoneChangeRequested: 'Now confirm the change to finish.',
+            "Next we'll send a six-digit code to the new number on WhatsApp, and the change takes effect once you enter it. You have 24 hours to finish.",
+        phoneChangeRequested: 'Now verify the new number to finish.',
         phoneChangeCancelled: 'Phone change cancelled.',
         phoneChanged: 'Your phone number has been changed.',
-        confirmPhone: 'Confirm change',
+        confirmPhone: 'Confirm with WhatsApp',
         phonePendingNotice:
             'Keep signing in with your current number until this is confirmed.',
+
+        // ── Verifying a number with a WhatsApp code ──────────────────────────
+        // The proof that serves this dashboard. A vendor never registers through
+        // the bot, so they hold no WhatsApp connection and the `confirmPhone`
+        // route above can never succeed on its own.
+        verify: 'Verify',
+        verified: 'Verified',
+        /** Said where the Verify button is, so the reason to press it is next to it. */
+        verifyPrompt:
+            "Your number isn't verified yet. Verifying it lets us reach you about orders and payouts.",
+        sendCode: 'Send code',
+        resendCode: 'Send a new code',
+        /** The cooldown is real and server-enforced, so the wait is shown rather than guessed at. */
+        resendIn: 'Send a new code in {{seconds}}s',
+        codeLabel: 'Six-digit code',
+        codePlaceholder: '123456',
+        codeSentTo: 'We sent a code on WhatsApp to {{phone}}.',
+        codeExpires: 'It expires {{when}}.',
+        /** `completesPendingChange: true` — confirming here swaps the identifier. */
+        codeCompletesChange:
+            'Entering it switches your sign-in number to the new one.',
+        /** `completesPendingChange: false` — it only proves the number already on the account. */
+        codeVerifiesCurrent: 'Entering it confirms the number already on your account.',
+        submitCode: 'Verify number',
+        attemptsLeft: plural({
+            one: '{{count}} attempt left.',
+            other: '{{count}} attempts left.',
+        }),
+        codeSent: 'Code sent on WhatsApp.',
+        phoneVerified: 'Your phone number is verified.',
+        /** Both happened at once — `changed: true` on the confirm response. */
+        phoneChangedAndVerified: 'Your phone number has been changed and verified.',
+        /**
+         * ⛔ The 24-hour-window limitation, said before the send rather than after
+         * a 502: outside Meta's service window we can only reach a number that has
+         * messaged us recently, and this WABA has no approved template yet.
+         */
+        codeDeliveryHint:
+            "If the code doesn't arrive, send our WhatsApp bot any message from that number and ask for a new one.",
 
         pendingTarget: 'Waiting to switch to {{target}}',
         pendingExpires: 'Expires {{when}}.',

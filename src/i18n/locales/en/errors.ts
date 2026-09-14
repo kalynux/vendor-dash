@@ -1094,9 +1094,40 @@ export const errors = {
         CONTACT_CHANGE_EXPIRED: 'That request has expired. Please start again.',
         CONTACT_CHANGE_TOKEN_INVALID:
             'That confirmation link is no longer valid. Please start again.',
-        /** There is no SMS code — the proof IS a linked WhatsApp connection. */
+        /**
+         * The *connection* proof. A vendor holds no WhatsApp connection unless
+         * they linked one deliberately, which is why the code flow below exists
+         * — so this message offers that route rather than dead-ending.
+         */
         CONTACT_CHANGE_PHONE_UNPROVEN:
-            'Connect WhatsApp using the new number first, then confirm the change.',
+            'Connect WhatsApp using the new number first, or verify it with a code instead.',
+
+        // ── Verifying a phone number with a WhatsApp code ──────────────────────
+        // The proof that serves dashboard roles. `INVALID` and `EXPIRED` are
+        // deliberately distinct and must read differently: one says retype, the
+        // other says ask for a new code. Collapsing them sends a vendor hunting
+        // for a typo that is not there.
+        PHONE_VERIFICATION_NO_TARGET:
+            'There is no phone number on your account yet. Add one, then verify it.',
+        /** `details.attemptsLeft` is appended by the panel when the backend sends it. */
+        PHONE_VERIFICATION_CODE_INVALID: "That code isn't right. Check it and try again.",
+        PHONE_VERIFICATION_CODE_EXPIRED:
+            'That code has expired. Ask for a new one and enter it within 10 minutes.',
+        /** The code is destroyed, not just refused — a new one is the only way on. */
+        PHONE_VERIFICATION_TOO_MANY_ATTEMPTS:
+            'Too many incorrect codes, so that one no longer works. Ask for a new code.',
+        /** The panel disables the button for `details.retryAfterSeconds`. */
+        PHONE_VERIFICATION_RESEND_TOO_SOON:
+            'A code was just sent. Wait a moment before asking for another.',
+        /**
+         * ⛔ Almost always the 24-hour-window limitation rather than a transient
+         * fault: outside it only an approved template may be sent, and this WABA
+         * holds none. Messaging the bot reopens the window, so the copy says that
+         * instead of "try again" — same reasoning as PRODUCT_SHARE_WINDOW_CLOSED.
+         */
+        PHONE_VERIFICATION_DELIVERY_FAILED:
+            "We couldn't send the code on WhatsApp. Send our bot any message from that number, " +
+            'then ask for the code again.',
 
         // ── Account closure ───────────────────────────────────────────────────
         // A vendor cannot close their account at all; `details.blockingRoles`
