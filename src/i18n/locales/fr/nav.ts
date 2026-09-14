@@ -26,6 +26,7 @@ export const nav = {
         profile: 'Profil',
         store: 'Boutique',
         addresses: 'Adresses',
+        verification: 'Vérification',
         security: 'Sécurité',
         billing: 'Facturation',
         payout: 'Versements',

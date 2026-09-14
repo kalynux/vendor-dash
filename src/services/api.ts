@@ -217,6 +217,49 @@ async function request<T>(
     return res.json() as Promise<T>;
 }
 
+// ─── Raw-body request function ───────────────────────────────────────────────
+// For routes that answer the bytes of a file rather than a JSON envelope. The
+// only one today is the KYC document content route, whose whole purpose is to
+// be the authorized door to a private-tree file (`url` is `null` on those by
+// construction — see api-doc/vendor/identity-verification.md).
+//
+// It cannot reuse `request()` because that ends in `res.json()`, and it must not
+// be a bare `fetch` because the 401 refresh-and-retry has to apply here too: a
+// verification screen showing four documents fires four of these at once, and a
+// 15-minute access token expiring between page loads is the ordinary case.
+
+async function requestBlob(path: string, isRetry = false): Promise<Blob> {
+    const url = `${BASE_URL}${path}`;
+
+    const res = await fetch(url, {
+        method: 'GET',
+        credentials: authStrategy.credentials,
+        // No `Content-Type` — there is no request body, and the response type is
+        // whatever the stored file was.
+        headers: await authStrategy.authHeaders(),
+    });
+
+    if (res.status === 401 && !isRetry) {
+        const { err, terminal } = await classifyAuthError(res);
+        if (terminal) throw err;
+        return refreshThenRetry(() => requestBlob(path, true));
+    }
+
+    if (res.status === 403) {
+        throw (await classifyAuthError(res)).err;
+    }
+
+    // An error on this route still answers the ordinary JSON envelope, so
+    // `buildApiError` reads it correctly and the caller gets a real `code`
+    // (`KYC_DOCUMENT_NOT_FOUND`, `STORAGE_DOWNLOAD_NOT_SUPPORTED`) rather than a
+    // bare status.
+    if (!res.ok) {
+        throw await buildApiError(res);
+    }
+
+    return res.blob();
+}
+
 // ─── Multipart request function ──────────────────────────────────────────────
 // Used for file uploads. Does NOT set Content-Type — the browser sets it
 // automatically with the correct multipart/form-data boundary.
@@ -301,6 +344,14 @@ export async function refreshForXhr(): Promise<boolean> {
 export const api = {
     get<T>(path: string): Promise<T> {
         return request<T>(path, { method: 'GET' });
+    },
+
+    /**
+     * GET a raw file body rather than a JSON envelope, with the same auth and
+     * refresh-retry as every other call. See `requestBlob`.
+     */
+    getBlob(path: string): Promise<Blob> {
+        return requestBlob(path);
     },
 
     post<T>(path: string, body?: unknown): Promise<T> {

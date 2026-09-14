@@ -944,6 +944,18 @@ export const errors = {
         VENDOR_STATUS_CONFLICT: 'That shop changed while you were looking at it. Refresh and try again.',
         VENDOR_KYC_STATUS_CONFLICT: 'That verification has already been decided.',
 
+        // ── Identity verification (`/api/vendor/kyc`) ─────────────────────────
+        // ⚠ None of these means "your documents were rejected" — a rejection is
+        // a verdict a person writes, and it arrives on the record as
+        // `rejectionReason`, never as an error code.
+        KYC_SLOT_UNKNOWN: 'That is not a document we collect. Refresh the page and try again.',
+        KYC_FILE_REQUIRED: 'No file was attached. Pick a file and try again.',
+        KYC_SUBJECT_NOT_FOUND: 'We could not find your verification record. Refresh the page and try again.',
+        KYC_DOCUMENT_NOT_FOUND: 'That document is no longer there. Refresh the page to see what you have.',
+        KYC_LOCKED:
+            'Your documents cannot be changed right now — they are either being reviewed or already verified. Contact support if something must change.',
+        KYC_SLOT_FULL: 'You have added as many files as this section allows. Remove one first.',
+
         // ── Agency & contract administration ──────────────────────────────────
         DELIVERY_AGENCY_STATUS_CONFLICT:
             'That agency changed while you were looking at it. Refresh and try again.',

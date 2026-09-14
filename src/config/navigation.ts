@@ -14,6 +14,7 @@ import {
   MapPin,
   Bell,
   Shield,
+  ShieldCheck,
   User,
   CreditCard,
   Image as ImageIcon,
@@ -51,7 +52,16 @@ import type { TranslationKey } from '@/i18n';
  * Consumed by the desktop Sidebar and the MobileMoreDrawer.
  */
 
-export type NavBadge = 'orders' | 'notifications';
+/**
+ * Which live counter decorates an item.
+ *
+ * `verification` is not a count — it resolves to 1 or 0, meaning "a rejected
+ * identity submission is waiting for you" or nothing. It rides the same badge
+ * mechanism because a single attention dot and a count of one render
+ * identically, and a second decoration system for one item is not worth its
+ * weight.
+ */
+export type NavBadge = 'orders' | 'notifications' | 'verification';
 
 export interface NavChild {
   id: string;
@@ -137,10 +147,16 @@ export const FOOTER_NAV: NavItem[] = [
     labelKey: 'nav.items.account',
     path: '/dashboard/account',
     icon: UserCog,
+    // Mirrors the Verification child's badge onto the parent, because the parent
+    // is all you can see in the two places that matter: the collapsed icon rail,
+    // and the mobile More drawer, where a group's children stay folded until
+    // tapped. A rejection behind a closed group is a rejection nobody reads.
+    badge: 'verification',
     children: [
       { id: 'account-profile', labelKey: 'nav.items.profile', path: '/dashboard/account/profile', icon: User },
       { id: 'account-store', labelKey: 'nav.items.store', path: '/dashboard/account/store', icon: Store },
       { id: 'account-addresses', labelKey: 'nav.items.addresses', path: '/dashboard/account/addresses', icon: MapPin },
+      { id: 'account-verification', labelKey: 'nav.items.verification', path: '/dashboard/account/verification', icon: ShieldCheck, badge: 'verification' },
       { id: 'account-security', labelKey: 'nav.items.security', path: '/dashboard/account/security', icon: Shield, disabled: false },
       { id: 'account-billing', labelKey: 'nav.items.billing', path: '/dashboard/account/billing', icon: CreditCard },
       { id: 'account-payout', labelKey: 'nav.items.payout', path: '/dashboard/account/payout', icon: Wallet },

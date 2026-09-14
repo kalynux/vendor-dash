@@ -33,6 +33,7 @@ export const nav = {
         profile: 'Profile',
         store: 'Store',
         addresses: 'Addresses',
+        verification: 'Verification',
         security: 'Security',
         billing: 'Billing',
         payout: 'Payout Setup',

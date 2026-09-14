@@ -43,9 +43,31 @@ export interface BrandingWritePayload {
   cover_image_file_id?: string | null;
 }
 
+/**
+ * The verification block as it rides along on the vendor profile.
+ *
+ * ⚠ **This is the session's summary, not the verification surface.** The
+ * documents, the home address and the reviewers' checklist live behind
+ * `/api/vendor/kyc` (`src/services/kyc.service.ts`, typed in `kyc.types.ts`) —
+ * this is only what `role_entity` happens to carry, and it exists so the nav can
+ * badge a rejection without a second request on every app load.
+ *
+ * The verdict fields are optional because they were added to the block after
+ * this type was first written: a deployment that predates them sends the first
+ * two and nothing else, and a required field would make that a type lie.
+ */
 export interface KycDetails {
   national_id_number: string | null;
+  /** Admin-controlled. Never set by vendor input, and it gates nothing here. */
   legit_verified: boolean;
+  /**
+   * ⚠ `pending` means BOTH "never touched" and "waiting for a reviewer" — read
+   * `submitted_at` to tell them apart, exactly as on the KYC record itself.
+   */
+  status?: 'pending' | 'verified' | 'rejected';
+  submitted_at?: string | null;
+  rejection_reason?: string | null;
+  verified_at?: string | null;
 }
 
 export interface SocialLinks {

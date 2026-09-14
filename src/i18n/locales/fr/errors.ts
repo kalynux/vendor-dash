@@ -840,6 +840,18 @@ export const errors = {
         VENDOR_STATUS_CONFLICT: 'Cette boutique a changé pendant que vous la consultiez. Actualisez puis réessayez.',
         VENDOR_KYC_STATUS_CONFLICT: 'Cette vérification a déjà été tranchée.',
 
+        // ── Vérification d'identité (`/api/vendor/kyc`) ───────────────────────
+        // ⚠ Aucun de ces codes ne signifie « vos documents ont été refusés » :
+        // un refus est un verdict rédigé par une personne et arrive sur le
+        // dossier sous `rejectionReason`, jamais sous forme de code d'erreur.
+        KYC_SLOT_UNKNOWN: "Ce n'est pas un document que nous collectons. Actualisez la page et réessayez.",
+        KYC_FILE_REQUIRED: 'Aucun fichier joint. Choisissez un fichier et réessayez.',
+        KYC_SUBJECT_NOT_FOUND: 'Nous ne trouvons pas votre dossier de vérification. Actualisez la page et réessayez.',
+        KYC_DOCUMENT_NOT_FOUND: "Ce document n'est plus là. Actualisez la page pour voir ce que vous avez.",
+        KYC_LOCKED:
+            'Vos documents ne peuvent pas être modifiés pour le moment : ils sont en cours d’examen ou déjà vérifiés. Contactez le support si quelque chose doit changer.',
+        KYC_SLOT_FULL: 'Vous avez ajouté le maximum de fichiers autorisé dans cette section. Supprimez-en un d’abord.',
+
         // ── Agences & contrats ────────────────────────────────────────────────
         DELIVERY_AGENCY_STATUS_CONFLICT:
             'Cette agence a changé pendant que vous la consultiez. Actualisez puis réessayez.',

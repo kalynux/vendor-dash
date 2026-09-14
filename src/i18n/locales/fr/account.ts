@@ -1,3 +1,5 @@
+import { plural } from '../../types';
+
 /** Compte : profil, identité de la boutique, adresses, sécurité, versements. */
 export const account = {
     title: 'Compte',
@@ -7,6 +9,7 @@ export const account = {
         profile: 'Vos informations personnelles, votre photo et la langue du tableau de bord',
         store: 'L’identité publique de votre boutique, vos contacts d’assistance et le mode vacances',
         addresses: 'Les adresses professionnelles d’où vos produits sont expédiés et retirés',
+        verification: 'Les pièces d’identité qu’un administrateur examine avant de vérifier votre boutique',
         security: 'Votre mot de passe, l’authentification à deux facteurs et vos appareils connectés',
         billing: 'Votre formule, vos crédits, vos moyens de paiement enregistrés et votre stockage',
         payout: 'Votre solde de gains et la destination de vos retraits',
@@ -49,6 +52,134 @@ export const account = {
             vendor: 'Vendeur',
         },
         updated: 'Profil mis à jour',
+    },
+
+    /**
+     * Vérification d'identité (Compte → Vérification) — `/api/vendor/kyc`.
+     *
+     * ⚠ Règle de rédaction : rien ici ne doit promettre qu'un dossier complet
+     * sera approuvé, ni qu'un dossier incomplet sera refusé. Le backend
+     * n'évalue rien ; c'est une personne qui décide. « Obligatoire » signifie
+     * toujours « exigé par les vérificateurs » — une indication, pas un blocage.
+     */
+    verification: {
+        title: "Vérification d'identité",
+        info1: 'Les boutiques vérifiées inspirent davantage confiance aux acheteurs. Un administrateur examine les documents que vous ajoutez ici et décide de vérifier ou non votre compte.',
+        info2: 'Vos documents sont privés. Ils ne sont jamais affichés sur votre boutique, jamais transmis aux clients ni aux agences de livraison, et seuls vous et le vérificateur pouvez les ouvrir.',
+        info3: "Rien n'est contrôlé automatiquement — une personne lit vos documents. S'il manque quelque chose ou si un document est illisible, elle vous dira pourquoi et vous pourrez le corriger et le renvoyer.",
+        saved: 'Informations de vérification enregistrées',
+        submitted: 'Envoyé pour examen',
+        uploadsSaveImmediately: "Les documents sont enregistrés dès que vous les ajoutez. Le numéro de pièce d'identité et l'adresse du domicile ci-dessous nécessitent le bouton Enregistrer.",
+
+        status: {
+            draft: {
+                title: 'Pas encore envoyé',
+                body: "Ajoutez vos documents ci-dessous, puis envoyez-les pour examen. Vous pouvez tout modifier tant que vous n'avez pas envoyé.",
+            },
+            under_review: {
+                title: 'En cours d’examen',
+                body: "Vos documents sont entre les mains d'un vérificateur. Vous pouvez encore consulter ce que vous avez envoyé, mais vous ne pouvez pas le modifier avant sa décision.",
+            },
+            verified: {
+                title: 'Vérifié',
+                body: 'Votre identité a été vérifiée. Ces documents sont désormais verrouillés — contactez le support si quelque chose doit changer.',
+            },
+            rejected: {
+                title: 'Non accepté',
+                body: "Un vérificateur n'a pas pu vérifier votre compte. Corrigez ce qu'il indique ci-dessous, puis renvoyez le dossier.",
+            },
+            rejectionReason: 'Motif',
+            submittedOn: 'Envoyé le {{date}}',
+            verifiedOn: 'Vérifié le {{date}}',
+            lockedHint: 'Ce dossier est verrouillé et ne peut pas être modifié pour le moment.',
+        },
+
+        checklist: {
+            required: 'Obligatoire',
+            optional: 'Facultatif',
+            complete: 'Vous avez tout ce que les vérificateurs demandent.',
+            remaining: plural({
+                one: '{{count}} élément manque encore avant l’envoi.',
+                other: '{{count}} éléments manquent encore avant l’envoi.',
+            }),
+            items: {
+                idNumber: "Votre numéro de pièce d'identité",
+                idCardFront: "Recto de votre pièce d'identité",
+                idCardBack: "Verso de votre pièce d'identité",
+                selfieWithId: "Une photo de vous tenant votre pièce d'identité",
+                homeAddress: 'Votre adresse de domicile',
+                homeAddressSketch: 'Une capture de carte de votre domicile',
+                storeAddressSketch: 'Une capture de carte de votre boutique',
+            },
+        },
+
+        identity: {
+            title: 'Votre identité',
+            idNumber: "Numéro de pièce d'identité",
+            idNumberPlaceholder: "Le numéro imprimé sur votre pièce d'identité",
+            idNumberHint: "Saisissez-le exactement tel qu'il apparaît sur la carte. Tous les formats sont acceptés — un vérificateur le compare à vos scans.",
+        },
+
+        slots: {
+            idCardFront: "Recto de votre pièce d'identité",
+            idCardFrontHint: "Une photo ou un scan. JPG, PNG, WebP ou PDF, jusqu'à 10 Mo.",
+            idCardBack: "Verso de votre pièce d'identité",
+            idCardBackHint: 'Le verso de la même carte.',
+            selfieWithId: "Photo de vous tenant votre pièce d'identité",
+            selfieWithIdHint: 'Votre visage et la carte doivent être tous les deux bien visibles.',
+            homeAddressSketch: 'Carte de votre domicile',
+            homeAddressSketchHint: "Une capture de la carte avec votre maison indiquée, ou un croquis de l'itinéraire pour y arriver.",
+            storeAddressSketch: 'Carte de votre boutique',
+            storeAddressSketchHint: "Une capture de la carte avec votre boutique indiquée, ou un croquis de l'itinéraire pour y arriver.",
+        },
+
+        locations: {
+            title: 'Vos adresses',
+            info: "Les vérificateurs contrôlent que vos adresses sont localisables sur une carte. Les adresses de vos boutiques se modifient sous Adresses — seule l'adresse de votre domicile se saisit ici.",
+            homeAddress: 'Adresse du domicile',
+            homeAddressPlaceholder: 'Recherchez votre adresse de domicile',
+            homeAddressHint: "Choisissez votre adresse dans les résultats de recherche afin qu'elle porte des coordonnées cartographiques. Une adresse saisie à la main qu'un vérificateur ne trouve pas sur une carte ne compte pas.",
+            noHomeAddress: 'Aucune adresse de domicile enregistrée.',
+            notGeocoded: "« {{address}} » a été enregistrée sans coordonnées cartographiques. Recherchez-la de nouveau et choisissez-la dans la liste.",
+        },
+
+        document: {
+            pdf: 'PDF',
+            view: 'Voir {{label}}',
+            remove: 'Supprimer {{label}}',
+            unavailable: 'Chargement impossible',
+            quotaBlocked: 'Limite de stockage atteinte',
+            quotaBlockedLong: "Ce fichier est retenu parce que votre compte dépasse sa limite de stockage. Libérez de l'espace ou passez à une offre supérieure pour le revoir — le fichier n'a pas été supprimé.",
+            save: 'Enregistrer une copie',
+            saveFailed: "Impossible d'enregistrer le fichier.",
+        },
+
+        upload: {
+            add: 'Ajouter',
+            replace: 'Remplacer',
+            remaining: '{{current}} sur {{max}} ajoutés',
+            wrongType: "{{name}} n'est pas un fichier pris en charge. Utilisez un JPG, PNG, WebP ou PDF.",
+            tooLarge: '{{name}} dépasse 10 Mo. Essayez une photo plus petite ou un scan de moindre qualité.',
+            slotFull: "Vous pouvez ajouter jusqu'à {{max}} fichiers ici, et vous en avez déjà {{current}}. Supprimez-en un d'abord.",
+            tooMany: 'Vous pouvez ajouter au maximum {{max}} fichiers à la fois.',
+        },
+
+        submit: {
+            title: 'Envoyer pour examen',
+            body: 'Quand vous êtes prêt, envoyez vos documents à un administrateur. Vos informations sont verrouillées pendant son examen.',
+            resubmitBody: 'Corrigez ce que le vérificateur a signalé, puis renvoyez vos documents.',
+            action: 'Envoyer pour examen',
+            resubmitAction: 'Renvoyer',
+            confirmTitle: 'Envoyer pour examen ?',
+            confirmBody: 'Vos documents seront transmis à un administrateur.',
+            confirmIncomplete: plural({
+                one: 'Un élément demandé par les vérificateurs manque encore.',
+                other: '{{count}} éléments demandés par les vérificateurs manquent encore.',
+            }),
+            confirmAction: 'Envoyer',
+            freezeWarning: 'Une fois envoyés, vos documents ne pourront plus être modifiés avant la décision du vérificateur. Vous pourrez toujours consulter ce que vous avez envoyé.',
+            unsavedWarning: "Vous avez des modifications non enregistrées ci-dessus. Enregistrez-les d'abord, sinon elles ne feront pas partie de votre envoi.",
+        },
     },
 
     /** Adresses professionnelles (Compte → Adresses). */

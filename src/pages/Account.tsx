@@ -9,6 +9,7 @@ import { PayoutSetupSettings } from '@/components/vendor-settings/PayoutSetupSet
 import { EarningsSummaryCard } from '@/components/vendor-settings/EarningsSummaryCard';
 import { StorefrontSettings } from '@/components/vendor-settings/StorefrontSettings';
 import { BusinessAddressSettings } from '@/components/vendor-settings/BusinessAddressSettings';
+import { IdentityVerificationSettings } from '@/components/vendor-settings/verification/IdentityVerificationSettings';
 import { SettingsSections } from '@/components/vendor-settings/SettingsSection';
 import { SubPageHeader } from '@/components/layout/SubPageHeader';
 import { MobilePageHeader, type MobileHeaderAction } from '@/components/layout/MobilePageHeader';
@@ -17,9 +18,20 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { useRouteSwipe } from '@/hooks/use-route-swipe';
 import { useTranslation, type TranslationKey } from '@/i18n';
 
-const VALID_TABS = ['profile', 'store', 'addresses', 'security', 'billing', 'payout'] as const;
+const VALID_TABS = [
+  'profile',
+  'store',
+  'addresses',
+  // Verification sits next to Addresses on purpose: two of the reviewers' rules
+  // are conditional on whether a business address exists, and the store sketch
+  // is a drawing of one of them.
+  'verification',
+  'security',
+  'billing',
+  'payout',
+] as const;
 
-/** The same six, as routes — what a sideways swipe walks. Order matters. */
+/** The same seven, as routes — what a sideways swipe walks. Order matters. */
 const TAB_RING = VALID_TABS.map((tab) => `/dashboard/account/${tab}`);
 const DEFAULT_TAB = 'profile';
 
@@ -30,6 +42,7 @@ const TAB_LABEL_KEYS: Record<AccountTab, TranslationKey> = {
   profile: 'nav.items.profile',
   store: 'nav.items.store',
   addresses: 'nav.items.addresses',
+  verification: 'nav.items.verification',
   security: 'nav.items.security',
   billing: 'nav.items.billing',
   payout: 'nav.items.payout',
@@ -39,6 +52,7 @@ const TAB_SUBTITLE_KEYS: Record<AccountTab, TranslationKey> = {
   profile: 'account.tabSubtitles.profile',
   store: 'account.tabSubtitles.store',
   addresses: 'account.tabSubtitles.addresses',
+  verification: 'account.tabSubtitles.verification',
   security: 'account.tabSubtitles.security',
   billing: 'account.tabSubtitles.billing',
   payout: 'account.tabSubtitles.payout',
@@ -96,6 +110,10 @@ export function Account() {
 
       <TabsContent value="addresses" className="space-y-6">
         <BusinessAddressSettings />
+      </TabsContent>
+
+      <TabsContent value="verification" className="space-y-6">
+        <IdentityVerificationSettings />
       </TabsContent>
 
       <TabsContent value="security" className="space-y-6">

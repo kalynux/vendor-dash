@@ -1,3 +1,5 @@
+import { plural } from '../../types';
+
 /** Account area: profile, store identity, addresses, security, billing, payouts. */
 export const account = {
     title: 'Account',
@@ -13,6 +15,7 @@ export const account = {
         profile: 'Your personal details, photo, and the language the dashboard speaks to you in',
         store: 'Your public store identity, support contacts, and vacation mode',
         addresses: 'The business locations your products are shipped and picked up from',
+        verification: 'The identity documents an administrator reviews before verifying your shop',
         security: 'Your password, two-factor authentication, and signed-in devices',
         billing: 'Your plan, credit wallet, saved payment methods, and storage usage',
         payout: 'Your earnings balance and where withdrawals are sent',
@@ -56,6 +59,134 @@ export const account = {
             vendor: 'Vendor',
         },
         updated: 'Profile updated',
+    },
+
+    /**
+     * Identity verification (Account → Verification) — `/api/vendor/kyc`.
+     *
+     * ⚠ Copy rule: nothing here may promise that a complete submission is
+     * approved, or that an incomplete one is refused. The backend grades
+     * nothing; a person decides. "Required" in this namespace always means
+     * "required by the reviewers", which is guidance, not a gate.
+     */
+    verification: {
+        title: 'Identity verification',
+        info1: 'Verified shops are trusted by more buyers. An administrator reviews the documents you upload here and decides whether to verify your account.',
+        info2: 'Your documents are private. They are never shown on your storefront, never shared with customers or delivery agencies, and can only be opened by you and the reviewer.',
+        info3: 'Nothing is checked automatically — a person reads your documents. If something is missing or unreadable they will tell you why, and you can fix it and send it again.',
+        saved: 'Verification details saved',
+        submitted: 'Sent for review',
+        uploadsSaveImmediately: 'Documents are saved as soon as you add them. The identity number and home address below need the Save button.',
+
+        status: {
+            draft: {
+                title: 'Not sent yet',
+                body: 'Add your documents below, then send them for review. You can come back and change anything until you send.',
+            },
+            under_review: {
+                title: 'Being reviewed',
+                body: 'Your documents are with a reviewer. You can still look at what you sent, but you cannot change it until they decide.',
+            },
+            verified: {
+                title: 'Verified',
+                body: 'Your identity has been verified. These documents are now locked — contact support if something needs to change.',
+            },
+            rejected: {
+                title: 'Not accepted',
+                body: 'A reviewer could not verify your account. Fix what they mention below and send it again.',
+            },
+            rejectionReason: 'Reason',
+            submittedOn: 'Sent on {{date}}',
+            verifiedOn: 'Verified on {{date}}',
+            lockedHint: 'This record is locked and cannot be edited right now.',
+        },
+
+        checklist: {
+            required: 'Required',
+            optional: 'Optional',
+            complete: 'You have everything the reviewers ask for.',
+            remaining: plural({
+                one: '{{count}} thing still missing before you send.',
+                other: '{{count}} things still missing before you send.',
+            }),
+            items: {
+                idNumber: 'Your ID number',
+                idCardFront: 'Front of your ID card',
+                idCardBack: 'Back of your ID card',
+                selfieWithId: 'A photo of you holding your ID card',
+                homeAddress: 'Your home address',
+                homeAddressSketch: 'A map screenshot of where you live',
+                storeAddressSketch: 'A map screenshot of your shop',
+            },
+        },
+
+        identity: {
+            title: 'Your identity',
+            idNumber: 'ID number',
+            idNumberPlaceholder: 'The number printed on your ID card',
+            idNumberHint: 'Type it exactly as it appears on the card. Any format is accepted — a reviewer checks it against your scans.',
+        },
+
+        slots: {
+            idCardFront: 'Front of your ID card',
+            idCardFrontHint: 'A photo or scan. JPG, PNG, WebP or PDF, up to 10 MB.',
+            idCardBack: 'Back of your ID card',
+            idCardBackHint: 'The back of the same card.',
+            selfieWithId: 'Photo of you holding your ID',
+            selfieWithIdHint: 'Your face and the card must both be clearly visible.',
+            homeAddressSketch: 'Map of where you live',
+            homeAddressSketchHint: 'A screenshot of the map with your house marked, or a drawing of the route to it.',
+            storeAddressSketch: 'Map of your shop',
+            storeAddressSketchHint: 'A screenshot of the map with your shop marked, or a drawing of the route to it.',
+        },
+
+        locations: {
+            title: 'Your locations',
+            info: 'Reviewers check that your addresses can be found on a map. Your shop addresses are edited under Addresses — only your home address is set here.',
+            homeAddress: 'Home address',
+            homeAddressPlaceholder: 'Search for your home address',
+            homeAddressHint: 'Pick your address from the search results so it carries map coordinates. A typed address a reviewer cannot find on a map does not count.',
+            noHomeAddress: 'No home address set.',
+            notGeocoded: '"{{address}}" was saved without map coordinates. Search for it again and pick it from the list.',
+        },
+
+        document: {
+            pdf: 'PDF',
+            view: 'View {{label}}',
+            remove: 'Remove {{label}}',
+            unavailable: "Can't load",
+            quotaBlocked: 'Over storage limit',
+            quotaBlockedLong: 'This file is held back because your account is over its storage limit. Free up space or upgrade your plan to see it again — the file has not been deleted.',
+            save: 'Save a copy',
+            saveFailed: 'Could not save the file.',
+        },
+
+        upload: {
+            add: 'Add',
+            replace: 'Replace',
+            remaining: '{{current}} of {{max}} added',
+            wrongType: '{{name}} is not a supported file. Use a JPG, PNG, WebP or PDF.',
+            tooLarge: '{{name}} is larger than 10 MB. Try a smaller photo or a lower-quality scan.',
+            slotFull: 'You can add up to {{max}} files here, and you already have {{current}}. Remove one first.',
+            tooMany: 'You can add at most {{max}} files at a time.',
+        },
+
+        submit: {
+            title: 'Send for review',
+            body: 'When you are ready, send your documents to an administrator. Your details are locked while they review.',
+            resubmitBody: 'Fix what the reviewer mentioned, then send your documents again.',
+            action: 'Send for review',
+            resubmitAction: 'Send again',
+            confirmTitle: 'Send for review?',
+            confirmBody: 'Your documents go to an administrator.',
+            confirmIncomplete: plural({
+                one: 'One thing the reviewers ask for is still missing.',
+                other: '{{count}} things the reviewers ask for are still missing.',
+            }),
+            confirmAction: 'Send',
+            freezeWarning: 'Once you send, you cannot change your documents until a reviewer decides. You will still be able to see what you sent.',
+            unsavedWarning: 'You have unsaved changes above. Save them first, or they will not be part of what you send.',
+        },
     },
 
     /** Business addresses (Account → Addresses). */

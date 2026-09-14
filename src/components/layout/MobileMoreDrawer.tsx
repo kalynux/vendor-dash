@@ -11,6 +11,7 @@ import { useAuth } from '@/App';
 import { useNotificationStore } from '@/store';
 import { PRIMARY_NAV, FOOTER_NAV, type NavItem, type NavChild, type NavBadge } from '@/config/navigation';
 import { cn } from '@/lib/utils';
+import { useKycNeedsAttention } from '@/hooks/use-kyc-attention';
 import { useTranslation } from '@/i18n';
 
 // Items already present in the bottom tab bar — hidden from "More".
@@ -119,13 +120,20 @@ export function MobileMoreDrawer({ open, onOpenChange }: MobileMoreDrawerProps) 
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { unreadCount } = useNotificationStore();
+  const kycNeedsAttention = useKycNeedsAttention();
 
   const handlers: NavHandlers = {
     go: (path) => {
       navigate(path);
       onOpenChange(false);
     },
-    badgeCount: (badge) => (badge === 'notifications' ? unreadCount : badge === 'orders' ? 3 : 0),
+    badgeCount: (badge) => {
+      if (badge === 'notifications') return unreadCount;
+      if (badge === 'orders') return 3;
+      // Not a count — 1 means "a rejected identity submission is waiting".
+      if (badge === 'verification') return kycNeedsAttention ? 1 : 0;
+      return 0;
+    },
   };
 
   // Primary items not already in the bottom tab bar.
