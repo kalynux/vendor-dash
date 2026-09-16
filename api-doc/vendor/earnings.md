@@ -144,7 +144,31 @@ check.**
 
 `null` when there has never been one.
 
-`status`: `pending` · `paid` · `rejected`. `origin`: `manual` · `auto_threshold`.
+`origin`: `manual` · `auto_threshold`.
+
+### `status` — five values since 2026-09-15
+
+🔴 **`processing` and `failed` are new, neither is terminal, and BOTH still hold the money.** A map
+that was exhaustive over the old three sends them into whichever branch was last — which tells a
+vendor their payout was declined while it is in flight.
+
+| `status` | Means | The vendor's money is | Say |
+|---|---|---|---|
+| `pending` | Waiting for an administrator | held | "Pending review" |
+| `processing` | Sent to the payment provider, not yet confirmed | held | "On its way" — **never** "Paid" |
+| `paid` | Settled | gone to them | "Paid" |
+| `rejected` | Closed. `rejectionReason` says why | **back in `available`** | "Rejected — &lt;reason&gt;" |
+| `failed` | The transfer was refused | **still held** | "Payment failed — we're looking into it" |
+
+🔴 **Only `rejected` gives the balance back.** `failed` returns nothing — the amount stays reserved
+while an admin retries or closes the request, so there is nothing for the vendor to re-request.
+
+🔴 **Gate "Request withdrawal" on all three open statuses**, not on `pending` alone. A request while
+any of them is live is refused with `409 EARNINGS_PAYOUT_ALREADY_PENDING`, and the backend's partial
+unique index is that exact list (`PAYOUT_HELD_STATUSES`).
+
+🔴 **Treat an unrecognised status as in-progress, never as a failure.** The safe default for a money
+record you do not recognise is "still happening".
 
 Two fields the `POST` response does not have: **`rejectionReason`** and **`resolvedAt`**. Both are
 `null` while pending.

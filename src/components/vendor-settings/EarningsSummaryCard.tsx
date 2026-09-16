@@ -10,14 +10,17 @@ import { cn } from '@/lib/utils';
 import { useFormatters, useTranslation, Trans } from '@/i18n';
 import { CardSkeleton } from '@/components/billing/BillingSkeletons';
 import { fetchEarningsBalance, fetchLatestPayout, requestPayout } from '@/services/earnings.service';
+import { isPayoutOpen, payoutReturnedBalance } from '@/types/earnings.types';
 import type { EarningsBalance, PayoutRequest } from '@/types/earnings.types';
 import {
-  PAYOUT_STATUS_KEYS,
-  PAYOUT_STATUS_BADGE_CLASSES,
   PAYOUT_ORIGIN_KEYS,
   MIN_PAYOUT_AMOUNT,
   AUTO_PAYOUT_THRESHOLD,
   earningsErrorMessage,
+  payoutOpenRequestKey,
+  payoutStatusBadgeClass,
+  payoutStatusKey,
+  payoutStatusNoteKey,
 } from './earnings.constants';
 
 export function EarningsSummaryCard() {
@@ -48,11 +51,18 @@ export function EarningsSummaryCard() {
     load();
   }, [load]);
 
-  const hasPendingRequest = latestPayout?.status === 'pending';
+  /**
+   * ⛔ **Gate on every OPEN status, not on `pending` alone.** `processing` and
+   * `failed` each still hold the money, and the backend's partial unique index
+   * refuses a second request during any of the three with
+   * `409 EARNINGS_PAYOUT_ALREADY_PENDING`. An unrecognised status counts as open
+   * too — a button that can only 409 is worse than one that waits.
+   */
+  const hasOpenRequest = isPayoutOpen(latestPayout?.status);
   // The backend rejects anything under the minimum with EARNINGS_PAYOUT_BELOW_MINIMUM,
   // so gate the button on it rather than letting the request fail.
   const belowMinimum = !!balance && balance.available < MIN_PAYOUT_AMOUNT;
-  const canRequest = !!balance && balance.available > 0 && !belowMinimum && !hasPendingRequest;
+  const canRequest = !!balance && balance.available > 0 && !belowMinimum && !hasOpenRequest;
 
   async function onRequestPayout() {
     setRequesting(true);
@@ -145,10 +155,17 @@ export function EarningsSummaryCard() {
             {requesting && <Loader2 className="h-4 w-4 animate-spin" />}
             {t('account.earnings.requestWithdrawal')}
           </Button>
-          {!hasPendingRequest && balance.available <= 0 && (
+          {/* An open request owns the explanation: saying "nothing available" while
+              a payout is in flight hides where the money went. */}
+          {hasOpenRequest && latestPayout && (
+            <p className="text-xs text-muted-foreground">
+              {t(payoutOpenRequestKey(latestPayout.status))}
+            </p>
+          )}
+          {!hasOpenRequest && balance.available <= 0 && (
             <p className="text-xs text-muted-foreground">{t('account.earnings.nothingAvailable')}</p>
           )}
-          {!hasPendingRequest && balance.available > 0 && belowMinimum && (
+          {!hasOpenRequest && balance.available > 0 && belowMinimum && (
             <p className="text-xs text-muted-foreground">
               {t('account.earnings.belowMinimum', {
                 amount: fmt.currency(MIN_PAYOUT_AMOUNT, balance.currency),
@@ -161,8 +178,10 @@ export function EarningsSummaryCard() {
           <div className="space-y-2 border-t pt-4">
             <div className="flex items-center justify-between gap-2">
               <p className="text-sm font-medium">{t('account.earnings.latestRequest')}</p>
-              <Badge className={cn('border-0 font-medium', PAYOUT_STATUS_BADGE_CLASSES[latestPayout.status])}>
-                {t(PAYOUT_STATUS_KEYS[latestPayout.status])}
+              <Badge
+                className={cn('border-0 font-medium', payoutStatusBadgeClass(latestPayout.status))}
+              >
+                {t(payoutStatusKey(latestPayout.status))}
               </Badge>
             </div>
             <p className="text-sm text-muted-foreground">
@@ -183,8 +202,18 @@ export function EarningsSummaryCard() {
                 })}
               </p>
             )}
-            {latestPayout.status === 'rejected' && latestPayout.rejectionReason && (
-              <p className="text-sm text-destructive">{latestPayout.rejectionReason}</p>
+            {/* Where the money actually is, for every status — including the two
+                that look finished and are not. */}
+            <p className="text-sm text-muted-foreground">
+              {t(payoutStatusNoteKey(latestPayout.status))}
+            </p>
+            {/* ⚠ `rejectionReason` is the ONLY place the why lives: the WhatsApp
+                notice (`vendor_payout_rejected`) carries just the currency and the
+                amount and points the vendor here. Keep it visible. */}
+            {payoutReturnedBalance(latestPayout.status) && (
+              <p className="text-sm text-destructive">
+                {latestPayout.rejectionReason || t('account.earnings.status.noReason')}
+              </p>
             )}
             <Button variant="outline" size="sm" onClick={viewTicket} className="gap-1.5">
               <ExternalLink className="h-3.5 w-3.5" /> {t('account.earnings.viewTicket')}

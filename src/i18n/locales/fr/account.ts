@@ -335,8 +335,30 @@ export const account = {
         requestFailed: 'Échec de la demande de versement.',
         status: {
             pending: 'En cours d’examen',
+            processing: 'En cours d’envoi',
             paid: 'Payé',
             rejected: 'Refusé',
+            failed: 'Échec du paiement',
+            unknown: 'En cours',
+            noReason: 'Aucun motif n’a été enregistré. Ouvrez le ticket pour en savoir plus.',
+        },
+        statusNote: {
+            pending:
+                'Un administrateur examine votre demande. Le montant est retenu jusqu’à sa résolution.',
+            processing:
+                'Approuvée et transmise au prestataire de paiement. Le versement n’est pas encore confirmé — cette page se met à jour dès qu’il aboutit.',
+            paid: 'Réglée — les fonds ont été envoyés vers votre moyen de versement enregistré.',
+            rejected:
+                'Cette demande a été clôturée et la totalité du montant est retournée dans votre solde disponible.',
+            failed:
+                'Le transfert a été refusé. Votre argent est toujours retenu — il n’est pas revenu dans votre solde disponible — et nous examinons la situation.',
+            unknown:
+                'Cette demande est toujours en cours de traitement. Ouvrez le ticket pour la dernière mise à jour.',
+        },
+        openRequest: {
+            generic: 'Vous avez déjà une demande de retrait en cours — une seule à la fois.',
+            failed:
+                'Un transfert lié à votre demande en cours a été refusé. Nous examinons la situation — il n’y a rien à redemander.',
         },
         origin: {
             manual: 'Demandé par vous',

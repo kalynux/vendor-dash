@@ -387,10 +387,39 @@ export const account = {
         requestCreated: 'Payout request created.',
         loadFailed: 'Failed to load earnings.',
         requestFailed: 'Failed to request payout.',
+        /**
+         * ⛔ Five values since 2026-09-15, and `processing`/`failed` are BOTH still
+         * holding the vendor's money. `processing` must never read as "Paid", and
+         * `failed` must never read as a closed, refunded request.
+         */
         status: {
             pending: 'Pending review',
+            processing: 'On its way',
             paid: 'Paid',
             rejected: 'Rejected',
+            failed: 'Payment failed',
+            /** Any status this build does not know — shown as in-progress, never as a failure. */
+            unknown: 'In progress',
+            noReason: 'No reason was recorded. Open the ticket to ask why.',
+        },
+        /** The line under the badge: where the money actually is right now. */
+        statusNote: {
+            pending:
+                'An administrator is reviewing your request. The amount is held until it is resolved.',
+            processing:
+                'Approved and sent to the payment provider. It is not confirmed yet — this updates as soon as it settles.',
+            paid: 'Settled — the money has gone out to your saved payout method.',
+            rejected:
+                'This request was closed and the full amount went back to your available balance.',
+            failed:
+                'The transfer was refused. Your money is still held — it has not returned to your available balance — and we are looking into it.',
+            unknown: 'This request is still being processed. Open the ticket for the latest update.',
+        },
+        /** Beside the disabled button while a request is open. */
+        openRequest: {
+            generic: 'You already have a withdrawal request in progress — only one at a time.',
+            failed:
+                'A transfer on your open request was refused. We are looking into it — there is nothing to request again.',
         },
         origin: {
             manual: 'Requested by you',
