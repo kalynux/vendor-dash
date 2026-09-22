@@ -18,9 +18,11 @@
 // unaffected by these calls.
 
 import { api, unwrapEnvelope } from './api';
+import { fetchContactState } from './contact-change.service';
+import { onboardingService } from './onboarding.service';
 import { authStrategy } from '@/platform/auth/strategy';
 import { startRefreshScheduler, stopRefreshScheduler } from '@/platform/auth/refreshScheduler';
-import type { AuthMeVendorResponse, AuthTokens } from '@/types/api';
+import type { AuthMeVendorResponse, AuthTokens, ChangePasswordPayload } from '@/types/api';
 
 /** Shape shared by login, register and add-role. */
 interface AuthSessionResponse extends AuthMeVendorResponse {
@@ -32,6 +34,15 @@ export interface LoginPayload {
     identifier: string;
     password: string;
 }
+
+/**
+ * Whether this device is still signed in after its own password change.
+ *
+ * `'sign-in-again'` means the password DID change but this device could not get
+ * a fresh session — the caller must end the session deliberately, with a message,
+ * rather than let the vendor discover it as a surprise sign-out on their next tap.
+ */
+export type PasswordChangeOutcome = 'signed-in' | 'sign-in-again';
 
 export interface RegisterPayload {
     phone: string;
@@ -120,6 +131,45 @@ export const authService = {
         // dispatch that event.
         stopRefreshScheduler();
         return authStrategy.endSession();
+    },
+
+    /**
+     * Change the account password, and keep THIS device signed in.
+     *
+     * The change revokes every token minted before it, this device's included.
+     * In a browser that costs nothing — the replacement pair arrives as cookies
+     * on the same response. The phone app gets no replacement it can use (see
+     * `passwordChangeKeepsSession`), so there this signs straight back in with the
+     * new password, as api-doc/me/password.md asks. Without it the screen said
+     * "this one stays signed in" and the very next tap signed the vendor out.
+     *
+     * Throws only when the password was NOT changed, so the caller's error path
+     * stays "nothing happened". Everything after the change reports through the
+     * outcome instead — see {@link PasswordChangeOutcome}.
+     */
+    async changePassword(payload: ChangePasswordPayload): Promise<PasswordChangeOutcome> {
+        const keepsSession = authStrategy.passwordChangeKeepsSession;
+
+        // Who to sign back in as — read BEFORE the change, while the token still
+        // works; afterwards nothing authenticated does. The session's own
+        // `login_phone` is not good enough: a phone change confirmed on the
+        // Security tab is never written back to it, and it would name a number
+        // that no longer signs in.
+        const contact = keepsSession ? null : await fetchContactState();
+
+        await onboardingService.changePassword(payload);
+        if (keepsSession) return 'signed-in';
+
+        const identifier = contact?.phone ?? contact?.email;
+        if (!identifier) return 'sign-in-again';
+        try {
+            // Straight away, before anything else can go out on the dead token.
+            // `login` stores the new pair and re-arms the refresh timer.
+            await authService.login({ identifier, password: payload.newPassword });
+            return 'signed-in';
+        } catch {
+            return 'sign-in-again';
+        }
     },
 
     /** Start a password reset. Base namespace — identical on both transports. */

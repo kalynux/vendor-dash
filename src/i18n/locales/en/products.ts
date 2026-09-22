@@ -374,6 +374,8 @@ export const products = {
         /** Shown instead of the hint when the product is warehoused by an agency. */
         unlimitedStockLockedHint:
             'An agency warehouses this product, and a warehouse holds a countable quantity. Move pickup back to your own address to use unlimited stock.',
+        /** The one line under the locked switch; the full reason sits behind its info icon. */
+        unlimitedStockLockedShort: 'Not available while an agency stores this product.',
         moreOptions: 'More options',
         skuPlaceholderEdit: 'Product SKU',
         skuPlaceholderCreate: 'Leave blank to generate one automatically',
@@ -384,6 +386,8 @@ export const products = {
         allowOversell: 'Allow overselling',
         allowOversellHint: 'Accept orders past your stock count.',
         addTagPlaceholder: 'Add tag, press Enter or comma',
+        /** Accessible name of the × on a tag chip. */
+        removeTag: 'Remove {{tag}}',
         dimensionsTitle: 'Weight & dimensions (optional)',
         weightG: 'Weight (g)',
         lengthCm: 'Length (cm)',
@@ -414,7 +418,7 @@ export const products = {
     variantTable: {
         options: 'Options',
         autoSku: 'Auto SKU',
-        bulkEdit: 'Bulk Edit',
+        bulkEdit: 'Bulk edit',
         setForAll: 'Set for all:',
         empty: 'No variants. Edit options to generate the variant matrix.',
         saved: '{{count}} saved',
@@ -434,10 +438,10 @@ export const products = {
             removed: 'Removed',
         },
         secondary: {
-            compareAtPrice: 'Compare at Price',
-            infiniteStock: 'Infinite Stock',
-            lowStockAlert: 'Low Stock Alert',
-            allowOversell: 'Allow Oversell',
+            compareAtPrice: 'Compare-at price',
+            infiniteStock: 'Unlimited stock',
+            lowStockAlert: 'Low-stock alert',
+            allowOversell: 'Allow overselling',
             nonePlaceholder: 'None',
         },
     },
@@ -486,32 +490,32 @@ export const products = {
 
     /** The option builder that generates the variant matrix. */
     options: {
-        title: 'Options & Variants',
+        title: 'Options & variants',
         description: 'Each combination of options becomes its own variant.',
-        skuPrefix: 'SKU Prefix',
+        skuPrefix: 'SKU prefix',
         skuPrefixPlaceholder: 'e.g. TSHIRT',
         skuPrefixHint: 'Auto-generated SKUs will start with this prefix',
         namePlaceholder: 'Option name (e.g. Color, Size)',
-        addOption: 'Add Option',
+        addOption: 'Add option',
         maxOptions: 'Maximum of {{max}} options per product',
         valuePlaceholder: 'Add value, press Enter',
         noValues: 'No values added yet',
-        preview: 'Variant Preview',
+        preview: 'Variant preview',
         willGenerate: plural({
             one: '{{count}} variant will be generated',
             other: '{{count}} variants will be generated',
         }),
         addValuesToGenerate: 'Add values to generate variants',
         exceedsLimit: 'Exceeds maximum of {{max}} variants',
-        applyAndGenerate: 'Apply & Generate Variants',
+        applyAndGenerate: 'Apply & generate variants',
         renamedUnsaved: 'Renamed (unsaved)',
         savedMarker: 'Saved',
     },
 
     /** The confirm-before-regenerating dialog. */
     regenerate: {
-        titleDestructive: 'Regenerate Variants?',
-        title: 'Generate Variants',
+        titleDestructive: 'Regenerate variants?',
+        title: 'Generate variants',
         descriptionDestructive:
             'Regenerating the variant matrix will modify existing variants. Review the changes below.',
         description: plural({
@@ -532,8 +536,8 @@ export const products = {
         skuHint: '(SKU: {{sku}})',
         archiveNote: 'Archived variants will be removed from the storefront but data is preserved.',
         applying: 'Applying…',
-        confirmDestructive: 'Confirm & Regenerate',
-        confirm: 'Generate Variants',
+        confirmDestructive: 'Confirm & regenerate',
+        confirm: 'Generate variants',
     },
 
     wizard: {
@@ -544,18 +548,18 @@ export const products = {
         stepDigital: 'Digital files',
         stepReview: 'Review',
         stepType: 'Type',
-        stepBasicInfo: 'Basic Info',
+        stepBasicInfo: 'Basic info',
         stepFormats: 'Formats',
-        createTitle: 'Create Product',
+        createTitle: 'Create product',
         createSubtitle: 'Add a new product to your store',
-        editTitle: 'Edit Product',
+        editTitle: 'Edit product',
         /** Badge marking a product that is on the quick (simple-mode) editor. */
         quickBadge: 'Quick',
         backToProducts: 'Products',
         saveDraft: 'Save draft',
         publishNow: 'Publish now',
         reviewTitle: 'Review and publish',
-        saveAndContinue: 'Save & Continue',
+        saveAndContinue: 'Save & continue',
         basicsTitle: 'Basic information',
         basicsDescription: 'Core details about your product. You can update these later.',
         productTitle: 'Product title',
@@ -698,8 +702,13 @@ export const products = {
         aiSearchTitle: 'AI search',
         aiSearchDescription:
             'Index this product so customers can find it through AI search. Applies once the product is active and complete.',
+        /** The label of the switch row; `aiSearchDescription` sits behind the section's info icon. */
+        aiSearchToggle: 'Let shoppers find it through AI search',
         suspendedNotice:
             'This product is suspended because of a delivery-agency issue. You can still edit it — assigning a working delivery agency below restores it automatically.',
+        // Section headings of the quick editor.
+        sectionDetails: 'Details',
+        sectionPriceStock: 'Price & stock',
 
         // ── Agency-warehoused stock ───────────────────────────────────────────
         // The quantity was NOT written: an agency holds these goods, so the
@@ -872,6 +881,14 @@ export const products = {
         replaceImage: 'Replace image',
         tapToClose: 'Tap to close',
         thumbnail: 'Thumbnail',
+        /** The empty photo control — `count` is the product's image limit. */
+        addPhotos: plural({ one: 'Add a photo', other: 'Add photos' }),
+        addPhotosHint: plural({
+            one: 'One image, shown as the thumbnail.',
+            other: 'Up to {{count}} images. The first one is the thumbnail.',
+        }),
+        /** Under "Add" on the last tile of the photo grid. */
+        tileCount: '{{count}} of {{max}}',
         skipForNow: 'Skip for now',
         variantImages: 'Variant images',
         addVariantImage: 'Add image ({{used}}/{{max}})',
@@ -890,7 +907,7 @@ export const products = {
         dropHere: 'Drop your file here',
         dragOrClick: 'Drag & drop or click to upload',
         supported: 'PDF, ZIP, MP4, MP3, images, Word, Excel · max 500MB',
-        selectFile: 'Select File',
+        selectFile: 'Select file',
         typeNotAllowed:
             'File type “{{type}}” is not allowed. Supported: PDF, ZIP, MP4, MP3, images, Word, Excel.',
         tooLarge: 'File too large ({{size}}). Maximum is 500MB.',
@@ -934,10 +951,10 @@ export const products = {
         title: 'Choose product type',
         description:
             'The type determines which fields and steps are required. This cannot be changed after creation.',
-        physical: 'Physical Product',
+        physical: 'Physical product',
         physicalDescription: 'A tangible product that gets shipped to the customer.',
         physicalExamples: 'Clothing, electronics, furniture, accessories',
-        digital: 'Digital Product',
+        digital: 'Digital product',
         digitalDescription: 'A downloadable file or software license delivered electronically.',
         digitalExamples: 'Software, e-books, music, templates, courses',
     },

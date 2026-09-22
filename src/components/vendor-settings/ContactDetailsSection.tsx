@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { AtSign, BadgeCheck, Info, Loader2, MessageCircle, Phone } from 'lucide-react';
+import { AtSign, BadgeCheck, Loader2, MessageCircle, Phone } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
@@ -15,7 +15,6 @@ import { formatPhoneInternational, isValidPhone, phoneErrorKey } from '@/lib/pho
 import {
   cancelEmailChange,
   cancelPhoneChange,
-  confirmPhoneChange,
   fetchContactState,
   requestEmailChange,
   requestPhoneChange,
@@ -26,7 +25,6 @@ import {
   phoneVerificationAttemptsLeft,
   requestPhoneVerificationCode,
 } from '@/services/phone-verification.service';
-import { listConnections } from '@/services/connections.service';
 import { isValidEmail, normalizeEmail } from '@/lib/email';
 import { ApiError } from '@/types/api';
 import type { ContactState, PendingContactChange } from '@/types/contact-change.types';
@@ -66,26 +64,25 @@ const RESEND_COOLDOWN_SECONDS = 60;
  * The backend propagates a confirmed change out to every role profile
  * best-effort, so they converge — but they are two records and can differ.
  *
- * ── The two proofs of a phone number ─────────────────────────────────────────
+ * ── Proving a phone number ───────────────────────────────────────────────────
  *
- * There are two, and they are not alternatives the vendor picks between — each
- * reaches accounts the other cannot:
+ * One way only: a six-digit code sent over WhatsApp (`/me/phone/verify/*`). It
+ * verifies the number already on the account, and it completes a change to a new
+ * one — `PATCH /me/phone`, then request the code, then enter it.
  *
- *  - **A WhatsApp connection** (`POST /me/phone/confirm`, no body) is the
- *    stronger proof: a message actually arrived *from* the number. But it serves
- *    customers, who reach the platform through the bot.
- *  - **A six-digit code** (`/me/phone/verify/*`) is weaker — we sent it
- *    ourselves — and is what serves dashboard roles. A vendor never registers
- *    through the bot, so without this `phone_verified` could never become true
- *    for them at all.
+ * ⛔ There used to be a second button here, "Confirm with WhatsApp", which
+ * completed a change through a linked WhatsApp *connection* on the new number,
+ * with a notice and a mismatch warning built around it. All three are gone: since
+ * 2026-09-21 every frontend confirms with the code and the connection route is
+ * left to the bot (see contact-change.service.ts). When the code completes a
+ * change, the backend moves the WhatsApp link off the old number by itself.
+ * See api-doc/me/contact-change.md and api-doc/me/phone-verification.md.
  *
- * So the code path is offered unconditionally, and the connection path only when
- * a WhatsApp connection actually exists — otherwise it is a button whose only
- * possible outcome is `CONTACT_CHANGE_PHONE_UNPROVEN`.
- * See api-doc/me/phone-verification.md.
+ * Three things this panel must never say:
  *
- * Two things this panel must never say:
- *
+ *  - ⛔ **Never tell the vendor to message the WhatsApp bot to get a code
+ *    through.** When a send fails, every route has already been tried; the
+ *    answer is "try again", then support. See `deliveryError`.
  *  - ⚠ **Do not warn about being signed out.** Neither change stamps the
  *    password epoch, so every existing token on every device keeps working.
  *    (Changing a *password* does sign other sessions out — different endpoint.)
@@ -107,12 +104,20 @@ export function ContactDetailsSection() {
   const [emailDraft, setEmailDraft] = useState('');
   const [phoneDraft, setPhoneDraft] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
+
+  // ── A send WhatsApp refused ────────────────────────────────────────────────
   /**
-   * WhatsApp's masked identity hint (`"••••1234"`), or `null` when the channel is
-   * not linked. This is the whole reason the phone half needs a second request.
+   * The `PHONE_VERIFICATION_DELIVERY_FAILED` message, shown in place rather than
+   * as a toast: it needs a "try again" beside it, and a toast would take the
+   * explanation away while the vendor is still deciding what to do.
    */
-  const [whatsappHint, setWhatsappHint] = useState<string | null>(null);
-  const [whatsappLinked, setWhatsappLinked] = useState<boolean | null>(null);
+  const [deliveryError, setDeliveryError] = useState<string | null>(null);
+  /**
+   * Consecutive refusals. Support is offered from the second one ("if it happens
+   * again", per the doc) — a single refusal is usually just WhatsApp being slow,
+   * and a support link on the first reads as "this is broken".
+   */
+  const [deliveryFailures, setDeliveryFailures] = useState(0);
 
   // ── Code entry ─────────────────────────────────────────────────────────────
   const [codeOpen, setCodeOpen] = useState(false);
@@ -163,27 +168,6 @@ export function ContactDetailsSection() {
     return () => window.clearInterval(id);
   }, [resendAt]);
 
-  // The connection proof is the stronger of the two, so its state is still worth
-  // knowing — it decides whether the no-code confirm is offered at all.
-  useEffect(() => {
-    let cancelled = false;
-    listConnections()
-      .then((connections) => {
-        if (cancelled) return;
-        const whatsapp = connections.find((c) => c.channel === 'whatsapp');
-        setWhatsappLinked(whatsapp?.connected ?? false);
-        setWhatsappHint(whatsapp?.identityHint ?? null);
-      })
-      .catch(() => {
-        // Unknown, not "absent". Rendering a notice off a failed request would
-        // tell a vendor with a perfectly good connection the wrong thing.
-        if (!cancelled) setWhatsappLinked(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
   const run = useCallback(
     async (key: string, action: () => Promise<void>, successKey: Parameters<typeof t>[0]) => {
       setBusy(key);
@@ -220,8 +204,19 @@ export function ContactDetailsSection() {
       setNow(Date.now());
       setCodeOpen(true);
       setOpenForm(null);
+      setDeliveryError(null);
+      setDeliveryFailures(0);
       toast.success(t('account.contact.codeSent'));
     } catch (err) {
+      // WhatsApp refused every route. Explained in place, never as "message the
+      // bot" — see the component comment. No cooldown was started (the backend
+      // stores a code only once a send works), so the button that sent it can be
+      // pressed again straight away.
+      if (err instanceof ApiError && err.code === 'PHONE_VERIFICATION_DELIVERY_FAILED') {
+        setDeliveryError(apiError.resolve(err, { fallbackKey: 'account.contact.errors.actionFailed' }));
+        setDeliveryFailures((n) => n + 1);
+        return;
+      }
       // A cooldown refusal means a code IS in flight, so the useful response is
       // to open the entry panel anyway — the vendor is holding a live code, and
       // dead-ending them on "wait" would make them wait for nothing.
@@ -279,6 +274,39 @@ export function ContactDetailsSection() {
     }
   }, [code, t, reload, apiError]);
 
+  /**
+   * Open a phone change, then ask for the code straight away.
+   *
+   * Two calls, on purpose: `PATCH /me/phone` only writes the pending change, and
+   * the backend leaves the send to an explicit request so the resend cooldown is
+   * not already running when it arrives. Doing both here spares the vendor a
+   * "Send code" tap the form's own hint already promised would happen. If the send
+   * fails, the pending banner is already on screen with its own Send code button.
+   */
+  const submitPhoneChange = useCallback(async () => {
+    setBusy('request-phone');
+    try {
+      await requestPhoneChange(phoneDraft);
+    } catch (err) {
+      apiError.toast(err, { fallbackKey: 'account.contact.errors.actionFailed' });
+      setBusy(null);
+      return;
+    }
+    setOpenForm(null);
+    await reload();
+    await sendCode();
+  }, [phoneDraft, reload, sendCode, apiError]);
+
+  /** Abandon the pending change, and the code that was on its way to it. */
+  const cancelPhone = useCallback(async () => {
+    setCodeOpen(false);
+    setCode('');
+    setCodeError(null);
+    setDeliveryError(null);
+    setDeliveryFailures(0);
+    await run('cancel-phone', cancelPhoneChange, 'account.contact.phoneChangeCancelled');
+  }, [run]);
+
   if (loading) {
     return (
       <SettingsSection title={t('account.contact.title')} icon={AtSign}>
@@ -295,22 +323,15 @@ export function ContactDetailsSection() {
   // Compared against the canonical form the backend stores, so re-entering the
   // current address with different capitalisation is caught here rather than
   // coming back as 422 CONTACT_CHANGE_SAME_IDENTIFIER.
+  //
+  // ⚠ `state.email` may be `null` — a vendor's email is optional at sign-up — and
+  // `normalizeEmail(null)` throws. This used to be unguarded, so typing a valid
+  // address into the form of an account with no email crashed the whole tab.
   const emailValid =
-    isValidEmail(emailDraft) && normalizeEmail(emailDraft) !== normalizeEmail(state.email);
+    isValidEmail(emailDraft) &&
+    (state.email === null || normalizeEmail(emailDraft) !== normalizeEmail(state.email));
   const phoneValid =
     isValidPhone(phoneDraft) && phoneDraft !== state.phone && phoneErrorKey(phoneDraft) === null;
-
-  // Weak by necessity: the connections surface exposes only the masked last four
-  // digits, never the raw number, so this can spot an obvious mismatch but cannot
-  // confirm a match. It warns rather than blocks — the server is the authority,
-  // and a mask formatted differently must not lock a vendor out of the flow.
-  const hintDigits = whatsappHint?.replace(/\D/g, '') ?? '';
-  const draftDigits = phoneDraft.replace(/\D/g, '');
-  const likelyMismatch =
-    whatsappLinked === true &&
-    hintDigits.length >= 4 &&
-    draftDigits.length >= 4 &&
-    !draftDigits.endsWith(hintDigits.slice(-4));
 
   /**
    * `phone_verified` lives on the role profile and describes the number on *that*
@@ -331,22 +352,6 @@ export function ContactDetailsSection() {
   const cooldownLeft = resendAt === null ? 0 : Math.max(0, Math.ceil((resendAt - now) / 1000));
   const sending = busy === 'send-code';
 
-  /**
-   * Shown only once the vendor is actually in the phone flow. It used to stand on
-   * the page unconditionally, back when a linked connection was the *only* proof
-   * and its absence meant the flow was closed to them. It no longer is, so this
-   * is guidance rather than a blocker and belongs next to the decision.
-   *
-   * Still worth saying, and "Manage connections" is still the useful link: the
-   * code is delivered over WhatsApp, and messaging the bot is what holds Meta's
-   * 24-hour service window open — which on this deployment is the only way a code
-   * gets delivered at all (there is no approved template yet).
-   */
-  const showWhatsappNotice =
-    whatsappLinked === false &&
-    !phoneVerified &&
-    (openForm === 'phone' || state.pendingPhone !== null);
-
   return (
     <SettingsSection
       title={t('account.contact.title')}
@@ -359,7 +364,9 @@ export function ContactDetailsSection() {
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="text-xs text-muted-foreground">{t('account.contact.emailLabel')}</p>
-            <p className="truncate text-sm font-medium">{state.email}</p>
+            <p className="truncate text-sm font-medium">
+              {state.email ?? t('common.labels.emptyValue')}
+            </p>
           </div>
           {!state.pendingEmail && openForm !== 'email' && (
             <Button
@@ -371,7 +378,7 @@ export function ContactDetailsSection() {
                 setOpenForm('email');
               }}
             >
-              {t('account.contact.change')}
+              {t(state.email === null ? 'account.contact.add' : 'account.contact.change')}
             </Button>
           )}
         </div>
@@ -463,7 +470,7 @@ export function ContactDetailsSection() {
                   setOpenForm('phone');
                 }}
               >
-                {t('account.contact.change')}
+                {t(state.phone === null ? 'account.contact.add' : 'account.contact.change')}
               </Button>
             )}
           </div>
@@ -475,67 +482,56 @@ export function ContactDetailsSection() {
           <p className="text-xs text-muted-foreground">{t('account.contact.verifyPrompt')}</p>
         )}
 
-        {/*
-          The code is delivered over WhatsApp, so the number has to have WhatsApp
-          on it — a weaker requirement than the old one, which needed a *linked*
-          account. See `showWhatsappNotice` for why it is still worth saying.
-        */}
-        {showWhatsappNotice && (
-          <Alert>
-            <MessageCircle className="size-4" />
-            <AlertDescription className="space-y-2">
-              <p>{t('account.contact.whatsappRequired')}</p>
-              <Button asChild variant="outline" size="sm">
-                <Link to="/dashboard/settings/notifications">
-                  {t('account.contact.manageConnections')}
-                </Link>
-              </Button>
-            </AlertDescription>
-          </Alert>
-        )}
-
         {state.pendingPhone && (
           <PendingBanner
             pending={state.pendingPhone}
             noticeKey="account.contact.phonePendingNotice"
             busy={busy === 'cancel-phone'}
-            onCancel={() =>
-              void run('cancel-phone', cancelPhoneChange, 'account.contact.phoneChangeCancelled')
-            }
+            onCancel={() => void cancelPhone()}
             action={
-              <>
-                {/* The code path — the one that works for a dashboard role. */}
-                {!codeOpen && (
-                  <Button size="sm" disabled={sending} onClick={() => void sendCode()}>
-                    {sending && <Loader2 className="size-4 animate-spin" />}
-                    {t('account.contact.sendCode')}
-                  </Button>
-                )}
-                {/* The connection path: stronger, and no code to type — but only
-                    offered when a WhatsApp connection actually exists, or it is a
-                    button whose only outcome is CONTACT_CHANGE_PHONE_UNPROVEN. */}
-                {whatsappLinked === true && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={busy === 'confirm-phone'}
-                    onClick={() =>
-                      void run(
-                        'confirm-phone',
-                        async () => {
-                          await confirmPhoneChange();
-                        },
-                        'account.contact.phoneChanged',
-                      )
-                    }
-                  >
-                    {busy === 'confirm-phone' && <Loader2 className="size-4 animate-spin" />}
-                    {t('account.contact.confirmPhone')}
-                  </Button>
-                )}
-              </>
+              !codeOpen && (
+                <Button size="sm" disabled={sending} onClick={() => void sendCode()}>
+                  {sending && <Loader2 className="size-4 animate-spin" />}
+                  {t('account.contact.sendCode')}
+                </Button>
+              )
             }
           />
+        )}
+
+        {/*
+          WhatsApp refused the send on every route. The doc's contract: say it is
+          temporary, let them try again, and offer support if it keeps happening —
+          never "message the bot first", which used to make things worse.
+
+          No retry button of its own: whichever button sent the code (Verify on
+          the row, Send code on the pending banner, Send a new code on the code
+          panel) is still on screen and is the retry — a second one here would
+          read as a different action. A code sent earlier still works; a failed
+          resend leaves it untouched on the server.
+
+          Neutral, not destructive-red: the doc frames this as temporary, and a red
+          box reads as "the platform is broken".
+        */}
+        {deliveryError && (
+          <Alert>
+            <MessageCircle className="size-4" />
+            <AlertDescription className="space-y-2">
+              <p>{deliveryError}</p>
+              {deliveryFailures > 1 && (
+                <>
+                  <p>{t('account.contact.deliverySupportHint')}</p>
+                  <div className="pt-1">
+                    <Button asChild variant="outline" size="sm">
+                      <Link to="/dashboard/tickets" state={{ create: true }}>
+                        {t('account.contact.contactSupport')}
+                      </Link>
+                    </Button>
+                  </div>
+                </>
+              )}
+            </AlertDescription>
+          </Alert>
         )}
 
         {codeOpen && (
@@ -639,6 +635,8 @@ export function ContactDetailsSection() {
                   setCode('');
                   setCodeError(null);
                   setAttemptsLeft(null);
+                  setDeliveryError(null);
+                  setDeliveryFailures(0);
                 }}
               >
                 {t('common.actions.cancel')}
@@ -656,28 +654,13 @@ export function ContactDetailsSection() {
               <PhoneInput id="new-phone" value={phoneDraft} onChange={setPhoneDraft} />
             </div>
 
-            {likelyMismatch && (
-              <Alert>
-                <Info className="size-4" />
-                <AlertDescription>
-                  {t('account.contact.whatsappNumberMismatch', { hint: whatsappHint ?? '' })}
-                </AlertDescription>
-              </Alert>
-            )}
-
             <p className="text-xs text-muted-foreground">{t('account.contact.phoneFlowHint')}</p>
 
             <div className="flex flex-wrap gap-2">
               <Button
                 size="sm"
                 disabled={!phoneValid || busy === 'request-phone'}
-                onClick={() =>
-                  void run(
-                    'request-phone',
-                    () => requestPhoneChange(phoneDraft),
-                    'account.contact.phoneChangeRequested',
-                  )
-                }
+                onClick={() => void submitPhoneChange()}
               >
                 {busy === 'request-phone' && <Loader2 className="size-4 animate-spin" />}
                 {t('common.actions.continue')}

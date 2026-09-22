@@ -16,6 +16,7 @@ import {
 import { ApiError } from '@/types/api';
 import type { ShippingConfig } from '@/types/shipping.types';
 import { useApiError, useTranslation, type TranslationKey } from '@/i18n';
+import { cn } from '@/lib/utils';
 
 interface ShippingConfigSheetProps {
   open: boolean;
@@ -61,6 +62,12 @@ function toDraft(config: ShippingConfig): Draft {
     shippingEnabled: config.shippingEnabled,
   };
 }
+
+/**
+ * Thumb-sized fields on a phone. The sheet is portalled out of the page, so the
+ * product form's own phone sizing (`ProductFormBody`) does not reach in here.
+ */
+const SHEET_INPUT = 'max-md:h-11 max-md:text-base';
 
 /** The four measurements, so the numeric rule is written once. */
 const MEASUREMENTS = ['weight', 'length', 'width', 'height'] as const;
@@ -234,6 +241,9 @@ export function ShippingConfigSheet({
       title={t('products.shipping.title')}
       description={t('products.shipping.description')}
       desktopClassName="sm:max-w-lg"
+      // Save on top on a phone (primary, then Cancel, then Clear); the desktop
+      // row is already reversed into Clear · Cancel · Save.
+      footerClassName="flex-col-reverse"
       footer={
         <>
           {/* Only offered when there is something stored — DELETE 404s otherwise,
@@ -269,13 +279,13 @@ export function ShippingConfigSheet({
           <AlertDescription>{loadError}</AlertDescription>
         </Alert>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-5">
           {/* Said up front, because it is the question this screen creates. */}
-          <p className="text-xs text-muted-foreground">
+          <p className="text-sm text-muted-foreground">
             {t('products.shipping.notActivationHint')}
           </p>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-x-3 gap-y-5">
             {/* Labelled in grams on purpose. The backend stores grams and its own
                 doc says kilograms in two places — a vendor typing 2 for a 2 kg
                 parcel would describe a 2 g one. */}
@@ -322,7 +332,7 @@ export function ShippingConfigSheet({
             />
           </div>
 
-          <div className="space-y-1.5">
+          <div className="space-y-2">
             <Label htmlFor="shipping-zip">{t('products.shipping.originZip')}</Label>
             <Input
               id="shipping-zip"
@@ -331,20 +341,22 @@ export function ShippingConfigSheet({
               maxLength={20}
               disabled={busy}
               aria-invalid={!!errors.originZipCode}
+              className={SHEET_INPUT}
             />
             {errors.originZipCode && (
-              <p className="text-xs text-destructive">{t(errors.originZipCode)}</p>
+              <p className="text-sm text-destructive">{t(errors.originZipCode)}</p>
             )}
           </div>
 
-          <div className="flex items-center justify-between gap-3 rounded-lg border p-3">
+          <div className="flex items-center justify-between gap-4">
             <div className="min-w-0">
-              <p className="text-sm font-medium">{t('products.shipping.enabled')}</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">
+              <Label htmlFor="shipping-enabled">{t('products.shipping.enabled')}</Label>
+              <p className="mt-1 text-sm text-muted-foreground">
                 {t('products.shipping.enabledHint')}
               </p>
             </div>
             <Switch
+              id="shipping-enabled"
               className="shrink-0"
               checked={draft.shippingEnabled}
               onCheckedChange={(v) => set('shippingEnabled', v)}
@@ -377,7 +389,7 @@ function Field({
 }) {
   const { t } = useTranslation();
   return (
-    <div className={className}>
+    <div className={cn('space-y-2', className)}>
       <Label htmlFor={id}>{label}</Label>
       <Input
         id={id}
@@ -385,13 +397,13 @@ function Field({
         min={0}
         step="any"
         inputMode="decimal"
-        className="mt-1.5"
+        className={SHEET_INPUT}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
         aria-invalid={!!error}
       />
-      {error && <p className="mt-1 text-xs text-destructive">{t(error)}</p>}
+      {error && <p className="text-sm text-destructive">{t(error)}</p>}
     </div>
   );
 }

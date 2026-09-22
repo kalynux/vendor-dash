@@ -2,12 +2,11 @@
 // UI for creating, editing, renaming, and managing product options and values.
 
 import { useState, useRef, useCallback, type KeyboardEvent } from 'react';
-import { Plus, X, GripVertical, Pencil, Check, AlertTriangle } from 'lucide-react';
+import { Plus, X, Pencil, Check, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import type { DraftOption, DraftOptionValue } from './variant.types';
 import { MAX_OPTIONS, MAX_VARIANTS } from './variant.engine';
@@ -64,47 +63,35 @@ export function OptionBuilderPanel({
   };
 
   return (
-    <div className="space-y-6">
-      {/* SKU Prefix */}
-      <div className="space-y-2">
-        <Label htmlFor="sku-prefix" className="text-sm font-medium">
-          {t('products.options.skuPrefix')}
-        </Label>
-        <Input
-          id="sku-prefix"
-          placeholder={t('products.options.skuPrefixPlaceholder')}
-          value={skuPrefix}
-          onChange={(e) => onSetSkuPrefix(e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, ''))}
-          className="w-full sm:max-w-[200px] font-mono text-sm"
-        />
-        <p className="text-xs text-muted-foreground">
-          {t('products.options.skuPrefixHint')}
-        </p>
-      </div>
+    <div className="space-y-5">
+      {/* Existing Options — flat blocks with hairlines between, not a card
+          each: they already sit inside the step's own section. */}
+      {options.length > 0 && (
+        <div className="divide-y divide-border border-y border-border">
+          {options.map((option) => (
+            <OptionCard
+              key={option.localId}
+              option={option}
+              onRemove={() => onRemoveOption(option.localId)}
+              onRename={(name) => onRenameOption(option.localId, name)}
+              onAddValue={(value) => onAddValue(option.localId, value)}
+              onRemoveValue={(valueLocalId) =>
+                onRemoveValue(option.localId, valueLocalId)
+              }
+              onRenameValue={(valueLocalId, newValue) =>
+                onRenameValue(option.localId, valueLocalId, newValue)
+              }
+            />
+          ))}
+        </div>
+      )}
 
-      {/* Existing Options */}
-      <div className="space-y-4">
-        {options.map((option) => (
-          <OptionCard
-            key={option.localId}
-            option={option}
-            onRemove={() => onRemoveOption(option.localId)}
-            onRename={(name) => onRenameOption(option.localId, name)}
-            onAddValue={(value) => onAddValue(option.localId, value)}
-            onRemoveValue={(valueLocalId) =>
-              onRemoveValue(option.localId, valueLocalId)
-            }
-            onRenameValue={(valueLocalId, newValue) =>
-              onRenameValue(option.localId, valueLocalId, newValue)
-            }
-          />
-        ))}
-      </div>
-
-      {/* Add New Option */}
+      {/* Add New Option — stacked on a phone, where the button beside the
+          field left it too narrow to show its own placeholder. */}
       {canAddOption && (
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col gap-2 md:flex-row md:items-center">
           <Input
+            aria-label={t('products.variants.optionName')}
             placeholder={t('products.options.namePlaceholder')}
             value={newOptionName}
             onChange={(e) => setNewOptionName(e.target.value)}
@@ -114,58 +101,71 @@ export function OptionBuilderPanel({
                 handleAddOption();
               }
             }}
-            className="flex-1 sm:max-w-[300px]"
+            className="md:max-w-[300px] md:flex-1"
           />
           <Button
             variant="outline"
-            size="sm"
             onClick={handleAddOption}
             disabled={!newOptionName.trim()}
-            className="shrink-0"
+            className="shrink-0 gap-1.5 max-md:h-11"
           >
-            <Plus className="h-4 w-4 sm:mr-1" />
-            <span className="hidden sm:inline">{t('products.options.addOption')}</span>
+            <Plus className="size-4" />
+            {t('products.options.addOption')}
           </Button>
         </div>
       )}
 
       {!canAddOption && (
-        <p className="text-xs text-muted-foreground">
+        <p className="text-sm text-muted-foreground">
           {t('products.options.maxOptions', { max: MAX_OPTIONS })}
         </p>
       )}
 
+      {/* SKU Prefix — read when the variants are generated, so it sits just
+          above the button that generates them. */}
+      <div className="space-y-2">
+        <Label htmlFor="sku-prefix">{t('products.options.skuPrefix')}</Label>
+        <Input
+          id="sku-prefix"
+          placeholder={t('products.options.skuPrefixPlaceholder')}
+          value={skuPrefix}
+          onChange={(e) => onSetSkuPrefix(e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, ''))}
+          className="w-full font-mono md:max-w-[200px]"
+        />
+        <p className="text-sm text-muted-foreground">
+          {t('products.options.skuPrefixHint')}
+        </p>
+      </div>
+
       {/* Combination Preview & Generate Button */}
       {options.length > 0 && (
-        <div className="pt-4 border-t space-y-3">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="space-y-1">
-              <p className="text-sm font-medium">{t('products.options.preview')}</p>
-              <p
-                className={cn(
-                  'text-sm',
-                  exceedsLimit ? 'text-destructive font-medium' : 'text-muted-foreground',
-                )}
-              >
-                {combinationCount > 0
-                  ? t('products.options.willGenerate', { count: combinationCount })
-                  : t('products.options.addValuesToGenerate')}
-              </p>
-              {exceedsLimit && (
-                <p className="text-xs text-destructive flex items-center gap-1">
-                  <AlertTriangle className="h-3 w-3" />
-                  {t('products.options.exceedsLimit', { max: MAX_VARIANTS })}
-                </p>
+        <div className="flex flex-col gap-3 border-t pt-5 md:flex-row md:items-center md:justify-between">
+          <div className="space-y-1">
+            <p className="text-sm font-medium">{t('products.options.preview')}</p>
+            <p
+              className={cn(
+                'text-sm',
+                exceedsLimit ? 'text-destructive font-medium' : 'text-muted-foreground',
               )}
-            </div>
-            <Button
-              onClick={onApplyAndGenerate}
-              disabled={!hasValidOptions || exceedsLimit}
-              className="w-full sm:w-auto"
             >
-              {t('products.options.applyAndGenerate')}
-            </Button>
+              {combinationCount > 0
+                ? t('products.options.willGenerate', { count: combinationCount })
+                : t('products.options.addValuesToGenerate')}
+            </p>
+            {exceedsLimit && (
+              <p className="flex items-center gap-1.5 text-sm text-destructive">
+                <AlertTriangle className="size-4 shrink-0" />
+                {t('products.options.exceedsLimit', { max: MAX_VARIANTS })}
+              </p>
+            )}
           </div>
+          <Button
+            onClick={onApplyAndGenerate}
+            disabled={!hasValidOptions || exceedsLimit}
+            className="w-full max-md:h-11 md:w-auto"
+          >
+            {t('products.options.applyAndGenerate')}
+          </Button>
         </div>
       )}
     </div>
@@ -220,115 +220,115 @@ function OptionCard({
   };
 
   return (
-    <Card className="relative gap-2">
-      <CardHeader className="">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <GripVertical className="h-4 w-4 text-muted-foreground cursor-grab" />
-            {isEditingName ? (
-              <div className="flex items-center gap-1">
-                <Input
-                  value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleSaveName();
-                    if (e.key === 'Escape') {
-                      setEditName(option.name);
-                      setIsEditingName(false);
-                    }
-                  }}
-                  onBlur={handleSaveName}
-                  className="h-7 w-[160px] text-sm"
-                  autoFocus
-                />
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 w-7 p-0"
-                  onClick={handleSaveName}
-                >
-                  <Check className="h-3 w-3" />
-                </Button>
-              </div>
-            ) : (
-              <CardTitle
-                className="text-sm font-medium cursor-pointer hover:text-primary flex items-center gap-1.5"
-                onClick={() => {
-                  setEditName(option.name);
-                  setIsEditingName(true);
+    <div className="space-y-3 py-4">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2">
+          {isEditingName ? (
+            <div className="flex items-center gap-1">
+              <Input
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleSaveName();
+                  if (e.key === 'Escape') {
+                    setEditName(option.name);
+                    setIsEditingName(false);
+                  }
                 }}
-              >
-                {option.name}
-                <Pencil className="h-3 w-3 text-muted-foreground group-hover:opacity-100 transition-opacity" />
-                {isSaved && (
-                  <span
-                    className={cn(
-                      'inline-block w-1.5 h-1.5 rounded-full',
-                      isRenamed ? 'bg-amber-500' : 'bg-emerald-500',
-                    )}
-                    title={t(isRenamed
-                      ? 'products.options.renamedUnsaved'
-                      : 'products.options.savedMarker')}
-                  />
-                )}
-              </CardTitle>
-            )}
-          </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
-            onClick={onRemove}
-          >
-            <X className="h-4 w-4" />
-          </Button>
-        </div>
-      </CardHeader>
-      <CardContent className="pt-0 space-y-3">
-        {/* Value Tags */}
-        <div className="flex flex-wrap gap-1.5">
-          {option.values && option.values.length > 0 ? (
-            option.values.map((val) => (
-              <ValueBadge
-                key={val.localId}
-                value={val}
-                onRemove={() => onRemoveValue(val.localId)}
-                onRename={(newValue) => onRenameValue(val.localId, newValue)}
+                onBlur={handleSaveName}
+                className="w-[180px] md:h-8"
+                autoFocus
               />
-            ))) : (
-            <p className="text-xs text-red-500">{t('products.options.noValues')}</p>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleSaveName}
+                aria-label={t('common.actions.save')}
+              >
+                <Check className="size-4" />
+              </Button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="tap-target flex min-w-0 items-center gap-1.5 rounded-sm text-sm font-medium hover:text-primary"
+              onClick={() => {
+                setEditName(option.name);
+                setIsEditingName(true);
+              }}
+            >
+              <span className="truncate">{option.name}</span>
+              <Pencil className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+              {isSaved && (
+                <span
+                  className={cn(
+                    'inline-block size-1.5 shrink-0 rounded-full',
+                    isRenamed ? 'bg-amber-500' : 'bg-emerald-500',
+                  )}
+                  title={t(isRenamed
+                    ? 'products.options.renamedUnsaved'
+                    : 'products.options.savedMarker')}
+                />
+              )}
+            </button>
           )}
         </div>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="-mr-2 text-muted-foreground hover:text-destructive"
+          onClick={onRemove}
+          aria-label={t('common.actions.remove')}
+        >
+          <X className="size-4" />
+        </Button>
+      </div>
 
-        {/* Add Value Input */}
-        <div className="flex items-center gap-2">
-          <Input
-            ref={valueInputRef}
-            placeholder={t('products.options.valuePlaceholder')}
-            value={valueInput}
-            onChange={(e) => setValueInput(e.target.value)}
-            onKeyDown={handleValueKeyDown}
-            className="text-sm flex-1 min-w-0"
-          />
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              const trimmed = valueInput.trim();
-              if (trimmed) {
-                onAddValue(trimmed);
-                setValueInput('');
-                valueInputRef.current?.focus();
-              }
-            }}
-            disabled={!valueInput.trim()}
-            className="shrink-0"
-          >
-            <Plus className="h-3 w-3" />
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
+      {/* Value Tags */}
+      <div className="flex flex-wrap gap-2">
+        {option.values && option.values.length > 0 ? (
+          option.values.map((val) => (
+            <ValueBadge
+              key={val.localId}
+              value={val}
+              onRemove={() => onRemoveValue(val.localId)}
+              onRename={(newValue) => onRenameValue(val.localId, newValue)}
+            />
+          ))) : (
+          <p className="text-sm text-destructive">{t('products.options.noValues')}</p>
+        )}
+      </div>
+
+      {/* Add Value Input */}
+      <div className="flex items-center gap-2">
+        <Input
+          ref={valueInputRef}
+          aria-label={t('products.variants.optionValues')}
+          placeholder={t('products.options.valuePlaceholder')}
+          value={valueInput}
+          onChange={(e) => setValueInput(e.target.value)}
+          onKeyDown={handleValueKeyDown}
+          className="min-w-0 flex-1"
+        />
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={() => {
+            const trimmed = valueInput.trim();
+            if (trimmed) {
+              onAddValue(trimmed);
+              setValueInput('');
+              valueInputRef.current?.focus();
+            }
+          }}
+          disabled={!valueInput.trim()}
+          aria-label={t('common.actions.add')}
+          className="shrink-0 max-md:size-11"
+        >
+          <Plus className="size-4" />
+        </Button>
+      </div>
+    </div>
   );
 }
 
@@ -341,6 +341,7 @@ interface ValueBadgeProps {
 }
 
 function ValueBadge({ value, onRemove, onRename }: ValueBadgeProps) {
+  const { t } = useTranslation();
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState(value.value);
 
@@ -368,7 +369,9 @@ function ValueBadge({ value, onRemove, onRename }: ValueBadgeProps) {
           }
         }}
         onBlur={handleSave}
-        className="h-6 w-[100px] text-xs px-2"
+        // Stays chip-sized on a phone: `ProductFormBody` would otherwise make
+        // this inline editor a full 44px field in the middle of a row of chips.
+        className="w-[120px] px-2 max-md:!h-9 md:h-7 md:text-xs"
         autoFocus
       />
     );
@@ -378,7 +381,7 @@ function ValueBadge({ value, onRemove, onRename }: ValueBadgeProps) {
     <Badge
       variant="secondary"
       className={cn(
-        'cursor-pointer hover:bg-secondary/80 transition-colors gap-1 pr-1',
+        'cursor-pointer gap-1 py-1 pl-2.5 pr-1.5 text-sm font-normal transition-colors hover:bg-secondary/80',
         isRenamed && 'border-amber-500/50 bg-amber-50 dark:bg-amber-950/20',
         isSaved && !isRenamed && 'border-emerald-500/30',
       )}
@@ -404,13 +407,15 @@ function ValueBadge({ value, onRemove, onRename }: ValueBadgeProps) {
         <span className="inline-block w-1.5 h-1.5 rounded-full ml-0.5 bg-blue-500" />
       )}
       <button
+        type="button"
+        aria-label={t('products.fields.removeTag', { tag: value.value })}
         onClick={(e) => {
           e.stopPropagation();
           onRemove();
         }}
-        className="ml-0.5 hover:text-destructive transition-colors tap-target"
+        className="tap-target ml-0.5 rounded-sm text-muted-foreground transition-colors hover:text-destructive"
       >
-        <X className="h-3 w-3" />
+        <X className="size-3.5" />
       </button>
     </Badge>
   );

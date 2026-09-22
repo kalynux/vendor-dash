@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { Ruler } from 'lucide-react';
 
 import { ShippingConfigSheet } from '@/components/products/ShippingConfigSheet';
 import { fetchShippingConfig } from '@/services/shipping.service';
@@ -80,6 +79,9 @@ export function ShippingConfigRow({
 
   const shipping = loaded?.productId === productId ? loaded.config : null;
 
+  // A plain row, not a box: the page wraps it in its "Delivery" section, where
+  // it sits as one more labelled line — label, a one-line summary, and the
+  // action. The whole row is the tap target.
   return (
     <>
       <button
@@ -87,15 +89,15 @@ export function ShippingConfigRow({
         onClick={() => setOpen(true)}
         disabled={disabled}
         className={cn(
-          'flex w-full items-center gap-3 rounded-xl border border-border p-4 text-left',
-          'transition-colors hover:bg-accent/40 disabled:pointer-events-none disabled:opacity-60',
+          'group flex min-h-11 w-full items-center justify-between gap-4 rounded-md text-left',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+          'disabled:pointer-events-none disabled:opacity-60',
           className,
         )}
       >
-        <Ruler className="size-5 shrink-0 text-muted-foreground" aria-hidden />
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium">{t('products.shipping.title')}</p>
-          <p className="mt-0.5 text-xs text-muted-foreground">
+        <span className="min-w-0">
+          <span className="block text-sm font-medium">{t('products.shipping.title')}</span>
+          <span className="mt-0.5 block truncate text-sm text-muted-foreground">
             {shipping
               ? t('products.shipping.summarySet', {
                   weight: shipping.weight,
@@ -104,9 +106,9 @@ export function ShippingConfigRow({
                   height: shipping.height,
                 })
               : t('products.shipping.summaryNone')}
-          </p>
-        </div>
-        <span className="shrink-0 text-xs font-semibold text-primary">
+          </span>
+        </span>
+        <span className="shrink-0 text-sm font-medium text-primary group-hover:underline group-hover:underline-offset-4">
           {shipping ? t('common.actions.edit') : t('products.shipping.summaryAction')}
         </span>
       </button>

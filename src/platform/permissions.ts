@@ -20,8 +20,9 @@
  * core-plugin answer — `@capacitor/app` has no `openSettings` — and it is used
  * from this module and nowhere else.
  */
+import { App } from '@capacitor/app';
 import { NativeSettings, AndroidSettings, IOSSettings } from 'capacitor-native-settings';
-import type { PermissionState } from '@capacitor/core';
+import type { PermissionState, PluginListenerHandle } from '@capacitor/core';
 import { isNative } from './env';
 
 /**
@@ -86,4 +87,35 @@ export async function openAppSettings(): Promise<void> {
   } catch (err) {
     console.warn('[permissions] could not open the system settings screen', err);
   }
+}
+
+/**
+ * Run `callback` once, the next time the app comes back to the foreground —
+ * called straight after {@link openAppSettings}, that is the vendor returning
+ * from the settings screen, so the feature can carry on without a second tap.
+ * Returns a cancel function. Never fires on the web.
+ *
+ * ⚠ Register it only right before leaving for settings. The OS permission
+ * prompt and Google's "turn on location" dialog are separate activities too, so
+ * closing either of them also counts as a resume.
+ */
+export function onNextResume(callback: () => void): () => void {
+  if (!isNative) return () => undefined;
+  let spent = false;
+  let handle: PluginListenerHandle | null = null;
+
+  void App.addListener('resume', () => {
+    if (spent) return;
+    spent = true;
+    void handle?.remove();
+    callback();
+  }).then((h) => {
+    handle = h;
+    if (spent) void h.remove();
+  });
+
+  return () => {
+    spent = true;
+    void handle?.remove();
+  };
 }

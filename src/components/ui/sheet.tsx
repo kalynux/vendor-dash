@@ -46,6 +46,7 @@ function SheetContent({
   className,
   children,
   side = "right",
+  onOpenAutoFocus,
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Content> & {
   side?: "top" | "right" | "bottom" | "left"
@@ -55,6 +56,21 @@ function SheetContent({
       <SheetOverlay />
       <SheetPrimitive.Content
         data-slot="sheet-content"
+        // A bottom sheet is the phone layout, and Radix's default — focus the
+        // first focusable element — usually lands on a text field there: the
+        // media picker's search box, the first input of a form. That raises the
+        // keyboard the moment the sheet opens, and the sheet, sized in `dvh`,
+        // shrinks to the half of the screen the keyboard leaves. Focus the sheet
+        // itself instead, which keeps focus inside the dialog for screen readers
+        // and leaves the keyboard down until a field is tapped. A field that
+        // really should take focus on open still can: an `autoFocus` input is
+        // focused before this runs, and Radix then skips its own pass.
+        onOpenAutoFocus={(event) => {
+          onOpenAutoFocus?.(event)
+          if (event.defaultPrevented || side !== "bottom") return
+          event.preventDefault()
+          ;(event.currentTarget as HTMLElement | null)?.focus({ preventScroll: true })
+        }}
         className={cn(
           "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out fixed z-50 flex flex-col gap-4 shadow-lg transition ease-in-out data-[state=closed]:duration-300 data-[state=open]:duration-500",
           side === "right" &&
@@ -83,7 +99,7 @@ function SheetContent({
             `position`, so the icon does not move. Call sites that pull the
             close in to `right-3` lose ~2px of halo to the content's
             `overflow-hidden` — still 42px, against 16px before. */}
-        <SheetPrimitive.Close className="ring-offset-background focus:ring-ring data-[state=open]:bg-secondary absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none tap-target">
+        <SheetPrimitive.Close className="ring-offset-background focus:ring-ring data-[state=open]:bg-secondary absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-none disabled:pointer-events-none tap-target">
           <XIcon className="size-4" />
           <span className="sr-only">Close</span>
         </SheetPrimitive.Close>

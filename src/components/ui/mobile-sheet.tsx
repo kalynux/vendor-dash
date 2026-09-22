@@ -19,12 +19,21 @@ import { cn } from '@/lib/utils';
  *
  * ── The one thing that made this non-obvious ─────────────────────────────────
  *
- * ⚠ **`!important` beats an animation.** Radix positions a popper with an inline
- * `transform: translate(x, y)`, so pinning it to the bottom of the screen means
- * overriding that transform — and per the cascade, an `!important` author
- * declaration outranks a running animation. Do it on the element the sheet is
- * drawn on and `slide-in-from-bottom` silently does nothing: the sheet appears,
- * fully formed, with no motion at all.
+ * ⚠ **`!important` beats an animation.** Pinning the content to the bottom of
+ * the screen means stripping every transform on it — any transform turns it
+ * into the containing block for the `fixed` scrim inside it — and per the
+ * cascade, an `!important` author declaration outranks a running animation. Do
+ * it on the element the sheet is drawn on and `slide-in-from-bottom` silently
+ * does nothing: the sheet appears, fully formed, with no motion at all.
+ *
+ * ⚠ **The popper's own transform is NOT on the content.** For Popover,
+ * DropdownMenu and a `position="popper"` Select, Radix puts the inline
+ * `translate(x, y)` (and, at 1.5x density and up, `will-change: transform`) on
+ * a `[data-radix-popper-content-wrapper]` around the content. Either one makes
+ * that wrapper the containing block for the content's `position: fixed`, and
+ * the sheet collapses to zero width at the trigger — a dim screen with nothing
+ * on it. `index.css` undoes both on any wrapper holding a `[data-mobile-sheet]`
+ * element, which is why the three primitives set that attribute.
  *
  * Hence two elements rather than one. The Radix element becomes an invisible
  * *positioning shell* — pinned, transparent, transform killed — and a plain

@@ -60,6 +60,10 @@ function FieldLabel({
 }
 
 // ─── Section wrapper ─────────────────────────────────────────────────────────
+// A card from `md` up. Below that the card's border and padding came on top of
+// the page's own gutter (and, in Settings, the section's), shrinking every field
+// by ~32px — so on a phone a section is a heading row with its switch, the
+// fields sit flat underneath, and the form's dividers separate the sections.
 
 function PolicySection({
     icon,
@@ -79,18 +83,19 @@ function PolicySection({
     const { t } = useTranslation();
     return (
         <div className={cn(
-            'rounded-lg border transition-colors',
-            enabled ? 'border-border' : 'border-dashed border-muted-foreground/30',
+            'max-md:py-5 max-md:first:pt-0 max-md:last:pb-0',
+            'md:rounded-lg md:border transition-colors',
+            enabled ? 'md:border-border' : 'md:border-dashed md:border-muted-foreground/30',
         )}>
-            <div className="flex items-center justify-between gap-3 p-3 sm:p-4">
-                <div className="flex items-center gap-3">
+            <div className="flex items-center justify-between gap-3 md:p-4">
+                <div className="flex min-w-0 items-center gap-3">
                     <div className={cn(
                         'w-8 h-8 rounded-lg flex items-center justify-center transition-colors',
                         enabled ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground',
                     )}>
                         {icon}
                     </div>
-                    <div>
+                    <div className="min-w-0">
                         <p className="text-sm font-semibold">{title}</p>
                         <p className="text-xs text-muted-foreground">{subtitle}</p>
                     </div>
@@ -98,7 +103,7 @@ function PolicySection({
                 <Switch checked={enabled} onCheckedChange={onToggle} aria-label={t('settings.policies.enableSection', { title })} />
             </div>
             {enabled && (
-                <div className="px-3 pb-3 pt-0 border-t space-y-4 sm:px-4 sm:pb-4">
+                <div className="space-y-4 md:border-t md:px-4 md:pb-4">
                     {children}
                 </div>
             )}
@@ -271,7 +276,7 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
         onSubmit(values, { return: enableReturn, cancellation: enableCancellation, support: enableSupport });
 
     return (
-        <form id={formId} onSubmit={handleSubmit(submit)} className="space-y-4" noValidate>
+        <form id={formId} onSubmit={handleSubmit(submit)} className="max-md:divide-y md:space-y-4" noValidate>
 
             {/* ── Return Policy ── */}
             <PolicySection
@@ -659,46 +664,51 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
                     <div className="space-y-3">
                         {channelFields.map((field, index) => (
                             <div key={field.id} className="space-y-1">
-                                <div className="flex items-center gap-2">
-                                    <span className="text-xs font-semibold text-muted-foreground w-16 shrink-0">
+                                {/* Label above the field on a phone: beside it, a
+                                    country picker, a number and a delete button
+                                    left the number itself about 100px wide. */}
+                                <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-2">
+                                    <span className="text-xs font-semibold text-muted-foreground sm:w-16 sm:shrink-0">
                                         {t(CHANNEL_LABEL_KEYS[field.type])}
                                     </span>
-                                    {PHONE_CHANNELS.has(field.type) ? (
-                                        <div className="min-w-0 flex-1">
-                                            <Controller
-                                                control={control}
-                                                name={`support_policy.channels.${index}.contact`}
-                                                render={({ field: f }) => (
-                                                    <PhoneInput
-                                                        value={f.value ?? ''}
-                                                        onChange={f.onChange}
-                                                        onBlur={f.onBlur}
-                                                        required
-                                                        hideError
-                                                        invalid={!!errors.support_policy?.channels?.[index]?.contact}
-                                                        className="h-10"
-                                                    />
+                                    <div className="flex min-w-0 flex-1 items-center gap-2">
+                                        {PHONE_CHANNELS.has(field.type) ? (
+                                            <div className="min-w-0 flex-1">
+                                                <Controller
+                                                    control={control}
+                                                    name={`support_policy.channels.${index}.contact`}
+                                                    render={({ field: f }) => (
+                                                        <PhoneInput
+                                                            value={f.value ?? ''}
+                                                            onChange={f.onChange}
+                                                            onBlur={f.onBlur}
+                                                            required
+                                                            hideError
+                                                            invalid={!!errors.support_policy?.channels?.[index]?.contact}
+                                                            className="h-10"
+                                                        />
+                                                    )}
+                                                />
+                                            </div>
+                                        ) : (
+                                            <Input
+                                                placeholder={CHANNEL_PLACEHOLDERS[field.type]}
+                                                className={cn(
+                                                    'h-10 w-full flex-1',
+                                                    errors.support_policy?.channels?.[index]?.contact && 'border-destructive',
                                                 )}
+                                                {...register(`support_policy.channels.${index}.contact`)}
                                             />
-                                        </div>
-                                    ) : (
-                                        <Input
-                                            placeholder={CHANNEL_PLACEHOLDERS[field.type]}
-                                            className={cn(
-                                                'h-10 w-full flex-1',
-                                                errors.support_policy?.channels?.[index]?.contact && 'border-destructive',
-                                            )}
-                                            {...register(`support_policy.channels.${index}.contact`)}
-                                        />
-                                    )}
-                                    <button
-                                        type="button"
-                                        onClick={() => removeChannel(index)}
-                                        aria-label={t('settings.policies.support.removeChannel', { type: field.type })}
-                                        className="text-muted-foreground hover:text-destructive transition-colors shrink-0 tap-target"
-                                    >
-                                        <Trash2 className="w-4 h-4" />
-                                    </button>
+                                        )}
+                                        <button
+                                            type="button"
+                                            onClick={() => removeChannel(index)}
+                                            aria-label={t('settings.policies.support.removeChannel', { type: field.type })}
+                                            className="text-muted-foreground hover:text-destructive transition-colors shrink-0 tap-target"
+                                        >
+                                            <Trash2 className="w-4 h-4" />
+                                        </button>
+                                    </div>
                                 </div>
                                 <FieldError message={errors.support_policy?.channels?.[index]?.contact?.message} />
                             </div>
@@ -848,7 +858,7 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
             </PolicySection>
 
             {/* ── Policy Documents ── */}
-            <div className="rounded-lg border p-4 space-y-3">
+            <div className="space-y-3 max-md:py-5 max-md:last:pb-0 md:rounded-lg md:border md:p-4">
                 <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-lg bg-muted text-muted-foreground flex items-center justify-center">
                         <FileText className="w-4 h-4" />

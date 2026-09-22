@@ -1,12 +1,13 @@
 import { useState, useCallback } from 'react';
-import { AlertCircle, ChevronLeft, ChevronRight, Plus, Save } from 'lucide-react';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { ChevronRight, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { SettingsSection, SettingsSections } from '@/components/vendor-settings/SettingsSection';
 import { DigitalFormatCard } from '@/components/products/DigitalFormatCard';
-import { useMessage, useTranslation } from '@/i18n';
+import { useTranslation } from '@/i18n';
 import type { WizardState, DigitalFormatRow } from '@/types/product.types';
+import { StepActions, StepError } from './StepLayout';
 
 const MAX_FORMATS = 5;
 
@@ -69,7 +70,6 @@ export function StepDigitalFormats({
   onBack,
 }: StepDigitalFormatsProps) {
   const { t } = useTranslation();
-  const m = useMessage();
   const [formats, setFormats] = useState<DigitalFormatRow[]>(() => buildInitialFormats(serverData));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isActive, setIsActive] = useState<boolean>(
@@ -150,44 +150,36 @@ export function StepDigitalFormats({
   const productId = serverData.productId ?? '';
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold">{t('products.formats.title')}</h2>
-        <p className="text-sm text-muted-foreground mt-1">
-          {t('products.formats.description', { max: MAX_FORMATS })}
-        </p>
-      </div>
+    <div>
+      <StepError error={stepError} />
 
-      {stepError && (
-        <Alert variant="destructive">
-          <AlertCircle className="w-4 h-4" />
-          <AlertDescription>{m(stepError)}</AlertDescription>
-        </Alert>
-      )}
-
-      {/* Product-wide downloads switch */}
-      <div className="rounded-xl border border-border p-4">
-        <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <Label className="text-sm font-medium">{t('products.formats.downloadsEnabled')}</Label>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              {t('products.formats.downloadsEnabledHint')}
-            </p>
+      {/* One section for the product-wide switch, then one per format — so on a
+          wide screen each format is its own card, never a card inside one. */}
+      <SettingsSections>
+        <SettingsSection
+          title={t('products.formats.title')}
+          info={t('products.formats.description', { max: MAX_FORMATS })}
+        >
+          <div className="flex items-center justify-between gap-4">
+            <div className="min-w-0 space-y-1">
+              <Label htmlFor="downloads-enabled">{t('products.formats.downloadsEnabled')}</Label>
+              <p className="text-sm text-muted-foreground">
+                {t('products.formats.downloadsEnabledHint')}
+              </p>
+            </div>
+            <Switch
+              id="downloads-enabled"
+              checked={isActive}
+              onCheckedChange={(v) => {
+                setIsActive(v);
+                setDirty(true);
+              }}
+              disabled={isSaving}
+              aria-label={t('products.formats.downloadsEnabled')}
+            />
           </div>
-          <Switch
-            checked={isActive}
-            onCheckedChange={(v) => {
-              setIsActive(v);
-              setDirty(true);
-            }}
-            disabled={isSaving}
-            aria-label={t('products.formats.downloadsEnabled')}
-          />
-        </div>
-      </div>
+        </SettingsSection>
 
-      {/* Format cards */}
-      <div className="space-y-4">
         {formats.map((format, idx) => (
           <DigitalFormatCard
             key={format.tempId}
@@ -204,51 +196,39 @@ export function StepDigitalFormats({
             onStatusSync={handleStatusSync}
           />
         ))}
-      </div>
+      </SettingsSections>
 
-      <div className="space-y-1">
+      {/* Below the last format, where the new one will appear. */}
+      <div className="flex flex-col gap-2 max-md:border-t max-md:py-5 md:mt-6 md:flex-row md:items-center md:gap-3">
         <Button
           type="button"
           variant="outline"
-          size="sm"
           onClick={handleAdd}
           disabled={atLimit || isSaving}
-          className="gap-2 w-full sm:w-auto"
+          className="gap-1.5 max-md:h-11 max-md:w-full"
         >
-          <Plus className="w-3.5 h-3.5" />
+          <Plus className="size-4" />
           {t('products.formats.addFormat')}
         </Button>
-        <p className="text-xs text-muted-foreground">
+        <p className="text-sm text-muted-foreground max-md:text-center">
           {atLimit
             ? t('products.formats.atLimit', { max: MAX_FORMATS })
             : t('products.formats.count', { used: formats.length, max: MAX_FORMATS })}
         </p>
       </div>
 
-      {/* Navigation */}
-      <div className="flex items-center justify-between pt-2">
-        <Button type="button" variant="ghost" size="sm" onClick={onBack} className="gap-1.5">
-          <ChevronLeft className="w-4 h-4" />
-          {t('common.actions.back')}
-        </Button>
+      <StepActions onBack={onBack}>
         {hasUnsaved ? (
           <Button type="button" onClick={handleSave} disabled={isSaving} className="gap-1.5">
-            {isSaving ? (
-              t('common.actions.saving')
-            ) : (
-              <>
-                <Save className="w-4 h-4" />
-                {t('products.formats.saveAndContinue')}
-              </>
-            )}
+            {isSaving ? t('common.actions.saving') : t('products.formats.saveAndContinue')}
           </Button>
         ) : (
           <Button type="button" onClick={handleContinue} disabled={isSaving} className="gap-1.5">
             {t('common.actions.continue')}
-            <ChevronRight className="w-4 h-4" />
+            <ChevronRight className="size-4" />
           </Button>
         )}
-      </div>
+      </StepActions>
     </div>
   );
 }

@@ -27,6 +27,8 @@ export const onboarding = {
 
     optional: 'This step is optional',
     saveAndFinish: 'Save & Finish',
+    /** Step 3's button — a step still follows it, so it must not say "Finish". */
+    saveAndContinue: 'Save & continue',
     continuing: 'Continuing…',
 
     basicSetup: {
@@ -78,8 +80,9 @@ export const onboarding = {
         subheading:
             'Optional — add your logo and store address to give customers a better experience. ' +
             'You can always do this later.',
-        profileComplete: 'Profile complete! Welcome aboard 🎉',
-        setupComplete: 'Setup complete! Welcome to the dashboard 🎉',
+        // Step 3 of 4 — a step still follows, so neither says "complete".
+        saved: 'Logo and addresses saved.',
+        skipped: 'Skipped — you can add these later from your account.',
         title: 'Make it yours',
         description: 'Add a logo and a banner so customers recognise your store.',
         logo: 'Logo',

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { AlertCircle, X, Plus, ChevronDown, Settings2, Handshake } from 'lucide-react';
+import { AlertCircle, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -10,11 +10,14 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
+import { InfoHint, LabelWithHint } from '@/components/ui/info-hint';
+import { Collapsible, CollapsibleContent } from '@/components/ui/collapsible';
 import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@/components/ui/collapsible';
+  SettingsGroup,
+  SettingsSection,
+  SettingsSections,
+} from '@/components/vendor-settings/SettingsSection';
+import { DisclosureTrigger } from '@/components/products/form/DisclosureTrigger';
 import { ProductMediaUpload } from '@/components/products/ProductMediaUpload';
 import { ChatRichTextEditor } from '@/components/rich-text';
 import { useTranslation, useMessage, useFormatters } from '@/i18n';
@@ -77,6 +80,11 @@ export interface SimpleProductFormProps {
    * Rendered between the fields and the action bar. The edit page injects the
    * delivery card, AI-search toggle and status control here — all separate
    * endpoints, and therefore not this form's business.
+   *
+   * ⚠ Pass `SettingsSection`s (a fragment of them is fine). They land as direct
+   * children of the form's `SettingsSections`, whose phone hairlines come from
+   * `divide-y` — which only sees direct children, so loose markup here would sit
+   * unseparated and unguttered between two sections.
    */
   children?: React.ReactNode;
   /**
@@ -111,6 +119,24 @@ const EMPTY_VALUES: SimpleProductFormValues = {
   width: undefined,
   height: undefined,
 };
+
+/**
+ * A watched number field as a number, for display decisions only: a finite
+ * number, or a string that parses to one. Empty and non-numeric input is "no
+ * value" (`undefined`), never 0.
+ */
+function displayNumber(value: unknown): number | undefined {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : undefined;
+  if (typeof value !== 'string' || value.trim() === '') return undefined;
+  const n = Number(value.trim());
+  return Number.isFinite(n) ? n : undefined;
+}
+
+/** An error under a field, in the one size every helper line on this page uses. */
+function FieldError({ message }: { message?: string }) {
+  if (!message) return null;
+  return <p className="text-sm text-destructive">{message}</p>;
+}
 
 export function SimpleProductForm({
   mode,
@@ -151,8 +177,12 @@ export function SimpleProductForm({
 
   const tags = (watch('tags') ?? []) as string[];
   const isInfiniteStock = watch('isInfiniteStock');
-  const price = watch('price');
-  const compareAtPrice = watch('compareAtPrice');
+  // Display-only numbers for the hints and the preview. `register` hands back
+  // what is in the input — a string once the vendor types — so a plain
+  // `typeof === 'number'` check only ever passed for untouched edit values.
+  // What is submitted is unaffected: the schema does its own coercion.
+  const price = displayNumber(watch('price'));
+  const compareAtPrice = displayNumber(watch('compareAtPrice'));
   const seoTitle = watch('seoTitle') ?? '';
   const seoDesc = watch('seoDescription') ?? '';
   const descriptionRich = watch('descriptionRich') as RichDoc;
@@ -167,7 +197,18 @@ export function SimpleProductForm({
   const minCeiling =
     typeof price === 'number' && price > 0 ? minCeilingFor(price) : null;
 
-  const bargainMaxPrice = watch('bargainMaxPrice');
+  const bargainMaxPrice = displayNumber(watch('bargainMaxPrice'));
+  const hasAskingPrice = typeof bargainMaxPrice === 'number' && bargainMaxPrice > 0;
+
+  /**
+   * A compare-at price at or under the price is stored but never shown struck
+   * through — say so under the pair rather than let it silently do nothing.
+   */
+  const compareAtTooLow =
+    typeof compareAtPrice === 'number' &&
+    typeof price === 'number' &&
+    compareAtPrice > 0 &&
+    compareAtPrice <= price;
 
   /**
    * The shop publishes `compareAtPrice` only when it is strictly ABOVE the asking
@@ -177,11 +218,10 @@ export function SimpleProductForm({
    * both values are legal and stored either way.
    */
   const compareAtHiddenByAsking =
-    typeof bargainMaxPrice === 'number' &&
-    bargainMaxPrice > 0 &&
+    hasAskingPrice &&
     typeof compareAtPrice === 'number' &&
     compareAtPrice > 0 &&
-    compareAtPrice <= bargainMaxPrice;
+    compareAtPrice <= (bargainMaxPrice as number);
 
   /** Keeps `description` a derived projection of the document. See StepBasicInfo. */
   function onDescriptionChange(doc: RichDoc) {
@@ -253,7 +293,13 @@ export function SimpleProductForm({
     intentRef.current = intent;
   }
 
+  /** Accessible name for a field's info icon: "About <label>". */
+  const aboutLabel = (title: string) => t('account.section.aboutTitle', { title });
+
   const isBusy = isSubmitting || disabled;
+
+  // Thumb-sized and full-width on a phone, the app's ordinary buttons above it.
+  const actionButton = 'max-md:h-11 max-md:w-full';
 
   return (
     <form
@@ -267,436 +313,478 @@ export function SimpleProductForm({
         </Alert>
       )}
 
-      {/* Photos */}
-      <div className="space-y-1.5">
-        <Label>{t('products.fields.photos')}</Label>
-        <p className="text-xs text-muted-foreground">
-          {t('products.fields.photosHint', { max: PRODUCT_IMAGE_LIMIT.physical })}
-        </p>
-        <ProductMediaUpload
-          existingFiles={existingFiles}
-          maxFiles={PRODUCT_IMAGE_LIMIT.physical}
-          disabled={isBusy}
-          onMediaChange={(ids) => setValue('fileIds', ids, { shouldDirty: true })}
-        />
-        {errors.fileIds && (
-          <p className="text-xs text-destructive">{m(errors.fileIds.message as string)}</p>
-        )}
-      </div>
-
-      {/* Title */}
-      <div className="space-y-1.5">
-        <Label htmlFor="title">
-          {t('products.fields.productName')} <span className="text-destructive">*</span>
-        </Label>
-        <Input
-          id="title"
-          placeholder={t('products.fields.namePlaceholder')}
-          disabled={isBusy}
-          {...register('title')}
-          aria-invalid={!!errors.title}
-        />
-        {errors.title && <p className="text-xs text-destructive">{m(errors.title.message)}</p>}
-      </div>
-
-      {/* Description */}
-      <div className="space-y-1.5">
-        <Label htmlFor="description">
-          {t('products.fields.description')} <span className="text-destructive">*</span>
-        </Label>
-        <ChatRichTextEditor
-          id="description"
-          value={descriptionRich}
-          onChange={onDescriptionChange}
-          previewTitle={titleValue}
-          previewPrice={previewPrice}
-          disabled={isBusy}
-          invalid={!!errors.description}
-        />
-        {errors.description ? (
-          <p className="text-xs text-destructive">{m(errors.description.message)}</p>
-        ) : (
-          <p className="text-xs text-muted-foreground">
-            {t('products.fields.descriptionRequired')}
-          </p>
-        )}
-      </div>
-
-      {/* Category */}
-      <div className="space-y-1.5">
-        <Label htmlFor="category">
-          {t('products.fields.category')} <span className="text-destructive">*</span>
-        </Label>
-        <Input
-          id="category"
-          placeholder={t('products.fields.categoryPlaceholder')}
-          disabled={isBusy}
-          {...register('category')}
-          aria-invalid={!!errors.category}
-        />
-        {errors.category && <p className="text-xs text-destructive">{m(errors.category.message)}</p>}
-      </div>
-
-      {/* Price / compare-at / stock */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="space-y-1.5">
-          <Label htmlFor="price">
-            {t('products.fields.price')} <span className="text-destructive">*</span>
-          </Label>
-          <Input
-            id="price"
-            type="number"
-            min={0}
-            step="any"
-            inputMode="decimal"
-            placeholder="0"
+      <SettingsSections>
+        {/* ── Photos ─────────────────────────────────────────────────────── */}
+        <SettingsSection
+          title={t('products.fields.photos')}
+          info={t('products.fields.photosHint', { max: PRODUCT_IMAGE_LIMIT.physical })}
+          contentClassName="space-y-2"
+        >
+          <ProductMediaUpload
+            existingFiles={existingFiles}
+            maxFiles={PRODUCT_IMAGE_LIMIT.physical}
             disabled={isBusy}
-            {...register('price')}
-            aria-invalid={!!errors.price}
+            onMediaChange={(ids) => setValue('fileIds', ids, { shouldDirty: true })}
           />
-          {errors.price && <p className="text-xs text-destructive">{m(errors.price.message)}</p>}
-        </div>
+          <FieldError message={m(errors.fileIds?.message as string | undefined)} />
+        </SettingsSection>
 
-        <div className="space-y-1.5">
-          <Label htmlFor="compareAtPrice">{t('products.fields.compareAtPrice')}</Label>
-          <Input
-            id="compareAtPrice"
-            type="number"
-            min={0}
-            step="any"
-            inputMode="decimal"
-            placeholder={t('products.fields.compareAtOptional')}
-            disabled={isBusy}
-            {...register('compareAtPrice')}
-            aria-invalid={!!errors.compareAtPrice}
-          />
-          {errors.compareAtPrice ? (
-            <p className="text-xs text-destructive">{m(errors.compareAtPrice.message)}</p>
-          ) : (
-            <p className="text-xs text-muted-foreground">
-              {typeof compareAtPrice === 'number' &&
-              typeof price === 'number' &&
-              compareAtPrice > 0 &&
-              compareAtPrice <= price
-                ? t('products.fields.compareAtTooLowHint')
-                : t('products.fields.compareAtHigherHint')}
-            </p>
-          )}
-        </div>
-
-        <div className="space-y-1.5">
-          <Label htmlFor="stock">{t('products.fields.stock')}</Label>
-          <Input
-            id="stock"
-            type="number"
-            min={0}
-            step={1}
-            inputMode="numeric"
-            placeholder="0"
-            disabled={isBusy || isInfiniteStock === true}
-            {...register('stock')}
-            aria-invalid={!!errors.stock}
-          />
-          {errors.stock && <p className="text-xs text-destructive">{m(errors.stock.message)}</p>}
-          {/* Where the discrepancy is: the field above holds the server's
-              figure, and this says what is still waiting on the agency. */}
-          {stockNotice}
-        </div>
-
-        <div className="flex items-center justify-between gap-3 rounded-lg border border-border px-4 py-3 self-end">
-          <div className="min-w-0">
-            <p className="text-sm font-medium">{t('products.fields.unlimitedStock')}</p>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              {disableUnlimitedStock
-                ? t('products.fields.unlimitedStockLockedHint')
-                : t('products.fields.unlimitedStockHint')}
-            </p>
-          </div>
-          <Switch
-            checked={isInfiniteStock === true}
-            onCheckedChange={(checked) =>
-              setValue('isInfiniteStock', checked, { shouldDirty: true })
-            }
-            disabled={isBusy || disableUnlimitedStock}
-            aria-label={t('products.fields.unlimitedStock')}
-          />
-        </div>
-      </div>
-
-      {/* More options */}
-      <Collapsible open={moreOpen} onOpenChange={setMoreOpen}>
-        <CollapsibleTrigger asChild>
-          <Button type="button" variant="outline" size="sm" className="gap-1.5 w-full sm:w-auto">
-            <Settings2 className="w-3.5 h-3.5" />
-            {t('products.fields.moreOptions')}
-            <ChevronDown
-              className={cn('w-3.5 h-3.5 transition-transform', moreOpen && 'rotate-180')}
-            />
-          </Button>
-        </CollapsibleTrigger>
-
-        <CollapsibleContent className="space-y-6 pt-4">
-          {/* SKU */}
-          <div className="space-y-1.5">
-            <Label htmlFor="sku">{t('products.fields.sku')}</Label>
+        {/* ── Details ────────────────────────────────────────────────────── */}
+        <SettingsSection title={t('products.simple.sectionDetails')} contentClassName="space-y-5">
+          <div className="space-y-2">
+            <Label htmlFor="title">
+              {t('products.fields.productName')} <span className="text-destructive">*</span>
+            </Label>
             <Input
-              id="sku"
-              placeholder={t(
-                isEdit
-                  ? 'products.fields.skuPlaceholderEdit'
-                  : 'products.fields.skuPlaceholderCreate',
-              )}
+              id="title"
+              placeholder={t('products.fields.namePlaceholder')}
               disabled={isBusy}
-              {...register('sku')}
-              aria-invalid={!!errors.sku}
+              {...register('title')}
+              aria-invalid={!!errors.title}
             />
-            {errors.sku ? (
-              <p className="text-xs text-destructive">{m(errors.sku.message)}</p>
-            ) : (
-              <p className="text-xs text-muted-foreground">
-                {t(isEdit ? 'products.fields.skuHintEdit' : 'products.fields.skuHintCreate')}
+            <FieldError message={m(errors.title?.message)} />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="description">
+              {t('products.fields.description')} <span className="text-destructive">*</span>
+            </Label>
+            <ChatRichTextEditor
+              id="description"
+              value={descriptionRich}
+              onChange={onDescriptionChange}
+              previewTitle={titleValue}
+              previewPrice={previewPrice}
+              disabled={isBusy}
+              invalid={!!errors.description}
+            />
+            <FieldError message={m(errors.description?.message)} />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="category">
+              {t('products.fields.category')} <span className="text-destructive">*</span>
+            </Label>
+            <Input
+              id="category"
+              placeholder={t('products.fields.categoryPlaceholder')}
+              disabled={isBusy}
+              {...register('category')}
+              aria-invalid={!!errors.category}
+            />
+            <FieldError message={m(errors.category?.message)} />
+          </div>
+        </SettingsSection>
+
+        {/* ── Price & stock ──────────────────────────────────────────────── */}
+        <SettingsSection
+          title={t('products.simple.sectionPriceStock')}
+          contentClassName="space-y-5"
+        >
+          {/* Two short numbers — side by side even on a phone. */}
+          <div className="space-y-2">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                {/* `min-h-5` matches the info icon beside the compare-at label,
+                    so the two inputs start on the same line. */}
+                <Label htmlFor="price" className="min-h-5">
+                  {t('products.fields.price')} <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="price"
+                  type="number"
+                  min={0}
+                  step="any"
+                  inputMode="decimal"
+                  placeholder="0"
+                  disabled={isBusy}
+                  {...register('price')}
+                  aria-invalid={!!errors.price}
+                />
+                {errors.price ? (
+                  <FieldError message={m(errors.price.message)} />
+                ) : (
+                  // Under an asking price this number is never published — said
+                  // here, under the field it describes, rather than under the
+                  // asking price where "shoppers never see this" read as if it
+                  // meant the asking price itself.
+                  showBargainField &&
+                  hasAskingPrice && (
+                    <p className="text-sm text-muted-foreground">
+                      {t('products.fields.bargainFloorHint')}
+                    </p>
+                  )
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <LabelWithHint
+                  htmlFor="compareAtPrice"
+                  hint={t('products.fields.compareAtHigherHint')}
+                  hintLabel={aboutLabel(t('products.fields.compareAtPrice'))}
+                >
+                  {t('products.fields.compareAtPrice')}
+                </LabelWithHint>
+                <Input
+                  id="compareAtPrice"
+                  type="number"
+                  min={0}
+                  step="any"
+                  inputMode="decimal"
+                  placeholder={t('products.fields.compareAtOptional')}
+                  disabled={isBusy}
+                  {...register('compareAtPrice')}
+                  aria-invalid={!!errors.compareAtPrice}
+                />
+                <FieldError message={m(errors.compareAtPrice?.message)} />
+              </div>
+            </div>
+            {compareAtTooLow && !errors.compareAtPrice && (
+              <p className="text-sm text-muted-foreground">
+                {t('products.fields.compareAtTooLowHint')}
               </p>
             )}
           </div>
 
-          {/* Edit-only inventory controls — not part of the create contract. */}
-          {isEdit && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="lowStockThreshold">{t('products.fields.lowStockAlertAt')}</Label>
+          <div className="space-y-2">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="stock">{t('products.fields.stock')}</Label>
                 <Input
-                  id="lowStockThreshold"
+                  id="stock"
                   type="number"
                   min={0}
                   step={1}
                   inputMode="numeric"
-                  placeholder={t('products.fields.noAlert')}
-                  disabled={isBusy}
-                  {...register('lowStockThreshold')}
-                  aria-invalid={!!errors.lowStockThreshold}
+                  placeholder="0"
+                  disabled={isBusy || isInfiniteStock === true}
+                  {...register('stock')}
+                  aria-invalid={!!errors.stock}
                 />
-                {errors.lowStockThreshold && (
-                  <p className="text-xs text-destructive">{m(errors.lowStockThreshold.message)}</p>
+                <FieldError message={m(errors.stock?.message)} />
+              </div>
+            </div>
+            {/* Where the discrepancy is: the field above holds the server's
+                figure, and this says what is still waiting on the agency. */}
+            {stockNotice}
+          </div>
+
+          <div className="flex items-center justify-between gap-4">
+            <div className="min-w-0 space-y-1">
+              <div className="flex items-center gap-1">
+                <Label htmlFor="isInfiniteStock">{t('products.fields.unlimitedStock')}</Label>
+                {disableUnlimitedStock && (
+                  <InfoHint label={aboutLabel(t('products.fields.unlimitedStock'))} align="start">
+                    {t('products.fields.unlimitedStockLockedHint')}
+                  </InfoHint>
                 )}
               </div>
-
-              <div className="flex items-center justify-between gap-3 rounded-lg border border-border px-4 py-3 self-end">
-                <div className="min-w-0">
-                  <p className="text-sm font-medium">{t('products.fields.allowOversell')}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    {t('products.fields.allowOversellHint')}
-                  </p>
-                </div>
-                <Switch
-                  checked={watch('allowOversell') === true}
-                  onCheckedChange={(checked) =>
-                    setValue('allowOversell', checked, { shouldDirty: true })
-                  }
-                  disabled={isBusy}
-                  aria-label={t('products.fields.allowOversell')}
-                />
-              </div>
+              <p className="text-sm text-muted-foreground">
+                {disableUnlimitedStock
+                  ? t('products.fields.unlimitedStockLockedShort')
+                  : t('products.fields.unlimitedStockHint')}
+              </p>
             </div>
-          )}
-
-          {/* Tags */}
-          <div className="space-y-1.5">
-            <Label>{t('products.fields.tags')}</Label>
-            <div className="flex flex-wrap gap-1.5 mb-2">
-              {tags.map((tag, i) => (
-                <Badge key={`${tag}-${i}`} variant="secondary" className="gap-1 text-xs">
-                  {tag}
-                  <button
-                    type="button"
-                    onClick={() => removeTag(i)}
-                    disabled={isBusy}
-                    className="hover:text-destructive transition-colors ml-0.5"
-                  >
-                    <X className="w-2.5 h-2.5" />
-                  </button>
-                </Badge>
-              ))}
-            </div>
-            <div className="flex gap-2">
-              <Input
-                ref={tagInputRef}
-                placeholder={t('products.fields.addTagPlaceholder')}
-                className="h-8"
-                disabled={isBusy}
-                onKeyDown={onTagKeyDown}
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={addTag}
-                disabled={isBusy}
-                className="gap-1.5 shrink-0"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                {t('common.actions.add')}
-              </Button>
-            </div>
-            {errors.tags?.message && (
-              <p className="text-xs text-destructive">{m(errors.tags.message as string)}</p>
-            )}
+            <Switch
+              id="isInfiniteStock"
+              checked={isInfiniteStock === true}
+              onCheckedChange={(checked) =>
+                setValue('isInfiniteStock', checked, { shouldDirty: true })
+              }
+              disabled={isBusy || disableUnlimitedStock}
+              aria-label={t('products.fields.unlimitedStock')}
+            />
           </div>
+        </SettingsSection>
 
-          {/* Shipping dimensions */}
-          <div className="rounded-lg border border-border p-4 space-y-4">
-            <p className="text-sm font-medium">{t('products.fields.dimensionsTitle')}</p>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {(
-                [
-                  ['weight', 'products.fields.weightG'],
-                  ['length', 'products.fields.lengthCm'],
-                  ['width', 'products.fields.widthCm'],
-                  ['height', 'products.fields.heightCm'],
-                ] as const
-              ).map(([field, labelKey]) => (
-                <div key={field} className="space-y-1.5">
-                  <Label htmlFor={field} className="text-xs text-muted-foreground">
-                    {t(labelKey)}
-                  </Label>
-                  <Input
-                    id={field}
-                    type="number"
-                    min={0}
-                    step="any"
-                    inputMode="decimal"
-                    disabled={isBusy}
-                    {...register(field)}
-                    aria-invalid={!!errors[field]}
-                  />
-                  {errors[field] && (
-                    <p className="text-xs text-destructive">{m(errors[field]?.message)}</p>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
+        {children}
 
-          {/* SEO */}
-          <div className="rounded-lg border border-border p-4 space-y-4">
-            <p className="text-sm font-medium">{t('products.fields.seoTitle')}</p>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="seoTitle" className="text-xs text-muted-foreground">
-                {t('products.fields.seoTitleLabel')}{' '}
-                <span className="text-muted-foreground/60">
-                  {t('products.fields.charCount', { used: seoTitle.length, max: 60 })}
-                </span>
-              </Label>
-              <Input
-                id="seoTitle"
-                placeholder={t('products.fields.seoTitlePlaceholder')}
-                maxLength={60}
-                disabled={isBusy}
-                {...register('seoTitle')}
-                aria-invalid={!!errors.seoTitle}
-              />
-              {errors.seoTitle && (
-                <p className="text-xs text-destructive">{m(errors.seoTitle.message)}</p>
-              )}
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="seoDescription" className="text-xs text-muted-foreground">
-                {t('products.fields.seoDescriptionLabel')}{' '}
-                <span className="text-muted-foreground/60">
-                  {t('products.fields.charCount', { used: seoDesc.length, max: 160 })}
-                </span>
-              </Label>
-              <Textarea
-                id="seoDescription"
-                placeholder={t('products.fields.seoDescriptionPlaceholder')}
-                maxLength={160}
-                rows={2}
-                disabled={isBusy}
-                {...register('seoDescription')}
-                aria-invalid={!!errors.seoDescription}
-              />
-              {errors.seoDescription && (
-                <p className="text-xs text-destructive">{m(errors.seoDescription.message)}</p>
-              )}
-            </div>
-          </div>
-        </CollapsibleContent>
-      </Collapsible>
-
-      {children}
-
-      {/* Bargainable pricing. Placed after `children` deliberately: the edit page's
-          last child is the AI-search card, so this lands directly beneath the
-          toggle that governs it, while staying a field of this one form. */}
-      {showBargainField && (
-        <div className="rounded-xl border border-border p-5">
-          <div className="flex items-start gap-3">
-            <Handshake className="w-5 h-5 text-muted-foreground mt-0.5 shrink-0" />
-            <div className="flex-1 min-w-0 space-y-1.5">
-              <div>
-                <Label htmlFor="bargainMaxPrice" className="text-sm font-medium">
-                  {t('products.fields.bargainMaxPrice')}
-                </Label>
-                <p className="text-xs text-muted-foreground mt-0.5 max-w-md">
-                  {t(isEdit ? 'products.fields.bargainHint' : 'products.fields.bargainInertHint')}
-                </p>
-              </div>
+        {/* ── Asking price ───────────────────────────────────────────────────
+            Placed after `children` deliberately: the edit page's last child is
+            the AI-search section, so this lands directly beneath the toggle
+            that governs it, while staying a field of this one form. */}
+        {showBargainField && (
+          <SettingsSection
+            title={t('products.bargain.title')}
+            info={t(isEdit ? 'products.fields.bargainHint' : 'products.fields.bargainInertHint')}
+            contentClassName="space-y-2"
+          >
+            {/* Full width on a phone — half of one cut its placeholder off
+                mid-word; half width, under the price column, from `md` up. The
+                section title names the field, so the label is for assistive
+                tech only. */}
+            <div className="grid gap-4 md:grid-cols-2">
               <Input
                 id="bargainMaxPrice"
                 type="number"
-                min={minCeiling ?? 0}
+                // Not `min={minCeiling}`: the schema's superRefine already
+                // enforces the floor with a translated message, and a native
+                // `min` makes the browser block the submit with its own bubble
+                // ("Value must be greater than or equal to 12000"), in the
+                // browser's language, on top of it.
+                min={0}
                 step="any"
                 inputMode="decimal"
                 placeholder={t('products.fields.bargainOptional')}
                 disabled={isBusy}
-                className="sm:max-w-[220px]"
                 {...register('bargainMaxPrice')}
+                aria-label={t('products.fields.bargainMaxPrice')}
                 aria-invalid={!!errors.bargainMaxPrice}
                 aria-describedby="bargainMaxPrice-hint"
               />
-              {/* The floor moves with the price, so it is spelled out here rather
-                  than only in the error — guessing the number is the whole
-                  difficulty. Nothing to say until a price has been entered. */}
-              {(errors.bargainMaxPrice || minCeiling !== null) && (
-                <p
-                  id="bargainMaxPrice-hint"
-                  className={cn(
-                    'text-xs',
-                    errors.bargainMaxPrice ? 'text-destructive' : 'text-muted-foreground',
-                  )}
-                >
-                  {errors.bargainMaxPrice
-                    ? m(errors.bargainMaxPrice.message)
-                    : t('products.bargain.ceilingMin', { min: currency(minCeiling as number) })}
-                </p>
-              )}
-              {/* Both of these are consequences the vendor cannot see from this
-                  screen: what shoppers pay, and what happens to the "was" price. */}
-              {typeof bargainMaxPrice === 'number' && bargainMaxPrice > 0 && (
-                <p className="text-xs text-muted-foreground">
-                  {t('products.fields.bargainFloorHint')}
-                </p>
-              )}
-              {compareAtHiddenByAsking && (
-                <p className="text-xs text-amber-600">
-                  {t('products.fields.bargainCompareAtHidden', {
-                    max: currency(bargainMaxPrice as number),
-                  })}
-                </p>
-              )}
             </div>
-          </div>
-        </div>
-      )}
+            {/* The floor moves with the price, so it is spelled out here rather
+                than only in the error — guessing the number is the whole
+                difficulty. Nothing to say until a price has been entered. */}
+            {(errors.bargainMaxPrice || minCeiling !== null) && (
+              <p
+                id="bargainMaxPrice-hint"
+                className={cn(
+                  'text-sm',
+                  errors.bargainMaxPrice ? 'text-destructive' : 'text-muted-foreground',
+                )}
+              >
+                {errors.bargainMaxPrice
+                  ? m(errors.bargainMaxPrice.message)
+                  : t('products.bargain.ceilingMin', { min: currency(minCeiling as number) })}
+              </p>
+            )}
+            {/* A consequence the vendor cannot see from this screen: what
+                happens to the "was" price. */}
+            {compareAtHiddenByAsking && (
+              <p className="text-sm text-amber-700 dark:text-amber-400">
+                {t('products.fields.bargainCompareAtHidden', {
+                  max: currency(bargainMaxPrice as number),
+                })}
+              </p>
+            )}
+          </SettingsSection>
+        )}
 
-      {/* Action bar */}
-      <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-2 pt-2 border-t border-border">
-        <Button type="button" variant="ghost" size="sm" onClick={onCancel} disabled={isSubmitting}>
+        {/* ── More options ───────────────────────────────────────────────────
+            One plain disclosure row, drawn as a section of its own so the phone
+            hairline and the desktop card come out the same as its neighbours'. */}
+        <section className="md:rounded-xl md:border md:bg-card md:text-card-foreground md:shadow-sm">
+          <Collapsible open={moreOpen} onOpenChange={setMoreOpen}>
+            {/* The same row the wizard steps use, padded out to the height of
+                a section so it sits evenly between the phone hairlines and
+                fills the desktop card. */}
+            <DisclosureTrigger open={moreOpen} className="py-4 md:rounded-xl md:px-6 md:py-5">
+              {t('products.fields.moreOptions')}
+            </DisclosureTrigger>
+
+            <CollapsibleContent className="space-y-8 pb-5 pt-1 md:px-6 md:pb-6">
+              {/* SKU and — edit only — the inventory controls. */}
+              <div className="space-y-5">
+                <div className="space-y-2">
+                  <LabelWithHint
+                    htmlFor="sku"
+                    hint={t(isEdit ? 'products.fields.skuHintEdit' : 'products.fields.skuHintCreate')}
+                    hintLabel={aboutLabel(t('products.fields.sku'))}
+                  >
+                    {t('products.fields.sku')}
+                  </LabelWithHint>
+                  <Input
+                    id="sku"
+                    placeholder={t(
+                      isEdit
+                        ? 'products.fields.skuPlaceholderEdit'
+                        : 'products.fields.skuPlaceholderCreate',
+                    )}
+                    disabled={isBusy}
+                    {...register('sku')}
+                    aria-invalid={!!errors.sku}
+                  />
+                  <FieldError message={m(errors.sku?.message)} />
+                </div>
+
+                {/* Edit-only inventory controls — not part of the create contract. */}
+                {isEdit && (
+                  <>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="lowStockThreshold">
+                          {t('products.fields.lowStockAlertAt')}
+                        </Label>
+                        <Input
+                          id="lowStockThreshold"
+                          type="number"
+                          min={0}
+                          step={1}
+                          inputMode="numeric"
+                          placeholder={t('products.fields.noAlert')}
+                          disabled={isBusy}
+                          {...register('lowStockThreshold')}
+                          aria-invalid={!!errors.lowStockThreshold}
+                        />
+                        <FieldError message={m(errors.lowStockThreshold?.message)} />
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="min-w-0 space-y-1">
+                        <Label htmlFor="allowOversell">{t('products.fields.allowOversell')}</Label>
+                        <p className="text-sm text-muted-foreground">
+                          {t('products.fields.allowOversellHint')}
+                        </p>
+                      </div>
+                      <Switch
+                        id="allowOversell"
+                        checked={watch('allowOversell') === true}
+                        onCheckedChange={(checked) =>
+                          setValue('allowOversell', checked, { shouldDirty: true })
+                        }
+                        disabled={isBusy}
+                        aria-label={t('products.fields.allowOversell')}
+                      />
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Tags */}
+              <div className="space-y-2">
+                <Label htmlFor="tagInput">{t('products.fields.tags')}</Label>
+                {tags.length > 0 && (
+                  <div className="flex flex-wrap gap-2 pb-1">
+                    {tags.map((tag, i) => (
+                      // `overflow-visible` so the badge does not clip the ×'s
+                      // touch halo; the text truncates on its own instead.
+                      <Badge
+                        key={`${tag}-${i}`}
+                        variant="secondary"
+                        className="max-w-full gap-1.5 overflow-visible py-1 pl-2.5 pr-1.5 text-sm font-normal"
+                      >
+                        <span className="min-w-0 truncate">{tag}</span>
+                        <button
+                          type="button"
+                          onClick={() => removeTag(i)}
+                          disabled={isBusy}
+                          aria-label={t('products.fields.removeTag', { tag })}
+                          className="tap-target rounded-full text-muted-foreground transition-colors hover:text-destructive"
+                        >
+                          <X className="size-3.5" />
+                        </button>
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <Input
+                    id="tagInput"
+                    ref={tagInputRef}
+                    placeholder={t('products.fields.addTagPlaceholder')}
+                    disabled={isBusy}
+                    onKeyDown={onTagKeyDown}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={addTag}
+                    disabled={isBusy}
+                    className="shrink-0 max-md:h-11"
+                  >
+                    {t('common.actions.add')}
+                  </Button>
+                </div>
+                <FieldError message={m(errors.tags?.message as string | undefined)} />
+              </div>
+
+              {/* Shipping dimensions — four short numbers, 2×2 on a phone. */}
+              <SettingsGroup title={t('products.fields.dimensionsTitle')}>
+                <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+                  {(
+                    [
+                      ['weight', 'products.fields.weightG'],
+                      ['length', 'products.fields.lengthCm'],
+                      ['width', 'products.fields.widthCm'],
+                      ['height', 'products.fields.heightCm'],
+                    ] as const
+                  ).map(([field, labelKey]) => (
+                    <div key={field} className="space-y-2">
+                      <Label htmlFor={field} className="font-normal text-muted-foreground">
+                        {t(labelKey)}
+                      </Label>
+                      <Input
+                        id={field}
+                        type="number"
+                        min={0}
+                        step="any"
+                        inputMode="decimal"
+                        disabled={isBusy}
+                        {...register(field)}
+                        aria-invalid={!!errors[field]}
+                      />
+                      <FieldError message={m(errors[field]?.message)} />
+                    </div>
+                  ))}
+                </div>
+              </SettingsGroup>
+
+              {/* SEO */}
+              <SettingsGroup title={t('products.fields.seoTitle')} contentClassName="space-y-5">
+                <div className="space-y-2">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <Label htmlFor="seoTitle" className="font-normal text-muted-foreground">
+                      {t('products.fields.seoTitleLabel')}
+                    </Label>
+                    <span className="text-sm tabular-nums text-muted-foreground">
+                      {t('products.fields.charCount', { used: seoTitle.length, max: 60 })}
+                    </span>
+                  </div>
+                  <Input
+                    id="seoTitle"
+                    placeholder={t('products.fields.seoTitlePlaceholder')}
+                    maxLength={60}
+                    disabled={isBusy}
+                    {...register('seoTitle')}
+                    aria-invalid={!!errors.seoTitle}
+                  />
+                  <FieldError message={m(errors.seoTitle?.message)} />
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <Label htmlFor="seoDescription" className="font-normal text-muted-foreground">
+                      {t('products.fields.seoDescriptionLabel')}
+                    </Label>
+                    <span className="text-sm tabular-nums text-muted-foreground">
+                      {t('products.fields.charCount', { used: seoDesc.length, max: 160 })}
+                    </span>
+                  </div>
+                  <Textarea
+                    id="seoDescription"
+                    placeholder={t('products.fields.seoDescriptionPlaceholder')}
+                    maxLength={160}
+                    rows={3}
+                    disabled={isBusy}
+                    {...register('seoDescription')}
+                    aria-invalid={!!errors.seoDescription}
+                  />
+                  <FieldError message={m(errors.seoDescription?.message)} />
+                </div>
+              </SettingsGroup>
+            </CollapsibleContent>
+          </Collapsible>
+        </section>
+      </SettingsSections>
+
+      {/* Action bar. DOM order is cancel → secondary → primary, which is the
+          wide-screen reading order; a phone reverses it so the primary lands on
+          top, under the thumb, and the quiet cancel at the bottom. The hairline
+          continues the sections' separators — there is no card to end on. */}
+      <div className="flex flex-col-reverse gap-2 max-md:!mt-0 max-md:border-t max-md:pt-5 md:flex-row md:items-center md:justify-between">
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={onCancel}
+          disabled={isSubmitting}
+          className={actionButton}
+        >
           {t('common.actions.cancel')}
         </Button>
 
-        <div className="flex flex-col-reverse sm:flex-row gap-2">
+        <div className="flex flex-col-reverse gap-2 md:flex-row">
           {isEdit ? (
             <>
               {canPublish && (
@@ -705,11 +793,17 @@ export function SimpleProductForm({
                   variant="outline"
                   disabled={isBusy}
                   onClick={() => submitWith('publish')}
+                  className={actionButton}
                 >
                   {t('products.simple.savePublish')}
                 </Button>
               )}
-              <Button type="submit" disabled={isBusy} onClick={() => submitWith('save')}>
+              <Button
+                type="submit"
+                disabled={isBusy}
+                onClick={() => submitWith('save')}
+                className={actionButton}
+              >
                 {isSubmitting ? t('common.actions.saving') : t('common.actions.saveChanges')}
               </Button>
             </>
@@ -720,10 +814,16 @@ export function SimpleProductForm({
                 variant="outline"
                 disabled={isBusy}
                 onClick={() => submitWith('draft')}
+                className={actionButton}
               >
                 {t('products.wizard.saveDraft')}
               </Button>
-              <Button type="submit" disabled={isBusy} onClick={() => submitWith('publish')}>
+              <Button
+                type="submit"
+                disabled={isBusy}
+                onClick={() => submitWith('publish')}
+                className={actionButton}
+              >
                 {isSubmitting ? t('products.simple.publishing') : t('products.actions.publish')}
               </Button>
             </>

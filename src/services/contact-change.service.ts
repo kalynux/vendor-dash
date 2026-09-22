@@ -1,4 +1,8 @@
-// Changing the account email or phone — 6 routes. See api-doc/me/contact-change.md.
+// Changing the account email or phone. See api-doc/me/contact-change.md.
+//
+// Five of the doc's six routes are called from here. The sixth,
+// `POST /me/phone/confirm`, is deliberately not — see the note where
+// `confirmPhoneChange` used to be.
 //
 // Role-agnostic: these live under /api/me and resolve the account from the token.
 //
@@ -60,36 +64,42 @@ export async function cancelEmailChange(): Promise<void> {
   await api.delete<{ success: boolean; message?: string }>('/me/email/pending');
 }
 
-// ─── Phone — proven by a WhatsApp connection ──────────────────────────────────
+// ─── Phone — proven by a WhatsApp code ────────────────────────────────────────
 
 /**
  * Start a phone change. TTL 24 hours. Strict E.164, strict schema.
  *
- * 🔴 Gate this on a linked WhatsApp connection whose number is the NEW one. The
- * proof for a phone change is that connection existing — there is no code to
- * type — so an account without it cannot complete the flow and should be told
- * before the form, not after `422 CONTACT_CHANGE_PHONE_UNPROVEN`.
+ * Writes the pending change and nothing else. The three calls are:
+ *
+ *   PATCH /me/phone              → pending; the old number still signs in
+ *   POST  /me/phone/verify/request → code sent to the NEW number
+ *   POST  /me/phone/verify/confirm → the sign-in number swaps
+ *
+ * ⚠ **This does not send the code — ask for it explicitly, straight after.**
+ * The backend deliberately leaves the send out of this call: doing it here would
+ * start the 60-second resend cooldown, and the explicit request every client
+ * makes next would then be refused with a 429. The last two calls live in
+ * phone-verification.service.ts.
  */
 export async function requestPhoneChange(phone: string): Promise<void> {
   await api.patch<{ success: boolean; message?: string }>('/me/phone', { phone });
 }
 
 /**
- * Complete a phone change.
+ * `confirmPhoneChange` (`POST /me/phone/confirm`) lived here and is GONE.
  *
- * Authenticated, and takes **no body** — the call itself asks the backend to check,
- * at that moment, whether a WhatsApp connection exists whose number equals the
- * pending one.
+ * It completed a change by checking for a WhatsApp *connection* on the new
+ * number — the only proof there was, once. Since 2026-09-21 the backend's
+ * contract is that every frontend confirms with the six-digit code instead, and
+ * that route stays for the WhatsApp bot, where the person is already writing from
+ * the number. For a vendor it could only ever succeed if they had linked WhatsApp
+ * from the new number before changing it, and otherwise answered
+ * `CONTACT_CHANGE_PHONE_UNPROVEN`.
  *
- * `422 CONTACT_CHANGE_PHONE_UNPROVEN` with `details: { channel: 'whatsapp' }`
- * when it does not.
+ * ⚠ **Do not reinstate it.** The code path covers everything it did: when a code
+ * completes a change, the backend also moves the account's WhatsApp link off the
+ * number being given up.
  */
-export async function confirmPhoneChange(): Promise<{ phone: string }> {
-  const res = await api.post<{ success: boolean; data: { phone: string } }>(
-    '/me/phone/confirm',
-  );
-  return res.data;
-}
 
 /** Abandon a pending phone change. `409 CONTACT_CHANGE_NOT_PENDING` if there is none. */
 export async function cancelPhoneChange(): Promise<void> {

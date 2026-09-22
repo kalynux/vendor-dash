@@ -1,20 +1,19 @@
 # Change Password API
 
-**Verified against source on 2026-09-08** — the route, the strength rule, the `message`-only
-response, the cookies-only re-issue and the fresh `auth_time`, against
-`jovi-mall/src/modules/users/user.controller.ts:22-71`, `user.validator.ts:12-28` and
+**Verified against source on 2026-09-08** — the route, the strength rule, the response shape,
+the cookie re-issue and the 90-day cap reset, against
+`jovi-mall/src/modules/users/user.controller.ts`, `user.validator.ts`, `user.routes.ts` and
 `src/core/auth/token.issuer.ts`.
-
-> ## 🔴 Capacitor / WebView builds: this endpoint signs the caller OUT
->
-> The vendor dashboard ships both as a browser SPA and wrapped in Capacitor. **The two
-> behave differently here, and only the browser one keeps its session.** Read
-> [§ The Capacitor consequence](#the-capacitor-consequence) before wiring the screen.
 
 Reference for changing the authenticated user's **account password**.
 
 > [!IMPORTANT]
-> This is a **shared, role-agnostic** API mounted at `/api/me/password`. The **same endpoint, request body, and responses** work for **every** authenticated role (customer, vendor, admin, agent, agency). The account is resolved from the auth token — the password lives on the **User** record, not on any role entity, so there is exactly one password per account regardless of role.
+> This is a **shared, role-agnostic** API mounted at `/api/me/password`. The **same endpoint, request body, and responses** work for **every** authenticated role. The account is resolved from the auth token — the password lives on the **User** record, not on any role entity, so there is exactly one password per account regardless of role.
+>
+> ⚠ **Corrected 2026-09-08:** this used to list the roles as *"customer, vendor, admin, agent,
+> agency"*. There are **four** — `customer`, `vendor`, `agency`, `agent`. `admin` is not a role
+> you can authenticate as on this service and has no password here; administrators are a
+> separate identity in wi-admin. See [../auth/README.md](../auth/README.md#roles).
 
 ---
 
@@ -78,6 +77,22 @@ request arrived with — so the caller is handed a replacement pair and stays si
 *other* session is signed out on its next request. A client that discards cookies from this
 response will find itself logged out.
 
+> ### 🔴 A BEARER client is signed out by its own password change
+>
+> The replacement pair is delivered **as cookies only** — the body carries no `tokens` object,
+> deliberately (`user.controller.ts:44-46`: "a token in a response body is a token in a client
+> log"). A Capacitor / native client on `/api/auth/mobile/*` therefore has nothing to store, and
+> its existing bearer token is refused with `401 AUTH_PASSWORD_CHANGED` on the **next** request.
+>
+> Plan for it: warn before the form, then sign the user back in with the new password
+> (`POST /api/auth/mobile/login`) as soon as the `200` returns.
+
+> **This is one of the four things that RESET the 90-day session cap.** `auth_time` is stamped
+> fresh here, because the caller proved a credential (the old password) — so a password change
+> is a complete remedy after a compromise rather than one that leaves the victim's new session
+> carrying the attacker-era start date. `auth-me`, `add-role` and every refresh **copy**
+> `auth_time` instead. See [../auth/README.md](../auth/README.md#the-90-day-absolute-cap).
+
 ### Error Responses
 
 **Validation Error (400)** — `newPassword` fails the strength policy or a field is missing:
@@ -122,40 +137,6 @@ response will find itself logged out.
 }
 ```
 
-### The Capacitor consequence
-
-**A bearer client is signed out by its own password change. There is no way around it on
-the current API, and it is not a bug you can work around client-side.**
-
-The chain, each link verified in source:
-
-1. The change stamps `User.password_changed_at` — a per-account revocation instant
-   (`core/auth/password-epoch.ts`). Every token minted in a strictly earlier second is
-   refused from then on, **on both credentials**: the 15-minute access token *and* the
-   30-day refresh token (`auth.service.ts:151`). That is the point of the feature.
-2. The caller is handed a replacement pair so they do not sign themselves out — but it is
-   handed over **as cookies only** (`user.controller.ts:64`, `setAuthCookies`). The
-   controller's own comment is explicit: *"Cookies only, no tokens in the body … a token in
-   a response body is a token in a client log."*
-3. A Capacitor WebView cannot use that pair. Its origin is `capacitor://localhost` or
-   `https://localhost`, so the cookie is third-party and blocked; and `Set-Cookie` is a
-   **forbidden response-header name** in the Fetch standard, so the WebView cannot read it
-   either (`modules/auth/controllers/mobile-auth.controller.ts:17-38`).
-4. **There is no mobile twin of this route.** `/api/auth/mobile/*` has `login`, `register`,
-   `refresh`, `add-role`, `auth-me` and the two magic routes — **no `password`**. So there
-   is no variant that returns `data.tokens`.
-5. `POST /api/auth/mobile/refresh` does not rescue it. The stored refresh token predates
-   the epoch, so it is refused with the same `401 AUTH_PASSWORD_CHANGED`.
-
-**What to build.** On the Capacitor build, treat a successful password change as a
-**deliberate sign-out**: show a confirmation, clear the stored token pair, and route to
-sign-in with a message saying the password was changed and they need to sign in again.
-Do **not** let the app discover this as a surprise 401 on the next background request —
-that reads as "the app broke", not "the password changed".
-
-On the browser build, nothing changes: the replacement cookies arrive with the response and
-the session continues.
-
 ### Notes
 
 - **Password Verification**: The old password must be correct before the new password is set.
@@ -165,9 +146,8 @@ the session continues.
   access **or** refresh token minted before it is refused with `401 AUTH_PASSWORD_CHANGED`,
   on every authenticated request and on every refresh. A stolen 30-day refresh cookie stops
   working — that is the point of the change.
-- **Your own session survives — if you are a cookie client.** The replacement pair arrives as
-  cookies and no other session gets one. A bearer client has nothing to receive; see
-  [The Capacitor consequence](#the-capacitor-consequence).
+- **Your own session survives**, via the replacement cookie pair above. No other session gets
+  one.
 - **What clients must do**: treat `AUTH_PASSWORD_CHANGED` as terminal — do not retry, do not
   attempt a refresh (the refresh cookie is refused by the same rule). Clear local state and
   send the user to sign-in, showing the message: to someone who did not change their own
@@ -177,13 +157,7 @@ the session continues.
 
 ## Legacy alias
 
-`PATCH /api/vendor/profile/password` (vendor role only) is a **deprecated alias** kept for
-existing vendor frontends. It routes to the same handler and inherits every property above,
-including the Capacitor consequence. New integrations should use `/api/me/password`.
-
-Confirmed live in the route dump on 2026-08-24 — it has **not** been removed, so existing
-code calling it is not broken. Prefer the shared path anyway: it is the one documented, and
-the vendor alias is the sort of route that disappears without a changelog.
+`PATCH /api/vendor/profile/password` (vendor role only) is a **deprecated alias** kept for existing vendor frontends. It routes to the exact same handler. New integrations should use `/api/me/password` for every role.
 
 ### Example
 

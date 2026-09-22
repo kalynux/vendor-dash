@@ -86,6 +86,9 @@ export const onboardingService = {
      * Change the account password. Requires the current password.
      * Role-agnostic endpoint — the deprecated `/vendor/profile/password` alias
      * routes to the same handler (see api-doc/me/password.md).
+     *
+     * ⚠ The bare call. Screens use `authService.changePassword`, which wraps this
+     * so the phone app is not signed out by its own password change.
      */
     changePassword(payload: ChangePasswordPayload): Promise<ChangePasswordResponse> {
         return api.patch<ChangePasswordResponse>('/me/password', payload);

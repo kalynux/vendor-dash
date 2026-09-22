@@ -1,11 +1,11 @@
 import { useReducer, useCallback, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { AlertCircle, Box, Package, ImageIcon, Tag, FileDigit, CheckSquare } from 'lucide-react';
-import { Card, CardContent } from '@/components/ui/card';
+import { AlertCircle } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { EditorPageShell } from '@/components/layout/EditorPageShell';
 import { ProductStepIndicator } from '@/components/products/ProductStepIndicator';
+import { ProductFormBody } from '@/components/products/form/ProductFormBody';
 import {
   StepProductMode,
   type ProductCreationChoice,
@@ -60,20 +60,20 @@ import type { VariantPhase1Payload, VariantPhase2Payload } from '@/components/pr
 
 // ─── Step definitions ─────────────────────────────────────────────────────────
 
-const PHYSICAL_STEPS: { id: WizardStep; labelKey: TranslationKey; icon: React.ElementType }[] = [
-  { id: 'type', labelKey: 'products.wizard.stepType', icon: Box },
-  { id: 'basic-info', labelKey: 'products.wizard.stepBasicInfo', icon: Package },
-  { id: 'media', labelKey: 'products.wizard.stepMedia', icon: ImageIcon },
-  { id: 'options-variants', labelKey: 'products.wizard.stepVariants', icon: Tag },
-  { id: 'review', labelKey: 'products.wizard.stepReview', icon: CheckSquare },
+const PHYSICAL_STEPS: { id: WizardStep; labelKey: TranslationKey }[] = [
+  { id: 'type', labelKey: 'products.wizard.stepType' },
+  { id: 'basic-info', labelKey: 'products.wizard.stepBasicInfo' },
+  { id: 'media', labelKey: 'products.wizard.stepMedia' },
+  { id: 'options-variants', labelKey: 'products.wizard.stepVariants' },
+  { id: 'review', labelKey: 'products.wizard.stepReview' },
 ];
 
-const DIGITAL_STEPS: { id: WizardStep; labelKey: TranslationKey; icon: React.ElementType }[] = [
-  { id: 'type', labelKey: 'products.wizard.stepType', icon: Box },
-  { id: 'basic-info', labelKey: 'products.wizard.stepBasicInfo', icon: Package },
-  { id: 'media', labelKey: 'products.wizard.stepMedia', icon: ImageIcon },
-  { id: 'formats', labelKey: 'products.wizard.stepFormats', icon: FileDigit },
-  { id: 'review', labelKey: 'products.wizard.stepReview', icon: CheckSquare },
+const DIGITAL_STEPS: { id: WizardStep; labelKey: TranslationKey }[] = [
+  { id: 'type', labelKey: 'products.wizard.stepType' },
+  { id: 'basic-info', labelKey: 'products.wizard.stepBasicInfo' },
+  { id: 'media', labelKey: 'products.wizard.stepMedia' },
+  { id: 'formats', labelKey: 'products.wizard.stepFormats' },
+  { id: 'review', labelKey: 'products.wizard.stepReview' },
 ];
 
 // ─── Reducer ──────────────────────────────────────────────────────────────────
@@ -872,21 +872,21 @@ export function ProductUpload() {
       backTo="/dashboard/products"
       backLabel={t('products.wizard.backToProducts')}
     >
+      {/* The stepper sits on the page, not in a card of its own — on a phone it
+          is a single line over a progress bar (see ProductStepIndicator). */}
       {state.productType && visibleSteps.length > 0 && (
-        <Card className="rounded-none border-x-0 md:rounded-xl md:border">
-          <CardContent className="p-3 sm:p-4">
-            <ProductStepIndicator
-              steps={visibleSteps}
-              currentStep={state.currentStep}
-              completedSteps={state.completedSteps}
-              onStepClick={(stepId) => {
-                if (state.completedSteps.includes(stepId as WizardStep)) {
-                  dispatch({ type: 'SET_STEP', step: stepId as WizardStep });
-                }
-              }}
-            />
-          </CardContent>
-        </Card>
+        <div className="max-md:px-4">
+          <ProductStepIndicator
+            steps={visibleSteps}
+            currentStep={state.currentStep}
+            completedSteps={state.completedSteps}
+            onStepClick={(stepId) => {
+              if (state.completedSteps.includes(stepId as WizardStep)) {
+                dispatch({ type: 'SET_STEP', step: stepId as WizardStep });
+              }
+            }}
+          />
+        </div>
       )}
 
       {isLockedForVectorisation && state.currentStep !== 'review' && (
@@ -900,19 +900,17 @@ export function ProductUpload() {
         </div>
       )}
 
-      <Card className="rounded-none border-x-0 md:rounded-xl md:border">
-        <CardContent className="p-4 sm:p-6">
-          <div
-            className={
-              isLockedForVectorisation && state.currentStep !== 'review'
-                ? 'pointer-events-none opacity-60'
-                : ''
-            }
-          >
-            {renderStep()}
-          </div>
-        </CardContent>
-      </Card>
+      {/* No wrapping card: each step lays itself out as flat sections, which
+          become cards of their own from `md` up. */}
+      <ProductFormBody
+        className={
+          isLockedForVectorisation && state.currentStep !== 'review'
+            ? 'pointer-events-none opacity-60'
+            : undefined
+        }
+      >
+        {renderStep()}
+      </ProductFormBody>
     </EditorPageShell>
   );
 }

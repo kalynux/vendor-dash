@@ -289,6 +289,36 @@ export const errors = {
             PAYMENT_CARD_DECLINED:
                 'Your card was declined. Check the details or try another card.',
         },
+
+        /**
+         * Registering a vendor with a phone or email another account already
+         * uses. One person may hold several roles on ONE account, so the way
+         * through is to add Vendor to that account — on the website, since this
+         * app has no add-role screen. The shared `codes` wording stops at "in
+         * use", a dead end.
+         *
+         * ⚠ Never name the account's EXISTING role: anyone can type a number
+         * here. "Vendor" is the role they asked for, so it is theirs to see.
+         * "The way you usually do" covers a shopper's account too, which has no
+         * password — it signs in through the WhatsApp bot.
+         */
+        register: {
+            AUTH_PHONE_TAKEN:
+                'This phone number is already linked to a Wi-Mall account. Sign in to that account on the Wi-Mall website the way you usually do, then add the Vendor role from there.',
+            AUTH_EMAIL_TAKEN:
+                'This email address is already linked to a Wi-Mall account. Sign in to that account on the Wi-Mall website the way you usually do, then add the Vendor role from there.',
+        },
+
+        /**
+         * Sign-in only. The backend answers `AUTH_ROLE_NOT_FOUND` from login
+         * AFTER the password has been checked, so this reader has proved the
+         * account is theirs and may be told it lacks the role. `codes` keeps the
+         * generic sentence: the same code is any `requireRole` 403 elsewhere.
+         */
+        login: {
+            AUTH_ROLE_NOT_FOUND:
+                "This account doesn't have the Vendor role yet. Sign in on the Wi-Mall website the way you usually do, then add the Vendor role from there.",
+        },
     },
 
     codes: {
@@ -1099,8 +1129,11 @@ export const errors = {
          * they linked one deliberately, which is why the code flow below exists
          * — so this message offers that route rather than dead-ending.
          */
+        // Unreachable from this dashboard since the connection confirm was dropped
+        // (2026-09-21); kept so the catalog still covers the registry. Points at
+        // the code, as the backend's own message now does.
         CONTACT_CHANGE_PHONE_UNPROVEN:
-            'Connect WhatsApp using the new number first, or verify it with a code instead.',
+            "That number hasn't been confirmed yet. Confirm it with the code we send to it on WhatsApp.",
 
         // ── Verifying a phone number with a WhatsApp code ──────────────────────
         // The proof that serves dashboard roles. `INVALID` and `EXPIRED` are
@@ -1125,9 +1158,14 @@ export const errors = {
          * holds none. Messaging the bot reopens the window, so the copy says that
          * instead of "try again" — same reasoning as PRODUCT_SHARE_WINDOW_CLOSED.
          */
+        /**
+         * ⛔ Never "message our bot first" — that advice (here until 2026-09-21)
+         * steered people onto the one path that failed. Every route has already
+         * been tried by the time this arrives; the panel adds Try again, and
+         * Contact support when it repeats. See api-doc/me/phone-verification.md.
+         */
         PHONE_VERIFICATION_DELIVERY_FAILED:
-            "We couldn't send the code on WhatsApp. Send our bot any message from that number, " +
-            'then ask for the code again.',
+            "We couldn't send your code on WhatsApp right now. Please try again in a minute.",
 
         // ── Account closure ───────────────────────────────────────────────────
         // A vendor cannot close their account at all; `details.blockingRoles`

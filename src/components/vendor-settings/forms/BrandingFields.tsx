@@ -22,7 +22,7 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { useMessage, useTranslation } from '@/i18n';
+import { useFormatters, useMessage, useTranslation } from '@/i18n';
 import { cn } from '@/lib/utils';
 import type { ApiFile } from '@/types/file.types';
 
@@ -79,6 +79,8 @@ type PendingConfirm = { kind: 'remove' | 'clearPin'; index: number };
  * the row's place in the list ("Primary address", "Address 2") drops to a
  * sub-line, and stands in as the title for a row that has no label yet. Mirrors
  * the agency dashboard's Locations screen so both read the same.
+ *
+ * Below `md` there is no card, so there is no band either — just the title row.
  */
 function AddressRowHeading({
     index,
@@ -98,7 +100,7 @@ function AddressRowHeading({
 
     return (
         // Negative margins pull the band out to the card's own padding edges.
-        <div className="-mx-3 -mt-3 flex items-center justify-between gap-2 rounded-t-lg border-b bg-muted/40 px-3 py-2.5 sm:-mx-4 sm:-mt-4 sm:px-4">
+        <div className="flex items-center justify-between gap-2 md:-mx-4 md:-mt-4 md:rounded-t-lg md:border-b md:bg-muted/40 md:px-4 md:py-2.5">
             <span className="flex min-w-0 items-center gap-2">
                 <Building className="w-4 h-4 shrink-0 text-muted-foreground" />
                 <span className="min-w-0">
@@ -140,6 +142,7 @@ export function BrandingFields({
 }: BrandingFieldsProps) {
     const { t } = useTranslation();
     const m = useMessage();
+    const fmt = useFormatters();
     const {
         register,
         handleSubmit,
@@ -165,6 +168,20 @@ export function BrandingFields({
         name: 'business_addresses',
     });
 
+    // Backend rule (ADDRESS_GEO_REQUIRED / ADDRESS_COUNTRY_MISMATCH): every NEW or
+    // EDITED business address must carry a geocoded `geo` that resolves inside the
+    // vendor's country. Addresses echoed back byte-identical are grandfathered, so
+    // legacy plain-text entries keep working until the vendor touches them.
+    const requiredCountry = addressCountryBias?.toUpperCase() ?? null;
+    // Named, not coded: "must be in Cameroon", not "must be in (CM)".
+    const requiredCountryName = requiredCountry ? fmt.country(requiredCountry) : '';
+
+    /** The place is outside the vendor's country — the save would be refused. */
+    const outsideCountry = (geo: { components?: { country_code?: string | null } | null }) => {
+        const cc = geo.components?.country_code?.toUpperCase() ?? null;
+        return !!(requiredCountry && cc && cc !== requiredCountry);
+    };
+
     // Fill the loose fields from a picked search candidate and stash the canonical
     // `geo` (candidate + raw query). The loose fields stay editable afterward.
     const applyCandidate = (index: number, candidate: GeoAddressCandidate, rawInput: string) => {
@@ -176,15 +193,19 @@ export function BrandingFields({
         if (c.city) setValue(`business_addresses.${index}.city`, c.city, { shouldDirty: true, shouldValidate: true });
         if (c.region) setValue(`business_addresses.${index}.state`, c.region, { shouldDirty: true });
         setValue(`business_addresses.${index}.geo`, { ...candidate, raw_input: rawInput }, { shouldDirty: true });
-        // The address now has a pinned location — drop any "geo required" error.
-        clearErrors(`business_addresses.${index}.geo`);
+        if (outsideCountry(candidate)) {
+            // Said now, next to the pin, rather than only when Save is pressed —
+            // "use my location" can land abroad (a travelling vendor, a phone
+            // on a foreign SIM's cached fix) and nothing else on screen says so.
+            setError(`business_addresses.${index}.geo`, {
+                type: 'manual',
+                message: t('settings.branding.geoCountryMismatch', { country: requiredCountryName }),
+            });
+        } else {
+            // The address now has a pinned location — drop any "geo required" error.
+            clearErrors(`business_addresses.${index}.geo`);
+        }
     };
-
-    // Backend rule (ADDRESS_GEO_REQUIRED / ADDRESS_COUNTRY_MISMATCH): every NEW or
-    // EDITED business address must carry a geocoded `geo` that resolves inside the
-    // vendor's country. Addresses echoed back byte-identical are grandfathered, so
-    // legacy plain-text entries keep working until the vendor touches them.
-    const requiredCountry = addressCountryBias?.toUpperCase() ?? null;
 
     type AddressValue = NonNullable<Step3FormValues['business_addresses']>[number];
     // Moving (or clearing) the pin counts as an edit too — otherwise a row whose
@@ -220,15 +241,12 @@ export function BrandingFields({
                 return;
             }
 
-            if (addr.geo && requiredCountry) {
-                const cc = addr.geo.components?.country_code?.toUpperCase() ?? null;
-                if (cc && cc !== requiredCountry) {
-                    setError(`business_addresses.${index}.geo`, {
-                        type: 'manual',
-                        message: t('settings.branding.geoCountryMismatch', { country: requiredCountry }),
-                    });
-                    hasGeoError = true;
-                }
+            if (addr.geo && outsideCountry(addr.geo)) {
+                setError(`business_addresses.${index}.geo`, {
+                    type: 'manual',
+                    message: t('settings.branding.geoCountryMismatch', { country: requiredCountryName }),
+                });
+                hasGeoError = true;
             }
         });
 
@@ -344,7 +362,10 @@ export function BrandingFields({
                         {t('settings.branding.noAddresses')}
                     </p>
                 ) : (
-                    <div className="space-y-4">
+                    // Cards from `md` up. Below that a card's border and padding
+                    // cost every field ~32px of a phone's width, so addresses sit
+                    // flat on the page and a rule between them does the grouping.
+                    <div className="max-md:divide-y md:space-y-4">
                         {fields.map((field, index) => {
                             const geo = watch(`business_addresses.${index}.geo`);
                             const city = (watch(`business_addresses.${index}.city`) ?? '').trim();
@@ -357,7 +378,10 @@ export function BrandingFields({
                             const geoError = errors.business_addresses?.[index]?.geo?.message;
 
                             return (
-                            <div key={field.id} className="rounded-lg border p-3 sm:p-4 space-y-3">
+                            <div
+                                key={field.id}
+                                className="space-y-3 max-md:py-5 max-md:first:pt-1 max-md:last:pb-0 md:rounded-lg md:border md:p-4"
+                            >
                                 <AddressRowHeading
                                     index={index}
                                     label={watch(`business_addresses.${index}.label`) ?? ''}

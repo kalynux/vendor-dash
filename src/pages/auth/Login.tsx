@@ -212,7 +212,9 @@ export function Login() {
 
       goAfterSignIn(session);
     } catch (err) {
-      apiError.toast(err, { fallbackKey: 'auth.errors.loginFailed' });
+      // `login` rewords AUTH_ROLE_NOT_FOUND, which only a correct password can
+      // reach — see errors.contexts.login.
+      apiError.toast(err, { fallbackKey: 'auth.errors.loginFailed', context: 'login' });
     }
   }
 

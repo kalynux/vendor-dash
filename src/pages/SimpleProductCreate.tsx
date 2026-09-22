@@ -2,9 +2,9 @@ import { useCallback, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
-import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { EditorPageShell } from '@/components/layout/EditorPageShell';
+import { ProductFormBody } from '@/components/products/form/ProductFormBody';
 import {
   SimpleProductForm,
   type SimpleFieldErrors,
@@ -145,47 +145,59 @@ export function SimpleProductCreate() {
       backTo="/dashboard/products"
       backLabel={t('products.wizard.backToProducts')}
     >
-      <Card className="rounded-none border-x-0 md:rounded-xl md:border">
-        <CardContent className="p-4 sm:p-6 space-y-6">
-          {result ? (
-            <ActivationBlockersPanel
-              activation={result.activation}
-              isBusy={isSubmitting}
-              onRetryPublish={handleRetryPublish}
-              onPickupLocationChosen={handlePickupLocationChosen}
-              onDone={goToList}
+      <ProductFormBody className="space-y-4 md:space-y-6">
+        {result ? (
+          <ActivationBlockersPanel
+            activation={result.activation}
+            isBusy={isSubmitting}
+            onRetryPublish={handleRetryPublish}
+            onPickupLocationChosen={handlePickupLocationChosen}
+            onDone={goToList}
+          />
+        ) : (
+          <>
+            {/* Recoveries after a failed create — each resubmits what was
+                typed, so they sit right above the form they act on. */}
+            {(offerDraftFallback || fieldErrors?.sku) && (
+              <div className="flex flex-col gap-2 md:flex-row md:flex-wrap">
+                {offerDraftFallback && (
+                  <>
+                    <Button
+                      variant="outline"
+                      onClick={saveAsDraftInstead}
+                      className="max-md:h-11 max-md:w-full"
+                    >
+                      {t('products.simple.saveDraftInstead')}
+                    </Button>
+                    <Button asChild variant="outline" className="max-md:h-11 max-md:w-full">
+                      <Link to="/dashboard/account/billing">{t('products.quickAdd.viewPlans')}</Link>
+                    </Button>
+                  </>
+                )}
+
+                {fieldErrors?.sku && (
+                  <Button
+                    variant="outline"
+                    onClick={useGeneratedSku}
+                    className="max-md:h-11 max-md:w-full"
+                  >
+                    {t('products.quickAdd.useGeneratedSku')}
+                  </Button>
+                )}
+              </div>
+            )}
+
+            <SimpleProductForm
+              mode="create"
+              isSubmitting={isSubmitting}
+              formError={formError}
+              fieldErrors={fieldErrors}
+              onSubmit={handleSubmit}
+              onCancel={goToList}
             />
-          ) : (
-            <>
-              {offerDraftFallback && (
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <Button size="sm" variant="outline" onClick={saveAsDraftInstead}>
-                    {t('products.simple.saveDraftInstead')}
-                  </Button>
-                  <Button asChild size="sm" variant="outline">
-                    <Link to="/dashboard/account/billing">{t('products.quickAdd.viewPlans')}</Link>
-                  </Button>
-                </div>
-              )}
-
-              {fieldErrors?.sku && (
-                <Button size="sm" variant="outline" onClick={useGeneratedSku}>
-                  {t('products.quickAdd.useGeneratedSku')}
-                </Button>
-              )}
-
-              <SimpleProductForm
-                mode="create"
-                isSubmitting={isSubmitting}
-                formError={formError}
-                fieldErrors={fieldErrors}
-                onSubmit={handleSubmit}
-                onCancel={goToList}
-              />
-            </>
-          )}
-        </CardContent>
-      </Card>
+          </>
+        )}
+      </ProductFormBody>
     </EditorPageShell>
   );
 }

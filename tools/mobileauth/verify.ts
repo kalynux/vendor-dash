@@ -107,6 +107,16 @@ console.log('\nCredentials mode');
 eq('cookie', cookieAuthStrategy.credentials, 'include', "cookie sends credentials");
 eq('bearer', bearerAuthStrategy.credentials, 'omit', 'bearer sends none');
 
+/* ─── Own password change ─────────────────────────────────────────────────── */
+//
+// The replacement pair after `PATCH /me/password` travels as cookies only. Get
+// bearer's flag wrong and the phone app is signed out by its own password change
+// while the screen says it stays signed in (api-doc/me/password.md).
+
+console.log('\nOwn password change');
+eq('cookie', cookieAuthStrategy.passwordChangeKeepsSession, true, 'keeps its session');
+eq('bearer', bearerAuthStrategy.passwordChangeKeepsSession, false, 'must sign in again');
+
 /* ─── Headers ─────────────────────────────────────────────────────────────── */
 
 console.log('\nHeaders');

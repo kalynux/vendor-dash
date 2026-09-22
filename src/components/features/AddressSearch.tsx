@@ -4,12 +4,13 @@ import { toast } from 'sonner';
 
 import { searchAddresses, reverseGeocode } from '@/services/geo.service';
 import { getCurrentPosition } from '@/platform/geolocation';
-import { canOpenAppSettings, openAppSettings } from '@/platform/permissions';
+import { onNextResume, openAppSettings } from '@/platform/permissions';
 import { useTranslation, useApiError } from '@/i18n';
 import type { GeoAddress, GeoAddressCandidate } from '@/types/geo.types';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { LocationAccessDialog, type LocationAccessProblem } from './LocationAccessDialog';
 
 const DEBOUNCE_MS = 350;
 const MIN_QUERY = 3;
@@ -57,6 +58,8 @@ export function AddressSearch({
   const [loading, setLoading] = useState(false);
   const [locating, setLocating] = useState(false);
   const [hint, setHint] = useState<string | null>(null);
+  const [accessOpen, setAccessOpen] = useState(false);
+  const [accessProblem, setAccessProblem] = useState<LocationAccessProblem>('denied');
   const containerRef = useRef<HTMLDivElement>(null);
 
   const country = countryBias ? countryBias.toLowerCase() : undefined;
@@ -114,6 +117,10 @@ export function AddressSearch({
     [onSelect, query],
   );
 
+  // The toast's retry and the return from settings outlive the render that
+  // created them, so they go through a ref to the current callback.
+  const retryRef = useRef<() => Promise<void>>(async () => undefined);
+
   /**
    * Fill the address from where the vendor is standing.
    *
@@ -122,9 +129,13 @@ export function AddressSearch({
    * permission, and a WebView cannot raise an Android runtime prompt on the
    * app's behalf — so without the grant it fails with `PERMISSION_DENIED`
    * instantly and the vendor has no way to act on the toast.
-   * `@/platform/geolocation` prompts properly and answers in five states, which
-   * is the point: the four failures need four different things said about them,
-   * and only one of them is worth offering a settings screen for.
+   * `@/platform/geolocation` prompts properly and answers in six states, which
+   * is the point: each failure needs a different thing said about it.
+   *
+   * ⚠ A refusal or a switched-off location opens `LocationAccessDialog`, never
+   * a bare "denied" toast: most vendors do not know how to re-allow a
+   * permission by hand, so the dialog always ends in a button that asks again
+   * or goes to the switch.
    */
   const fillFromCurrentLocation = useCallback(async () => {
     setLocating(true);
@@ -132,26 +143,20 @@ export function AddressSearch({
       const fix = await getCurrentPosition();
 
       if (fix.status !== 'granted') {
-        if (fix.status === 'blocked') {
-          // The OS will not prompt again; a retry button here would silently do
-          // nothing, so the only honest offer is the settings screen.
-          toast.error(t('common.address.permissionBlocked'), {
-            action: canOpenAppSettings
-              ? {
-                  label: t('common.address.openSettings'),
-                  onClick: () => void openAppSettings(),
-                }
-              : undefined,
-          });
-        } else if (fix.status === 'denied') {
-          toast.error(t('common.address.permissionDenied'));
+        if (fix.status === 'denied' || fix.status === 'blocked' || fix.status === 'off') {
+          setAccessProblem(fix.status);
+          setAccessOpen(true);
         } else if (fix.status === 'unavailable') {
           toast.error(t('common.address.geolocationUnavailable'));
         } else {
-          // Permission was fine and the fix itself failed — indoors, hardware
-          // off, timed out. Previously indistinguishable from a refusal, which
-          // sent people to a settings screen that would not have helped.
-          toast.error(t('common.address.locationFixFailed'));
+          // Permission was fine and no position arrived, even after waiting and
+          // falling back to the phone's last known one.
+          toast.error(t('common.address.locationFixFailed'), {
+            action: {
+              label: t('common.actions.retry'),
+              onClick: () => void retryRef.current(),
+            },
+          });
         }
         return;
       }
@@ -169,6 +174,23 @@ export function AddressSearch({
       setLocating(false);
     }
   }, [onSelect, t, apiError]);
+
+  useEffect(() => {
+    retryRef.current = fillFromCurrentLocation;
+  }, [fillFromCurrentLocation]);
+
+  // Cancel a pending "carry on when back from settings" if the box unmounts.
+  const cancelResumeRef = useRef<(() => void) | null>(null);
+  useEffect(() => () => cancelResumeRef.current?.(), []);
+
+  const openSettingsThenRetry = useCallback(() => {
+    cancelResumeRef.current?.();
+    cancelResumeRef.current = onNextResume(() => {
+      cancelResumeRef.current = null;
+      void retryRef.current();
+    });
+    void openAppSettings();
+  }, []);
 
   return (
     <div ref={containerRef} className={cn('relative space-y-2', className)}>
@@ -211,6 +233,13 @@ export function AddressSearch({
       </div>
 
       {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
+      {/* A first fix outdoors can take several seconds; say so rather than
+          leave a bare spinner that looks stuck. */}
+      {locating && (
+        <p className="text-xs text-muted-foreground" aria-live="polite">
+          {t('common.address.locating')}
+        </p>
+      )}
 
       {open && results.length > 0 && (
         <ul className="absolute z-50 mt-1 max-h-64 w-full overflow-auto rounded-lg border bg-popover p-1 shadow-md">
@@ -266,6 +295,14 @@ export function AddressSearch({
           )}
         </div>
       )}
+
+      <LocationAccessDialog
+        open={accessOpen}
+        problem={accessProblem}
+        onOpenChange={setAccessOpen}
+        onRetry={() => void fillFromCurrentLocation()}
+        onOpenSettings={openSettingsThenRetry}
+      />
     </div>
   );
 }

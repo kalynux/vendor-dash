@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { AlertCircle, CircleDashed, Loader2 } from 'lucide-react';
+import { AlertCircle, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { getPickupGuidance } from '@/services/products.service';
 import { useTranslation } from '@/i18n';
@@ -48,40 +48,41 @@ export function ActivationBlockersPanel({
   );
 
   return (
-    <div className="rounded-xl border border-border bg-muted/30 p-5 space-y-4">
-      <div className="flex items-start gap-3">
-        <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-500 mt-0.5 shrink-0" />
-        <div className="min-w-0">
-          <p className="font-medium text-sm">
-            {t(demoted ? 'products.blockers.demoted' : 'products.blockers.savedAsDraft')}
+    // Flat on a phone — it shares the page with the form, and a box there is a
+    // box inside the page's own gutter — with the same vertical padding as the
+    // form's sections, so it sits as far below the header as they do. One card
+    // from `md` up, like them.
+    <div className="space-y-5 max-md:py-5 md:rounded-xl md:border md:bg-card md:p-6 md:text-card-foreground md:shadow-sm">
+      {/* The icon sits in the heading line rather than in a column of its own,
+          so everything below starts on the same left edge as the heading. */}
+      <div className="space-y-1">
+        <h2 className="flex items-center gap-2 text-base font-semibold leading-tight">
+          <AlertCircle className="size-5 shrink-0 text-amber-600 dark:text-amber-500" />
+          {t(demoted ? 'products.blockers.demoted' : 'products.blockers.savedAsDraft')}
+        </h2>
+        {lines.length > 0 && (
+          <p className="text-sm text-muted-foreground">
+            {t('products.blockers.summary', { count: lines.length })}
           </p>
-          {lines.length > 0 && (
-            <p className="text-sm text-muted-foreground mt-0.5">
-              {t('products.blockers.summary', { count: lines.length })}
-            </p>
-          )}
-        </div>
+        )}
       </div>
 
       {lines.length > 0 && (
         // Localized from `blocker.code` rather than rendered from
         // `blocker.message`: the backend writes that message for a vendor to
         // read, but only ever in English.
-        <ul className="space-y-2 pl-8">
+        <ul className="list-disc space-y-1.5 pl-5 text-sm marker:text-muted-foreground">
           {lines.map((line) => (
-            <li key={line} className="flex items-start gap-2 text-sm">
-              <CircleDashed className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
-              <span>{line}</span>
-            </li>
+            <li key={line}>{line}</li>
           ))}
         </ul>
       )}
 
       {guidance && (
-        <div className="pl-8 space-y-2 pt-1 border-t border-border/60">
-          <div className="pt-3">
+        <div className="space-y-3">
+          <div className="space-y-1">
             <p className="text-sm font-medium">{t(guidance.titleKey)}</p>
-            <p className="text-xs text-muted-foreground mt-0.5">{t(guidance.bodyKey)}</p>
+            <p className="text-sm text-muted-foreground">{t(guidance.bodyKey)}</p>
           </div>
 
           {guidance.action.kind === 'address_picker' && (
@@ -89,19 +90,30 @@ export function ActivationBlockersPanel({
           )}
 
           {guidance.action.kind === 'link' && (
-            <Button asChild size="sm" variant="outline">
+            <Button asChild variant="outline" className="max-md:h-11 max-md:w-full">
               <Link to={guidance.action.to}>{t(guidance.action.labelKey)}</Link>
             </Button>
           )}
         </div>
       )}
 
-      <div className="flex flex-col-reverse sm:flex-row sm:items-center gap-2 pl-8 pt-1">
-        <Button size="sm" variant="outline" onClick={onDone} disabled={isBusy}>
+      {/* DOM order is the wide-screen reading order; a phone reverses it so the
+          primary action lands on top. */}
+      <div className="flex flex-col-reverse gap-2 md:flex-row md:justify-end">
+        <Button
+          variant="outline"
+          onClick={onDone}
+          disabled={isBusy}
+          className="max-md:h-11 max-md:w-full"
+        >
           {t('products.blockers.done')}
         </Button>
-        <Button size="sm" onClick={() => void onRetryPublish()} disabled={isBusy}>
-          {isBusy && <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />}
+        <Button
+          onClick={() => void onRetryPublish()}
+          disabled={isBusy}
+          className="max-md:h-11 max-md:w-full"
+        >
+          {isBusy && <Loader2 className="size-4 animate-spin" />}
           {t('products.blockers.retryPublish')}
         </Button>
       </div>

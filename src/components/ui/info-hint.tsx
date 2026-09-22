@@ -3,6 +3,7 @@ import { CircleAlert } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { useTranslation } from '@/i18n';
 
 interface InfoHintProps {
   /** The explanation revealed when the icon is pressed. */
@@ -22,17 +23,18 @@ interface InfoHintProps {
  */
 export function InfoHint({
   children,
-  label = 'More information',
+  label,
   side = 'top',
   align = 'center',
   className,
 }: InfoHintProps) {
+  const { t } = useTranslation();
   return (
     <Popover>
       <PopoverTrigger asChild>
         <button
           type="button"
-          aria-label={label}
+          aria-label={label ?? t('common.a11y.moreInformation')}
           className={cn(
             'tap-target inline-flex size-5 shrink-0 items-center justify-center rounded-full text-muted-foreground/70 transition-colors',
             'hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
@@ -46,9 +48,14 @@ export function InfoHint({
         side={side}
         align={align}
         collisionPadding={12}
-        className="w-[min(20rem,calc(100vw-2rem))] p-3 text-xs leading-relaxed text-muted-foreground"
+        className="w-[min(20rem,calc(100vw-2rem))] p-3 max-md:p-0"
       >
-        {children}
+        {/* On a phone this is a bottom sheet the width of the screen, where the
+            popup's 12px type and tight padding read as a footnote. There it is
+            body copy, and gets the room body copy has. */}
+        <div className="text-xs leading-relaxed text-muted-foreground max-md:px-5 max-md:pb-4 max-md:pt-2 max-md:text-sm max-md:text-foreground/80">
+          {children}
+        </div>
       </PopoverContent>
     </Popover>
   );
@@ -75,6 +82,7 @@ export function LabelWithHint({
   optional?: boolean;
   className?: string;
 }) {
+  const { t } = useTranslation();
   return (
     <div className={cn('flex items-center gap-1', className)}>
       <label
@@ -83,10 +91,14 @@ export function LabelWithHint({
       >
         {children}
         {required && <span className="ml-0.5 text-destructive">*</span>}
-        {optional && <span className="ml-1 font-normal text-muted-foreground">(optional)</span>}
+        {optional && (
+          <span className="ml-1 font-normal lowercase text-muted-foreground">
+            ({t('common.labels.optional')})
+          </span>
+        )}
       </label>
       {hint && (
-        <InfoHint label={hintLabel ?? `About this field`} align="start">
+        <InfoHint label={hintLabel ?? t('common.a11y.aboutThisField')} align="start">
           {hint}
         </InfoHint>
       )}

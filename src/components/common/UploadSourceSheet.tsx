@@ -130,7 +130,7 @@ export function UploadSourceSheet({
       desktopClassName="sm:max-w-sm"
       disableClose={busy !== null}
     >
-      <div className="flex flex-col gap-2">
+      <div className="-mx-2 flex flex-col">
         <SourceRow
           icon={busy === 'camera' ? Loader2 : Camera}
           spinning={busy === 'camera'}
@@ -175,19 +175,20 @@ function SourceRow({ icon: Icon, label, hint, disabled, spinning, onClick }: Sou
   return (
     <Button
       type="button"
-      variant="outline"
+      variant="ghost"
       disabled={disabled}
       onClick={onClick}
-      // Tall enough to be a comfortable thumb target, and left-aligned so the
-      // three read as a list of destinations rather than a row of actions.
-      className="h-auto justify-start gap-3 px-3 py-3 text-left"
+      // A plain list of destinations, like the system share sheet: tall enough
+      // for a thumb, left-aligned, no box around each row.
+      className="h-auto min-h-14 justify-start gap-4 whitespace-normal rounded-lg px-2 py-3 text-left"
     >
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted">
-        <Icon className={spinning ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
-      </span>
-      <span className="flex min-w-0 flex-col">
-        <span className="text-sm font-medium leading-tight">{label}</span>
-        <span className="text-xs font-normal leading-tight text-muted-foreground">{hint}</span>
+      <Icon
+        className={spinning ? 'size-5 animate-spin text-muted-foreground' : 'size-5 text-muted-foreground'}
+        aria-hidden
+      />
+      <span className="flex min-w-0 flex-col gap-0.5">
+        <span className="text-sm font-medium">{label}</span>
+        <span className="text-sm font-normal text-muted-foreground">{hint}</span>
       </span>
     </Button>
   );

@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { FileDigit, Upload, Trash2, RefreshCw, FileText, AlertCircle } from 'lucide-react';
+import { Upload, Trash2, FileText, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useFormatters, useTranslation } from '@/i18n';
@@ -85,42 +85,48 @@ export function DigitalAssetUpload({
   };
 
   if (currentAsset) {
+    // Drawn like a filled-in field — the file IS this field's value.
     return (
       <div className="space-y-3">
-        <div className="flex items-center gap-4 p-4 rounded-xl border border-border bg-muted/40">
-          <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-            <FileText className="w-6 h-6 text-primary" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium truncate">{currentAsset.filename}</p>
-            <p className="text-xs text-muted-foreground mt-0.5">
+        <div className="flex items-center gap-3 rounded-md border border-input py-2 pl-3 pr-1.5">
+          <FileText className="size-5 shrink-0 text-muted-foreground" aria-hidden />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium">{currentAsset.filename}</p>
+            <p className="truncate text-sm text-muted-foreground">
               {fmt.fileSize(currentAsset.size)} · {currentAsset.mimeType}
             </p>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex shrink-0 items-center gap-1">
             <Button
               type="button"
-              variant="outline"
+              variant="ghost"
               size="sm"
               onClick={() => inputRef.current?.click()}
               disabled={disabled || isUploading}
-              className="gap-1.5"
             >
-              <RefreshCw className="w-3.5 h-3.5" />
               {t('products.asset.replace')}
             </Button>
             <Button
               type="button"
               variant="ghost"
-              size="sm"
+              size="icon"
               onClick={onRemove}
               disabled={disabled || isUploading}
-              className="text-destructive hover:text-destructive hover:bg-destructive/10"
+              aria-label={t('common.actions.remove')}
+              className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
             >
-              <Trash2 className="w-3.5 h-3.5" />
+              <Trash2 className="size-4" />
             </Button>
           </div>
         </div>
+
+        {/* A rejected replacement used to vanish without a word here. */}
+        {validationError && (
+          <div className="flex items-start gap-2 text-sm text-destructive">
+            <AlertCircle className="mt-0.5 size-4 shrink-0" />
+            <span>{validationError}</span>
+          </div>
+        )}
 
         <input
           ref={inputRef}
@@ -140,31 +146,28 @@ export function DigitalAssetUpload({
         onDrop={onDrop}
         onClick={() => !disabled && !isUploading && inputRef.current?.click()}
         className={cn(
-          'border-2 border-dashed rounded-xl p-10 flex flex-col items-center justify-center gap-4 cursor-pointer transition-all',
-          isDragging ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50 hover:bg-muted/50',
-          (disabled || isUploading) && 'opacity-50 cursor-not-allowed pointer-events-none',
+          'flex cursor-pointer flex-col items-center justify-center gap-3 rounded-md border border-dashed px-4 py-6 text-center transition-colors',
+          isDragging ? 'border-primary bg-primary/5' : 'border-input hover:border-primary/50 hover:bg-muted/40',
+          (disabled || isUploading) && 'pointer-events-none cursor-not-allowed opacity-50',
         )}
       >
         {isUploading ? (
           <>
-            <div className="w-12 h-12 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-            <p className="text-sm font-medium text-muted-foreground">{t('products.asset.uploading')}</p>
+            <div className="size-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+            <p className="text-sm text-muted-foreground">{t('products.asset.uploading')}</p>
           </>
         ) : (
           <>
-            <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center">
-              <FileDigit className="w-8 h-8 text-muted-foreground" />
-            </div>
-            <div className="text-center space-y-1">
+            <div className="space-y-1">
               <p className="text-sm font-medium">
                 {t(isDragging ? 'products.asset.dropHere' : 'products.asset.dragOrClick')}
               </p>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-sm text-muted-foreground">
                 {t('products.asset.supported')}
               </p>
             </div>
-            <Button type="button" variant="outline" size="sm" className="gap-2 pointer-events-none">
-              <Upload className="w-3.5 h-3.5" />
+            <Button type="button" variant="outline" size="sm" className="pointer-events-none gap-1.5">
+              <Upload className="size-4" />
               {t('products.asset.selectFile')}
             </Button>
           </>
@@ -172,8 +175,8 @@ export function DigitalAssetUpload({
       </div>
 
       {validationError && (
-        <div className="flex items-start gap-2 text-destructive text-sm">
-          <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+        <div className="flex items-start gap-2 text-sm text-destructive">
+          <AlertCircle className="mt-0.5 size-4 shrink-0" />
           <span>{validationError}</span>
         </div>
       )}

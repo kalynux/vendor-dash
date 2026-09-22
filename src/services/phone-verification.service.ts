@@ -2,10 +2,9 @@
 // api-doc/me/phone-verification.md.
 //
 // Role-agnostic: these live under /api/me and resolve the account from the token.
-// They exist because a dashboard role holds no WhatsApp *connection* — it never
-// registered through the bot — so `/me/phone/confirm` can never succeed for a
-// vendor and `phone_verified` could never become true. See the type module for
-// which proof serves whom; the two are not alternatives you pick between.
+// They are the one way this dashboard proves a phone number — both the number
+// already on the account and the new one in a pending change. See the type module
+// for why the connection proof (`/me/phone/confirm`) is not used here.
 //
 // Refusals:
 //   422 PHONE_VERIFICATION_NO_TARGET         no number on the account — PATCH /me/phone first
@@ -19,13 +18,19 @@
 // that way in the UI: the remedies differ — retype versus request a new code.
 // Collapsing them sends people hunting for a typo that is not there.
 //
-// ⛔ **Outside Meta's 24-hour window this does not work on the current
-// deployment.** Only an approved template may be sent there and this WABA holds
-// none, so a vendor who has not messaged the platform in the last 24 hours gets
-// `PHONE_VERIFICATION_DELIVERY_FAILED`. That is deliberate on the backend's part —
-// a code that silently never arrives is indistinguishable, to the person waiting,
-// from a platform ignoring them — so the copy for it must say what to do (message
-// the bot, which reopens the window) rather than just "try again".
+// ⛔ **`DELIVERY_FAILED` must NEVER tell the vendor to message the WhatsApp bot.**
+// It used to, when no approved template existed and texting the bot was thought
+// to be the only way to get a code through. As of 2026-09-21 the backend sends
+// free text where it can and falls back to an approved template everywhere else,
+// so by the time this 502 comes back every route has been tried and WhatsApp
+// refused them all. Nothing the vendor does in the bot changes that — and while
+// the old advice stood, texting the bot actually steered the code onto a path
+// that failed. The contract now (api-doc/me/phone-verification.md):
+//
+//   - a temporary failure with a way to try again — no cooldown was started, so
+//     an immediate retry is allowed (the code is stored only after a send works);
+//   - a way to contact support if it keeps happening;
+//   - never "we can't reach our systems" — branch on the code, not the status.
 
 import { api } from './api';
 import { ApiError } from '@/types/api';

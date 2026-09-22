@@ -15,6 +15,7 @@ import {
     TIMEZONES,
 } from '@/components/vendor-settings/forms/basicSetup.helpers';
 import { PayoutMethodsEditor } from '@/components/vendor-settings/payout';
+import { Label } from '@/components/ui/label';
 import { normalizeStoredPhone, toPhoneCountry } from '@/lib/phone';
 import { useFormatters, useMessage, useTranslation } from '@/i18n';
 import { cn } from '@/lib/utils';
@@ -46,31 +47,31 @@ function withNormalizedPhones(values: Step1FormValues): Step1FormValues {
 
 // ─── Shared UI Helpers ────────────────────────────────────────────────────────
 
+// Same field look as the other onboarding steps (plain label, outlined 44px
+// control, `destructive` for errors). This step used to be the odd one out with
+// grey-filled selects under small-caps labels.
 const selectTriggerClass = (hasError?: boolean) =>
-    cn(
-        'h-11 w-full rounded-lg border text-sm bg-muted',
-        'border-border text-foreground',
-        'focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary',
-        'placeholder:text-muted-foreground transition-colors duration-150',
-        hasError && 'border-red-400 focus:ring-red-200 focus:border-red-400',
-    );
+    cn('h-11 w-full', hasError && 'border-destructive');
 
-function FieldRow({ label, labelId, required, error, children }: {
+function FieldRow({ label, labelId, htmlFor, required, error, children }: {
     label: string;
     /** Set when the control is a group (a radiogroup) that `aria-labelledby`s this label. */
     labelId?: string;
+    /** The control's id, so tapping the label focuses it. */
+    htmlFor?: string;
     required?: boolean;
     error?: string;
     children: React.ReactNode;
 }) {
     const m = useMessage();
     return (
-        <div className="space-y-1.5">
-            <label id={labelId} className="block text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                {label}{required && <span className="text-red-500 ml-0.5">*</span>}
-            </label>
+        <div className="space-y-2">
+            <Label id={labelId} htmlFor={htmlFor}>
+                {label}
+                {required && <span className="text-destructive">*</span>}
+            </Label>
             {children}
-            {error && <p className="text-xs text-red-500 mt-1" role="alert">{m(error)}</p>}
+            {error && <p className="text-sm text-destructive" role="alert">{m(error)}</p>}
         </div>
     );
 }
@@ -143,7 +144,7 @@ export function BasicSetupFields({
             {showRegion && (
                 <>
                     {/* Country */}
-                    <FieldRow label={t('settings.payout.country')} required error={errors.country?.message}>
+                    <FieldRow label={t('settings.payout.country')} htmlFor="country" required error={errors.country?.message}>
                         <Select
                             value={selectedCountry}
                             onValueChange={(v) => setValue('country', v, { shouldValidate: true })}
@@ -162,7 +163,7 @@ export function BasicSetupFields({
                     </FieldRow>
 
                     {/* Timezone */}
-                    <FieldRow label={t('settings.payout.timezone')} required error={errors.timezone?.message}>
+                    <FieldRow label={t('settings.payout.timezone')} htmlFor="timezone" required error={errors.timezone?.message}>
                         <Select
                             value={selectedTimezone}
                             onValueChange={(v) => setValue('timezone', v, { shouldValidate: true })}

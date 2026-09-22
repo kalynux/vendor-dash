@@ -198,6 +198,20 @@ export const errors = {
             PAYMENT_CARD_DECLINED:
                 'Votre carte a été refusée. Vérifiez les informations ou essayez une autre carte.',
         },
+
+        /** Numéro ou e-mail déjà pris à l’inscription — voir la note anglaise. */
+        register: {
+            AUTH_PHONE_TAKEN:
+                'Ce numéro de téléphone est déjà associé à un compte Wi-Mall. Connectez-vous à ce compte sur le site Wi-Mall comme d’habitude, puis ajoutez-y le rôle Vendeur.',
+            AUTH_EMAIL_TAKEN:
+                'Cette adresse e-mail est déjà associée à un compte Wi-Mall. Connectez-vous à ce compte sur le site Wi-Mall comme d’habitude, puis ajoutez-y le rôle Vendeur.',
+        },
+
+        /** Mot de passe correct, rôle absent — voir la note anglaise. */
+        login: {
+            AUTH_ROLE_NOT_FOUND:
+                'Ce compte n’a pas encore le rôle Vendeur. Connectez-vous sur le site Wi-Mall comme d’habitude, puis ajoutez-y le rôle Vendeur.',
+        },
     },
 
     codes: {
@@ -959,7 +973,7 @@ export const errors = {
         CONTACT_CHANGE_TOKEN_INVALID:
             'Ce lien de confirmation n’est plus valide. Veuillez recommencer.',
         CONTACT_CHANGE_PHONE_UNPROVEN:
-            'Connectez d’abord WhatsApp avec le nouveau numéro, ou vérifiez-le plutôt avec un code.',
+            'Ce numéro n’est pas encore confirmé. Confirmez-le avec le code que nous lui envoyons sur WhatsApp.',
 
         PHONE_VERIFICATION_NO_TARGET:
             'Aucun numéro de téléphone n’est encore associé à votre compte. Ajoutez-en un, puis vérifiez-le.',
@@ -972,8 +986,7 @@ export const errors = {
         PHONE_VERIFICATION_RESEND_TOO_SOON:
             'Un code vient d’être envoyé. Patientez un instant avant d’en demander un autre.',
         PHONE_VERIFICATION_DELIVERY_FAILED:
-            'Nous n’avons pas pu envoyer le code sur WhatsApp. Envoyez un message à notre bot depuis ' +
-            'ce numéro, puis redemandez le code.',
+            'Nous n’avons pas pu envoyer votre code sur WhatsApp pour le moment. Réessayez dans une minute.',
 
         ACCOUNT_CLOSURE_ROLE_NOT_ELIGIBLE:
             'Votre compte vendeur doit être fermé par le support avant de pouvoir fermer ce compte.',

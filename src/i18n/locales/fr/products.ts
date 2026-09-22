@@ -325,6 +325,7 @@ export const products = {
         unlimitedStockHint: 'Ne s’épuise jamais.',
         unlimitedStockLockedHint:
             'Une agence entrepose ce produit, et un entrepôt détient une quantité chiffrée. Remettez le retrait à votre propre adresse pour utiliser le stock illimité.',
+        unlimitedStockLockedShort: 'Indisponible tant qu’une agence entrepose ce produit.',
         moreOptions: 'Plus d’options',
         skuPlaceholderEdit: 'SKU du produit',
         skuPlaceholderCreate: 'Laissez vide pour en générer un automatiquement',
@@ -336,6 +337,7 @@ export const products = {
         allowOversell: 'Autoriser la survente',
         allowOversellHint: 'Accepter les commandes au-delà de votre stock.',
         addTagPlaceholder: 'Ajoutez une étiquette, puis Entrée ou virgule',
+        removeTag: 'Retirer {{tag}}',
         dimensionsTitle: 'Poids et dimensions (facultatif)',
         weightG: 'Poids (g)',
         lengthCm: 'Longueur (cm)',
@@ -634,8 +636,11 @@ export const products = {
         aiSearchTitle: 'Recherche IA',
         aiSearchDescription:
             'Indexez ce produit pour que les clients le trouvent via la recherche IA. S’applique une fois le produit actif et complet.',
+        aiSearchToggle: 'Laisser les acheteurs le trouver via la recherche IA',
         suspendedNotice:
             'Ce produit est suspendu à cause d’un problème d’agence de livraison. Vous pouvez toujours le modifier — lui attribuer une agence opérationnelle ci-dessous le rétablit automatiquement.',
+        sectionDetails: 'Détails',
+        sectionPriceStock: 'Prix et stock',
 
         stockQueued:
             'Enregistré. La modification de stock ({{from}} → {{to}}) est en attente de validation de l’agence de stockage.',
@@ -800,6 +805,12 @@ export const products = {
         replaceImage: 'Remplacer l’image',
         tapToClose: 'Touchez pour fermer',
         thumbnail: 'Vignette',
+        addPhotos: plural({ one: 'Ajouter une photo', other: 'Ajouter des photos' }),
+        addPhotosHint: plural({
+            one: 'Une seule image, utilisée comme vignette.',
+            other: 'Jusqu’à {{count}} images. La première sert de vignette.',
+        }),
+        tileCount: '{{count}} sur {{max}}',
         skipForNow: 'Passer pour l’instant',
         variantImages: 'Images de la variante',
         addVariantImage: 'Ajouter une image ({{used}}/{{max}})',

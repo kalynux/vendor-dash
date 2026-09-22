@@ -1,18 +1,20 @@
 import { useEffect, useRef, useState } from 'react';
-import { Trash2, ChevronDown, ChevronUp, Wand2, ImagePlus, RefreshCw, X } from 'lucide-react';
+import { Trash2, ImagePlus } from 'lucide-react';
 import { toast } from 'sonner';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { Collapsible, CollapsibleContent } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
+import { SettingsSection } from '@/components/vendor-settings/SettingsSection';
+import { DisclosureTrigger } from '@/components/products/form/DisclosureTrigger';
 import { DigitalAssetUpload } from '@/components/products/DigitalAssetUpload';
 import { MediaPicker } from '@/components/features/MediaPicker';
 import { updateVariantStatus } from '@/services/products.service';
 import { resolveFileUrl } from '@/services/files.service';
 import { ApiError } from '@/types/api';
-import { useMessage, useTranslation, type TranslationKey } from '@/i18n';
+import { useFormatters, useMessage, useTranslation, type TranslationKey } from '@/i18n';
 import type { ApiFile } from '@/types/file.types';
 import type { DigitalFormatRow } from '@/types/product.types';
 
@@ -79,6 +81,11 @@ export function DigitalFormatCard({
 }: DigitalFormatCardProps) {
   const { t } = useTranslation();
   const m = useMessage();
+  const fmt = useFormatters();
+  // The currency as the app formats it ("FCFA"), not a hard-coded "$": the
+  // formatter's own rendering of zero with the number taken out. Display only —
+  // the field still reads and sends a bare number.
+  const currencyUnit = fmt.currency(0).replace(/[\d\s.,-]/g, '');
   const nameRef = useRef<HTMLInputElement>(null);
   const skuRef = useRef<HTMLInputElement>(null);
   const priceRef = useRef<HTMLInputElement>(null);
@@ -223,27 +230,28 @@ export function DigitalFormatCard({
   const skuError = errors[`${format.tempId}.sku`];
   const priceError = errors[`${format.tempId}.price`];
 
-  // Status pill — reflects the locally-pending status while a debounce/API call is mid-flight.
+  // Status word beside the heading — reflects the locally-pending status while a
+  // debounce/API call is mid-flight.
   let statusBadge: { labelKey: TranslationKey; className: string };
   if (hasNewFile) {
     statusBadge = {
       labelKey: 'products.digital.badge.fileReady',
-      className: 'text-blue-600 border-blue-200 bg-blue-50',
+      className: 'text-blue-600 dark:text-blue-400',
     };
   } else if (!hasExistingAsset) {
     statusBadge = {
       labelKey: 'products.digital.badge.needsFile',
-      className: 'text-amber-700 border-amber-200 bg-amber-50',
+      className: 'text-amber-700 dark:text-amber-400',
     };
   } else if (pendingStatus === 'active') {
     statusBadge = {
       labelKey: 'products.digital.badge.live',
-      className: 'text-green-700 border-green-200 bg-green-50',
+      className: 'text-green-700 dark:text-green-400',
     };
   } else {
     statusBadge = {
       labelKey: 'products.digital.badge.paused',
-      className: 'text-muted-foreground border-border bg-muted/40',
+      className: 'text-muted-foreground',
     };
   }
 
@@ -262,23 +270,29 @@ export function DigitalFormatCard({
         : 'products.digital.toggle.activate',
   );
 
+  const statusSwitchId = `format-active-${format.tempId}`;
+
+  // Rendered as a section of its own (see StepDigitalFormats): flat with a hairline
+  // on a phone, one card per format on a wide screen — never a card inside one.
   return (
-    <div className="rounded-xl border border-border bg-card p-4 space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="text-sm font-medium text-muted-foreground">
-            {t('products.digital.formatIndex', { index: index + 1 })}
-          </span>
-          <Badge variant="outline" className={cn('text-xs', statusBadge.className)}>
+    <SettingsSection
+      title={
+        <span className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+          <span>{t('products.digital.formatIndex', { index: index + 1 })}</span>
+          <span className={cn('font-sans text-sm font-normal', statusBadge.className)}>
             {t(statusBadge.labelKey)}
-          </Badge>
-        </div>
-        <div className="flex items-center gap-3">
+          </span>
+        </span>
+      }
+      action={
+        <div className="flex items-center gap-2">
           {showStatusToggle && (
             <div className="flex items-center gap-2" title={toggleTitle}>
-              <Label className="text-xs text-muted-foreground">{t('products.digital.active')}</Label>
+              <Label htmlFor={statusSwitchId} className="font-normal text-muted-foreground">
+                {t('products.digital.active')}
+              </Label>
               <Switch
+                id={statusSwitchId}
                 checked={pendingStatus === 'active'}
                 onCheckedChange={handleStatusToggle}
                 disabled={toggleDisabled}
@@ -289,42 +303,42 @@ export function DigitalFormatCard({
           <Button
             type="button"
             variant="ghost"
-            size="sm"
+            size="icon"
             onClick={() => onRemove(format.tempId)}
             disabled={!canRemove || isSaving}
-            className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+            className="-mr-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
             aria-label={t('products.digital.removeFormat')}
           >
-            <Trash2 className="w-4 h-4" />
+            <Trash2 className="size-4" />
           </Button>
         </div>
-      </div>
-
+      }
+      contentClassName="space-y-5"
+    >
       {/* Details */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div className="space-y-1 sm:col-span-2">
-          <Label className="text-xs">
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+        <div className="space-y-2 md:col-span-2">
+          <Label htmlFor={`format-name-${format.tempId}`}>
             {t('products.digital.formatName')} <span className="text-destructive">*</span>
           </Label>
           <Input
+            id={`format-name-${format.tempId}`}
             ref={nameRef}
             defaultValue={format.name}
             placeholder={t('products.digital.formatNamePlaceholder')}
-            className={cn('h-9', nameError && 'border-destructive')}
+            aria-invalid={!!nameError}
             onBlur={() => onChange(format.tempId, { name: nameRef.current?.value ?? '' })}
           />
-          {nameError && <p className="text-xs text-destructive">{m(nameError)}</p>}
+          {nameError && <p className="text-sm text-destructive">{m(nameError)}</p>}
         </div>
 
-        <div className="space-y-1">
+        <div className="space-y-2">
           <div className="flex items-center justify-between gap-2">
-            <Label className="text-xs">
+            <Label htmlFor={`format-sku-${format.tempId}`}>
               {t('products.fields.sku')} <span className="text-destructive">*</span>
             </Label>
-            <Button
+            <button
               type="button"
-              variant="ghost"
-              size="sm"
               onClick={handleGenerateSku}
               disabled={isSaving || !productTitle.trim()}
               title={t(
@@ -332,48 +346,53 @@ export function DigitalFormatCard({
                   ? 'products.digital.generateSkuHint'
                   : 'products.digital.generateSkuBlocked',
               )}
-              className="h-6 gap-1 px-1.5 text-xs text-muted-foreground hover:text-foreground"
+              className="tap-target rounded-sm text-sm font-medium text-primary hover:underline disabled:pointer-events-none disabled:opacity-50"
             >
-              <Wand2 className="w-3 h-3" />
               {t('products.digital.generateSku')}
-            </Button>
+            </button>
           </div>
           <Input
+            id={`format-sku-${format.tempId}`}
             ref={skuRef}
             defaultValue={format.sku}
             placeholder={t('products.digital.skuPlaceholder')}
-            className={cn('h-9 font-mono text-sm', skuError && 'border-destructive')}
+            className="font-mono"
+            aria-invalid={!!skuError}
             onBlur={() => onChange(format.tempId, { sku: skuRef.current?.value ?? '' })}
           />
-          {skuError && <p className="text-xs text-destructive">{m(skuError)}</p>}
+          {skuError && <p className="text-sm text-destructive">{m(skuError)}</p>}
         </div>
 
+        {/* A short numeric pair — side by side even on a phone. */}
         <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1">
-            <Label className="text-xs">
+          <div className="space-y-2">
+            <Label htmlFor={`format-price-${format.tempId}`}>
               {t('products.fields.price')} <span className="text-destructive">*</span>
             </Label>
             <div className="relative">
-              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
+              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">{currencyUnit}</span>
               <Input
+                id={`format-price-${format.tempId}`}
                 ref={priceRef}
                 type="number"
                 min={0}
                 step={0.01}
                 inputMode="decimal"
                 defaultValue={format.price || ''}
-                placeholder="0.00"
-                className={cn('h-9 pl-5', priceError && 'border-destructive')}
+                placeholder="0"
+                className="pr-14"
+                aria-invalid={!!priceError}
                 onBlur={() => onBlurNumber(priceRef, 'price')}
               />
             </div>
-            {priceError && <p className="text-xs text-destructive">{m(priceError)}</p>}
+            {priceError && <p className="text-sm text-destructive">{m(priceError)}</p>}
           </div>
-          <div className="space-y-1">
-            <Label className="text-xs">{t('products.digital.compareAt')}</Label>
+          <div className="space-y-2">
+            <Label htmlFor={`format-compare-${format.tempId}`}>{t('products.digital.compareAt')}</Label>
             <div className="relative">
-              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
+              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">{currencyUnit}</span>
               <Input
+                id={`format-compare-${format.tempId}`}
                 ref={compareAtRef}
                 type="number"
                 min={0}
@@ -381,7 +400,7 @@ export function DigitalFormatCard({
                 inputMode="decimal"
                 defaultValue={format.compareAtPrice ?? ''}
                 placeholder="—"
-                className="h-9 pl-5"
+                className="pr-14"
                 onBlur={() => onBlurNumber(compareAtRef, 'compareAtPrice')}
               />
             </div>
@@ -390,8 +409,8 @@ export function DigitalFormatCard({
       </div>
 
       {/* File */}
-      <div className="space-y-1.5">
-        <Label className="text-xs">{t('products.digital.downloadableFile')}</Label>
+      <div className="space-y-2">
+        <Label>{t('products.digital.downloadableFile')}</Label>
         <DigitalAssetUpload
           currentAsset={currentAsset}
           onFileSelect={handleFileSelect}
@@ -399,18 +418,18 @@ export function DigitalFormatCard({
           isUploading={isSaving}
         />
         {!currentAsset && (
-          <p className="text-xs text-muted-foreground">
+          <p className="text-sm text-muted-foreground">
             {t('products.digital.uploadToSell')}
           </p>
         )}
       </div>
 
       {/* Preview image (optional, max 1) */}
-      <div className="space-y-1.5">
-        <Label className="text-xs">{t('products.digital.previewImage')}</Label>
+      <div className="space-y-2">
+        <Label>{t('products.digital.previewImage')}</Label>
         <div className="flex items-center gap-3">
           {imageSrc ? (
-            <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-border bg-muted">
+            <div className="relative size-14 shrink-0 overflow-hidden rounded-md border border-border bg-muted">
               <img
                 src={imageSrc}
                 alt={t('products.digital.previewImageAlt')}
@@ -423,13 +442,13 @@ export function DigitalFormatCard({
               onClick={() => setImagePickerOpen(true)}
               disabled={isSaving}
               className={cn(
-                'flex h-14 w-14 shrink-0 items-center justify-center rounded-lg border border-dashed border-border text-muted-foreground transition-colors',
+                'flex size-14 shrink-0 items-center justify-center rounded-md border border-dashed border-border text-muted-foreground transition-colors',
                 'hover:border-primary/60 hover:text-foreground',
-                isSaving && 'opacity-50 cursor-not-allowed',
+                isSaving && 'cursor-not-allowed opacity-50',
               )}
               aria-label={t('products.digital.addPreviewImage')}
             >
-              <ImagePlus className="h-5 w-5" />
+              <ImagePlus className="size-5" />
             </button>
           )}
 
@@ -441,9 +460,7 @@ export function DigitalFormatCard({
                 size="sm"
                 onClick={() => setImagePickerOpen(true)}
                 disabled={isSaving}
-                className="gap-1.5"
               >
-                <RefreshCw className="h-3.5 w-3.5" />
                 {t('products.digital.replaceImage')}
               </Button>
               <Button
@@ -452,14 +469,13 @@ export function DigitalFormatCard({
                 size="sm"
                 onClick={handleImageRemove}
                 disabled={isSaving}
-                className="gap-1.5 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
               >
-                <X className="h-3.5 w-3.5" />
                 {t('common.actions.remove')}
               </Button>
             </div>
           ) : (
-            <p className="text-xs text-muted-foreground">
+            <p className="text-sm text-muted-foreground">
               {t('products.digital.previewImageHint')}
             </p>
           )}
@@ -473,44 +489,37 @@ export function DigitalFormatCard({
       </div>
 
       {/* Download limits */}
-      <div>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={() => setShowLimits((v) => !v)}
-          className="gap-1.5 -ml-2 h-8 text-muted-foreground"
-        >
-          {showLimits ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+      <Collapsible open={showLimits} onOpenChange={setShowLimits} className="border-t border-border">
+        <DisclosureTrigger open={showLimits} className="py-2">
           {t('products.digital.downloadLimits')}
-        </Button>
-        {showLimits && (
-          <div className="grid grid-cols-2 gap-3 mt-2 pl-1">
-            <div className="space-y-1">
-              <Label className="text-xs">{t('products.digital.maxDownloads')}</Label>
+        </DisclosureTrigger>
+        <CollapsibleContent className="pb-1 pt-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label htmlFor={`format-max-${format.tempId}`}>{t('products.digital.maxDownloads')}</Label>
               <Input
+                id={`format-max-${format.tempId}`}
                 type="number"
                 min={1}
                 defaultValue={format.maxDownloads ?? ''}
                 placeholder={t('products.digital.maxDownloadsPlaceholder')}
-                className="h-9"
                 onBlur={(e) => onBlurLimit(e.target.value, 'maxDownloads')}
               />
             </div>
-            <div className="space-y-1">
-              <Label className="text-xs">{t('products.digital.expiresAfter')}</Label>
+            <div className="space-y-2">
+              <Label htmlFor={`format-expires-${format.tempId}`}>{t('products.digital.expiresAfter')}</Label>
               <Input
+                id={`format-expires-${format.tempId}`}
                 type="number"
                 min={1}
                 defaultValue={format.expiresAfterDays ?? ''}
                 placeholder={t('products.digital.expiresAfterPlaceholder')}
-                className="h-9"
                 onBlur={(e) => onBlurLimit(e.target.value, 'expiresAfterDays')}
               />
             </div>
           </div>
-        )}
-      </div>
-    </div>
+        </CollapsibleContent>
+      </Collapsible>
+    </SettingsSection>
   );
 }

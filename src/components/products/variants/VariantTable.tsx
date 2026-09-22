@@ -1,19 +1,15 @@
 // ─── Variant Table ────────────────────────────────────────────────────────────
 // Matrix table with dynamic option columns, inline editing, bulk edit, and row
-// status. Renders as a table on >= md screens and as stacked cards on mobile.
+// status. Renders as a table on >= md screens and as flat stacked blocks on mobile.
 
 import { useState, useCallback, useEffect, useRef, type ChangeEvent } from 'react';
-import {
-  ChevronDown,
-  Wand2,
-  Settings2,
-  Loader2,
-} from 'lucide-react';
+import { ChevronDown, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
+import { InfoHint } from '@/components/ui/info-hint';
 import { cn } from '@/lib/utils';
 import { useMessage, useTranslation, type TranslationKey } from '@/i18n';
 import { VariantImageStack } from './VariantImageStack';
@@ -105,68 +101,67 @@ export function VariantTable({
     <div className="space-y-4">
       {/* Toolbar */}
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        {/* Status summary — visible on top on mobile so users see at a glance */}
-        <div className="flex items-center gap-1.5 flex-wrap text-xs order-1 md:order-2">
-          {persistedRowCount > 0 && (
-            <Badge variant="outline" className="border-emerald-500/50 text-emerald-600">
-              {t('products.variantTable.saved', { count: persistedRowCount })}
-            </Badge>
-          )}
-          {newRowCount > 0 && (
-            <Badge variant="outline" className="border-blue-500/50 text-blue-600">
-              {t('products.variantTable.new', { count: newRowCount })}
-            </Badge>
-          )}
-          {modifiedRowCount > 0 && (
-            <Badge variant="outline" className="border-amber-500/50 text-amber-600">
-              {t('products.variantTable.modified', { count: modifiedRowCount })}
-            </Badge>
-          )}
-        </div>
+        {/* Status summary — on top on a phone so it reads at a glance. Plain
+            text: three coloured pills for three numbers was a lot of chrome. */}
+        {(persistedRowCount > 0 || newRowCount > 0 || modifiedRowCount > 0) && (
+          <p className="order-1 flex flex-wrap items-center gap-x-2 text-sm text-muted-foreground md:order-2">
+            {[
+              persistedRowCount > 0 &&
+                t('products.variantTable.saved', { count: persistedRowCount }),
+              newRowCount > 0 && t('products.variantTable.new', { count: newRowCount }),
+              modifiedRowCount > 0 &&
+                t('products.variantTable.modified', { count: modifiedRowCount }),
+            ]
+              .filter(Boolean)
+              .join(' · ')}
+          </p>
+        )}
 
         {/* Action buttons */}
-        <div className="grid grid-cols-3 gap-2 md:flex md:items-center md:gap-2 order-2 md:order-1">
-          <Button variant="outline" size="sm" onClick={onEditOptions} className="gap-1">
-            <Settings2 className="h-4 w-4" />
-            <span>{t('products.variantTable.options')}</span>
+        <div className="order-2 flex flex-wrap items-center gap-2 max-md:[&>*]:h-11 max-md:[&>*]:grow md:order-1">
+          <Button variant="outline" size="sm" onClick={onEditOptions}>
+            {t('products.variantTable.options')}
           </Button>
-          <Button variant="outline" size="sm" onClick={onAutoGenerateSkus} className="gap-1">
-            <Wand2 className="h-4 w-4" />
-            <span>{t('products.variantTable.autoSku')}</span>
+          <Button variant="outline" size="sm" onClick={onAutoGenerateSkus}>
+            {t('products.variantTable.autoSku')}
           </Button>
           <Button
             variant="outline"
             size="sm"
             onClick={() => setShowBulkEdit(!showBulkEdit)}
+            aria-expanded={showBulkEdit}
           >
             {t('products.variantTable.bulkEdit')}
           </Button>
         </div>
       </div>
 
-      {/* Bulk Edit Bar */}
+      {/* Bulk Edit Bar — flat on a phone, a light panel from `md` up */}
       {showBulkEdit && (
-        <div className="flex flex-col gap-3 p-3 bg-muted/50 rounded-lg border md:flex-row md:items-center">
-          <span className="text-xs font-medium text-muted-foreground md:shrink-0">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:rounded-md md:border md:bg-muted/40 md:p-3">
+          <span className="text-sm font-medium md:shrink-0 md:text-muted-foreground">
             {t('products.variantTable.setForAll')}
           </span>
-          <div className="grid grid-cols-[1fr_auto] gap-2 items-center md:flex md:items-center md:gap-1.5">
-            <div className="flex items-center gap-1.5">
-              <Label className="text-xs shrink-0">{t('products.columns.price')}</Label>
+          <div className="flex items-end gap-2 md:items-center md:gap-1.5">
+            <div className="min-w-0 flex-1 space-y-2 md:flex md:flex-none md:items-center md:gap-1.5 md:space-y-0">
+              <Label htmlFor="bulk-price" className="md:shrink-0">
+                {t('products.columns.price')}
+              </Label>
               <Input
+                id="bulk-price"
                 type="number"
                 min={0}
                 step="0.01"
                 value={bulkPrice}
                 onChange={(e) => setBulkPrice(e.target.value)}
-                className="h-8 w-full md:w-[100px] text-xs"
+                className="w-full md:h-8 md:w-[100px] md:text-xs"
                 placeholder="0.00"
               />
             </div>
             <Button
               variant={bulkPrice ? 'default' : 'secondary'}
               size="sm"
-              className="h-8 text-xs"
+              className="max-md:h-11 md:h-8 md:text-xs"
               onClick={() => {
                 const val = parseFloat(bulkPrice);
                 if (!isNaN(val) && val >= 0) {
@@ -178,22 +173,25 @@ export function VariantTable({
               {t('common.actions.apply')}
             </Button>
           </div>
-          <div className="grid grid-cols-[1fr_auto] gap-2 items-center md:flex md:items-center md:gap-1.5">
-            <div className="flex items-center gap-1.5">
-              <Label className="text-xs shrink-0">{t('products.columns.stock')}</Label>
+          <div className="flex items-end gap-2 md:items-center md:gap-1.5">
+            <div className="min-w-0 flex-1 space-y-2 md:flex md:flex-none md:items-center md:gap-1.5 md:space-y-0">
+              <Label htmlFor="bulk-stock" className="md:shrink-0">
+                {t('products.columns.stock')}
+              </Label>
               <Input
+                id="bulk-stock"
                 type="number"
                 min={0}
                 value={bulkStock}
                 onChange={(e) => setBulkStock(e.target.value)}
-                className="h-8 w-full md:w-[100px] text-xs"
+                className="w-full md:h-8 md:w-[100px] md:text-xs"
                 placeholder="0"
               />
             </div>
             <Button
               variant={bulkStock ? 'default' : 'secondary'}
               size="sm"
-              className="h-8 text-xs"
+              className="max-md:h-11 md:h-8 md:text-xs"
               onClick={() => {
                 const val = parseInt(bulkStock, 10);
                 if (!isNaN(val) && val >= 0) {
@@ -210,14 +208,12 @@ export function VariantTable({
 
       {/* Empty state (shared) */}
       {rows.length === 0 && (
-        <div className="border rounded-lg p-8 text-center text-muted-foreground text-sm">
-          {t('products.variantTable.empty')}
-        </div>
+        <p className="text-sm text-muted-foreground">{t('products.variantTable.empty')}</p>
       )}
 
-      {/* ── Mobile: stacked cards ─────────────────────────────────────────── */}
+      {/* ── Mobile: one flat block per variant, hairlines between ─────────── */}
       {rows.length > 0 && (
-        <div className="space-y-3 md:hidden">
+        <div className="divide-y divide-border border-y border-border md:hidden">
           {rows.map((row) => (
             <VariantRowCard
               key={row.localId}
@@ -306,7 +302,7 @@ export function VariantTable({
           <Button
             onClick={onSave}
             disabled={isSaving || !hasUnsavedChanges}
-            className="w-full md:w-auto gap-1.5"
+            className="w-full gap-1.5 max-md:h-11 md:w-auto"
           >
             {isSaving && <Loader2 className="h-4 w-4 animate-spin" />}
             {isSaving
@@ -518,35 +514,23 @@ function VariantRowCard({
   const priceError = errors[`${row.localId}.price`];
   const stockError = errors[`${row.localId}.stock`];
 
+  // Flat on purpose: this renders inside the step's own section, so a bordered,
+  // tinted card per variant was a box inside a box. The combination is the
+  // heading; the row's state is the word beside it.
   return (
-    <div
-      className={cn(
-        'rounded-lg border bg-card p-3 space-y-3',
-        row.status === 'new' && 'border-blue-200 bg-blue-50/30 dark:border-blue-900/40 dark:bg-blue-950/20',
-        row.status === 'modified' && 'border-amber-200 bg-amber-50/30 dark:border-amber-900/40 dark:bg-amber-950/20',
-      )}
-    >
-      {/* Header: option badges + status */}
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex flex-wrap gap-1 flex-1 min-w-0">
-          {sortedOptions.map((opt) => {
-            const comboVal = row.combo.comboValues.find(
-              (cv) => cv.optionLocalId === opt.localId,
-            );
-            if (!comboVal) return null;
-            return (
-              <Badge
-                key={opt.localId}
-                variant="outline"
-                className="font-normal text-xs gap-1"
-              >
-                <span className="text-muted-foreground">{opt.name}:</span>
-                <span>{comboVal.displayValue}</span>
-              </Badge>
-            );
-          })}
-        </div>
-        <Badge variant="outline" className={cn('text-[10px] shrink-0', statusBadge.className)}>
+    <div className="space-y-4 py-5">
+      {/* Header: the combination + status */}
+      <div className="flex items-start justify-between gap-3">
+        <p className="min-w-0 flex-1 font-medium">
+          {sortedOptions
+            .map((opt) =>
+              row.combo.comboValues.find((cv) => cv.optionLocalId === opt.localId)
+                ?.displayValue,
+            )
+            .filter(Boolean)
+            .join(' / ')}
+        </p>
+        <Badge variant="outline" className={cn('shrink-0 border-transparent text-xs', statusBadge.className)}>
           {t(statusBadge.labelKey)}
         </Badge>
       </div>
@@ -587,7 +571,7 @@ function VariantRowCard({
         </FieldRow>
         <FieldRow label={t('products.columns.stock')} error={stockError}>
           {row.isInfiniteStock ? (
-            <div className="h-8 px-3 text-xs text-muted-foreground flex items-center bg-muted/40 rounded-md border border-input">
+            <div className="flex h-11 items-center rounded-md border border-input bg-muted/40 px-3 text-sm text-muted-foreground">
               {t('products.variantTable.unlimited')}
             </div>
           ) : (
@@ -625,7 +609,8 @@ function VariantRowCard({
       <button
         type="button"
         onClick={onToggleExpand}
-        className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline px-1 py-1 -mx-1 -mb-1 tap-target"
+        aria-expanded={isExpanded}
+        className="tap-target inline-flex items-center gap-1 rounded-sm text-sm font-medium text-primary hover:underline"
       >
         <span>
           {t(isExpanded
@@ -641,7 +626,7 @@ function VariantRowCard({
       </button>
 
       {isExpanded && (
-        <div className="pt-3 border-t">
+        <div className="pt-1">
           <SecondaryFields
             row={row}
             onChange={handleFieldChange}
@@ -666,12 +651,10 @@ function FieldRow({
 }) {
   const m = useMessage();
   return (
-    <div className="space-y-1">
-      <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">
-        {label}
-      </Label>
+    <div className="space-y-2">
+      <Label>{label}</Label>
       {children}
-      {error && <p className="text-[10px] text-destructive">{m(error)}</p>}
+      {error && <p className="text-sm text-destructive">{m(error)}</p>}
     </div>
   );
 }
@@ -689,9 +672,9 @@ function SecondaryFields({
 }) {
   const { t } = useTranslation();
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 md:max-w-3xl">
-      <div className="space-y-1">
-        <Label className="text-xs">{t('products.fields.weightG')}</Label>
+    <div className="grid grid-cols-2 gap-x-3 gap-y-5 md:max-w-3xl md:grid-cols-4 md:gap-4">
+      <div className="space-y-2 md:space-y-1">
+        <Label className="md:text-xs">{t('products.fields.weightG')}</Label>
         <Input
           type="number"
           min={0}
@@ -699,12 +682,12 @@ function SecondaryFields({
           onChange={(e) =>
             onChange('weight', e.target.value ? parseInt(e.target.value, 10) : 0)
           }
-          className="h-8 text-sm"
+          className="md:h-8"
           placeholder="0"
         />
       </div>
-      <div className="space-y-1">
-        <Label className="text-xs">{t('products.fields.lengthCm')}</Label>
+      <div className="space-y-2 md:space-y-1">
+        <Label className="md:text-xs">{t('products.fields.lengthCm')}</Label>
         <Input
           type="number"
           min={0}
@@ -712,12 +695,12 @@ function SecondaryFields({
           onChange={(e) =>
             onChange('length', e.target.value ? parseInt(e.target.value, 10) : 0)
           }
-          className="h-8 text-sm"
+          className="md:h-8"
           placeholder="0"
         />
       </div>
-      <div className="space-y-1">
-        <Label className="text-xs">{t('products.fields.widthCm')}</Label>
+      <div className="space-y-2 md:space-y-1">
+        <Label className="md:text-xs">{t('products.fields.widthCm')}</Label>
         <Input
           type="number"
           min={0}
@@ -725,12 +708,12 @@ function SecondaryFields({
           onChange={(e) =>
             onChange('width', e.target.value ? parseInt(e.target.value, 10) : 0)
           }
-          className="h-8 text-sm"
+          className="md:h-8"
           placeholder="0"
         />
       </div>
-      <div className="space-y-1">
-        <Label className="text-xs">{t('products.fields.heightCm')}</Label>
+      <div className="space-y-2 md:space-y-1">
+        <Label className="md:text-xs">{t('products.fields.heightCm')}</Label>
         <Input
           type="number"
           min={0}
@@ -738,12 +721,12 @@ function SecondaryFields({
           onChange={(e) =>
             onChange('height', e.target.value ? parseInt(e.target.value, 10) : 0)
           }
-          className="h-8 text-sm"
+          className="md:h-8"
           placeholder="0"
         />
       </div>
-      <div className="space-y-1 col-span-2 md:col-span-1">
-        <Label className="text-xs">{t('products.variantTable.secondary.compareAtPrice')}</Label>
+      <div className="col-span-2 space-y-2 md:col-span-1 md:space-y-1">
+        <Label className="md:text-xs">{t('products.variantTable.secondary.compareAtPrice')}</Label>
         <Input
           type="number"
           min={0}
@@ -755,7 +738,7 @@ function SecondaryFields({
               e.target.value ? parseFloat(e.target.value) : 0,
             )
           }
-          className="h-8 text-sm"
+          className="md:h-8"
           placeholder="0.00"
         />
       </div>
@@ -763,26 +746,38 @@ function SecondaryFields({
           unlimited stock are mutually exclusive — the backend refuses the pair
           with 422 CATALOG_PRODUCT_AGENCY_STORAGE_INFINITE_STOCK. Disable rather
           than let the vendor discover it at save time. */}
-      <div className="col-span-2 md:col-span-1 space-y-1">
-        <div className="flex items-center gap-2">
+      {/* Switch rows: label left, switch right on a phone; the compact
+          switch-first pairing stays in the wide table. */}
+      <div className="col-span-2 space-y-1 md:col-span-1">
+        <div className="flex items-center justify-between gap-3 md:flex-row-reverse md:justify-end md:gap-2">
+          <Label className="md:text-xs">{t('products.variantTable.secondary.infiniteStock')}</Label>
           <Switch
             checked={row.isInfiniteStock}
             disabled={infiniteStockLocked}
             onCheckedChange={(checked) => onChange('isInfiniteStock', checked)}
+            aria-label={t('products.variantTable.secondary.infiniteStock')}
           />
-          <Label className="text-xs">{t('products.variantTable.secondary.infiniteStock')}</Label>
         </div>
+        {/* One line; the full reason behind the info icon. */}
         {infiniteStockLocked && (
-          <p className="text-[11px] leading-tight text-muted-foreground">
-            {t('products.fields.unlimitedStockLockedHint')}
+          <p className="flex items-center gap-1 text-sm text-muted-foreground md:text-xs md:leading-tight">
+            <span>{t('products.fields.unlimitedStockLockedShort')}</span>
+            <InfoHint
+              label={t('account.section.aboutTitle', {
+                title: t('products.variantTable.secondary.infiniteStock'),
+              })}
+              align="start"
+            >
+              {t('products.fields.unlimitedStockLockedHint')}
+            </InfoHint>
           </p>
         )}
       </div>
 
       {row.serverId && (
         <>
-          <div className="space-y-1 col-span-2 md:col-span-1">
-            <Label className="text-xs">{t('products.variantTable.secondary.lowStockAlert')}</Label>
+          <div className="col-span-2 space-y-2 md:col-span-1 md:space-y-1">
+            <Label className="md:text-xs">{t('products.variantTable.secondary.lowStockAlert')}</Label>
             <Input
               type="number"
               min={1}
@@ -793,16 +788,17 @@ function SecondaryFields({
                   e.target.value ? parseInt(e.target.value, 10) : null,
                 )
               }
-              className="h-8 text-sm"
+              className="md:h-8"
               placeholder={t('products.variantTable.secondary.nonePlaceholder')}
             />
           </div>
-          <div className="flex items-center gap-2 col-span-2 md:col-span-1">
+          <div className="col-span-2 flex items-center justify-between gap-3 md:col-span-1 md:flex-row-reverse md:justify-end md:gap-2">
+            <Label className="md:text-xs">{t('products.variantTable.secondary.allowOversell')}</Label>
             <Switch
               checked={row.allowOversell ?? false}
               onCheckedChange={(checked) => onChange('allowOversell', checked)}
+              aria-label={t('products.variantTable.secondary.allowOversell')}
             />
-            <Label className="text-xs">{t('products.variantTable.secondary.allowOversell')}</Label>
           </div>
         </>
       )}
@@ -894,12 +890,17 @@ function CellInput({
         step={step}
         inputMode={type === 'number' ? 'decimal' : undefined}
         className={cn(
-          'h-8 text-xs',
+          // Compact in the wide table only. `fullWidth` is the phone layout,
+          // where the field keeps the form's full size (and its 16px type — any
+          // smaller and iOS zooms the page on focus).
+          !fullWidth && 'h-8 text-xs',
           mono && 'font-mono',
           error && 'border-destructive focus-visible:ring-destructive',
         )}
       />
-      {error && (
+      {/* On the phone layout the surrounding FieldRow prints the error, in the
+          flow — absolutely positioned it overlapped the next field. */}
+      {error && !fullWidth && (
         <p className="absolute -bottom-4 left-0 text-[10px] text-destructive whitespace-nowrap">
           {m(error)}
         </p>

@@ -1,8 +1,7 @@
 import { useReducer, useCallback, useEffect, useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { AlertCircle, Box, Package, ImageIcon, Tag, FileDigit, CheckSquare, Eye, Share2 } from 'lucide-react';
-import { Card, CardContent } from '@/components/ui/card';
+import { AlertCircle, Eye, Share2 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -10,6 +9,7 @@ import { EditorPageShell } from '@/components/layout/EditorPageShell';
 import { useOpenPreview } from '@/components/preview';
 import { ShareProductDialog } from '@/components/products/ShareProductDialog';
 import { ProductStepIndicator } from '@/components/products/ProductStepIndicator';
+import { ProductFormBody } from '@/components/products/form/ProductFormBody';
 import { StepTypeSelect } from '@/components/products/steps/StepTypeSelect';
 import { StepBasicInfo } from '@/components/products/steps/StepBasicInfo';
 import { StepMedia } from '@/components/products/steps/StepMedia';
@@ -72,20 +72,20 @@ import type { VariantPhase1Payload, VariantPhase2Payload } from '@/components/pr
 
 // ─── Step definitions ─────────────────────────────────────────────────────────
 
-const PHYSICAL_STEPS: { id: WizardStep; labelKey: TranslationKey; icon: React.ElementType }[] = [
-  { id: 'type', labelKey: 'products.wizard.stepType', icon: Box },
-  { id: 'basic-info', labelKey: 'products.wizard.stepBasicInfo', icon: Package },
-  { id: 'media', labelKey: 'products.wizard.stepMedia', icon: ImageIcon },
-  { id: 'options-variants', labelKey: 'products.wizard.stepVariants', icon: Tag },
-  { id: 'review', labelKey: 'products.wizard.stepReview', icon: CheckSquare },
+const PHYSICAL_STEPS: { id: WizardStep; labelKey: TranslationKey }[] = [
+  { id: 'type', labelKey: 'products.wizard.stepType' },
+  { id: 'basic-info', labelKey: 'products.wizard.stepBasicInfo' },
+  { id: 'media', labelKey: 'products.wizard.stepMedia' },
+  { id: 'options-variants', labelKey: 'products.wizard.stepVariants' },
+  { id: 'review', labelKey: 'products.wizard.stepReview' },
 ];
 
-const DIGITAL_STEPS: { id: WizardStep; labelKey: TranslationKey; icon: React.ElementType }[] = [
-  { id: 'type', labelKey: 'products.wizard.stepType', icon: Box },
-  { id: 'basic-info', labelKey: 'products.wizard.stepBasicInfo', icon: Package },
-  { id: 'media', labelKey: 'products.wizard.stepMedia', icon: ImageIcon },
-  { id: 'formats', labelKey: 'products.wizard.stepFormats', icon: FileDigit },
-  { id: 'review', labelKey: 'products.wizard.stepReview', icon: CheckSquare },
+const DIGITAL_STEPS: { id: WizardStep; labelKey: TranslationKey }[] = [
+  { id: 'type', labelKey: 'products.wizard.stepType' },
+  { id: 'basic-info', labelKey: 'products.wizard.stepBasicInfo' },
+  { id: 'media', labelKey: 'products.wizard.stepMedia' },
+  { id: 'formats', labelKey: 'products.wizard.stepFormats' },
+  { id: 'review', labelKey: 'products.wizard.stepReview' },
 ];
 
 // ─── Reducer ──────────────────────────────────────────────────────────────────
@@ -1027,19 +1027,19 @@ export function ProductEdit() {
         onOpenChange={(open) => !open && setShareOpen(false)}
       />
 
+      {/* On the page, not in a card of its own — on a phone a single line that
+          opens a menu of the steps (see ProductStepIndicator). */}
       {state.productType && (
-        <Card className="rounded-none border-x-0 md:rounded-xl md:border">
-          <CardContent className="p-3 sm:p-4">
-            <ProductStepIndicator
-              steps={steps}
-              currentStep={state.currentStep}
-              completedSteps={state.completedSteps}
-              onStepClick={(stepId) => {
-                dispatch({ type: 'SET_STEP', step: stepId as WizardStep });
-              }}
-            />
-          </CardContent>
-        </Card>
+        <div className="max-md:px-4">
+          <ProductStepIndicator
+            steps={steps}
+            currentStep={state.currentStep}
+            completedSteps={state.completedSteps}
+            onStepClick={(stepId) => {
+              dispatch({ type: 'SET_STEP', step: stepId as WizardStep });
+            }}
+          />
+        </div>
       )}
 
       {isLockedForVectorisation && state.currentStep !== 'review' && (
@@ -1085,19 +1085,17 @@ export function ProductEdit() {
         </div>
       )}
 
-      <Card className="rounded-none border-x-0 md:rounded-xl md:border">
-        <CardContent className="p-4 sm:p-6">
-          <div
-            className={
-              (isLockedForVectorisation || isReadOnlyStatus) && state.currentStep !== 'review'
-                ? 'pointer-events-none opacity-60'
-                : ''
-            }
-          >
-            {renderStep()}
-          </div>
-        </CardContent>
-      </Card>
+      {/* No wrapping card: each step lays itself out as flat sections, which
+          become cards of their own from `md` up. */}
+      <ProductFormBody
+        className={
+          (isLockedForVectorisation || isReadOnlyStatus) && state.currentStep !== 'review'
+            ? 'pointer-events-none opacity-60'
+            : undefined
+        }
+      >
+        {renderStep()}
+      </ProductFormBody>
 
       <ConvertToAdvancedDialog
         open={!!simpleLock.lock}

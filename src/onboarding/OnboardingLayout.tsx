@@ -1,17 +1,20 @@
-import { type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LogOut, ChevronLeft } from 'lucide-react';
+import { LogOut, ChevronLeft, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AppLogo } from '@/components/layout/AppLogo';
 import { Button } from '@/components/ui/button';
 import { useOnboarding } from '@/onboarding/store/onboarding.store';
+import { useKeyboardOpen } from '@/platform/shell/keyboard';
 import { LanguageSwitcher, useTranslation, type TranslationKey } from '@/i18n';
 import type { VendorOnboardingStep } from '@/types/api';
 
 // ─── Step metadata ────────────────────────────────────────────────────────────
 
+type ActiveStep = Exclude<VendorOnboardingStep, 0>;
+
 const STEPS: {
-    step: Exclude<VendorOnboardingStep, 0>;
+    step: ActiveStep;
     labelKey: TranslationKey;
     sublabelKey: TranslationKey;
 }[] = [
@@ -23,91 +26,95 @@ const STEPS: {
 
 // ─── Progress indicator ───────────────────────────────────────────────────────
 
+/**
+ * "Step 2 of 4 · Delivery" over a row of numbered dots joined by a line.
+ *
+ * One compact stepper at every width. It replaced a progress bar *and* a dot
+ * row: together they cost a phone ~230px above every form, the bar's fill never
+ * lined up with the dots, and the dot labels were squeezed to 56px, so "Basic
+ * Setup" alone broke onto two lines. The labels under the dots now appear from
+ * `md` up only — on a phone the text row above already names the current step.
+ */
 function StepProgress({
     viewing,
     current,
     onStepClick,
 }: {
-    viewing: Exclude<VendorOnboardingStep, 0>;
-    current: Exclude<VendorOnboardingStep, 0>;
+    viewing: ActiveStep;
+    current: ActiveStep;
     onStepClick: (step: VendorOnboardingStep) => void;
 }) {
     const { t } = useTranslation();
     const totalSteps = STEPS.length;
-    const progressPct = ((viewing - 1) / (totalSteps - 1)) * 100;
 
     return (
-        <div className="w-full max-w-lg mx-auto px-4 pt-6 pb-2">
-            {/* Step label row */}
-            <div className="flex items-center justify-between mb-3 text-sm">
+        <div className="w-full max-w-lg mx-auto px-4 pt-4 md:pt-6">
+            <div className="flex items-baseline justify-between gap-3 mb-3 text-sm">
                 <span className="font-semibold text-foreground">
                     {t('onboarding.stepLabel', { current: viewing, total: totalSteps })}
                 </span>
-                <span className="text-muted-foreground">
-                    {STEPS[viewing - 1] ? t(STEPS[viewing - 1].labelKey) : ''}
+                <span className="truncate text-muted-foreground">
+                    {t(STEPS[viewing - 1].labelKey)}
                 </span>
             </div>
 
-            {/* Track */}
-            <div className="relative h-1.5 bg-muted rounded-full overflow-hidden">
-                <motion.div
-                    className="absolute inset-y-0 left-0 bg-primary rounded-full"
-                    initial={{ width: 0 }}
-                    animate={{ width: `${progressPct + (1 / totalSteps) * 100}%` }}
-                    transition={{ duration: 0.4, ease: 'easeOut' }}
-                />
-            </div>
-
-            {/* Step dots — completed steps are clickable for back-navigation */}
-            <div className="flex justify-between mt-3">
-                {STEPS.map(({ step, labelKey }) => {
+            <ol className="flex items-center md:pb-6">
+                {STEPS.map(({ step, labelKey }, index) => {
                     const label = t(labelKey);
-                    const isComplete = step < current;
+                    const isComplete = step < current && step !== viewing;
                     const isActive = step === viewing;
+                    // Completed steps are revisitable; a step can be revisited
+                    // from a later one *or* returned to from an earlier one.
                     const isClickable = step !== viewing && step <= current;
+                    const edge = index === 0 ? 'start' : index === STEPS.length - 1 ? 'end' : 'middle';
 
                     return (
-                        <div key={step} className="flex flex-col items-center gap-1.5">
-                            <button
-                                type="button"
-                                onClick={() => isClickable && onStepClick(step)}
-                                disabled={!isClickable}
-                                aria-label={isClickable ? t('onboarding.layout.goBackTo', { step: label }) : label}
-                                className={cn(
-                                    'w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-colors duration-300',
-                                    isComplete && 'bg-primary text-primary-foreground',
-                                    isActive && 'bg-primary text-primary-foreground ring-4 ring-primary/20',
-                                    !isComplete && !isActive && 'bg-muted text-muted-foreground',
-                                    isClickable && 'cursor-pointer hover:opacity-80',
-                                    !isClickable && 'cursor-default',
-                                )}
-                            >
-                                {isComplete ? (
-                                    <svg className="w-4 h-4" viewBox="0 0 16 16" fill="none">
-                                        <path
-                                            d="M3 8l3.5 3.5L13 5"
-                                            stroke="currentColor"
-                                            strokeWidth="2"
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                        />
-                                    </svg>
-                                ) : (
-                                    step
-                                )}
-                            </button>
-                            <span
-                                className={cn(
-                                    'text-[10px] font-medium text-center leading-tight max-w-[56px]',
-                                    isActive ? 'text-foreground' : 'text-muted-foreground',
-                                )}
-                            >
-                                {label}
-                            </span>
-                        </div>
+                        // Each step after the first carries the line leading into it.
+                        <li key={step} className={cn('flex items-center', index > 0 && 'flex-1')}>
+                            {index > 0 && (
+                                <span
+                                    aria-hidden
+                                    className={cn(
+                                        'h-0.5 flex-1 mx-1.5 rounded-full transition-colors duration-300',
+                                        step <= viewing ? 'bg-primary' : step <= current ? 'bg-primary/35' : 'bg-muted',
+                                    )}
+                                />
+                            )}
+                            <div className="relative flex shrink-0 flex-col items-center">
+                                <button
+                                    type="button"
+                                    onClick={() => isClickable && onStepClick(step)}
+                                    disabled={!isClickable}
+                                    aria-current={isActive ? 'step' : undefined}
+                                    aria-label={isClickable ? t('onboarding.layout.goBackTo', { step: label }) : label}
+                                    className={cn(
+                                        'w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-colors duration-300 tap-target',
+                                        isActive && 'bg-primary text-primary-foreground ring-4 ring-primary/20',
+                                        isComplete && 'bg-primary/15 text-primary',
+                                        !isComplete && !isActive && 'bg-muted text-muted-foreground',
+                                        isClickable ? 'cursor-pointer hover:opacity-80' : 'cursor-default',
+                                    )}
+                                >
+                                    {isComplete ? <Check className="w-4 h-4" strokeWidth={2.5} /> : step}
+                                </button>
+                                {/* Anchored to the dot, and to the row's edge for the
+                                    first and last, so a long label never overhangs. */}
+                                <span
+                                    className={cn(
+                                        'hidden md:block absolute top-full mt-1.5 whitespace-nowrap text-[11px] font-medium leading-tight',
+                                        edge === 'start' && 'left-0',
+                                        edge === 'end' && 'right-0',
+                                        edge === 'middle' && 'left-1/2 -translate-x-1/2',
+                                        isActive ? 'text-foreground' : 'text-muted-foreground',
+                                    )}
+                                >
+                                    {label}
+                                </span>
+                            </div>
+                        </li>
                     );
                 })}
-            </div>
+            </ol>
         </div>
     );
 }
@@ -121,20 +128,28 @@ interface OnboardingLayoutProps {
      * Typically the submit button or skip + submit buttons.
      */
     ctaSlot?: ReactNode;
-    /** Used to key the AnimatePresence transition between steps. */
-    stepKey: VendorOnboardingStep;
+    /**
+     * The step this screen renders. Also what the progress row and the back
+     * arrow read — not the store's `viewingStep`, which only moves when the
+     * store navigates, so a browser back, an Android back press or a typed URL
+     * left the header saying "Step 4 of 4" over the step-1 form.
+     */
+    stepKey: ActiveStep;
 }
 
 export function OnboardingLayout({ children, ctaSlot, stepKey }: OnboardingLayoutProps) {
     const { t } = useTranslation();
-    const { session, logout, viewingStep, currentStep, goBack, jumpToStep } = useOnboarding();
+    const { session, logout, currentStep, jumpToStep } = useOnboarding();
+    // A fixed bar would ride up on top of the keyboard and cover the field
+    // being typed in — same rule as every other bottom bar in the app.
+    const keyboardOpen = useKeyboardOpen();
     // The business name moved to the Store, which isn't fetched during onboarding
     // (the store shell mounts after it). `business_name` may still ride along on
     // `/auth/me`'s role_entity; the placeholder covers it when it doesn't.
     const businessName =
         session?.role_entity.display_name || session?.role_entity.business_name || 'Your Store';
 
-    const showBack = viewingStep !== null && viewingStep > 1;
+    const showBack = stepKey > 1;
 
     return (
         <div className="min-h-screen bg-background flex flex-col">
@@ -145,13 +160,13 @@ export function OnboardingLayout({ children, ctaSlot, stepKey }: OnboardingLayou
                 height grows by the same amount rather than the 4rem row being
                 squeezed into it. `env(...)` is 0 in a browser (P3.3). */}
             <header className="h-[calc(4rem+env(safe-area-inset-top))] pt-safe border-b bg-card flex items-center justify-between px-4 md:px-8 flex-shrink-0">
-                <div className="flex items-center gap-3">
+                <div className="flex min-w-0 items-center gap-3">
                     {/* Back button */}
                     {showBack && (
                         <Button
                             variant="ghost"
                             size="icon"
-                            onClick={goBack}
+                            onClick={() => jumpToStep((stepKey - 1) as ActiveStep)}
                             aria-label={t('onboarding.layout.goBack')}
                             className="text-muted-foreground -ml-2"
                         >
@@ -159,11 +174,11 @@ export function OnboardingLayout({ children, ctaSlot, stepKey }: OnboardingLayou
                         </Button>
                     )}
 
-                    <div className="flex items-center gap-2">
-                        <AppLogo className="w-8 h-8" />
-                        <div className="flex flex-col leading-tight">
+                    <div className="flex min-w-0 items-center gap-2">
+                        <AppLogo className="w-8 h-8 shrink-0" />
+                        <div className="flex min-w-0 flex-col leading-tight">
                             <span className="font-bold text-sm leading-none">{t('onboarding.layout.brand')}</span>
-                            <span className="text-[10px] text-muted-foreground leading-none truncate max-w-[120px]">
+                            <span className="text-[11px] text-muted-foreground leading-tight truncate max-w-[160px]">
                                 {businessName}
                             </span>
                         </div>
@@ -181,6 +196,7 @@ export function OnboardingLayout({ children, ctaSlot, stepKey }: OnboardingLayou
                         variant="ghost"
                         size="sm"
                         onClick={logout}
+                        aria-label={t('onboarding.layout.signOut')}
                         className="text-muted-foreground gap-1.5"
                     >
                         <LogOut className="w-4 h-4" />
@@ -190,19 +206,22 @@ export function OnboardingLayout({ children, ctaSlot, stepKey }: OnboardingLayou
             </header>
 
             {/* ── Progress ── */}
-            {viewingStep !== null && viewingStep !== 0 && currentStep !== null && currentStep !== 0 && (
+            {currentStep !== null && currentStep !== 0 && (
                 <nav aria-label={t('onboarding.layout.progress')}>
                     <StepProgress
-                        viewing={viewingStep as Exclude<VendorOnboardingStep, 0>}
-                        current={currentStep as Exclude<VendorOnboardingStep, 0>}
+                        viewing={stepKey}
+                        current={currentStep as ActiveStep}
                         onStepClick={jumpToStep}
                     />
                 </nav>
             )}
 
-            {/* ── Scrollable content ── */}
-            <main className="flex-1 overflow-y-auto">
-                <div className="w-full max-w-lg mx-auto px-4 py-6 md:py-10">
+            {/* ── Content ── */}
+            {/* No `overflow` here: the document is what scrolls, and a scroll box
+                on <main> would clip the address-search results near the bottom
+                of the page into a scroll area of their own. */}
+            <main className="flex-1">
+                <div className="w-full max-w-lg mx-auto px-4 pt-6 pb-8 md:pt-8 md:pb-10">
                     <AnimatePresence mode="wait" initial={false}>
                         <motion.div
                             key={stepKey}
@@ -224,8 +243,11 @@ export function OnboardingLayout({ children, ctaSlot, stepKey }: OnboardingLayou
             </main>
 
             {/* ── Sticky mobile CTA ── */}
-            {ctaSlot && (
-                <div className="md:hidden border-t bg-background px-4 py-4 flex-shrink-0 safe-area-pb">
+            {/* Sticky, so Continue is reachable without scrolling to the end of a
+                long step, and padded for the gesture bar (the old
+                `safe-area-pb` class was never defined anywhere). */}
+            {ctaSlot && !keyboardOpen && (
+                <div className="md:hidden sticky bottom-0 z-20 border-t bg-background px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] flex-shrink-0">
                     {ctaSlot}
                 </div>
             )}

@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Truck, AlertCircle, Loader2, Gift, MapPin, Warehouse } from 'lucide-react';
+import { useEffect, useId, useMemo, useState, type ReactNode } from 'react';
+import { AlertCircle, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Link } from 'react-router-dom';
 import {
@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
-import { InfoHint } from '@/components/ui/info-hint';
+import { InfoHint, LabelWithHint } from '@/components/ui/info-hint';
 import { fetchAgencyLocations, fetchDefaultDeliveryAgency } from '@/services/agencies.service';
 import { getActiveConnectedAgencies, getAgencyConnectionErrorMessage } from '@/services/agency-connections.service';
 import { getDeliveryErrorMessage } from '@/services/products.service';
@@ -89,6 +89,9 @@ export function AgencySelector({
   const m = useMessage();
   const apiError = useApiError();
   const { session } = useOnboarding();
+  const agencyFieldId = useId();
+  const pickupFieldId = useId();
+  const freeDeliveryId = useId();
   const businessAddresses = session?.role_entity.business_addresses ?? [];
   const [agencies, setAgencies] = useState<VendorAgencyListItemDto[]>([]);
   const [defaultAgency, setDefaultAgency] =
@@ -330,120 +333,101 @@ export function AgencySelector({
     }
   }
 
+  // No outer box and no heading of its own: the page wraps this in its
+  // "Delivery" `SettingsSection`. Inside, three plain labelled groups — agency,
+  // pickup location, free delivery — with the long explanations behind the info
+  // icon next to each label.
   return (
-    <div className="rounded-xl border border-border p-5 space-y-3">
-      <div className="flex items-start gap-3">
-        <Truck className="w-5 h-5 text-muted-foreground mt-0.5 shrink-0" />
-        <div className="flex-1 min-w-0">
-          <p className="font-medium text-sm">{t('products.delivery.agencyLabel')}</p>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            {t('products.delivery.agencyDescription')}
+    <div className="space-y-6">
+      <div className="space-y-2">
+        <LabelWithHint
+          htmlFor={agencyFieldId}
+          hint={t('products.delivery.agencyDescription')}
+          hintLabel={t('account.section.aboutTitle', { title: t('products.delivery.agencyLabel') })}
+        >
+          {t('products.delivery.agencyLabel')}
+        </LabelWithHint>
+
+        {isLoading ? (
+          <p className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="size-4 animate-spin" aria-hidden />
+            {t('products.delivery.loadingAgencies')}
           </p>
-        </div>
+        ) : loadError ? (
+          <Notice tone="error">{m(loadError)}</Notice>
+        ) : agencies.length === 0 && !defaultAgency ? (
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              {t('products.delivery.noConnections')}
+            </p>
+            <Button asChild size="sm" variant="outline">
+              <Link to="/dashboard/agency/connections">
+                {t('products.delivery.goToConnections')}
+              </Link>
+            </Button>
+          </div>
+        ) : (
+          <>
+            <Select
+              value={selectValue}
+              onValueChange={handleChange}
+              disabled={isSaving || !productId}
+            >
+              <SelectTrigger id={agencyFieldId} className="w-full" data-size="default">
+                <SelectValue placeholder={t('products.delivery.agencyPlaceholder')} />
+              </SelectTrigger>
+              <SelectContent>
+                {defaultAgency && (
+                  <SelectItem value="default">
+                    {t('products.delivery.agencyDefaultNamed', { name: defaultAgency.agencyName })}
+                  </SelectItem>
+                )}
+                {agencies.map((agency) => (
+                  <SelectItem key={agency.id} value={agency.id}>
+                    {agency.agencyName}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {noUsableAgency && (
+              <Notice tone="error">{t('products.delivery.noDefaultAgency')}</Notice>
+            )}
+
+            {defaultConnectionLost && !productAgencyId && (
+              <Notice tone="error">{t('products.delivery.defaultConnectionLost')}</Notice>
+            )}
+          </>
+        )}
       </div>
-
-      {isLoading ? (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="w-4 h-4 animate-spin" />
-          {t('products.delivery.loadingAgencies')}
-        </div>
-      ) : loadError ? (
-        <div className="flex items-start gap-2 text-sm text-destructive">
-          <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
-          <span>{m(loadError)}</span>
-        </div>
-      ) : agencies.length === 0 && !defaultAgency ? (
-        <div className="rounded-lg border border-dashed p-4 text-center space-y-2">
-          <p className="text-sm text-muted-foreground">
-            {t('products.delivery.noConnections')}
-          </p>
-          <Button asChild size="sm" variant="outline">
-            <Link to="/dashboard/agency/connections">
-              {t('products.delivery.goToConnections')}
-            </Link>
-          </Button>
-        </div>
-      ) : (
-        <>
-          <Select
-            value={selectValue}
-            onValueChange={handleChange}
-            disabled={isSaving || !productId}
-          >
-            <SelectTrigger className="w-full" data-size="default">
-              <SelectValue placeholder={t('products.delivery.agencyPlaceholder')} />
-            </SelectTrigger>
-            <SelectContent>
-              {defaultAgency && (
-                <SelectItem value="default">
-                  {t('products.delivery.agencyDefaultNamed', { name: defaultAgency.agencyName })}
-                </SelectItem>
-              )}
-              {agencies.map((agency) => (
-                <SelectItem key={agency.id} value={agency.id}>
-                  {agency.agencyName}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          {noUsableAgency && (
-            <div className="flex items-start gap-2 text-xs text-destructive">
-              <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-              <span>{t('products.delivery.noDefaultAgency')}</span>
-            </div>
-          )}
-
-          {defaultConnectionLost && !productAgencyId && (
-            <div className="flex items-start gap-2 text-xs text-destructive">
-              <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-              <span>{t('products.delivery.defaultConnectionLost')}</span>
-            </div>
-          )}
-
-          {effectiveAgency && !productAgencyId && !defaultConnectionLost && (
-            <div className="flex items-start gap-2 text-xs text-muted-foreground">
-              <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-              <span>
-                {t('products.delivery.usingDefaultAgency', { name: effectiveAgency.agencyName })}
-              </span>
-            </div>
-          )}
-        </>
-      )}
 
       {/* Pickup location — where the resolved agency collects this product from */}
       {!isLoading && !loadError && (
-        <div className="pt-3 border-t border-border space-y-3">
-          <div className="flex items-start gap-3">
-            <MapPin className="w-5 h-5 text-muted-foreground mt-0.5 shrink-0" />
-            <div className="flex-1 min-w-0">
-              <p className="font-medium text-sm">{t('products.delivery.pickupLabel')}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {t('products.delivery.pickupDescription')}
-              </p>
-            </div>
-          </div>
+        <div className="space-y-2">
+          <LabelWithHint
+            htmlFor={pickupFieldId}
+            hint={t('products.delivery.pickupDescription')}
+            hintLabel={t('account.section.aboutTitle', { title: t('products.delivery.pickupLabel') })}
+          >
+            {t('products.delivery.pickupLabel')}
+          </LabelWithHint>
 
           {!effectiveAgency ? (
-            <p className="text-xs text-muted-foreground">
+            <p className="text-sm text-muted-foreground">
               {t('products.delivery.pickupNeedsAgency')}
             </p>
           ) : noPickupSourcesAvailable ? (
-            <div className="flex items-start gap-2 text-xs text-destructive">
-              <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-              <span>
-                {t('products.delivery.pickupNoSources', { name: effectiveAgency.agencyName })}
-              </span>
-            </div>
+            <Notice tone="error">
+              {t('products.delivery.pickupNoSources', { name: effectiveAgency.agencyName })}
+            </Notice>
           ) : (
-            <>
+            <div className="space-y-3">
               <Select
                 value={localSource}
                 onValueChange={handleSourceChange}
                 disabled={isSaving || pickupSaving || !productId}
               >
-                <SelectTrigger className="w-full" data-size="default">
+                <SelectTrigger id={pickupFieldId} className="w-full" data-size="default">
                   <SelectValue placeholder={t('products.delivery.pickupPlaceholder')} />
                 </SelectTrigger>
                 <SelectContent>
@@ -472,24 +456,16 @@ export function AgencySelector({
                 // simply unavailable. Already warehoused → the product predates
                 // the rule and stays live until something revalidates it, so
                 // warn rather than disable.
-                <div
-                  className={cn(
-                    'flex items-start gap-2 text-xs',
-                    alreadyWarehoused ? 'text-destructive' : 'text-amber-600',
-                  )}
-                >
-                  <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-                  <span>
-                    {alreadyWarehoused
-                      ? t('products.delivery.storageInfiniteLive', { skus: blockedSkus })
-                      : t('products.delivery.storageNeedsCountableStock', { skus: blockedSkus })}
-                  </span>
-                </div>
+                <Notice tone={alreadyWarehoused ? 'error' : 'warning'}>
+                  {alreadyWarehoused
+                    ? t('products.delivery.storageInfiniteLive', { skus: blockedSkus })
+                    : t('products.delivery.storageNeedsCountableStock', { skus: blockedSkus })}
+                </Notice>
               )}
 
               {localSource === 'vendor_address' && (
                 businessAddresses.length === 0 ? (
-                  <div className="rounded-lg border border-dashed p-4 text-center space-y-2">
+                  <div className="space-y-3">
                     <p className="text-sm text-muted-foreground">
                       {t('products.delivery.noAddresses')}
                     </p>
@@ -505,7 +481,11 @@ export function AgencySelector({
                     onValueChange={handleAddressChange}
                     disabled={isSaving || pickupSaving || !productId}
                   >
-                    <SelectTrigger className="w-full" data-size="default">
+                    <SelectTrigger
+                      className="w-full"
+                      data-size="default"
+                      aria-label={t('products.delivery.addressPlaceholder')}
+                    >
                       <SelectValue placeholder={t('products.delivery.addressPlaceholder')} />
                     </SelectTrigger>
                     <SelectContent>
@@ -521,34 +501,28 @@ export function AgencySelector({
               )}
 
               {localSource === 'vendor_address' && vendorAddressMissing && (
-                <div className="flex items-start gap-2 text-xs text-destructive">
-                  <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-                  <span>{t('products.delivery.pickupAddressMissing')}</span>
-                </div>
+                <Notice tone="error">{t('products.delivery.pickupAddressMissing')}</Notice>
               )}
 
               {localSource === 'agency_storage' && (
                 <>
-                  <div className="flex items-start gap-2 text-xs text-muted-foreground">
-                    <Warehouse className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-                    <span>
-                      {t('products.delivery.pickupWarehoused', { name: effectiveAgency.agencyName })}
-                    </span>
-                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    {t('products.delivery.pickupWarehoused', { name: effectiveAgency.agencyName })}
+                  </p>
 
                   {/* Which depot. An agency commonly runs several; the primary
                       is the default, so this never blocks publishing. */}
                   {depotsLoading ? (
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Loader2 className="size-4 animate-spin" aria-hidden />
                       {t('products.delivery.loadingDepots')}
-                    </div>
+                    </p>
                   ) : depotsFailed ? (
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-sm text-muted-foreground">
                       {t('products.delivery.depotsUnavailable')}
                     </p>
                   ) : depots.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-sm text-muted-foreground">
                       {t('products.delivery.noDepots', { name: effectiveAgency.agencyName })}
                     </p>
                   ) : (
@@ -558,7 +532,11 @@ export function AgencySelector({
                         onValueChange={handleDepotChange}
                         disabled={isSaving || pickupSaving || !productId}
                       >
-                        <SelectTrigger className="w-full" data-size="default">
+                        <SelectTrigger
+                          className="w-full"
+                          data-size="default"
+                          aria-label={t('products.delivery.depotPlaceholder')}
+                        >
                           <SelectValue placeholder={t('products.delivery.depotPlaceholder')} />
                         </SelectTrigger>
                         <SelectContent>
@@ -571,65 +549,78 @@ export function AgencySelector({
                       </Select>
 
                       {depotFellBackToPrimary && (
-                        <div className="flex items-start gap-2 text-xs text-destructive">
-                          <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-                          <span>{t('products.delivery.depotRemoved')}</span>
-                        </div>
+                        <Notice tone="error">{t('products.delivery.depotRemoved')}</Notice>
                       )}
                     </>
                   )}
                 </>
               )}
-            </>
+            </div>
           )}
         </div>
       )}
 
-      <div className="flex items-start gap-3 pt-3 border-t border-border">
-        <Gift className="w-5 h-5 text-muted-foreground mt-0.5 shrink-0" />
-        <div className="flex-1 min-w-0 space-y-2.5">
-          <div className="flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <p className="font-medium text-sm">{t('products.delivery.freeDelivery')}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {t('products.delivery.freeDeliveryHint')}
-              </p>
-            </div>
-            <Switch
-              checked={freeDelivery}
-              onCheckedChange={handleFreeDeliveryToggle}
-              disabled={isSaving || !productId}
-              aria-label={t('products.delivery.freeDelivery')}
-            />
-          </div>
-
-          {/* Turning this off does not move the fee onto the customer — nothing on
-              the platform can, because delivery is never billed at checkout. It
-              moves the fee into the *price*, which is a decision about how this
-              product will look next to competing listings, so it is stated the
-              moment the switch flips rather than discovered later. */}
-          {!freeDelivery && (
-            <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-2 text-xs text-amber-700 dark:text-amber-400">
-              <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-              <p className="min-w-0">
-                {t('products.delivery.freeDeliveryOffNotice')}
-                <InfoHint
-                  label={t('products.delivery.freeDeliveryExplainerLabel')}
-                  align="start"
-                  className="ml-1 inline-flex translate-y-[3px] text-amber-700/80 hover:text-amber-800 dark:text-amber-400/80 dark:hover:text-amber-300"
-                >
-                  <span className="block space-y-2">
-                    <span className="block font-medium text-foreground">
-                      {t('products.delivery.freeDeliveryExplainerTitle')}
-                    </span>
-                    <span className="block">{t('products.delivery.freeDeliveryExplainerBody')}</span>
-                  </span>
-                </InfoHint>
-              </p>
-            </div>
-          )}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between gap-4">
+          <LabelWithHint
+            htmlFor={freeDeliveryId}
+            hint={t('products.delivery.freeDeliveryHint')}
+            hintLabel={t('account.section.aboutTitle', { title: t('products.delivery.freeDelivery') })}
+          >
+            {t('products.delivery.freeDelivery')}
+          </LabelWithHint>
+          <Switch
+            id={freeDeliveryId}
+            className="shrink-0"
+            checked={freeDelivery}
+            onCheckedChange={handleFreeDeliveryToggle}
+            disabled={isSaving || !productId}
+            aria-label={t('products.delivery.freeDelivery')}
+          />
         </div>
+
+        {/* Turning this off does not move the fee onto the customer — nothing on
+            the platform can, because delivery is never billed at checkout. It
+            moves the fee into the *price*, which is a decision about how this
+            product will look next to competing listings, so it is stated the
+            moment the switch flips rather than discovered later. */}
+        {!freeDelivery && (
+          <Notice tone="warning">
+            {t('products.delivery.freeDeliveryOffNotice')}
+            <InfoHint
+              label={t('products.delivery.freeDeliveryExplainerLabel')}
+              align="start"
+              className="ml-1 inline-flex translate-y-[3px] text-amber-700/80 hover:text-amber-800 dark:text-amber-400/80 dark:hover:text-amber-300"
+            >
+              <span className="block space-y-2">
+                <span className="block font-medium text-foreground">
+                  {t('products.delivery.freeDeliveryExplainerTitle')}
+                </span>
+                <span className="block">{t('products.delivery.freeDeliveryExplainerBody')}</span>
+              </span>
+            </InfoHint>
+          </Notice>
+        )}
       </div>
     </div>
+  );
+}
+
+/**
+ * A warning or error line under a control. Plain text with its icon — no tinted
+ * box: inside a section, a box around one sentence is the nesting this layout
+ * removes.
+ */
+function Notice({ tone, children }: { tone: 'error' | 'warning'; children: ReactNode }) {
+  return (
+    <p
+      className={cn(
+        'flex items-start gap-2 text-sm',
+        tone === 'error' ? 'text-destructive' : 'text-amber-700 dark:text-amber-400',
+      )}
+    >
+      <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden />
+      <span className="min-w-0">{children}</span>
+    </p>
   );
 }

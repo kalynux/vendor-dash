@@ -58,7 +58,9 @@ export function Register() {
       });
       navigate('/onboarding', { replace: true });
     } catch (err) {
-      apiError.toast(err, { fallbackKey: 'auth.errors.registerFailed' });
+      // `register` rewords AUTH_PHONE_TAKEN / AUTH_EMAIL_TAKEN into "sign in
+      // and add the Vendor role" — see errors.contexts.register.
+      apiError.toast(err, { fallbackKey: 'auth.errors.registerFailed', context: 'register' });
     }
   }
 

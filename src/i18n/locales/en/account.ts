@@ -216,6 +216,8 @@ export const account = {
         emailLabel: 'Email address',
         phoneLabel: 'Phone number',
         change: 'Change',
+        /** In place of Change when the account has no email (or phone) at all yet. */
+        add: 'Add',
         cancelChange: 'Cancel change',
 
         newEmailLabel: 'New email address',
@@ -231,29 +233,23 @@ export const account = {
 
         newPhoneLabel: 'New phone number',
         /**
-         * 🔴 Not "you need a linked WhatsApp account" any more — that was true
-         * when a connection was the only proof. A code sent over WhatsApp now
-         * works too, so this says what is actually required: the number has to be
-         * able to receive WhatsApp messages.
+         * The code is the ONLY proof now (2026-09-21), and the form sends it as
+         * soon as the change is saved — so this says what happens next and the one
+         * real requirement: the number must have WhatsApp.
+         *
+         * ⛔ The "connect WhatsApp first" notice, the linked-number mismatch
+         * warning and the "Confirm with WhatsApp" button are gone with the
+         * connection proof. Do not bring them back.
          */
-        whatsappRequired:
-            'We prove a phone number over WhatsApp, so the number you use must have WhatsApp on it. If you already have WhatsApp linked on that number, you can confirm without a code.',
-        whatsappNumberMismatch:
-            "Your linked WhatsApp number ends in {{hint}}, which doesn't match this one. You can still verify this number with a code.",
-        manageConnections: 'Manage connections',
         phoneFlowHint:
-            "Next we'll send a six-digit code to the new number on WhatsApp, and the change takes effect once you enter it. You have 24 hours to finish.",
-        phoneChangeRequested: 'Now verify the new number to finish.',
+            "We'll send a six-digit code to the new number on WhatsApp, so use a number that has WhatsApp. The change takes effect once you enter the code. You have 24 hours to finish.",
         phoneChangeCancelled: 'Phone change cancelled.',
-        phoneChanged: 'Your phone number has been changed.',
-        confirmPhone: 'Confirm with WhatsApp',
         phonePendingNotice:
             'Keep signing in with your current number until this is confirmed.',
 
         // ── Verifying a number with a WhatsApp code ──────────────────────────
-        // The proof that serves this dashboard. A vendor never registers through
-        // the bot, so they hold no WhatsApp connection and the `confirmPhone`
-        // route above can never succeed on its own.
+        // The one proof this dashboard uses — for the number already on the
+        // account and for a new one alike.
         verify: 'Verify',
         verified: 'Verified',
         /** Said where the Verify button is, so the reason to press it is next to it. */
@@ -267,9 +263,13 @@ export const account = {
         codePlaceholder: '123456',
         codeSentTo: 'We sent a code on WhatsApp to {{phone}}.',
         codeExpires: 'It expires {{when}}.',
-        /** `completesPendingChange: true` — confirming here swaps the identifier. */
+        /**
+         * `completesPendingChange: true` — confirming here swaps the identifier.
+         * The second sentence is the backend moving the account's WhatsApp link
+         * off the number being given up; a link on any other number stays put.
+         */
         codeCompletesChange:
-            'Entering it switches your sign-in number to the new one.',
+            'Entering it switches your sign-in number to the new one. If WhatsApp was linked on your old number, the link moves to the new one too.',
         /** `completesPendingChange: false` — it only proves the number already on the account. */
         codeVerifiesCurrent: 'Entering it confirms the number already on your account.',
         submitCode: 'Verify number',
@@ -282,12 +282,18 @@ export const account = {
         /** Both happened at once — `changed: true` on the confirm response. */
         phoneChangedAndVerified: 'Your phone number has been changed and verified.',
         /**
-         * ⛔ The 24-hour-window limitation, said before the send rather than after
-         * a 502: outside Meta's service window we can only reach a number that has
-         * messaged us recently, and this WABA has no approved template yet.
+         * ⛔ Must never say "message our bot". It did, until 2026-09-21 — and
+         * following that advice is what made the send fail. The backend now tries
+         * every route by itself; a new code is the only thing worth asking for.
          */
-        codeDeliveryHint:
-            "If the code doesn't arrive, send our WhatsApp bot any message from that number and ask for a new one.",
+        codeDeliveryHint: "The code can take a minute to arrive. If it doesn't, ask for a new one.",
+        /**
+         * Beside a `PHONE_VERIFICATION_DELIVERY_FAILED`, from the second refusal
+         * in a row. The failure message itself lives in errors.codes.
+         */
+        deliverySupportHint:
+            'Still not working? Our support team can look into it for you.',
+        contactSupport: 'Contact support',
 
         pendingTarget: 'Waiting to switch to {{target}}',
         pendingExpires: 'Expires {{when}}.',
@@ -317,6 +323,12 @@ export const account = {
         passwordsDontMatch: "Passwords don't match.",
         updatePassword: 'Update Password',
         updated: 'Password updated. Every other device has been signed out.',
+        /**
+         * Phone app only, and only when the automatic re-sign-in after the change
+         * failed (the change revokes this device's own session there). The
+         * password DID change — say so first, or they will retry the old one.
+         */
+        updatedSignInAgain: 'Password updated. Please sign in again with your new password.',
         updateFailed: 'We could not change your password. Please try again.',
         rules: {
             length: 'At least 8 characters',

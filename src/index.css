@@ -245,6 +245,25 @@ html.native [contenteditable="true"] {
   user-select: text;
 }
 
+/* ── Bottom sheets: let the sheet out of its popper wrapper ──────────────────
+   Below `md`, popovers, menus and selects are pinned to the bottom edge as
+   sheets (see components/ui/mobile-sheet.tsx). Radix does not position the
+   content element itself: it wraps it in a `[data-radix-popper-content-wrapper]`
+   carrying an inline `transform: translate(x, y)` — plus `will-change:
+   transform` on any screen at 1.5x density or more, i.e. every phone. Either
+   one makes the wrapper the containing block for `position: fixed`
+   descendants, so the sheet's `fixed inset-x-0 bottom-0` resolved against a
+   0x0 box parked at the trigger: a zero-width sheet over a visible scrim.
+   Undoing both here puts the containing block back on the viewport. The
+   wrapper is only a positioning shell and has no size of its own, so nothing
+   else moves. `data-mobile-sheet` is set by the three primitives that pin. */
+@media not all and (min-width: 768px) {
+  [data-radix-popper-content-wrapper]:has(> [data-mobile-sheet]) {
+    transform: none !important;
+    will-change: auto !important;
+  }
+}
+
 /* Custom scrollbar — brand-tinted */
 ::-webkit-scrollbar {
   width: 8px;

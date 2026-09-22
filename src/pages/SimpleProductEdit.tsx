@@ -1,14 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
-import { AlertCircle, Eye, Sparkles, Wand2, Copy } from 'lucide-react';
-import { Card, CardContent } from '@/components/ui/card';
+import { AlertCircle, Eye, Wand2, Copy } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { InfoHint } from '@/components/ui/info-hint';
+import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
 import { EditorPageShell } from '@/components/layout/EditorPageShell';
+import { ProductFormBody } from '@/components/products/form/ProductFormBody';
+import { SettingsSection } from '@/components/vendor-settings/SettingsSection';
 import { PageBackButton } from '@/components/layout/PageBackButton';
 import { STATUS_INTENT_ICON } from '@/components/products/statusIntentIcons';
 import { useOpenPreview } from '@/components/preview';
@@ -474,11 +477,7 @@ export function SimpleProductEdit() {
     <EditorPageShell
       title={t('products.wizard.editTitle')}
       description={product.title}
-      titleExtra={
-        <Badge variant="outline" className="text-[10px]">
-          {t('products.wizard.quickBadge')}
-        </Badge>
-      }
+      titleExtra={<Badge variant="outline">{t('products.wizard.quickBadge')}</Badge>}
       backTo="/dashboard/products"
       backLabel={t('products.wizard.backToProducts')}
       alwaysFallback
@@ -512,20 +511,15 @@ export function SimpleProductEdit() {
         })),
       ]}
     >
-
-      {isLockedForVectorisation && (
-        <div className="px-4 md:px-0">
+      <ProductFormBody className="space-y-4 md:space-y-6">
+        {isLockedForVectorisation && (
           <Alert>
             <AlertCircle className="w-4 h-4" />
-            <AlertDescription>
-              {t('products.review.lockedIndexing')}
-            </AlertDescription>
+            <AlertDescription>{t('products.review.lockedIndexing')}</AlertDescription>
           </Alert>
-        </div>
-      )}
+        )}
 
-      {isReadOnlyStatus && (
-        <div className="px-4 md:px-0">
+        {isReadOnlyStatus && (
           <Alert>
             <AlertCircle className="w-4 h-4" />
             <AlertDescription>
@@ -534,11 +528,9 @@ export function SimpleProductEdit() {
                 : 'products.review.pendingReviewNotice')}
             </AlertDescription>
           </Alert>
-        </div>
-      )}
+        )}
 
-      {productStatus === 'suspended' && (
-        <div className="px-4 md:px-0">
+        {productStatus === 'suspended' && (
           <Alert>
             <AlertCircle className="w-4 h-4" />
             <AlertDescription className="space-y-2">
@@ -552,25 +544,26 @@ export function SimpleProductEdit() {
               )}
             </AlertDescription>
           </Alert>
-        </div>
-      )}
+        )}
 
-      {activation && !activation.published && (
-        <div className="px-4 md:px-0">
-          <ActivationBlockersPanel
-            activation={activation}
-            demoted={demoted}
-            isBusy={isSubmitting}
-            onRetryPublish={handleRetryPublish}
-            onPickupLocationChosen={handlePickupLocationChosen}
-            onDone={goToList}
-          />
-        </div>
-      )}
+        {/* No gap between the checklist and the form on a phone: the
+            checklist’s own padding and hairline match the separators between
+            the form’s sections, so the line sits evenly between the two. */}
+        <div className="md:space-y-6">
+          {activation && !activation.published && (
+            <div className="max-md:border-b">
+              <ActivationBlockersPanel
+                activation={activation}
+                demoted={demoted}
+                isBusy={isSubmitting}
+                onRetryPublish={handleRetryPublish}
+                onPickupLocationChosen={handlePickupLocationChosen}
+                onDone={goToList}
+              />
+            </div>
+          )}
 
-      <Card className="rounded-none border-x-0 md:rounded-xl md:border">
-        <CardContent className="p-4 sm:p-6">
-          <div className={isLocked ? 'pointer-events-none opacity-60' : ''}>
+          <div className={isLocked ? 'pointer-events-none opacity-60' : undefined}>
             <SimpleProductForm
               // `formEpoch` remounts the form on the server's values after a
               // stock change the backend declined to write.
@@ -600,62 +593,64 @@ export function SimpleProductEdit() {
                 ) : null
               }
             >
-              <AgencySelector
-                productId={product.id}
-                productAgencyId={product.delivery?.agencyId ?? null}
-                isSaving={isSubmitting || isLocked}
-                onAgencyChange={handleAgencyChange}
-                freeDelivery={product.delivery?.freeDelivery ?? false}
-                onFreeDeliveryChange={handleFreeDeliveryChange}
-                pickupLocation={product.delivery?.pickupLocation ?? null}
-                onPickupLocationChange={handlePickupLocationChange}
-                pickup={product.pickup ?? null}
-                unlimitedStockVariants={unlimitedStockVariants}
-              />
+              {/* Sections, not loose markup: these land as direct children of the
+                  form's section stack, which draws the separators between them. */}
+              <SettingsSection title={t('products.delivery.title')} contentClassName="space-y-6">
+                <AgencySelector
+                  productId={product.id}
+                  productAgencyId={product.delivery?.agencyId ?? null}
+                  isSaving={isSubmitting || isLocked}
+                  onAgencyChange={handleAgencyChange}
+                  freeDelivery={product.delivery?.freeDelivery ?? false}
+                  onFreeDeliveryChange={handleFreeDeliveryChange}
+                  pickupLocation={product.delivery?.pickupLocation ?? null}
+                  onPickupLocationChange={handlePickupLocationChange}
+                  pickup={product.pickup ?? null}
+                  unlimitedStockVariants={unlimitedStockVariants}
+                />
 
-              {/*
-                Product-level parcel record — origin postcode, handling days and
-                the dimension fallback an agency reads when a variant carries
-                none of its own. The advanced wizard's review step has had this
-                since shipping config shipped; quick-add had no equivalent, so a
-                vendor who never left this editor could not set it at all.
+                {/*
+                  Product-level parcel record — origin postcode, handling days and
+                  the dimension fallback an agency reads when a variant carries
+                  none of its own. The advanced wizard's review step has had this
+                  since shipping config shipped; quick-add had no equivalent, so a
+                  vendor who never left this editor could not set it at all.
 
-                🔴 Not a duplicate of the form's own weight/length/width/height
-                inputs above — those write the VARIANT's parcel, on a different
-                endpoint, and take precedence over this one. See
-                `ShippingConfigRow` for the three-records distinction.
+                  🔴 Not a duplicate of the form's own weight/length/width/height
+                  inputs under "More options" — those write the VARIANT's parcel,
+                  on a different endpoint, and take precedence over this one. See
+                  `ShippingConfigRow` for the three-records distinction.
 
-                Edit-only, like the wizard's: the record is keyed by product id,
-                and quick-add's create page returns to the product list rather
-                than holding onto the id it just made.
-              */}
-              <ShippingConfigRow
-                productId={product.id}
-                isPhysical={product.type === 'physical'}
-                disabled={isSubmitting || isLocked}
-              />
+                  Edit-only, like the wizard's: the record is keyed by product id,
+                  and quick-add's create page returns to the product list rather
+                  than holding onto the id it just made.
+                */}
+                <ShippingConfigRow
+                  productId={product.id}
+                  isPhysical={product.type === 'physical'}
+                  disabled={isSubmitting || isLocked}
+                />
+              </SettingsSection>
 
-              <div className="rounded-xl border border-border p-5 flex items-start gap-3">
-                <Sparkles className="w-5 h-5 text-muted-foreground mt-0.5 shrink-0" />
-                <div className="flex-1 min-w-0 flex items-center justify-between gap-3">
-                  <div>
-                    <p className="font-medium text-sm">{t('products.simple.aiSearchTitle')}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5 max-w-md">
-                      {t('products.simple.aiSearchDescription')}
-                    </p>
-                  </div>
+              <SettingsSection
+                title={t('products.simple.aiSearchTitle')}
+                info={t('products.simple.aiSearchDescription')}
+              >
+                <div className="flex items-center justify-between gap-4">
+                  <Label htmlFor="vectorisationEnabled">{t('products.simple.aiSearchToggle')}</Label>
                   <Switch
+                    id="vectorisationEnabled"
                     checked={product.vectorisationEnabled ?? false}
                     onCheckedChange={(checked) => void handleVectorisationToggle(checked)}
                     disabled={isSubmitting || isLockedForVectorisation || isReadOnlyStatus}
                     aria-label={t('products.simple.aiSearchTitle')}
                   />
                 </div>
-              </div>
+              </SettingsSection>
             </SimpleProductForm>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </ProductFormBody>
 
       <ConvertToAdvancedDialog
         open={convertOpen}
@@ -690,25 +685,33 @@ function PendingStockRequestNotice({
   const canWithdraw = request.availableActions.includes('withdraw');
 
   return (
-    <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-2.5 text-xs text-amber-700 dark:text-amber-400">
-      <p className="font-medium tabular-nums">
-        {t('products.simple.stockQueuedNotice', {
-          from: request.currentQuantity ?? request.quantityBefore,
-          to: request.requestedQuantity,
-        })}
-      </p>
-      <p className="mt-0.5 opacity-90">{t('products.simple.stockQueuedHint')}</p>
-      <div className="mt-2 flex flex-wrap items-center gap-2">
-        <Button asChild size="sm" variant="outline" className="h-7 text-xs">
+    // No box: the amber line is the signal, and the explanation of why the
+    // field above disagrees with it sits behind the info icon.
+    <div className="space-y-2">
+      <div className="flex items-center gap-1">
+        <p className="text-sm font-medium tabular-nums text-amber-700 dark:text-amber-400">
+          {t('products.simple.stockQueuedNotice', {
+            from: request.currentQuantity ?? request.quantityBefore,
+            to: request.requestedQuantity,
+          })}
+        </p>
+        <InfoHint label={t('account.section.moreInformation')} align="start">
+          {t('products.simple.stockQueuedHint')}
+        </InfoHint>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button asChild size="sm" variant="outline">
           <Link to={`/dashboard/inventory/requests?view=${encodeURIComponent(request.id)}`}>
             {t('products.simple.viewStockRequest')}
           </Link>
         </Button>
         {canWithdraw && (
+          // `type="button"`: this renders inside the product form, and a bare
+          // <button> there is a submit button — withdrawing also saved the form.
           <Button
+            type="button"
             size="sm"
             variant="ghost"
-            className="h-7 text-xs"
             disabled={withdrawing}
             onClick={onWithdraw}
           >

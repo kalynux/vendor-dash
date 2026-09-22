@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { Loader2, Wand2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -58,10 +58,7 @@ export function ConvertToAdvancedDialog({
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle className="flex items-center gap-2">
-            <Wand2 className="w-4 h-4" />
-            {t('products.convert.title')}
-          </AlertDialogTitle>
+          <AlertDialogTitle>{t('products.convert.title')}</AlertDialogTitle>
           <AlertDialogDescription asChild>
             <div className="space-y-2 text-sm">
               <p>

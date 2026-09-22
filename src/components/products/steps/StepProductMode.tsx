@@ -1,6 +1,6 @@
-import { Zap, Package, FileDigit } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Badge } from '@/components/ui/badge';
+import { SettingsSection, SettingsSections } from '@/components/vendor-settings/SettingsSection';
 import { useTranslation, type TranslationKey } from '@/i18n';
 
 /**
@@ -18,85 +18,70 @@ const CHOICES: {
   choice: ProductCreationChoice;
   labelKey: TranslationKey;
   descriptionKey: TranslationKey;
-  icon: React.ElementType;
-  examplesKey: TranslationKey;
   recommended?: boolean;
 }[] = [
   {
     choice: 'simple',
     labelKey: 'products.mode.simple',
     descriptionKey: 'products.mode.simpleDescription',
-    icon: Zap,
-    examplesKey: 'products.mode.simpleExamples',
     recommended: true,
   },
   {
     choice: 'physical',
     labelKey: 'products.mode.physical',
     descriptionKey: 'products.mode.physicalDescription',
-    icon: Package,
-    examplesKey: 'products.mode.physicalExamples',
   },
   {
     choice: 'digital',
     labelKey: 'products.mode.digital',
     descriptionKey: 'products.mode.digitalDescription',
-    icon: FileDigit,
-    examplesKey: 'products.mode.digitalExamples',
   },
 ];
 
+/**
+ * Step 0 — a plain list of three rows. Picking one moves on straight away, so
+ * the rows carry a chevron rather than a selected state.
+ */
 export function StepProductMode({ onSelect, disabled = false }: StepProductModeProps) {
   const { t } = useTranslation();
   return (
-    <div className="space-y-4">
-      <div>
-        <h2 className="text-lg font-semibold">{t('products.mode.title')}</h2>
-        <p className="text-sm text-muted-foreground mt-1">
-          {t('products.mode.description')}
-        </p>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {CHOICES.map(({ choice, labelKey, descriptionKey, icon: Icon, examplesKey, recommended }) => (
-          <button
-            key={choice}
-            type="button"
-            disabled={disabled}
-            onClick={() => onSelect(choice)}
-            className={cn(
-              'flex flex-col gap-4 p-5 rounded-xl border-2 text-left transition-all',
-              recommended
-                ? 'border-primary/40 hover:border-primary hover:bg-primary/5'
-                : 'border-border hover:border-primary/40 hover:bg-muted/40',
-              disabled && 'opacity-50 cursor-not-allowed',
-            )}
-          >
-            <div
-              className={cn(
-                'w-12 h-12 rounded-xl flex items-center justify-center',
-                recommended
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-muted text-muted-foreground',
-              )}
-            >
-              <Icon className="w-6 h-6" />
-            </div>
-            <div className="space-y-1">
-              <div className="flex items-center gap-2 flex-wrap">
-                <p className="font-semibold text-sm">{t(labelKey)}</p>
-                {recommended && (
-                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                    {t('products.mode.recommended')}
-                  </Badge>
+    <SettingsSections>
+      <SettingsSection title={t('products.mode.title')} info={t('products.mode.description')}>
+        <ul className="-my-3 divide-y divide-border">
+          {CHOICES.map(({ choice, labelKey, descriptionKey, recommended }) => (
+            <li key={choice}>
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={() => onSelect(choice)}
+                className={cn(
+                  'group flex w-full items-center gap-3 py-4 text-left',
+                  'rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                  'disabled:cursor-not-allowed disabled:opacity-50',
                 )}
-              </div>
-              <p className="text-sm text-muted-foreground">{t(descriptionKey)}</p>
-              <p className="text-xs text-muted-foreground/70 mt-2">{t(examplesKey)}</p>
-            </div>
-          </button>
-        ))}
-      </div>
-    </div>
+              >
+                <span className="min-w-0 flex-1 space-y-1">
+                  <span className="flex flex-wrap items-baseline gap-x-2">
+                    <span className="font-medium group-hover:text-primary">{t(labelKey)}</span>
+                    {recommended && (
+                      <span className="text-xs font-medium text-primary">
+                        {t('products.mode.recommended')}
+                      </span>
+                    )}
+                  </span>
+                  <span className="block text-sm text-muted-foreground">
+                    {t(descriptionKey)}
+                  </span>
+                </span>
+                <ChevronRight
+                  className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5"
+                  aria-hidden
+                />
+              </button>
+            </li>
+          ))}
+        </ul>
+      </SettingsSection>
+    </SettingsSections>
   );
 }

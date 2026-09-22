@@ -316,16 +316,35 @@ export const common = {
         geolocationUnavailable: 'Location is not available in this browser.',
         filledFromLocation: 'Address filled from your location',
         resolveFailed: 'Could not resolve your location to an address.',
-        permissionDenied: 'Location permission denied.',
-        /**
-         * Refused for good, mobile app only (CAPACITOR-PLAN.md → P4.4). The OS
-         * will not prompt again, so a retry button would silently do nothing —
-         * the toast offers the settings screen instead.
-         */
-        permissionBlocked: 'Location is turned off for this app. Allow it in your device settings.',
         openSettings: 'Open settings',
-        /** Permission was fine and the fix itself failed — indoors, GPS off, timed out. */
+        /** Under the box while the phone looks for a position — a first fix outdoors takes a few seconds. */
+        locating: 'Finding your position… this can take a few seconds.',
+        /**
+         * Permission was fine and still no position — after a 20-second watch
+         * and a fall-back to the phone's last known one.
+         */
         locationFixFailed: 'Could not get your location. Move somewhere with a clearer signal and try again.',
+        /**
+         * `LocationAccessDialog` — replaces the old one-line "permission denied"
+         * toast. Every version ends in a button that asks again or goes to the
+         * switch, because most vendors do not know how to re-allow it by hand.
+         */
+        access: {
+            /** Refused this time; "Allow" brings the phone's question back. */
+            deniedTitle: 'Allow location access',
+            deniedBody: 'The app uses your location only to fill in this address. Tap Allow, then choose “While using the app” when your phone asks.',
+            allow: 'Allow',
+            /** Phone app: the phone will not ask again, only its settings can change it. */
+            blockedTitle: 'Location is blocked for this app',
+            blockedBody: 'Your phone won’t ask again on its own. Open settings, go to Permissions → Location and choose “Allow only while using the app”. When you come back, the address fills in by itself.',
+            /** Website: no settings screen can be opened, so say where the browser keeps the switch. */
+            blockedBrowserTitle: 'Location is blocked for this site',
+            blockedBrowserBody: 'Your browser won’t ask again on its own. Tap the icon to the left of the web address, allow Location, then tap Try again.',
+            /** The phone's location switch is off; "Try again" brings back the "turn on location" question. */
+            offTitle: 'Your phone’s location is off',
+            offBody: 'Turn it on to fill in this address from where you are. Tap Try again and choose Turn on — or swipe down from the top of the screen and tap Location.',
+            notNow: 'Not now',
+        },
         searchUnavailable: 'Address search is unavailable right now.',
         /** Under the picked place, so the vendor can sanity-check the coordinates. */
         pinnedAt: 'Pinned at {{lat}}, {{lng}}',
@@ -341,6 +360,8 @@ export const common = {
         userMenu: 'Account menu',
         breadcrumb: 'Breadcrumb',
         moreActions: 'More actions',
+        moreInformation: 'More information',
+        aboutThisField: 'About this field',
         sortAscending: 'Sort ascending',
         sortDescending: 'Sort descending',
         previousImage: 'Previous image',

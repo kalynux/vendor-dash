@@ -95,20 +95,27 @@ export function ChatRichTextEditor({
           onRedo={redo}
         />
 
-        <div className="relative">
+        {/* The placeholder and the editable area share one grid cell, so the
+            cell is as tall as the taller of the two. The example description is
+            seven lines — taller than the editor's minimum — and as an absolute
+            overlay it spilled out over the hint row below. It stays in the cell,
+            invisible, once the vendor starts typing: dropping it would shrink
+            the box under their first keystroke. */}
+        <div className="grid">
           {/* `contenteditable` has no `placeholder`, and the usual `:empty::before`
               trick fails here because the browser leaves a `<p><br></p>` behind —
               the element is never actually empty. Driving the overlay off the
               document's own character count is the only reading that matches what
               the vendor sees. */}
-          {empty && (
-            <div
-              aria-hidden
-              className="pointer-events-none absolute inset-0 whitespace-pre-wrap px-3 py-2.5 text-sm text-muted-foreground/70"
-            >
-              {t('products.editor.placeholder')}
-            </div>
-          )}
+          <div
+            aria-hidden
+            className={cn(
+              'pointer-events-none whitespace-pre-wrap px-3 py-2.5 text-sm leading-relaxed text-muted-foreground/70 [grid-area:1/1]',
+              !empty && 'invisible',
+            )}
+          >
+            {t('products.editor.placeholder')}
+          </div>
 
           <div
             id={id}
@@ -124,7 +131,7 @@ export function ChatRichTextEditor({
             onBlur={onInput}
             onPaste={onPaste}
             className={cn(
-              'min-h-[9.5rem] w-full px-3 py-2.5 text-sm leading-relaxed outline-none',
+              'min-h-[9.5rem] w-full px-3 py-2.5 text-sm leading-relaxed outline-none [grid-area:1/1]',
               '[&_p]:min-h-[1.4em] [&_p:not(:last-child)]:mb-2',
               '[&_ul]:my-1 [&_ul]:list-disc [&_ul]:pl-5',
               '[&_ol]:my-1 [&_ol]:list-decimal [&_ol]:pl-5',

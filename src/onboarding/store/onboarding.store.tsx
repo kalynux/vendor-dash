@@ -20,6 +20,7 @@ import type {
     DeliveryLinkingPayload,
     BrandingPayload,
     BrandingFileRef,
+    BusinessAddress,
     PolicySetupPayload,
     OnboardingStepResponse,
     VendorOnboardingStep,
@@ -174,6 +175,24 @@ export function stepToRoute(step: VendorOnboardingStep | number): string {
     }
 }
 
+/**
+ * The saved business addresses in a profile write's reply, or `undefined` when
+ * the reply carries none.
+ *
+ * ⚠ The onboarding steps and `PATCH /vendor/profile` answer with the camelCase
+ * profile DTO (`businessAddresses`), not the snake_case `role_entity` shape the
+ * types claim. Reading `business_addresses` off it always came back empty, so a
+ * vendor's new addresses never reached the session: the pickup-address pickers
+ * and the Addresses tab showed nothing until a reload, and the addresses sat
+ * there without the ids the server had just given them.
+ */
+function profileAddresses(profile: unknown): BusinessAddress[] | undefined {
+    if (!profile || typeof profile !== 'object') return undefined;
+    const p = profile as { businessAddresses?: unknown; business_addresses?: unknown };
+    const list = p.businessAddresses ?? p.business_addresses;
+    return Array.isArray(list) ? (list as BusinessAddress[]) : undefined;
+}
+
 // ─── Provider ─────────────────────────────────────────────────────────────────
 
 export function OnboardingProvider({ children }: { children: ReactNode }) {
@@ -278,6 +297,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
         (response: OnboardingStepResponse, submittedFromStep: number) => {
             const { completionStatus, profile } = response.data;
             const backendStep = completionStatus.onboardingStep;
+            const savedAddresses = profileAddresses(profile);
 
             setSession((prev) => {
                 if (!prev) return prev;
@@ -295,12 +315,21 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
                         payout_details: profile.payout_details ?? prev.role_entity.payout_details,
                         default_delivery_agency_id: profile.default_delivery_agency_id ?? prev.role_entity.default_delivery_agency_id,
                         branding: profile.branding ?? prev.role_entity.branding,
-                        business_addresses: profile.business_addresses?.length
-                            ? profile.business_addresses
-                            : prev.role_entity.business_addresses,
+                        // Every step returns the saved list, so an empty one means
+                        // the vendor has none — not "unchanged". Carrying the old
+                        // list forward is only right when the reply has no list.
+                        business_addresses: savedAddresses ?? prev.role_entity.business_addresses,
                     },
                 };
             });
+
+            // The step-3 draft existed to repopulate the form on back-navigation.
+            // Once the save lands, the session holds the same addresses *with*
+            // the ids the server just minted — the draft has none, so reusing it
+            // would resubmit every address as new.
+            if (submittedFromStep === 3) {
+                setDrafts((prev) => ({ ...prev, branding: null }));
+            }
 
             // Always navigate to the *next sequential step* after the one just submitted.
             // Never jump to the backend's max step — that would skip intermediate steps
@@ -379,6 +408,11 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
                     version: currentVersion,
                 });
                 const nextVersion = res.data?.version ?? currentVersion + 1;
+                // Addresses are the exception to "apply what we sent": a new
+                // one only gets its id from the server, and the product pickup
+                // pickers skip any address without one.
+                const savedAddresses =
+                    writePatch.business_addresses !== undefined ? profileAddresses(res.data) : undefined;
 
                 // Optimistically merge the submitted fields into role_entity. The PATCH
                 // response DTO is camelCase and not shaped like VendorRoleEntity, so we
@@ -394,7 +428,9 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
                             ...(writePatch.timezone !== undefined ? { timezone: writePatch.timezone } : {}),
                             ...(writePatch.preferred_language !== undefined ? { preferred_language: writePatch.preferred_language } : {}),
                             ...(writePatch.payout_details !== undefined ? { payout_details: writePatch.payout_details } : {}),
-                            ...(writePatch.business_addresses !== undefined ? { business_addresses: writePatch.business_addresses } : {}),
+                            ...(writePatch.business_addresses !== undefined
+                                ? { business_addresses: savedAddresses ?? writePatch.business_addresses }
+                                : {}),
                             // `avatarFileId` is a write-shape id; mirror the populated
                             // preview (or `null` on clear) into the read-shape `avatar`.
                             ...(avatarPreview !== undefined ? { avatar: avatarPreview } : {}),

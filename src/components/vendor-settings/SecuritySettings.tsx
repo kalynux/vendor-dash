@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Eye, EyeOff, Fingerprint, Globe, Loader2, Lock, Save, Shield } from 'lucide-react';
 import { toast } from 'sonner';
 
-import { onboardingService } from '@/services/onboarding.service';
+import { authService } from '@/services/auth.service';
+import { useOnboarding } from '@/onboarding/store/onboarding.store';
 import {
   biometricLoginStatus,
   disableBiometricLogin,
@@ -36,6 +37,7 @@ function passwordIssue(pw: string): TranslationKey | null {
 export function SecuritySettings() {
   const { t } = useTranslation();
   const m = useMessage();
+  const { logout } = useOnboarding();
   const [showCurrent, setShowCurrent] = useState(false);
   const [showNew, setShowNew] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -78,13 +80,22 @@ export function SecuritySettings() {
     setSaving(true);
     setError(null);
     try {
-      await onboardingService.changePassword({ oldPassword: current, newPassword: next });
+      // On the phone app this also signs straight back in with the new password —
+      // the change revokes this device's own session there. See the service.
+      const outcome = await authService.changePassword({ oldPassword: current, newPassword: next });
       // Re-key the stored fingerprint credential in the same breath. The old
       // password was just revoked server-side, so without this the vendor's next
       // fingerprint sign-in 401s and silently turns the feature off — and they
       // would have no way to connect that to the password they just changed.
       // A no-op when the feature is not on.
       await updateBiometricPassword(next);
+      if (outcome === 'sign-in-again') {
+        // The password DID change, but this device has no session left. Say so
+        // and sign out now, rather than let the next tap do it without a word.
+        toast.info(t('account.security.updatedSignInAgain'));
+        await logout();
+        return;
+      }
       toast.success(t('account.security.updated'));
       setCurrent('');
       setNext('');
@@ -94,7 +105,7 @@ export function SecuritySettings() {
     } finally {
       setSaving(false);
     }
-  }, [canSubmit, current, next, t]);
+  }, [canSubmit, current, next, t, logout]);
 
   return (
     <SettingsSections>

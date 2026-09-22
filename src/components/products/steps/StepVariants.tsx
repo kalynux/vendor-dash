@@ -2,9 +2,9 @@
 // Orchestration component that renders the correct phase of the variant builder
 // and communicates payloads to the parent wizard page for server execution.
 
-import { AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { SettingsSection, SettingsSections } from '@/components/vendor-settings/SettingsSection';
 import {
   useVariantBuilder,
   OptionBuilderPanel,
@@ -21,8 +21,9 @@ import type {
 } from '@/components/products/variants';
 import { VARIANT_IMAGE_LIMIT } from '@/components/products/media.constants';
 import type { PendingStockInfo } from '@/components/inventory/PendingStockBadge';
-import { useMessage, useTranslation } from '@/i18n';
+import { useTranslation } from '@/i18n';
 import type { WizardState, ApiProductOption, ApiFileDetail } from '@/types/product.types';
+import { StepActions, StepError } from './StepLayout';
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -65,7 +66,6 @@ export function StepVariants({
   onBack,
 }: StepVariantsProps) {
   const { t } = useTranslation();
-  const m = useMessage();
   const serverOptions: ApiProductOption[] = serverData.serverOptions ?? [];
   const serverVariants = serverData.serverVariants ?? [];
 
@@ -131,63 +131,58 @@ export function StepVariants({
   // ── Render ──────────────────────────────────────────────────────────────
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold">{t('products.options.title')}</h2>
-        <p className="text-sm text-muted-foreground mt-1">
-          {t('products.options.description')}
-        </p>
-      </div>
+    <div>
+      <StepError error={stepError} />
 
-      {stepError && (
-        <Alert variant="destructive">
-          <AlertCircle className="w-4 h-4" />
-          <AlertDescription>{m(stepError)}</AlertDescription>
-        </Alert>
-      )}
+      <SettingsSections>
+        <SettingsSection
+          title={t('products.options.title')}
+          description={t('products.options.description')}
+        >
+          {/* ── Options phase ───────────────────────────────────────────── */}
+          {state.phase === 'options' && (
+            <OptionBuilderPanel
+              options={state.options}
+              combinationCount={selectors.combinationCount}
+              exceedsLimit={selectors.exceedsLimit}
+              skuPrefix={state.skuPrefix}
+              onAddOption={actions.addOption}
+              onRemoveOption={actions.removeOption}
+              onRenameOption={actions.renameOption}
+              onAddValue={actions.addValue}
+              onRemoveValue={actions.removeValue}
+              onRenameValue={actions.renameValue}
+              onSetSkuPrefix={actions.setSkuPrefix}
+              onApplyAndGenerate={actions.proposeRegeneration}
+            />
+          )}
 
-      {/* ── Options phase ─────────────────────────────────────────────────── */}
-      {state.phase === 'options' && (
-        <OptionBuilderPanel
-          options={state.options}
-          combinationCount={selectors.combinationCount}
-          exceedsLimit={selectors.exceedsLimit}
-          skuPrefix={state.skuPrefix}
-          onAddOption={actions.addOption}
-          onRemoveOption={actions.removeOption}
-          onRenameOption={actions.renameOption}
-          onAddValue={actions.addValue}
-          onRemoveValue={actions.removeValue}
-          onRenameValue={actions.renameValue}
-          onSetSkuPrefix={actions.setSkuPrefix}
-          onApplyAndGenerate={actions.proposeRegeneration}
-        />
-      )}
-
-      {/* ── Matrix phase ─────────────────────────────────────────────────── */}
-      {state.phase === 'matrix' && (
-        <VariantTable
-          rows={selectors.visibleRows}
-          options={state.options}
-          rowErrors={state.rowErrors}
-          onUpdateRow={actions.updateRow}
-          onBulkUpdate={actions.bulkUpdateRows}
-          onAutoGenerateSkus={actions.autoGenerateSkus}
-          onEditOptions={actions.switchToOptions}
-          onSave={handleSaveVariants}
-          isSaving={isSaving}
-          hasUnsavedChanges={selectors.hasUnsavedChanges}
-          newRowCount={selectors.newRowCount}
-          modifiedRowCount={selectors.modifiedRowCount}
-          persistedRowCount={selectors.persistedRowCount}
-          productId={productId}
-          maxImages={maxImages}
-          filesByVariantId={filesByVariantId}
-          onVariantImagesChange={onVariantImagesChange}
-          pendingStockByVariantId={pendingStockByVariantId}
-          infiniteStockLocked={infiniteStockLocked}
-        />
-      )}
+          {/* ── Matrix phase ────────────────────────────────────────────── */}
+          {state.phase === 'matrix' && (
+            <VariantTable
+              rows={selectors.visibleRows}
+              options={state.options}
+              rowErrors={state.rowErrors}
+              onUpdateRow={actions.updateRow}
+              onBulkUpdate={actions.bulkUpdateRows}
+              onAutoGenerateSkus={actions.autoGenerateSkus}
+              onEditOptions={actions.switchToOptions}
+              onSave={handleSaveVariants}
+              isSaving={isSaving}
+              hasUnsavedChanges={selectors.hasUnsavedChanges}
+              newRowCount={selectors.newRowCount}
+              modifiedRowCount={selectors.modifiedRowCount}
+              persistedRowCount={selectors.persistedRowCount}
+              productId={productId}
+              maxImages={maxImages}
+              filesByVariantId={filesByVariantId}
+              onVariantImagesChange={onVariantImagesChange}
+              pendingStockByVariantId={pendingStockByVariantId}
+              infiniteStockLocked={infiniteStockLocked}
+            />
+          )}
+        </SettingsSection>
+      </SettingsSections>
 
       {/* ── Confirmation dialog ──────────────────────────────────────────── */}
       <RegenerateDialog
@@ -198,12 +193,7 @@ export function StepVariants({
         onCancel={actions.cancelRegeneration}
       />
 
-      {/* ── Navigation ──────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between pt-2">
-        <Button type="button" variant="ghost" size="sm" onClick={onBack} className="gap-1.5">
-          <ChevronLeft className="w-4 h-4" />
-          {t('common.actions.back')}
-        </Button>
+      <StepActions onBack={onBack}>
         <Button
           type="button"
           onClick={handleContinue}
@@ -218,9 +208,9 @@ export function StepVariants({
             : mode === 'create' && selectors.visibleRows.length === 0
               ? t('common.actions.skip')
               : t('common.actions.continue')}
-          {!isSaving && <ChevronRight className="w-4 h-4" />}
+          {!isSaving && <ChevronRight className="size-4" />}
         </Button>
-      </div>
+      </StepActions>
     </div>
   );
 }

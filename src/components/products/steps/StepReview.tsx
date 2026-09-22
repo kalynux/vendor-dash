@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
-import { AlertCircle, CheckCircle2, ChevronLeft, Globe, Handshake, Package, FileDigit, Sparkles } from 'lucide-react';
+import { AlertCircle, CheckCircle2 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
+import { SettingsSection, SettingsSections } from '@/components/vendor-settings/SettingsSection';
 import { validateActivation } from '@/components/products/schemas/product.schemas';
 import {
   collectCeilingEdits,
@@ -15,9 +16,10 @@ import {
 import { BargainCeilingsSheet } from '@/components/products/BargainCeilingsSheet';
 import { ShippingConfigRow } from '@/components/products/ShippingConfigRow';
 import { AgencySelector } from '@/components/products/review/AgencySelector';
-import { useMessage, useTranslation, type TranslationKey } from '@/i18n';
+import { useTranslation, type TranslationKey } from '@/i18n';
 import type { WizardState, VendorAgencyListItemDto, ApiPickupLocation } from '@/types/product.types';
 import { getProductFileCount } from '@/types/product.types';
+import { StepActions, StepError } from './StepLayout';
 
 interface StepReviewProps {
   mode: 'create' | 'edit';
@@ -44,7 +46,6 @@ export function StepReview({
   onPickupLocationChange,
 }: StepReviewProps) {
   const { t } = useTranslation();
-  const m = useMessage();
   const product = serverData.serverProduct;
   const variants = serverData.serverVariants ?? [];
   const isDigital = product?.type === 'digital';
@@ -177,242 +178,246 @@ export function StepReview({
     suspended: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
   };
 
+  const hasNotices =
+    isLockedForVectorisation ||
+    productStatus === 'archived' ||
+    productStatus === 'pending_review' ||
+    productStatus === 'suspended';
+
+  const requirements = canPublish ? (
+    <p className="flex items-center gap-2 text-sm text-green-700 dark:text-green-400">
+      <CheckCircle2 className="size-4 shrink-0" />
+      {t('products.review.requirementsMet')}
+    </p>
+  ) : (
+    <div className="space-y-2">
+      <p className="text-sm font-medium">{t('products.review.requirements')}</p>
+      <ul className="space-y-1.5">
+        {activationErrors.map((key, i) => (
+          <li key={i} className="flex items-start gap-2 text-sm text-destructive">
+            <AlertCircle className="mt-0.5 size-4 shrink-0" />
+            {t(key)}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold">{t('products.review.title')}</h2>
-        <p className="text-sm text-muted-foreground mt-1">
-          {t('products.review.description')}
-        </p>
-      </div>
+    <div>
+      <StepError error={stepError} />
 
-      {stepError && (
-        <Alert variant="destructive">
-          <AlertCircle className="w-4 h-4" />
-          <AlertDescription>{m(stepError)}</AlertDescription>
-        </Alert>
+      {hasNotices && (
+        <div className="mb-4 space-y-3 md:mb-6">
+          {isLockedForVectorisation && (
+            <Alert>
+              <AlertCircle className="size-4" />
+              <AlertDescription>{t('products.review.lockedIndexing')}</AlertDescription>
+            </Alert>
+          )}
+          {productStatus === 'archived' && (
+            <Alert>
+              <AlertCircle className="size-4" />
+              <AlertDescription>{t('products.review.archivedNotice')}</AlertDescription>
+            </Alert>
+          )}
+          {productStatus === 'pending_review' && (
+            <Alert>
+              <AlertCircle className="size-4" />
+              <AlertDescription>{t('products.review.pendingReviewNotice')}</AlertDescription>
+            </Alert>
+          )}
+          {productStatus === 'suspended' && (
+            <Alert>
+              <AlertCircle className="size-4" />
+              <AlertDescription>{t('products.review.suspendedNotice')}</AlertDescription>
+            </Alert>
+          )}
+        </div>
       )}
 
-      {isLockedForVectorisation && (
-        <Alert>
-          <AlertCircle className="w-4 h-4" />
-          <AlertDescription>
-            {t('products.review.lockedIndexing')}
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {productStatus === 'archived' && (
-        <Alert>
-          <AlertCircle className="w-4 h-4" />
-          <AlertDescription>
-            {t('products.review.archivedNotice')}
-          </AlertDescription>
-        </Alert>
-      )}
-      {productStatus === 'pending_review' && (
-        <Alert>
-          <AlertCircle className="w-4 h-4" />
-          <AlertDescription>
-            {t('products.review.pendingReviewNotice')}
-          </AlertDescription>
-        </Alert>
-      )}
-      {productStatus === 'suspended' && (
-        <Alert>
-          <AlertCircle className="w-4 h-4" />
-          <AlertDescription>
-            {t('products.review.suspendedNotice')}
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {/* Product summary card */}
-      {product && (
-        <div className="rounded-xl border border-border p-5 space-y-4">
-          {/* Header */}
-          <div className="flex items-start gap-3">
-            <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center shrink-0">
-              {isDigital ? (
-                <FileDigit className="w-5 h-5 text-muted-foreground" />
-              ) : (
-                <Package className="w-5 h-5 text-muted-foreground" />
-              )}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="font-semibold truncate">{product.title}</p>
-              <div className="flex items-center gap-2 mt-1 flex-wrap">
-                <span
-                  className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusColors[product.status] ?? ''}`}
-                >
-                  {t(statusLabelKeys[product.status] ?? 'products.status.draft')}
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  {t(`products.type.${product.type}` as TranslationKey)}
-                </span>
-                <span className="text-xs text-muted-foreground">{product.category}</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Details grid */}
-          <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
-            <div>
-              <span className="text-muted-foreground text-xs">
-                {t(isDigital ? 'products.review.summaryFormats' : 'products.review.summaryVariants')}
-              </span>
-              <p className="font-medium">
-                {isDigital
-                  ? t('products.review.formatsLive', {
-                      total: variants.length,
-                      live: liveFormatCount,
-                    })
-                  : variants.length}
-              </p>
-            </div>
-            <div>
-              <span className="text-muted-foreground text-xs">{t('products.review.summaryImages')}</span>
-              <p className="font-medium">{getProductFileCount(product)}</p>
-            </div>
-            {isDigital && (
-              <div>
-                <span className="text-muted-foreground text-xs">
-                  {t('products.review.summaryDownloads')}
-                </span>
-                <p className="font-medium">
-                  {t(product.digitalConfig?.isActive === false
-                    ? 'products.review.downloadsPaused'
-                    : 'products.review.downloadsEnabled')}
-                </p>
-              </div>
-            )}
-            {product.tags.length > 0 && (
-              <div className="col-span-2">
-                <span className="text-muted-foreground text-xs">{t('products.review.tags')}</span>
-                <div className="flex flex-wrap gap-1 mt-1">
-                  {product.tags.map((tag) => (
-                    <Badge key={tag} variant="secondary" className="text-xs font-normal">
-                      {tag}
-                    </Badge>
-                  ))}
+      <SettingsSections>
+        {/* ── Summary ─────────────────────────────────────────────────────── */}
+        <SettingsSection title={t('products.review.title')} info={t('products.review.description')}>
+          {product && (
+            <div className="space-y-5">
+              <div className="min-w-0">
+                <p className="truncate font-medium">{product.title}</p>
+                <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+                  <span
+                    className={cn(
+                      'rounded-full px-2 py-0.5 text-xs font-medium',
+                      statusColors[product.status],
+                    )}
+                  >
+                    {t(statusLabelKeys[product.status] ?? 'products.status.draft')}
+                  </span>
+                  <span>{t(`products.type.${product.type}` as TranslationKey)}</span>
+                  {product.category && (
+                    <>
+                      <span aria-hidden>·</span>
+                      <span className="min-w-0 truncate">{product.category}</span>
+                    </>
+                  )}
                 </div>
               </div>
-            )}
-          </div>
-        </div>
-      )}
 
-      {/* Delivery agency (physical products only) */}
-      {isPhysical && (
-        <AgencySelector
-          productId={product?.id ?? null}
-          productAgencyId={productAgencyId}
-          isSaving={controlsDisabled}
-          onAgencyChange={onAgencyChange}
-          freeDelivery={productFreeDelivery}
-          onFreeDeliveryChange={onFreeDeliveryChange}
-          pickupLocation={productPickupLocation}
-          onPickupLocationChange={onPickupLocationChange}
-          pickup={product?.pickup ?? null}
-          unlimitedStockVariants={variants
-            .filter((v) => v.status === 'active' && v.isInfiniteStock)
-            .map((v) => ({ id: v.id, sku: v.sku }))}
-          onAvailabilityResolved={({ defaultAgency: d }) => setDefaultAgency(d)}
-        />
-      )}
-
-      {/* Vectorisation toggle — pure form field, saved on publish/draft */}
-      <div className="rounded-xl border border-border p-4 sm:p-5">
-        <div className="flex items-start gap-3">
-          <Sparkles className="w-5 h-5 text-muted-foreground mt-0.5 shrink-0" />
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <p className="font-medium text-sm">{t('products.review.vectorisationTitle')}</p>
-                <p className="text-xs text-muted-foreground mt-0.5 max-w-md">
-                  {t('products.review.vectorisationDescription')}
-                </p>
-              </div>
-              <Switch
-                checked={vectorisationEnabled}
-                onCheckedChange={(next) => {
-                  setVectorisationEnabled(next);
-                  // Turning this on is the *only* thing that makes a negotiation
-                  // ceiling meaningful, so it presents the rows straight away
-                  // rather than unfolding them below the fold where they were
-                  // routinely missed. Dismissing is a real answer — pricing is
-                  // optional, and the summary row below reopens it.
-                  if (next && canPriceBargain) setBargainOpen(true);
-                }}
-                disabled={controlsDisabled}
-                aria-label={t('products.review.vectorisationTitle')}
-              />
+              <dl className="grid grid-cols-2 gap-x-6 gap-y-4 text-sm sm:grid-cols-3">
+                <div>
+                  <dt className="text-muted-foreground">
+                    {t(isDigital ? 'products.review.summaryFormats' : 'products.review.summaryVariants')}
+                  </dt>
+                  <dd className="mt-0.5 font-medium">
+                    {isDigital
+                      ? t('products.review.formatsLive', {
+                          total: variants.length,
+                          live: liveFormatCount,
+                        })
+                      : variants.length}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground">{t('products.review.summaryImages')}</dt>
+                  <dd className="mt-0.5 font-medium">{getProductFileCount(product)}</dd>
+                </div>
+                {isDigital && (
+                  <div>
+                    <dt className="text-muted-foreground">{t('products.review.summaryDownloads')}</dt>
+                    <dd className="mt-0.5 font-medium">
+                      {t(product.digitalConfig?.isActive === false
+                        ? 'products.review.downloadsPaused'
+                        : 'products.review.downloadsEnabled')}
+                    </dd>
+                  </div>
+                )}
+                {product.tags.length > 0 && (
+                  <div className="col-span-full">
+                    <dt className="text-muted-foreground">{t('products.review.tags')}</dt>
+                    <dd className="mt-1.5 flex flex-wrap gap-1.5">
+                      {product.tags.map((tag) => (
+                        <Badge key={tag} variant="secondary" className="font-normal">
+                          {tag}
+                        </Badge>
+                      ))}
+                    </dd>
+                  </div>
+                )}
+              </dl>
             </div>
-          </div>
-        </div>
-      </div>
-
-      {/*
-        Bargainable pricing.
-
-        The rows themselves live in a sheet (BargainCeilingsSheet) — see its
-        header for why. What stays inline is a summary: how many windows are
-        set, and the way back in. That matters more than it looks, because the
-        sheet is dismissible and Publish is blocked while a ceiling is invalid;
-        without a collapsed row carrying that error, a vendor could be stuck on
-        a disabled button with the explanation hidden behind a closed sheet.
-
-        Gated on the LOCAL toggle state, not `product.vectorisationEnabled`, so it
-        appears the moment the switch flips; the flip is persisted by the same
-        handler that writes these ceilings.
-      */}
-      {vectorisationEnabled && canPriceBargain && (
-        <button
-          type="button"
-          onClick={() => setBargainOpen(true)}
-          disabled={controlsDisabled}
-          className={cn(
-            'flex w-full items-center gap-3 rounded-xl border p-4 text-left transition-colors',
-            'hover:bg-accent/40 disabled:pointer-events-none disabled:opacity-60',
-            hasCeilingErrors ? 'border-destructive/50 bg-destructive/5' : 'border-border',
           )}
+        </SettingsSection>
+
+        {/* ── Delivery (physical products only) ───────────────────────────── */}
+        {/* AgencySelector and ShippingConfigRow draw no box and no heading of
+            their own — this section is their frame. */}
+        {isPhysical && (
+          <SettingsSection title={t('products.delivery.title')} contentClassName="space-y-6">
+            <AgencySelector
+              productId={product?.id ?? null}
+              productAgencyId={productAgencyId}
+              isSaving={controlsDisabled}
+              onAgencyChange={onAgencyChange}
+              freeDelivery={productFreeDelivery}
+              onFreeDeliveryChange={onFreeDeliveryChange}
+              pickupLocation={productPickupLocation}
+              onPickupLocationChange={onPickupLocationChange}
+              pickup={product?.pickup ?? null}
+              unlimitedStockVariants={variants
+                .filter((v) => v.status === 'active' && v.isInfiniteStock)
+                .map((v) => ({ id: v.id, sku: v.sku }))}
+              onAvailabilityResolved={({ defaultAgency: d }) => setDefaultAgency(d)}
+            />
+
+            {/*
+              Shipping configuration — a collapsed summary plus a sheet, for the
+              same reason as the negotiation row below: seven fields unfolded
+              inline would push Publish off a phone screen.
+
+              Shared with the quick-add editor, which had no equivalent until this
+              was extracted — the two flows produce the same record, so they should
+              not have two implementations of the control that writes it.
+            */}
+            <ShippingConfigRow
+              productId={productId}
+              isPhysical={isPhysical}
+              disabled={controlsDisabled}
+            />
+          </SettingsSection>
+        )}
+
+        {/* ── AI discovery — a pure form field, saved on publish / draft ──── */}
+        {/* Titled "AI search", as in the quick-add editor: "vectorisation" is
+            the mechanism, not something a vendor is choosing. */}
+        <SettingsSection
+          title={t('products.simple.aiSearchTitle')}
+          description={t('products.review.vectorisationDescription')}
+          action={
+            <Switch
+              checked={vectorisationEnabled}
+              onCheckedChange={(next) => {
+                setVectorisationEnabled(next);
+                // Turning this on is the *only* thing that makes a negotiation
+                // ceiling meaningful, so it presents the rows straight away
+                // rather than unfolding them below the fold where they were
+                // routinely missed. Dismissing is a real answer — pricing is
+                // optional, and the summary row below reopens it.
+                if (next && canPriceBargain) setBargainOpen(true);
+              }}
+              disabled={controlsDisabled}
+              aria-label={t('products.review.vectorisationTitle')}
+            />
+          }
+          // With no negotiation row under it the header is the whole section, so
+          // its bottom margin would only pad an empty body.
+          className={cn(!(vectorisationEnabled && canPriceBargain) && '[&>div:first-child]:mb-0')}
         >
-          <Handshake className="size-5 shrink-0 text-muted-foreground" aria-hidden />
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium">{t('products.bargain.title')}</p>
-            <p
+          {/*
+            Bargainable pricing.
+
+            The rows themselves live in a sheet (BargainCeilingsSheet) — see its
+            header for why. What stays inline is a summary: how many windows are
+            set, and the way back in. That matters more than it looks, because the
+            sheet is dismissible and Publish is blocked while a ceiling is invalid;
+            without a collapsed row carrying that error, a vendor could be stuck on
+            a disabled button with the explanation hidden behind a closed sheet.
+
+            Gated on the LOCAL toggle state, not `product.vectorisationEnabled`, so
+            it appears the moment the switch flips; the flip is persisted by the
+            same handler that writes these ceilings.
+          */}
+          {vectorisationEnabled && canPriceBargain && (
+            <button
+              type="button"
+              onClick={() => setBargainOpen(true)}
+              disabled={controlsDisabled}
               className={cn(
-                'mt-0.5 text-xs',
-                hasCeilingErrors ? 'text-destructive' : 'text-muted-foreground',
+                'group flex min-h-11 w-full items-center justify-between gap-4 rounded-md text-left',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+                'disabled:pointer-events-none disabled:opacity-60',
               )}
             >
-              {hasCeilingErrors
-                ? t('products.bargain.summaryInvalid')
-                : ceilingsSetCount > 0
-                  ? t('products.bargain.summarySet', { count: ceilingsSetCount })
-                  : t('products.bargain.summaryNone')}
-            </p>
-          </div>
-          <span className="shrink-0 text-xs font-semibold text-primary">
-            {ceilingsSetCount > 0 ? t('common.actions.edit') : t('products.bargain.summaryAction')}
-          </span>
-        </button>
-      )}
-
-      {/*
-        Shipping configuration — same collapsed-summary-plus-sheet shape as the
-        bargain row above, and for the same reason: seven fields unfolded inline
-        would push Publish off a phone screen.
-
-        Shared with the quick-add editor, which had no equivalent until this was
-        extracted — the two flows produce the same record, so they should not
-        have two implementations of the control that writes it.
-      */}
-      <ShippingConfigRow
-        productId={productId}
-        isPhysical={isPhysical}
-        disabled={controlsDisabled}
-      />
+              <span className="min-w-0">
+                <span className="block text-sm font-medium">{t('products.bargain.title')}</span>
+                <span
+                  className={cn(
+                    'mt-0.5 block text-sm',
+                    hasCeilingErrors ? 'text-destructive' : 'text-muted-foreground',
+                  )}
+                >
+                  {hasCeilingErrors
+                    ? t('products.bargain.summaryInvalid')
+                    : ceilingsSetCount > 0
+                      ? t('products.bargain.summarySet', { count: ceilingsSetCount })
+                      : t('products.bargain.summaryNone')}
+                </span>
+              </span>
+              <span className="shrink-0 text-sm font-medium text-primary group-hover:underline group-hover:underline-offset-4">
+                {ceilingsSetCount > 0 ? t('common.actions.edit') : t('products.bargain.summaryAction')}
+              </span>
+            </button>
+          )}
+        </SettingsSection>
+      </SettingsSections>
 
       <BargainCeilingsSheet
         open={bargainOpen}
@@ -425,72 +430,37 @@ export function StepReview({
         productImages={productImages}
       />
 
-      {/* Activation checklist */}
-      <div className="space-y-2">
-        <p className="text-sm font-medium">{t('products.review.requirements')}</p>
-        {canPublish ? (
-          <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
-            <CheckCircle2 className="w-4 h-4" />
-            {t('products.review.requirementsMet')}
-          </div>
-        ) : (
-          <ul className="space-y-1.5">
-            {activationErrors.map((key, i) => (
-              <li key={i} className="flex items-start gap-2 text-sm text-destructive">
-                <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
-                {t(key)}
-              </li>
-            ))}
-          </ul>
+      {/* The activation checklist sits right above the buttons it gates. */}
+      <StepActions onBack={onBack} notice={requirements}>
+        {product?.status === 'draft' && (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onSaveDraft(submitValues())}
+            disabled={isSaving || isLockedForVectorisation || hasCeilingErrors}
+          >
+            {t('products.review.keepAsDraft')}
+          </Button>
         )}
-      </div>
-
-      {/* Navigation */}
-      <div className="flex items-center justify-between pt-2">
-        <Button type="button" variant="ghost" size="sm" onClick={onBack} className="gap-1.5">
-          <ChevronLeft className="w-4 h-4" />
-          {t('common.actions.back')}
-        </Button>
-        <div className="flex items-center gap-2">
-          {product?.status === 'draft' && (
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onSaveDraft(submitValues())}
-              disabled={isSaving || isLockedForVectorisation || hasCeilingErrors}
-            >
-              {t('products.review.keepAsDraft')}
-            </Button>
-          )}
-          {showPublish && (
-            <Button
-              type="button"
-              onClick={() => onPublish(submitValues())}
-              disabled={isSaving || !canPublish || isLockedForVectorisation || hasCeilingErrors}
-              className="gap-1.5"
-            >
-              {isSaving ? (
-                t('products.review.publishing')
-              ) : (
-                <>
-                  <Globe className="w-4 h-4" />
-                  {t('products.actions.publish')}
-                </>
-              )}
-            </Button>
-          )}
-          {showSaveChanges && (
-            <Button
-              type="button"
-              onClick={() => onSaveDraft(submitValues())}
-              disabled={isSaving || isLockedForVectorisation || hasCeilingErrors}
-              className="gap-1.5"
-            >
-              {isSaving ? t('common.actions.saving') : t('common.actions.saveChanges')}
-            </Button>
-          )}
-        </div>
-      </div>
+        {showPublish && (
+          <Button
+            type="button"
+            onClick={() => onPublish(submitValues())}
+            disabled={isSaving || !canPublish || isLockedForVectorisation || hasCeilingErrors}
+          >
+            {isSaving ? t('products.review.publishing') : t('products.actions.publish')}
+          </Button>
+        )}
+        {showSaveChanges && (
+          <Button
+            type="button"
+            onClick={() => onSaveDraft(submitValues())}
+            disabled={isSaving || isLockedForVectorisation || hasCeilingErrors}
+          >
+            {isSaving ? t('common.actions.saving') : t('common.actions.saveChanges')}
+          </Button>
+        )}
+      </StepActions>
     </div>
   );
 }

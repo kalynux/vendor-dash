@@ -2,13 +2,15 @@
 // and `/api/me/phone`. See api-doc/me/contact-change.md.
 //
 // Both changes are two-step with a pending state, and the two halves prove
-// control in completely different ways.
+// control in completely different ways: a link emailed to the new address, and a
+// six-digit WhatsApp code sent to the new number (`/me/phone/verify/*` — see
+// phone-verification.types.ts).
 //
-// 🔴 **Changing a phone number requires a linked WhatsApp connection, and a
-// Telegram connection does not count.** There is no SMS code: the proof is that
-// the account already has a WhatsApp connection whose number IS the pending
-// number. So an account with no WhatsApp connection cannot change its phone here
-// at all — say so before the form rather than after a 422.
+// ⛔ **A phone change no longer needs a linked WhatsApp connection.** It used to:
+// the only proof was a connection on the new number, confirmed through
+// `POST /me/phone/confirm`. Since 2026-09-21 every frontend confirms with the
+// code, and that route is left to the bot. Do not bring back "connect WhatsApp
+// from your new number first" copy.
 //
 // ⚠ **No session is revoked.** Neither change stamps the password epoch, so every
 // existing token on every device keeps working. Do not warn the vendor they will
@@ -28,10 +30,16 @@ export interface PendingContactChange {
   expiresAt: string;
 }
 
-/** `GET /api/me/contact`. The token and its hash are never returned. */
+/**
+ * `GET /api/me/contact`. The token and its hash are never returned.
+ *
+ * ⚠ `email` and `phone` are each nullable — an account may hold only one of the
+ * two, and a vendor registers with a phone and an *optional* email. A `null` here
+ * is "nothing yet, add one", not a load failure.
+ */
 export interface ContactState {
-  email: string;
-  phone: string;
+  email: string | null;
+  phone: string | null;
   pendingEmail: PendingContactChange | null;
   pendingPhone: PendingContactChange | null;
 }

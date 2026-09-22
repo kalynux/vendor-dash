@@ -105,7 +105,17 @@ export function EditorPageShell({
     return (
       // `-mx-6 -mt-6` cancels `<main>`'s ordinary padding so the page reaches
       // both edges; the header re-applies the status-bar inset itself.
-      <div className="-mx-6 -mt-6 animate-fade-in">
+      //
+      // `overflow-x-clip`: one control wider than the screen — a Select whose
+      // chosen address will not truncate, say — made the whole document wider
+      // than the viewport, and a phone then lays every fixed layer out against
+      // that wider page: the header slides up out of view, and bottom sheets
+      // open offset and too wide (worse on each reopen, because the scroll lock
+      // mistakes the extra width for a scrollbar and pads the body by it).
+      // Clipping here keeps any such overflow inside the page. `clip`, not
+      // `hidden`: it makes no scroll container, so the sticky header still
+      // sticks.
+      <div className="-mx-6 -mt-6 overflow-x-clip animate-fade-in">
         <MobilePageHeader
           title={title}
           description={description}

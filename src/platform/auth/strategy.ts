@@ -79,6 +79,19 @@ export interface AuthStrategy {
    */
   endSession(): Promise<void>;
 
+  /**
+   * Whether this device is still signed in after it changes the account password
+   * itself.
+   *
+   * `PATCH /me/password` revokes every token minted before it — this device's own
+   * included — and hands the caller a replacement pair **as cookies only**: the
+   * backend will not put a token in a response body. Cookie mode receives them
+   * and carries on. Bearer mode cannot, so its stored pair is dead the moment the
+   * 200 lands and it has to sign in again with the new password
+   * (`authService.changePassword` does). See api-doc/me/password.md.
+   */
+  readonly passwordChangeKeepsSession: boolean;
+
   readonly paths: AuthPaths;
 }
 
@@ -128,6 +141,9 @@ export const cookieAuthStrategy: AuthStrategy = {
       // best-effort
     }
   },
+
+  // The replacement cookies arrive on the password change's own response.
+  passwordChangeKeepsSession: true,
 
   paths: {
     login: '/auth/login',
@@ -218,6 +234,10 @@ export const bearerAuthStrategy: AuthStrategy = {
     // pair IS the logout. Nothing can throw here.
     await tokenStore.clear();
   },
+
+  // There is no mobile twin of `/me/password` that returns `data.tokens`, and the
+  // stored refresh token predates the change, so a refresh cannot rescue it either.
+  passwordChangeKeepsSession: false,
 
   paths: {
     login: '/auth/mobile/login',

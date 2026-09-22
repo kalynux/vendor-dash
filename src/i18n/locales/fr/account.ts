@@ -197,6 +197,7 @@ export const account = {
         emailLabel: 'Adresse e-mail',
         phoneLabel: 'Numéro de téléphone',
         change: 'Modifier',
+        add: 'Ajouter',
         cancelChange: 'Annuler la modification',
 
         newEmailLabel: 'Nouvelle adresse e-mail',
@@ -210,17 +211,9 @@ export const account = {
             "Continuez à vous connecter avec votre e-mail actuel jusqu'à ce que vous confirmiez depuis le lien envoyé.",
 
         newPhoneLabel: 'Nouveau numéro de téléphone',
-        whatsappRequired:
-            'Nous prouvons un numéro de téléphone via WhatsApp : le numéro que vous utilisez doit donc disposer de WhatsApp. Si WhatsApp est déjà lié à ce numéro, vous pouvez confirmer sans code.',
-        whatsappNumberMismatch:
-            'Votre numéro WhatsApp lié se termine par {{hint}}, ce qui ne correspond pas à celui-ci. Vous pouvez tout de même vérifier ce numéro avec un code.',
-        manageConnections: 'Gérer les connexions',
         phoneFlowHint:
-            'Nous enverrons ensuite un code à six chiffres au nouveau numéro sur WhatsApp, et la modification prendra effet dès que vous le saisirez. Vous avez 24 heures pour terminer.',
-        phoneChangeRequested: 'Vérifiez maintenant le nouveau numéro pour terminer.',
+            'Nous enverrons un code à six chiffres au nouveau numéro sur WhatsApp : utilisez donc un numéro qui a WhatsApp. La modification prend effet dès que vous saisissez le code. Vous avez 24 heures pour terminer.',
         phoneChangeCancelled: 'Modification du numéro annulée.',
-        phoneChanged: 'Votre numéro de téléphone a été modifié.',
-        confirmPhone: 'Confirmer avec WhatsApp',
         phonePendingNotice:
             "Continuez à vous connecter avec votre numéro actuel jusqu'à la confirmation.",
 
@@ -236,7 +229,7 @@ export const account = {
         codeSentTo: 'Nous avons envoyé un code sur WhatsApp au {{phone}}.',
         codeExpires: 'Il expire {{when}}.',
         codeCompletesChange:
-            'En le saisissant, votre numéro de connexion devient le nouveau.',
+            'En le saisissant, votre numéro de connexion devient le nouveau. Si WhatsApp était lié à votre ancien numéro, le lien passe aussi au nouveau.',
         codeVerifiesCurrent: 'En le saisissant, vous confirmez le numéro déjà associé à votre compte.',
         submitCode: 'Vérifier le numéro',
         attemptsLeft: plural({
@@ -247,7 +240,10 @@ export const account = {
         phoneVerified: 'Votre numéro de téléphone est vérifié.',
         phoneChangedAndVerified: 'Votre numéro de téléphone a été modifié et vérifié.',
         codeDeliveryHint:
-            "Si le code n'arrive pas, envoyez un message à notre bot WhatsApp depuis ce numéro, puis demandez-en un nouveau.",
+            "Le code peut mettre une minute à arriver. S'il n'arrive pas, demandez-en un nouveau.",
+        deliverySupportHint:
+            'Toujours rien ? Notre équipe de support peut examiner le problème pour vous.',
+        contactSupport: 'Contacter le support',
 
         pendingTarget: 'En attente de passage à {{target}}',
         pendingExpires: 'Expire {{when}}.',
@@ -278,6 +274,8 @@ export const account = {
         passwordsDontMatch: 'Les mots de passe ne correspondent pas.',
         updatePassword: 'Mettre à jour le mot de passe',
         updated: 'Mot de passe mis à jour. Tous les autres appareils ont été déconnectés.',
+        updatedSignInAgain:
+            'Mot de passe mis à jour. Reconnectez-vous avec votre nouveau mot de passe.',
         updateFailed: 'Nous n’avons pas pu changer votre mot de passe. Veuillez réessayer.',
         rules: {
             length: 'Au moins 8 caractères',

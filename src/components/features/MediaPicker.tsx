@@ -474,12 +474,20 @@ export function MediaPicker({
               variant="outline"
               onClick={requestUpload}
               disabled={uploading}
-              className="h-11 shrink-0 gap-2 rounded-xl"
+              aria-label={t('common.actions.upload')}
+              className="h-11 shrink-0 gap-2 rounded-xl max-sm:w-11 max-sm:px-0"
             >
               {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
               <span className="hidden sm:inline">{t('common.actions.upload')}</span>
             </Button>
-            <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as 'grid' | 'list')}>
+            {/* Grid only on a phone: at that width a fourth control squeezes the
+                search box, and a list of truncated file names is no easier to
+                pick from than the pictures themselves. */}
+            <Tabs
+              value={viewMode}
+              onValueChange={(v) => setViewMode(v as 'grid' | 'list')}
+              className="max-sm:hidden"
+            >
               <TabsList className="h-11 rounded-xl">
                 <TabsTrigger value="grid" className="px-2" aria-label={t('media.picker.gridView')}>
                   <Grid3X3 className="h-4 w-4" />
@@ -496,7 +504,7 @@ export function MediaPicker({
   );
 
   const grid = (
-    <div className="grid grid-cols-3 gap-4 sm:grid-cols-4 lg:grid-cols-5">
+    <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 sm:gap-4 lg:grid-cols-5">
       {visibleFiles.map((file) => {
         const added = alreadySelected.has(file.id);
         const isSelected = added || !!selected[file.id];
@@ -505,7 +513,7 @@ export function MediaPicker({
             key={file.id}
             onClick={() => toggleSelection(file)}
             className={cn(
-              'group relative overflow-hidden rounded-lg border-2 transition-all',
+              'group relative overflow-hidden rounded-lg border-2 transition-colors',
               added
                 ? 'cursor-default border-primary/40 opacity-70'
                 : isSelected
@@ -513,22 +521,20 @@ export function MediaPicker({
                   : 'cursor-pointer border-transparent hover:border-muted',
             )}
           >
-            <div className="relative aspect-square overflow-hidden rounded-t-lg bg-muted">
+            <div className="relative aspect-square overflow-hidden rounded-md bg-muted sm:rounded-b-none">
               <FileThumb file={file} />
-              <div className="absolute right-2 top-2">
+              <div className="absolute right-1.5 top-1.5 sm:right-2 sm:top-2">
                 <SelectionBox checked={isSelected} />
               </div>
-              <div className="absolute bottom-2 left-2">
-                {added ? (
+              {added && (
+                <div className="absolute bottom-1.5 left-1.5 sm:bottom-2 sm:left-2">
                   <Badge className="bg-primary text-xs text-primary-foreground">{t('media.picker.added')}</Badge>
-                ) : (
-                  <Badge variant="secondary" className="text-xs capitalize">
-                    {kindFromMime(file.mimeType)}
-                  </Badge>
-                )}
-              </div>
+                </div>
+              )}
             </div>
-            <div className="p-3">
+            {/* The file name only where a tile is wide enough to show some of
+                it; on a phone it truncated to a few letters under every picture. */}
+            <div className="hidden px-3 py-2.5 sm:block">
               <p className="truncate text-sm font-medium">{file.originalName ?? t('media.details.untitled')}</p>
             </div>
           </div>
@@ -618,7 +624,7 @@ export function MediaPicker({
       <div className="flex-1 overflow-auto p-4 sm:p-6">
         {isLoading ? (
           viewMode === 'grid' ? (
-            <div className="grid grid-cols-3 gap-4 sm:grid-cols-4 lg:grid-cols-5">
+            <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 sm:gap-4 lg:grid-cols-5">
               {Array.from({ length: 10 }).map((_, i) => (
                 <Skeleton key={i} className="aspect-square" />
               ))}
@@ -632,21 +638,34 @@ export function MediaPicker({
           )
         ) : visibleFiles.length === 0 ? (
           <div className="py-12 text-center">
-            <ImageIcon className="mx-auto mb-3 h-12 w-12 text-muted-foreground" />
-            <p className="text-muted-foreground">{t('media.picker.noFiles')}</p>
-            {hasActiveFilters && (
+            <p className="text-sm text-muted-foreground">{t('media.picker.noFiles')}</p>
+            <div className="mt-3 flex flex-wrap justify-center gap-2">
+              {/* The same Upload the toolbar offers, where the eye already is —
+                  an empty library is the common case the first time a vendor
+                  adds product photos. */}
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => {
-                  setSearchInput('');
-                  setFilters(DEFAULT_FILTERS);
-                }}
-                className="mt-3"
+                onClick={requestUpload}
+                disabled={uploading}
+                className="gap-2"
               >
-                {t('media.picker.clearFilters')}
+                <Upload className="h-4 w-4" />
+                {t('common.actions.upload')}
               </Button>
-            )}
+              {hasActiveFilters && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setSearchInput('');
+                    setFilters(DEFAULT_FILTERS);
+                  }}
+                >
+                  {t('media.picker.clearFilters')}
+                </Button>
+              )}
+            </div>
           </div>
         ) : viewMode === 'grid' ? (
           grid
@@ -656,11 +675,13 @@ export function MediaPicker({
 
         {/* Pagination */}
         {pagination && pagination.pages > 1 && (
-          <div className="mt-4 flex items-center justify-between">
-            <p className="text-sm text-muted-foreground">
+          <div className="mt-4 flex items-center justify-between gap-3">
+            <p className="min-w-0 text-sm text-muted-foreground">
               {t('common.pagination.pageOf', { page: pagination.page, total: pagination.pages })}
-              {' · '}
-              {t('media.picker.totalFiles', { count: pagination.total })}
+              <span className="hidden sm:inline">
+                {' · '}
+                {t('media.picker.totalFiles', { count: pagination.total })}
+              </span>
             </p>
             <div className="flex items-center gap-2">
               <Button
@@ -703,12 +724,14 @@ export function MediaPicker({
     </div>
   );
 
+  // On a phone: a quiet Cancel and a thumb-sized primary that takes the rest of
+  // the row. On desktop: the two buttons at either end, as before.
   const footer = (
-    <div className="flex items-center justify-between border-t px-4 py-4 sm:px-6">
-      <Button variant="outline" onClick={onClose}>
+    <div className="flex items-center justify-between gap-3 border-t px-4 py-3 sm:px-6 sm:py-4">
+      <Button variant={isMobile ? 'ghost' : 'outline'} onClick={onClose} className="max-md:h-11">
         {t('common.actions.cancel')}
       </Button>
-      <Button onClick={handleConfirm} disabled={selectedCount === 0}>
+      <Button onClick={handleConfirm} disabled={selectedCount === 0} className="max-md:h-11 max-md:flex-1">
         {selectedCount > 0
           ? t('media.picker.selectCount', { count: selectedCount })
           : t('common.actions.select')}

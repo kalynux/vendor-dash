@@ -27,6 +27,7 @@ export const onboarding = {
 
     optional: 'Cette étape est facultative',
     saveAndFinish: 'Enregistrer et terminer',
+    saveAndContinue: 'Enregistrer et continuer',
     continuing: 'Poursuite…',
 
     basicSetup: {
@@ -80,8 +81,8 @@ export const onboarding = {
         subheading:
             'Facultatif — ajoutez votre logo et l’adresse de votre boutique pour offrir une meilleure ' +
             'expérience à vos clients. Vous pourrez toujours le faire plus tard.',
-        profileComplete: 'Profil complet ! Bienvenue 🎉',
-        setupComplete: 'Configuration terminée ! Bienvenue sur le tableau de bord 🎉',
+        saved: 'Logo et adresses enregistrés.',
+        skipped: 'Étape passée — vous pourrez les ajouter plus tard depuis votre compte.',
         title: 'Personnalisez votre boutique',
         description: 'Ajoutez un logo et une bannière pour que vos clients vous reconnaissent.',
         logo: 'Logo',

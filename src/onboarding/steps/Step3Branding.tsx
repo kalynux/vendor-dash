@@ -89,7 +89,7 @@ export function Step3Branding() {
                 // The logo/banner landed on the store — refresh it so the header,
                 // sidebar and a revisit of this step all read the new images.
                 await loadStore();
-                toast.success(t('onboarding.branding.profileComplete'));
+                toast.success(t('onboarding.branding.saved'));
             } catch (err) {
                 setApiError(errors.resolve(err, { fallbackKey: 'onboarding.errors.saveFailed' }));
             }
@@ -102,7 +102,7 @@ export function Step3Branding() {
         setIsSkipping(true);
         try {
             await submitBranding({ skip: true });
-            toast.success(t('onboarding.branding.setupComplete'));
+            toast.success(t('onboarding.branding.skipped'));
         } catch (err) {
             setApiError(errors.resolve(err, { fallbackKey: 'onboarding.errors.skipFailed' }));
         } finally {
@@ -125,7 +125,7 @@ export function Step3Branding() {
                     </>
                 ) : (
                     <>
-                        {t('onboarding.saveAndFinish')}
+                        {t('onboarding.saveAndContinue')}
                         <ChevronRight className="w-4 h-4" />
                     </>
                 )}

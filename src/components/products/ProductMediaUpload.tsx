@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { X, GripVertical, ImagePlus, Info, RefreshCw } from 'lucide-react';
+import { X, GripVertical, ImagePlus, Info, Plus, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { MediaPicker } from '@/components/features/MediaPicker';
 import { useFormatters, useTranslation } from '@/i18n';
@@ -32,6 +32,18 @@ interface ProductMediaUploadProps {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * A round control sitting on a photo tile. Visible by default (touch screens
+ * have no hover to reveal it), faded out until hover only where the pointer can
+ * hover. `tap-target` extends the touch area to 44px without reflow.
+ */
+const TILE_BUTTON = cn(
+  'tap-target absolute z-10 flex size-7 items-center justify-center rounded-full bg-black/60 text-white transition-opacity',
+  'hover:bg-black/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white',
+  'disabled:pointer-events-none disabled:opacity-50',
+  '[@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:focus-visible:opacity-100',
+);
 
 function formatMime(mime: string): string {
   const sub = mime.split('/')[1] ?? mime;
@@ -160,11 +172,39 @@ export function ProductMediaUpload({
 
   const canAddMore = items.length < maxFiles;
   const interactive = !disabled && !isUploading;
+  const openPicker = () => {
+    if (interactive) setPickerOpen(true);
+  };
 
   return (
-    <div className="space-y-4">
-      {/* Ordered grid */}
-      {items.length > 0 && (
+    <div>
+      {items.length === 0 ? (
+        // Empty: one plain control, not a drop zone — nothing is dropped here,
+        // the picker is where files are uploaded.
+        canAddMore && (
+          <button
+            type="button"
+            onClick={openPicker}
+            disabled={!interactive}
+            className={cn(
+              'flex w-full items-center gap-3 rounded-lg border border-dashed border-input px-4 py-5 text-left transition-colors',
+              'hover:border-primary/50 hover:bg-muted/40',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+              'disabled:cursor-not-allowed disabled:opacity-50',
+            )}
+          >
+            <ImagePlus className="size-5 shrink-0 text-muted-foreground" aria-hidden />
+            <span className="min-w-0">
+              <span className="block text-sm font-medium">
+                {t('products.media.addPhotos', { count: maxFiles })}
+              </span>
+              <span className="mt-0.5 block text-sm text-muted-foreground">
+                {t('products.media.addPhotosHint', { count: maxFiles })}
+              </span>
+            </span>
+          </button>
+        )
+      ) : (
         <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 lg:grid-cols-5">
           {items.map((item, index) => {
             const isFirst = index === 0;
@@ -182,47 +222,62 @@ export function ProductMediaUpload({
                 onDrop={(e) => handleItemDrop(e, index)}
                 onDragEnd={handleItemDragEnd}
                 className={cn(
-                  'group relative aspect-square select-none overflow-hidden rounded-lg border transition-all',
-                  'cursor-grab active:cursor-grabbing',
+                  // No `overflow-hidden` on the tile itself: it would clip the
+                  // 44px touch halo of the corner buttons. The picture is
+                  // clipped by the inner layer instead.
+                  'group relative aspect-square select-none transition-transform',
+                  '[@media(hover:hover)]:cursor-grab [@media(hover:hover)]:active:cursor-grabbing',
                   isBeingDragged && 'scale-95 opacity-40',
-                  isDragTarget ? 'scale-[1.03] border-primary ring-2 ring-primary/40' : 'border-border',
+                  isDragTarget && 'scale-[1.03]',
                 )}
               >
-                {item.url ? (
-                  <img
-                    src={item.url}
-                    alt={item.name}
-                    className="pointer-events-none h-full w-full object-cover"
-                    draggable={false}
-                  />
-                ) : (
-                  <div className="pointer-events-none flex h-full w-full items-center justify-center bg-muted px-2 text-center text-[10px] leading-tight text-muted-foreground">
-                    {formatMime(item.mime)}
-                  </div>
-                )}
+                <div
+                  className={cn(
+                    'absolute inset-0 overflow-hidden rounded-lg border bg-muted',
+                    isDragTarget ? 'border-primary ring-2 ring-primary/40' : 'border-border',
+                  )}
+                >
+                  {item.url ? (
+                    <img
+                      src={item.url}
+                      alt={item.name}
+                      className="pointer-events-none h-full w-full object-cover"
+                      draggable={false}
+                    />
+                  ) : (
+                    <div className="pointer-events-none flex h-full w-full items-center justify-center px-2 text-center text-xs text-muted-foreground">
+                      {formatMime(item.mime)}
+                    </div>
+                  )}
 
-                <div className="pointer-events-none absolute inset-0 bg-black/0 transition-colors group-hover:bg-black/35" />
+                  {/* Mouse only: a dim to carry the hover controls. */}
+                  <div className="pointer-events-none absolute inset-0 transition-colors [@media(hover:hover)]:group-hover:bg-black/30" />
 
-                {showInfo && (
-                  <div
-                    className="absolute inset-0 z-20 flex cursor-pointer flex-col justify-center gap-1 bg-black/85 px-2"
-                    onClick={() => setInfoIndex(null)}
-                  >
-                    <p className="truncate text-[10px] font-semibold leading-tight text-white">{item.name}</p>
-                    <p className="text-[10px] text-white/70">{fmt.fileSize(item.size)}</p>
-                    <p className="text-[10px] text-white/70">{formatMime(item.mime)}</p>
-                    <p className="mt-1 text-[9px] text-white/40">{t('products.media.tapToClose')}</p>
-                  </div>
-                )}
+                  {showInfo && (
+                    <div
+                      className="absolute inset-0 z-20 flex cursor-pointer flex-col justify-center gap-0.5 bg-black/85 px-2.5 text-xs"
+                      onClick={() => setInfoIndex(null)}
+                    >
+                      <p className="truncate font-medium text-white">{item.name}</p>
+                      <p className="text-white/75">{fmt.fileSize(item.size)}</p>
+                      <p className="text-white/75">{formatMime(item.mime)}</p>
+                      <p className="mt-1 text-white/60">{t('products.media.tapToClose')}</p>
+                    </div>
+                  )}
+                </div>
 
-                {isFirst && (
-                  <div className="absolute left-1 top-1 rounded-full bg-primary px-1.5 py-0.5 text-[9px] font-bold leading-none text-primary-foreground shadow">
+                {isFirst && !showInfo && (
+                  <span className="pointer-events-none absolute left-1.5 top-1.5 rounded bg-black/65 px-1.5 py-0.5 text-xs font-medium text-white">
                     {t('products.media.thumbnail')}
-                  </div>
+                  </span>
                 )}
 
                 {!showInfo && (
                   <>
+                    {/* Remove and replace are always shown on touch screens —
+                        there is no hover there — and revealed on hover with a
+                        mouse. `tap-target` gives them a 44px touch area without
+                        growing the painted circle. */}
                     <button
                       type="button"
                       onClick={(e) => {
@@ -230,9 +285,11 @@ export function ProductMediaUpload({
                         removeItem(index);
                       }}
                       disabled={!interactive}
-                      className="absolute right-1 top-1 z-10 flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-destructive-foreground opacity-0 shadow transition-opacity group-hover:opacity-100"
+                      aria-label={t('common.actions.remove')}
+                      title={t('common.actions.remove')}
+                      className={cn(TILE_BUTTON, 'right-1.5 top-1.5')}
                     >
-                      <X className="h-3 w-3" />
+                      <X className="size-4" />
                     </button>
 
                     <button
@@ -242,59 +299,60 @@ export function ProductMediaUpload({
                         if (interactive) setReplaceIndex(index);
                       }}
                       disabled={!interactive}
+                      aria-label={t('products.media.replaceImage')}
                       title={t('products.media.replaceImage')}
-                      className="absolute bottom-1 left-1 z-10 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white opacity-0 shadow transition-opacity group-hover:opacity-100"
+                      className={cn(TILE_BUTTON, 'bottom-1.5 left-1.5')}
                     >
-                      <RefreshCw className="h-3 w-3" />
+                      <RefreshCw className="size-3.5" />
                     </button>
 
+                    {/* File details: a mouse nicety. On a phone a third button
+                        on a ~110px tile is clutter, so it stays hover-only. */}
                     <button
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
                         setInfoIndex(index);
                       }}
-                      className="absolute bottom-1 right-1 z-10 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white opacity-0 shadow transition-opacity group-hover:opacity-100"
+                      aria-label={t('common.actions.viewDetails')}
+                      title={t('common.actions.viewDetails')}
+                      className={cn(TILE_BUTTON, 'bottom-1.5 right-1.5 hidden [@media(hover:hover)]:flex')}
                     >
-                      <Info className="h-3 w-3" />
+                      <Info className="size-3.5" />
                     </button>
 
-                    <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-0 transition-opacity group-hover:opacity-50">
-                      <GripVertical className="h-6 w-6 text-white drop-shadow-md" />
+                    {/* Drag to reorder is a mouse gesture; the handle only
+                        appears where it can be used. */}
+                    <div className="pointer-events-none absolute inset-0 hidden items-center justify-center opacity-0 transition-opacity [@media(hover:hover)]:flex [@media(hover:hover)]:group-hover:opacity-60">
+                      <GripVertical className="size-6 text-white" />
                     </div>
                   </>
                 )}
               </div>
             );
           })}
-        </div>
-      )}
 
-      {/* Add-from-library trigger */}
-      {canAddMore && (
-        <button
-          type="button"
-          onClick={() => interactive && setPickerOpen(true)}
-          disabled={!interactive}
-          className={cn(
-            'flex w-full flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed p-8 transition-all',
-            'border-border hover:border-primary/50 hover:bg-muted/50',
-            !interactive && 'pointer-events-none cursor-not-allowed opacity-50',
+          {/* Once there are photos, adding more is one more tile in the grid. */}
+          {canAddMore && (
+            <button
+              type="button"
+              onClick={openPicker}
+              disabled={!interactive}
+              className={cn(
+                'flex aspect-square flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-input text-sm transition-colors',
+                'hover:border-primary/50 hover:bg-muted/40',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                'disabled:cursor-not-allowed disabled:opacity-50',
+              )}
+            >
+              <Plus className="size-5 text-muted-foreground" aria-hidden />
+              <span className="font-medium">{t('common.actions.add')}</span>
+              <span className="text-muted-foreground">
+                {t('products.media.tileCount', { count: items.length, max: maxFiles })}
+              </span>
+            </button>
           )}
-        >
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
-            <ImagePlus className="h-6 w-6 text-muted-foreground" />
-          </div>
-          <div className="text-center">
-            <p className="text-sm font-medium">{t('products.media.addFromLibrary')}</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {t('products.media.addFromLibraryHint', {
-                max: maxFiles,
-                remaining: maxFiles - items.length,
-              })}
-            </p>
-          </div>
-        </button>
+        </div>
       )}
 
       <MediaPicker

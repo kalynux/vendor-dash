@@ -1,5 +1,3 @@
-import { Handshake } from 'lucide-react';
-
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -77,11 +75,11 @@ export function BargainCeilingsSheet({
       {/* Stated once, at the top, because it is the one thing a vendor filling in
           a "maximum" does not expect: this number is the shelf price, not private
           headroom above it (api-doc/vendor/variants.md § 0). */}
-      <p className="mb-4 rounded-lg bg-muted/60 p-3 text-xs text-muted-foreground">
+      <p className="mb-5 text-sm text-muted-foreground">
         {t('products.bargain.shelfPriceNotice')}
       </p>
 
-      <div className="space-y-3">
+      <div className="space-y-4">
         {variants.map((v) => {
           const rowError = errors[v.id];
           const minCeiling = minCeilingFor(v.price);
@@ -97,7 +95,7 @@ export function BargainCeilingsSheet({
           return (
             <div
               key={v.id}
-              className="grid grid-cols-1 gap-2 border-t border-border pt-3 first:border-t-0 first:pt-0 sm:grid-cols-[1fr_auto] sm:items-start"
+              className="grid grid-cols-1 gap-3 border-t border-border pt-4 first:border-t-0 first:pt-0 sm:grid-cols-[1fr_auto] sm:items-start"
             >
               {/* The variant's own first image, so a vendor pricing a forty-row
                   matrix recognises the row instead of decoding "Rouge / XL"
@@ -106,9 +104,9 @@ export function BargainCeilingsSheet({
                 <VariantThumb files={v.files} fallback={productImages} />
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium">{variantLabel(v)}</p>
-                  <div className="mt-0.5 flex flex-wrap items-center gap-2">
+                  <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">
                     <span className="font-mono text-xs text-muted-foreground">{v.sku}</span>
-                    <span className="text-xs tabular-nums text-muted-foreground">
+                    <span className="text-sm tabular-nums text-muted-foreground">
                       {fmt.currency(v.price)}
                     </span>
                     {/* A stored window shows regardless; `bargainable` only
@@ -117,13 +115,13 @@ export function BargainCeilingsSheet({
                     {v.bargain && (
                       <Badge
                         variant="outline"
-                        className={cn('text-[10px] font-normal', !v.bargainable && 'opacity-60')}
+                        className={cn('text-xs font-normal', !v.bargainable && 'opacity-60')}
                       >
                         {t('products.bargain.badge', { max: fmt.currency(v.bargain.maxPrice) })}
                       </Badge>
                     )}
                     {v.bargain && !v.bargainable && (
-                      <span className="text-[10px] text-muted-foreground">
+                      <span className="text-xs text-muted-foreground">
                         {t('products.bargain.inertHint')}
                       </span>
                     )}
@@ -155,7 +153,7 @@ export function BargainCeilingsSheet({
                 <p
                   id={`bargain-${v.id}-hint`}
                   className={cn(
-                    'mt-1 text-xs',
+                    'mt-1.5 text-sm sm:text-xs',
                     rowError ? 'text-destructive' : 'text-muted-foreground',
                   )}
                 >
@@ -164,7 +162,7 @@ export function BargainCeilingsSheet({
                     : t('products.bargain.ceilingMin', { min: fmt.currency(minCeiling) })}
                 </p>
                 {compareAtHidden && (
-                  <p className="mt-1 text-xs text-amber-600">
+                  <p className="mt-1.5 text-sm text-amber-700 dark:text-amber-400 sm:text-xs">
                     {t('products.fields.bargainCompareAtHidden', {
                       max: fmt.currency(asking),
                     })}
@@ -176,8 +174,7 @@ export function BargainCeilingsSheet({
         })}
       </div>
 
-      <p className="mt-4 flex items-start gap-2 text-xs text-muted-foreground">
-        <Handshake className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+      <p className="mt-5 text-sm text-muted-foreground">
         {t('products.bargain.clearHint')}
       </p>
     </ResponsiveModal>
