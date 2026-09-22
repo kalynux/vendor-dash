@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import type {
   Product, Order,
   AnalyticsMetrics, MetricWithChange, SalesDataPoint, TopProduct,
@@ -94,7 +94,11 @@ interface ProductState {
   selectedProducts: string[];
   isLoading: boolean;
   pagination: ProductListMeta | null;
-  fetchProducts: (params?: ProductsQueryParams) => Promise<void>;
+  /**
+   * `silent`: background refresh — no `isLoading` (so no skeleton) and no
+   * error toast; on failure the rows already shown stay.
+   */
+  fetchProducts: (params?: ProductsQueryParams, opts?: { silent?: boolean }) => Promise<void>;
   // createProduct / updateProduct are no-ops — the wizard pages handle their own saves
   createProduct: (product: Partial<Product>) => Promise<void>;
   updateProduct: (id: string, updates: Partial<Product>) => Promise<void>;
@@ -235,16 +239,26 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [productLoading, setProductLoading] = useState(false);
   const [productPagination, setProductPagination] = useState<ProductListMeta | null>(null);
 
-  const fetchProducts = useCallback(async (params?: ProductsQueryParams) => {
-    setProductLoading(true);
+  // Latest call wins: a slow background refresh must not land on top of the
+  // page or search the vendor asked for after it started.
+  const productRequestId = useRef(0);
+
+  const fetchProducts = useCallback(async (
+    params?: ProductsQueryParams,
+    opts?: { silent?: boolean },
+  ) => {
+    const silent = opts?.silent ?? false;
+    const id = ++productRequestId.current;
+    if (!silent) setProductLoading(true);
     try {
       const result = await apiFetchProducts(params ?? {});
+      if (id !== productRequestId.current) return;
       setProducts(result.data);
       setProductPagination(result.meta);
     } catch (err) {
-      toast.error(apiErrorMessage(err, { fallbackKey: 'products.errors.loadFailed' }));
+      if (!silent) toast.error(apiErrorMessage(err, { fallbackKey: 'products.errors.loadFailed' }));
     } finally {
-      setProductLoading(false);
+      if (!silent) setProductLoading(false);
     }
   }, []);
 

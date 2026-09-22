@@ -40,6 +40,13 @@ export interface UseInfiniteListOptions<T> {
    * tab switch / route round-trip doesn't reload. Cleared when `deps` change.
    */
   cacheKey?: string;
+  /**
+   * With `cacheKey`: after restoring from the cache, refetch the cached pages
+   * in the background and swap them in — no skeleton, rows stay on screen.
+   * For lists whose rows are edited on another route (Products → edit → back),
+   * where the cached copy is stale by the time you return.
+   */
+  revalidateOnRestore?: boolean;
 }
 
 export interface UseInfiniteListResult<T> {
@@ -70,6 +77,7 @@ export function useInfiniteList<T>({
   deps = [],
   enabled = true,
   cacheKey,
+  revalidateOnRestore = false,
 }: UseInfiniteListOptions<T>): UseInfiniteListResult<T> {
   const limit = React.useMemo(() => {
     if (typeof window === 'undefined') return minLimit;
@@ -133,6 +141,30 @@ export function useInfiniteList<T>({
     loadPage(1, 'replace');
   }, [loadPage]);
 
+  // Refetch pages 1..`upTo` in one go and replace the rows, leaving the stale
+  // ones on screen meanwhile. Doesn't claim a request id: any load that starts
+  // in the meantime (scroll, search, reload) wins and this result is dropped.
+  // A failure keeps the cached rows — they're still better than an error.
+  const revalidate = React.useCallback(
+    async (upTo: number) => {
+      const id = requestId.current;
+      try {
+        const pages = await Promise.all(
+          Array.from({ length: Math.max(1, upTo) }, (_, i) => fetchRef.current(i + 1, limit)),
+        );
+        if (id !== requestId.current) return;
+        const last = pages[pages.length - 1];
+        setItems(pages.flatMap((p) => p.items));
+        setTotal(last.total);
+        setTotalPages(last.totalPages);
+        setPage(pages.length);
+      } catch {
+        // Keep the cached rows.
+      }
+    },
+    [limit],
+  );
+
   // Reset + load whenever deps (filters/search) or enabled/limit change.
   // On the first enabled run, skip the fetch if we hydrated from cache.
   const didInit = React.useRef(false);
@@ -140,7 +172,11 @@ export function useInfiniteList<T>({
     if (!enabled) return;
     if (!didInit.current) {
       didInit.current = true;
-      if (hydrationRef.current) return; // restored from cache → no initial fetch
+      if (hydrationRef.current) {
+        // Restored from cache → no initial fetch, unless asked to refresh quietly.
+        if (revalidateOnRestore) revalidate(hydrationRef.current.page);
+        return;
+      }
       loadPage(1, 'replace');
       return;
     }

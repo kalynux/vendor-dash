@@ -290,8 +290,9 @@ export function Products() {
   useScrollRestoration('products');
 
   // Desktop uses the store + page-number pagination; mobile uses infinite scroll.
-  // Only fetch on mount when the store is empty so returning to the tab (or back
-  // from product-edit) doesn't reload data that's already there.
+  // Returning to the tab (or back from product-edit) shows the rows already in
+  // the store at once, then refreshes them quietly — an edit, a new product or a
+  // status change made elsewhere must show up without a manual reload.
   useEffect(() => {
     if (isMobile) return;
     // StrictMode invokes this effect twice on mount; the ref makes the fetch
@@ -306,6 +307,8 @@ export function Products() {
       fetchProducts().finally(() => setDidInitialLoad(true));
     } else {
       setDidInitialLoad(true);
+      // Same page the vendor left; the search box starts empty, so no `q`.
+      fetchProducts({ page: pagination?.page }, { silent: true });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isMobile]);
@@ -352,6 +355,7 @@ export function Products() {
     enabled: isMobile,
     deps: [debouncedSearch],
     cacheKey: 'products',
+    revalidateOnRestore: true,
   });
 
   const reloadList = useCallback(() => {
