@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Info, Loader2 } from 'lucide-react';
 
 import {
@@ -26,7 +26,8 @@ interface StorageInvoiceDetailSheetProps {
    * is not a spinner over known values — only `lines` needs the round trip.
    */
   seed?: StorageInvoice | null;
-  agencyName?: string;
+  /** The agency label, verified badge included — rendered as the sheet description. */
+  agencyName?: ReactNode;
 }
 
 /**

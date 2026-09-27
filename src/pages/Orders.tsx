@@ -89,6 +89,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { useInfiniteList } from '@/hooks/use-infinite-list';
 import { useScrollRestoration } from '@/hooks/use-scroll-restoration';
 import { MobilePageHeader } from '@/components/layout/MobilePageHeader';
+import { RefreshButton } from '@/components/common/RefreshButton';
 import { MobileListFooter } from '@/components/layout/MobileListFooter';
 import type { Order, VendorSettableStatus } from '@/types';
 import { CustomerAvatar } from '@/components/customers/CustomerAvatar';
@@ -422,6 +423,11 @@ export function Orders() {
     if (isMobile) infinite.reload();
     else fetchOrders(query);
   };
+
+  // The header's refresh icon: new orders arrive while the vendor is on the
+  // page, so pull them in without blanking the list.
+  const refreshList = () =>
+    isMobile ? infinite.refresh() : fetchOrders(query, { silent: true });
 
   const handleBulkStatusUpdate = async (status: VendorSettableStatus) => {
     if (status === 'cancelled') {
@@ -794,6 +800,7 @@ export function Orders() {
           <MobilePageHeader
             title={t('orders.title')}
             description={t('orders.subtitle')}
+            onRefresh={refreshList}
             actions={[
               {
                 id: 'create',
@@ -1010,9 +1017,12 @@ export function Orders() {
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold">{t('orders.title')}</h1>
-          <p className="text-muted-foreground">{t('orders.subtitle')}</p>
+        <div className="flex items-center gap-3">
+          <RefreshButton onRefresh={refreshList} />
+          <div>
+            <h1 className="text-2xl font-bold">{t('orders.title')}</h1>
+            <p className="text-muted-foreground">{t('orders.subtitle')}</p>
+          </div>
         </div>
         <div className="flex items-center gap-3">
           <Button variant="outline" className="gap-2">

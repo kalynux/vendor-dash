@@ -92,6 +92,12 @@ export function SimpleProductEdit() {
    * vendor looking at a quantity the server refused to write.
    */
   const [formEpoch, setFormEpoch] = useState(0);
+  /**
+   * The AI-search switch as the vendor has set it — NOT yet written. It is
+   * applied by the Save / Save & publish buttons like every other field here;
+   * `product.vectorisationEnabled` stays the saved value it is compared against.
+   */
+  const [aiSearchOn, setAiSearchOn] = useState(false);
 
   // The baseline the save diff is computed against; refreshed after every write
   // so a second save doesn't re-send what the first already persisted.
@@ -119,6 +125,7 @@ export function SimpleProductEdit() {
         setProduct(loaded);
         setVariant(loadedVariant);
         setLiveInfiniteStock(loadedVariant?.isInfiniteStock ?? false);
+        setAiSearchOn(loaded.vectorisationEnabled ?? false);
         initialValuesRef.current = toFormValues(loaded, loadedVariant);
 
         // Only an agency-warehoused product can have a pending stock request,
@@ -221,46 +228,17 @@ export function SimpleProductEdit() {
 
   // ─── Save ───────────────────────────────────────────────────────────────────
 
-  const handleSubmit = useCallback(
-    async (values: SimpleProductFormValues, intent: SimpleSubmitIntent) => {
-      if (!product || !initialValuesRef.current) return;
-      // `publish: false` is never sent from here — omitting it preserves the
-      // demote-on-invariant-break signal, and unpublishing goes through
-      // PATCH /products/:id/status instead.
-      const publish = intent === 'publish' ? true : undefined;
-      const payload = toUpdatePayload(values, initialValuesRef.current, publish);
-
-      if (isEmptyUpdate(payload) && publish === undefined) {
-        toast.info(t('products.simple.nothingToSave'));
-        return;
-      }
-
-      // Removing a live asking price is a price CUT on the storefront: the shop
-      // was quoting `bargain.maxPrice` and drops back to `price`, which until now
-      // was a private floor. Only ask when the window was actually on the shelf —
-      // an inert one (AI discovery off) was never quoted to anyone.
-      //
-      // The previous ceiling comes from the form's initial values rather than
-      // from the variant, because that IS what was stored — and `bargainable` is
-      // `vectorisationEnabled && bargain != null` by definition, so the product
-      // flag answers the "was it on the shelf" half without a variant read.
-      const previousAsking = initialValuesRef.current.bargainMaxPrice;
-      if (
-        'bargain' in payload &&
-        payload.bargain === null &&
-        typeof previousAsking === 'number' &&
-        previousAsking > 0 &&
-        product.vectorisationEnabled === true
-      ) {
-        const from = fmt.currency(previousAsking);
-        const to = fmt.currency(values.price);
-        if (!confirm(`${t('products.bargain.clearConfirm')}\n\n${from} → ${to}`)) return;
-      }
-
-      const wasActive = product.status === 'active';
-      setIsSubmitting(true);
-      setFormError(null);
-      setFieldErrors(undefined);
+  /**
+   * The form half of a save. Returns false when it failed — the error is already
+   * on the form — so the caller must not go on to apply the AI-search switch.
+   */
+  const saveContent = useCallback(
+    async (
+      values: SimpleProductFormValues,
+      payload: ReturnType<typeof toUpdatePayload>,
+      wasActive: boolean,
+    ): Promise<boolean> => {
+      if (!product) return false;
       try {
         const res = await updateSimpleProduct(product.id, payload);
         // Rebase the diff on what the server actually stored — the nested
@@ -310,16 +288,92 @@ export function SimpleProductEdit() {
         } else {
           toast.success(t('products.toast.changesSaved'));
         }
+        return true;
       } catch (err: unknown) {
         const projection = projectSimpleError(err);
         setFormError(projection.formError);
         setFieldErrors(projection.fieldErrors);
         window.scrollTo({ top: 0, behavior: 'smooth' });
+        return false;
+      }
+    },
+    [product, applyResult, t],
+  );
+
+  const handleSubmit = useCallback(
+    async (values: SimpleProductFormValues, intent: SimpleSubmitIntent) => {
+      if (!product || !initialValuesRef.current) return;
+      // `publish: false` is never sent from here — omitting it preserves the
+      // demote-on-invariant-break signal, and unpublishing goes through
+      // PATCH /products/:id/status instead.
+      const publish = intent === 'publish' ? true : undefined;
+      const payload = toUpdatePayload(values, initialValuesRef.current, publish);
+      const hasContentWrite = !isEmptyUpdate(payload) || publish !== undefined;
+      const aiSearchChanged = aiSearchOn !== (product.vectorisationEnabled ?? false);
+
+      if (!hasContentWrite && !aiSearchChanged) {
+        toast.info(t('products.simple.nothingToSave'));
+        return;
+      }
+
+      // Removing a live asking price is a price CUT on the storefront: the shop
+      // was quoting `bargain.maxPrice` and drops back to `price`, which until now
+      // was a private floor. Only ask when the window was actually on the shelf —
+      // an inert one (AI discovery off) was never quoted to anyone.
+      //
+      // The previous ceiling comes from the form's initial values rather than
+      // from the variant, because that IS what was stored — and `bargainable` is
+      // `vectorisationEnabled && bargain != null` by definition, so the product
+      // flag answers the "was it on the shelf" half without a variant read.
+      const previousAsking = initialValuesRef.current.bargainMaxPrice;
+      if (
+        'bargain' in payload &&
+        payload.bargain === null &&
+        typeof previousAsking === 'number' &&
+        previousAsking > 0 &&
+        product.vectorisationEnabled === true
+      ) {
+        const from = fmt.currency(previousAsking);
+        const to = fmt.currency(values.price);
+        if (!confirm(`${t('products.bargain.clearConfirm')}\n\n${from} → ${to}`)) return;
+      }
+
+      const wasActive = product.status === 'active';
+      setIsSubmitting(true);
+      setFormError(null);
+      setFieldErrors(undefined);
+      try {
+        // Content first, AI search second. Turning AI search on starts indexing,
+        // and while it indexes every product write returns 409 — so the edits
+        // (the asking price included) have to land before the switch is applied.
+        if (hasContentWrite) {
+          const saved = await saveContent(values, payload, wasActive);
+          if (!saved) return;
+        }
+        if (aiSearchChanged) {
+          try {
+            const status = await setVectorisationEnabled(product.id, aiSearchOn);
+            setProduct((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    vectorisationEnabled: status.vectorisationEnabled,
+                    vectorisationStatus: status.vectorisationStatus,
+                  }
+                : prev,
+            );
+            toast.success(t(aiSearchOn ? 'products.ai.enabled' : 'products.ai.disabled'));
+          } catch (err: unknown) {
+            // The switch keeps the vendor's choice, so pressing Save again
+            // retries just this part — the other edits are already saved.
+            toast.error(getSimpleProductErrorMessage(err));
+          }
+        }
       } finally {
         setIsSubmitting(false);
       }
     },
-    [product, applyResult, fmt, t],
+    [product, aiSearchOn, saveContent, fmt, t],
   );
 
   // ─── Delivery ───────────────────────────────────────────────────────────────
@@ -375,32 +429,6 @@ export function SimpleProductEdit() {
   const handlePickupLocationChosen = useCallback(
     (pickupLocation: ApiPickupLocation) => patchSimple({ pickupLocation, publish: true }),
     [patchSimple],
-  );
-
-  // ─── AI search ──────────────────────────────────────────────────────────────
-  // An immediate write, not a deferred form field: it is a separate endpoint and
-  // this editor has no publish step to piggyback on.
-
-  const handleVectorisationToggle = useCallback(
-    async (enabled: boolean) => {
-      if (!product) return;
-      try {
-        const status = await setVectorisationEnabled(product.id, enabled);
-        setProduct((prev) =>
-          prev
-            ? {
-                ...prev,
-                vectorisationEnabled: status.vectorisationEnabled,
-                vectorisationStatus: status.vectorisationStatus,
-              }
-            : prev,
-        );
-        toast.success(t(enabled ? 'products.ai.enabled' : 'products.ai.disabled'));
-      } catch (err: unknown) {
-        toast.error(getSimpleProductErrorMessage(err));
-      }
-    },
-    [product],
   );
 
   // ─── Header actions ─────────────────────────────────────────────────────────
@@ -581,8 +609,10 @@ export function SimpleProductEdit() {
               disableUnlimitedStock={isWarehoused}
               onStockModeChange={setLiveInfiniteStock}
               // Revealed only once AI discovery is on — the window is inert without
-              // it, and the toggle that governs it is rendered just above.
-              showBargainField={product.vectorisationEnabled === true}
+              // it, and the toggle that governs it is rendered just above. Follows
+              // the unsaved switch, as the wizard's review step does, so turning
+              // it on offers the asking price in the same save.
+              showBargainField={aiSearchOn}
               stockNotice={
                 pendingStockRequest ? (
                   <PendingStockRequestNotice
@@ -636,12 +666,22 @@ export function SimpleProductEdit() {
                 title={t('products.simple.aiSearchTitle')}
                 info={t('products.simple.aiSearchDescription')}
               >
+                {/* A form field like the rest: nothing is sent until Save. */}
                 <div className="flex items-center justify-between gap-4">
-                  <Label htmlFor="vectorisationEnabled">{t('products.simple.aiSearchToggle')}</Label>
+                  <div className="min-w-0 space-y-1">
+                    <Label htmlFor="vectorisationEnabled">
+                      {t('products.simple.aiSearchToggle')}
+                    </Label>
+                    {aiSearchOn !== (product.vectorisationEnabled ?? false) && (
+                      <p className="text-sm text-muted-foreground">
+                        {t('products.simple.aiSearchAppliesOnSave')}
+                      </p>
+                    )}
+                  </div>
                   <Switch
                     id="vectorisationEnabled"
-                    checked={product.vectorisationEnabled ?? false}
-                    onCheckedChange={(checked) => void handleVectorisationToggle(checked)}
+                    checked={aiSearchOn}
+                    onCheckedChange={setAiSearchOn}
                     disabled={isSubmitting || isLockedForVectorisation || isReadOnlyStatus}
                     aria-label={t('products.simple.aiSearchTitle')}
                   />

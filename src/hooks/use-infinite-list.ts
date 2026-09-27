@@ -60,6 +60,12 @@ export interface UseInfiniteListResult<T> {
   sentinelRef: (node: Element | null) => void;
   /** Reset to page 1 and refetch. */
   reload: () => void;
+  /**
+   * Refetch every page loaded so far and swap the rows in place — no skeleton,
+   * scroll position kept. For the header's refresh button. Rejects on failure
+   * (the rows already shown stay), so the caller can say so.
+   */
+  refresh: () => Promise<void>;
 }
 
 /**
@@ -144,9 +150,10 @@ export function useInfiniteList<T>({
   // Refetch pages 1..`upTo` in one go and replace the rows, leaving the stale
   // ones on screen meanwhile. Doesn't claim a request id: any load that starts
   // in the meantime (scroll, search, reload) wins and this result is dropped.
-  // A failure keeps the cached rows — they're still better than an error.
+  // A failure keeps the cached rows — they're still better than an error —
+  // and is rethrown only when a person asked for the refresh.
   const revalidate = React.useCallback(
-    async (upTo: number) => {
+    async (upTo: number, { rethrow = false }: { rethrow?: boolean } = {}) => {
       const id = requestId.current;
       try {
         const pages = await Promise.all(
@@ -158,12 +165,22 @@ export function useInfiniteList<T>({
         setTotal(last.total);
         setTotalPages(last.totalPages);
         setPage(pages.length);
-      } catch {
-        // Keep the cached rows.
+        setError(null);
+      } catch (err) {
+        if (rethrow) throw err;
       }
     },
     [limit],
   );
+
+  const pageForRefresh = React.useRef(page);
+  pageForRefresh.current = page;
+  const refresh = React.useCallback(async () => {
+    // Mid first-load there is nothing on screen to refresh, and a second
+    // request would only race the one already coming.
+    if (!enabled || inFlight.current) return;
+    await revalidate(pageForRefresh.current, { rethrow: true });
+  }, [enabled, revalidate]);
 
   // Reset + load whenever deps (filters/search) or enabled/limit change.
   // On the first enabled run, skip the fetch if we hydrated from cache.
@@ -240,5 +257,6 @@ export function useInfiniteList<T>({
     error,
     sentinelRef,
     reload,
+    refresh,
   };
 }

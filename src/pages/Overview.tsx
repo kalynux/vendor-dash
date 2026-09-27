@@ -20,12 +20,14 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useAnalyticsStore, useOrderStore, useStoreStore } from '@/store';
 import { SalesChart } from '@/components/features/SalesChart';
 import { TopProductsList } from '@/components/features/TopProductsList';
+import { EarningsSummary } from '@/components/features/EarningsSummary';
 import { DateRangePicker } from '@/components/features/DateRangePicker';
 import { OrderStatusBadge } from '@/components/orders/OrderStatusBadge';
 import { MobileOrderDetailSheet } from '@/components/orders/MobileOrderDetailSheet';
 import { MobilePageHeader } from '@/components/layout/MobilePageHeader';
+import { RefreshButton } from '@/components/common/RefreshButton';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { useRouter } from '@/App';
+import { useRouter } from '@/app-context';
 import { cn } from '@/lib/utils';
 import { storePath, storefrontUrl } from '@/lib/storefront/urls';
 // The storefront link used to be an <a target="_blank">, which the global
@@ -192,7 +194,7 @@ export function Overview() {
   const { t } = useTranslation();
   const apiError = useApiError();
   const fmt = useFormatters();
-  const { metrics, salesData, topProducts, dateRange, setDateRange, fetchAnalytics, isLoading, notReady } = useAnalyticsStore();
+  const { metrics, salesData, topProducts, dateRange, setDateRange, fetchAnalytics, isLoading } = useAnalyticsStore();
   const { orders, fetchOrders, isLoading: isOrderLoading, fetchOrderById } = useOrderStore();
   const { store } = useStoreStore();
   const { navigate } = useRouter();
@@ -210,6 +212,14 @@ export function Overview() {
   useEffect(() => {
     fetchOrders({ limit: 5 });
   }, [fetchOrders]);
+
+  // The header's refresh icon: figures, recent orders, and — by remounting
+  // it — the low-stock card, which loads itself.
+  const [refreshToken, setRefreshToken] = useState(0);
+  const refreshPage = () => {
+    setRefreshToken((n) => n + 1);
+    return Promise.all([fetchAnalytics(), fetchOrders({ limit: 5 }, { silent: true })]);
+  };
 
 
   const handleViewDetails = async (order: Order) => {
@@ -242,6 +252,7 @@ export function Overview() {
             the same place on every screen or it is not "always one tap away".
             The store's own logo and name carry the identity the block had. */}
         <MobilePageHeader
+          onRefresh={refreshPage}
           leading={
             store?.logo?.url ? (
               <img
@@ -272,16 +283,6 @@ export function Overview() {
 
         {/* Full-bleed above means the body restores main's own gutter. */}
         <div className="space-y-4 px-6 pb-4 pt-4">
-
-        {/* Data-not-ready notice (backend 503 AGGREGATION_NOT_READY) */}
-        {notReady && !isLoading && (
-          <Card className="border-amber-200 bg-amber-50">
-            <CardContent className="flex items-center gap-3 p-4 text-amber-800">
-              <AlertCircle className="w-5 h-5 flex-shrink-0" />
-              <p className="text-sm">{t('overview.notReady.short')}</p>
-            </CardContent>
-          </Card>
-        )}
 
         {/* Total sales card with sparkline */}
         <Card>
@@ -394,6 +395,16 @@ export function Overview() {
           </Card>
         </div>
 
+        {/* Earnings: gross → deductions → net revenue → net earnings */}
+        <div>
+          <h2 className="font-semibold mb-2">{t('analytics.earnings.title')}</h2>
+          <Card>
+            <CardContent className="p-4">
+              <EarningsSummary />
+            </CardContent>
+          </Card>
+        </div>
+
         {/* Top products */}
         <div>
           <h2 className="font-semibold mb-2">{t('overview.charts.topProductsShort')}</h2>
@@ -441,7 +452,7 @@ export function Overview() {
         </div>
 
         {/* Low Stock Alert */}
-        <LowStockWidget />
+        <LowStockWidget key={refreshToken} />
 
         <MobileOrderDetailSheet
           order={selectedOrder}
@@ -459,22 +470,15 @@ export function Overview() {
     <div className="space-y-6 animate-fade-up">
       {/* Header row */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div className="space-y-1">
-          <h1 className="text-3xl font-bold tracking-tight">{t('overview.title')}</h1>
-          <p className="text-muted-foreground">{t('overview.subtitle')}</p>
+        <div className="flex items-center gap-3">
+          <RefreshButton onRefresh={refreshPage} />
+          <div className="space-y-1">
+            <h1 className="text-3xl font-bold tracking-tight">{t('overview.title')}</h1>
+            <p className="text-muted-foreground">{t('overview.subtitle')}</p>
+          </div>
         </div>
         <DateRangePicker value={dateRange} onChange={setDateRange} />
       </div>
-
-      {/* Data-not-ready notice (backend 503 AGGREGATION_NOT_READY) */}
-      {notReady && !isLoading && (
-        <Card className="border-amber-200 bg-amber-50">
-          <CardContent className="flex items-center gap-3 p-4 text-amber-800">
-            <AlertCircle className="w-5 h-5 flex-shrink-0" />
-            <p className="text-sm">{t('overview.notReady.long')}</p>
-          </CardContent>
-        </Card>
-      )}
 
       {/* KPI cards — 4 columns */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -589,8 +593,18 @@ export function Overview() {
           </CardContent>
         </Card>
 
-        {/* Right column — Quick Actions + Low Stock */}
+        {/* Right column — Earnings + Quick Actions + Low Stock */}
         <div className="lg:col-span-2 space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>{t('analytics.earnings.title')}</CardTitle>
+              <CardDescription>{t('analytics.earnings.description')}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <EarningsSummary />
+            </CardContent>
+          </Card>
+
           {/* Quick Actions */}
           <Card>
             <CardHeader>
@@ -632,7 +646,7 @@ export function Overview() {
           </Card>
 
           {/* Low Stock */}
-          <LowStockWidget />
+          <LowStockWidget key={refreshToken} />
         </div>
       </div>
     </div>

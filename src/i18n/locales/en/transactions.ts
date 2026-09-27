@@ -23,12 +23,13 @@ export const transactions = {
         status: 'Status',
     },
 
-    /** Sub-tab / filter labels. `payout` is a category but has no tab yet. */
+    /** Sub-tab / filter labels. */
     tabs: {
         all: 'All',
         plan: 'Plans',
         credit: 'Credits',
         earning: 'Earnings',
+        payout: 'Payouts',
     },
 
     category: {

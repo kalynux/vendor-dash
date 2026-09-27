@@ -12,7 +12,7 @@ import type {
 
 type Translate = (key: TranslationKey, params?: Record<string, string | number>) => string;
 
-/** Category sub-tabs shown above the feed. `payout` is omitted (placeholder/empty). */
+/** Category sub-tabs shown above the feed. `payout` returns the vendor's payout requests. */
 export const TRANSACTION_CATEGORY_TABS: {
   value: TransactionCategory | 'all';
   labelKey: TranslationKey;
@@ -21,6 +21,7 @@ export const TRANSACTION_CATEGORY_TABS: {
   { value: 'plan', labelKey: 'transactions.tabs.plan' },
   { value: 'credit', labelKey: 'transactions.tabs.credit' },
   { value: 'earning', labelKey: 'transactions.tabs.earning' },
+  { value: 'payout', labelKey: 'transactions.tabs.payout' },
 ];
 
 const CATEGORY_KEYS: Record<TransactionCategory, TranslationKey> = {
@@ -61,6 +62,14 @@ export function isReversalTransaction(t: Transaction): boolean {
   return t.status === 'reversed' || t.status === 'reversal' || t.type === 'earning_reversal';
 }
 
+/**
+ * True for money moved between the vendor's own balances. These rows are shown
+ * unsigned and muted, and must be left out of any sum.
+ */
+export function isInternalTransaction(tx: Transaction): boolean {
+  return tx.direction === 'internal';
+}
+
 /** Signed amount text + colour, keyed off `unit` and `direction`. */
 export function transactionAmount(
   tx: Transaction,
@@ -68,7 +77,7 @@ export function transactionAmount(
   formatNumber: (value: number) => string,
   formatCurrency: (value: number, currency?: string) => string,
 ): { text: string; className: string } {
-  const sign = tx.direction === 'out' ? '−' : '+';
+  const sign = isInternalTransaction(tx) ? '' : tx.direction === 'out' ? '−' : '+';
   const text =
     tx.unit === 'money'
       ? t('transactions.amount.money', {
@@ -76,7 +85,13 @@ export function transactionAmount(
           amount: formatCurrency(tx.amount, tx.currency ?? 'XAF'),
         })
       : t('transactions.amount.credits', { sign, amount: formatNumber(tx.amount) });
-  // Money leaving / credit spend reads neutral; value coming in reads green.
-  const className = tx.direction === 'in' ? 'text-green-600' : 'text-foreground';
+  // Money leaving / credit spend reads neutral; value coming in reads green;
+  // a move between the vendor's own balances reads muted.
+  const className =
+    tx.direction === 'in'
+      ? 'text-green-600'
+      : isInternalTransaction(tx)
+        ? 'text-muted-foreground'
+        : 'text-foreground';
   return { text, className };
 }

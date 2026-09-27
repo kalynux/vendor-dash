@@ -18,6 +18,7 @@ import { registerDevice } from '@/services/devices.service';
 import { tStatic, useTranslation } from '@/i18n';
 import { notificationRoute } from '@/lib/notifications.utils';
 import { subscribeNetworkRestored } from '@/platform/network';
+import { refreshPendingOrdersCount } from '@/lib/pending-orders-count';
 import type { VendorNotification } from '@/types/notifications.types';
 
 /**
@@ -140,6 +141,8 @@ export function NotificationsBootstrap() {
         // Optimistic, INSTANT update — the badge bumps and the list/tray show
         // the notification right away, independent of the backend round-trip.
         prependNotification(synthetic);
+        // A new order moves the Orders badge too.
+        if (payload.aggregateType === 'order') void refreshPendingOrdersCount();
         // OS notification (bottom-right popup) — FCM won't show it in the
         // foreground, so we trigger it ourselves.
         void showSystemNotification(payload);

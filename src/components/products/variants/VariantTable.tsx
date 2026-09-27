@@ -2,7 +2,7 @@
 // Matrix table with dynamic option columns, inline editing, bulk edit, and row
 // status. Renders as a table on >= md screens and as flat stacked blocks on mobile.
 
-import { useState, useCallback, useEffect, useRef, type ChangeEvent } from 'react';
+import { useState, useCallback, type ChangeEvent } from 'react';
 import { ChevronDown, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -856,16 +856,17 @@ function CellInput({
 }: CellInputProps) {
   const m = useMessage();
   const [localValue, setLocalValue] = useState(value);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const [focused, setFocused] = useState(false);
 
   // Sync from parent when `value` changes externally (bulk edit, auto-SKU,
   // server sync, …). Skip while the user is actively editing this cell so we
-  // don't clobber their typing.
-  useEffect(() => {
-    if (document.activeElement !== inputRef.current) {
-      setLocalValue(value);
-    }
-  }, [value]);
+  // don't clobber their typing. Adjusted during render (React's "adjust state
+  // when a prop changes" pattern) rather than in an effect.
+  const [syncedValue, setSyncedValue] = useState(value);
+  if (syncedValue !== value) {
+    setSyncedValue(value);
+    if (!focused) setLocalValue(value);
+  }
 
   const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
     setLocalValue(e.target.value);
@@ -873,6 +874,7 @@ function CellInput({
   };
 
   const handleBlur = () => {
+    setFocused(false);
     if (localValue !== value) {
       onChange(localValue);
     }
@@ -881,10 +883,10 @@ function CellInput({
   return (
     <div className={cn('relative', fullWidth && 'w-full')}>
       <Input
-        ref={inputRef}
         type={type}
         value={localValue}
         onChange={handleChange}
+        onFocus={() => setFocused(true)}
         onBlur={handleBlur}
         min={min}
         step={step}

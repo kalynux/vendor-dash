@@ -704,6 +704,8 @@ export const products = {
             'Index this product so customers can find it through AI search. Applies once the product is active and complete.',
         /** The label of the switch row; `aiSearchDescription` sits behind the section's info icon. */
         aiSearchToggle: 'Let shoppers find it through AI search',
+        /** Under the switch while it differs from what is saved. */
+        aiSearchAppliesOnSave: 'Takes effect when you save.',
         suspendedNotice:
             'This product is suspended because of a delivery-agency issue. You can still edit it — assigning a working delivery agency below restores it automatically.',
         // Section headings of the quick editor.
@@ -783,6 +785,16 @@ export const products = {
         editLocked: 'Edit (locked — indexing)',
         editLockedToast: 'Editing is locked while AI indexing is in progress.',
         indexingToast: 'Product is being indexed, please try again later',
+        /** The switch on a product card, and the confirmation it opens. */
+        switchLabel: 'AI search',
+        confirmEnableTitle: 'Turn on AI search?',
+        confirmEnableBody:
+            'Shoppers will be able to find it through AI search. Indexing starts right away, and you can’t edit the product until it finishes.',
+        confirmDisableTitle: 'Turn off AI search?',
+        confirmDisableBody:
+            'It will stop showing up in AI search. If it has an asking price, shoppers will see its regular price instead.',
+        confirmEnableCta: 'Turn on',
+        confirmDisableCta: 'Turn off',
     },
 
     /** Delivery agency + pickup location picker on the review step. */

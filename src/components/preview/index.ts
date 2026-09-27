@@ -2,11 +2,8 @@ export { PreviewBanner, type PreviewAction } from './PreviewBanner';
 export { usePreviewLinkActions } from './usePreviewLinkActions';
 export { PreviewUnavailable } from './PreviewUnavailable';
 export { useProductStatusActions } from './useProductStatusActions';
-export {
-  StorefrontFrame,
-  DEVICE_WIDTHS,
-  type PreviewDevice,
-} from './StorefrontFrame';
+export { StorefrontFrame } from './StorefrontFrame';
+export { DEVICE_WIDTHS, type PreviewDevice } from './devices';
 export { useDefaultPreviewDevice } from './useDefaultPreviewDevice';
 export {
   useOpenPreview,

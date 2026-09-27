@@ -182,6 +182,8 @@ export interface DeliveryRejection {
 export interface OrderItemDelivery {
   agencyId?: string;
   agencyName?: string;
+  /** Admin has verified the agency's business documents — shows the verified badge. */
+  agencyVerified?: boolean;
   agencyPhone?: string;
   deliveryStatus?: string;
   shipmentId?: string;
@@ -202,6 +204,8 @@ export interface OrderItemDelivery {
     name: string;
     phone?: string;
     avatarUrl?: string;
+    /** Admin has verified the agent's identity — shows the verified badge. */
+    verified?: boolean;
   } | null;
 }
 
@@ -210,6 +214,7 @@ export interface OrderDeliveryTimelineEntry {
   shipmentId: string;
   agencyId: string;
   agencyName: string;
+  agencyVerified?: boolean;
   status: string;
   changedAt: string;
   changedByRole: string;
@@ -313,10 +318,46 @@ export interface OrderTimelineEvent {
 // Analytics Types
 // All fields are derived from GET /api/vendor/analytics/* (see api-doc/vendor/analytics.md).
 export interface AnalyticsMetrics {
-  totalSales: MetricWithChange;        // sales.gmv
+  totalSales: MetricWithChange;        // sales.grossSales
   totalOrders: MetricWithChange;       // sales.orderCount
-  netRevenue: MetricWithChange;        // sales.netRevenue (gmv - refunds)
-  averageOrderValue: MetricWithChange; // sales.aov
+  netRevenue: MetricWithChange;        // sales.netRevenue (gross minus every deduction)
+  averageOrderValue: MetricWithChange; // sales.aov (gross / distinct orders)
+}
+
+/**
+ * Sales money for a period: `dashboard.sales`, `/sales` `data.totals` and each
+ * `data.daily[]` row. Figures come from the earnings records, dated the day the
+ * money arrived.
+ */
+export interface SalesBreakdown {
+  /** What customers paid: the order total (online) or the cash collected (COD). */
+  grossSales: number;
+  bargainFee: number;
+  commission: number;
+  /** `null` when a COD sale has no recorded delivery fee — show `deliveryAndCodFees`. */
+  deliveryFee: number | null;
+  /** `null` alongside `deliveryFee` — show `deliveryAndCodFees`. */
+  codFee: number | null;
+  /** Always set: delivery fee + COD fee combined. */
+  deliveryAndCodFees: number;
+  /** gross − bargainFee − commission − deliveryFee − codFee. */
+  netRevenue: number;
+  /** Distinct orders with money received in the period. */
+  orderCount: number;
+  /** Average gross per order. */
+  aov: number;
+}
+
+/** Earnings moves outside sales and bookings (dashboard `data.adjustments`). */
+export interface EarningsAdjustments {
+  deliveryFeesReturned: number;
+  earningsReversed: number;
+}
+
+/** Refunds paid to customers — information only; the earnings effect is `earningsReversed`. */
+export interface CustomerRefunds {
+  count: number;
+  amount: number;
 }
 
 /**
@@ -332,18 +373,21 @@ export interface MetricWithChange {
 
 export interface SalesDataPoint {
   date: string;
-  sales: number;  // daily gmv
+  sales: number;  // daily grossSales
   orders: number; // daily orderCount
 }
 
 /** A top-performing variant from GET /vendor/analytics/products. */
 export interface TopProduct {
   variantId: string;
-  sku: string;
+  productId: string;
   productTitle: string;
-  variantTitle: string;
+  sku: string;
+  /** Line value at the price actually paid (the negotiated one when bargained). */
   revenue: number;
   quantity: number;
+  /** Distinct orders, not order lines. */
+  orderCount: number;
 }
 
 /** Customer acquisition/retention from GET /vendor/analytics/customers. */
@@ -356,7 +400,9 @@ export interface CustomerMetrics {
 /** Booking totals from the dashboard endpoint (data.bookings). */
 export interface BookingMetrics {
   count: number;
-  revenue: number;
+  grossRevenue: number;
+  commission: number;
+  netRevenue: number;
 }
 
 // UI Types

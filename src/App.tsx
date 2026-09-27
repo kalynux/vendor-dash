@@ -1,5 +1,5 @@
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
-import { createContext, useContext, useCallback, useState, useEffect, Suspense } from 'react';
+import { useCallback, useState, useEffect, Suspense } from 'react';
 import { Toaster } from '@/components/ui/sonner';
 
 // Every route below is code-split. The map of which screen lands in which chunk
@@ -45,109 +45,10 @@ import { OnboardingSkeleton } from '@/onboarding/OnboardingSkeleton';
 
 // i18n — binds the dashboard language to the vendor's Profile setting
 import { SessionLocaleSync, useTranslation } from '@/i18n';
-
-// ─── Sidebar collapse context (preserved for Sidebar/Header compatibility) ────
-
-interface UIContextType {
-  sidebarCollapsed: boolean;
-  toggleSidebar: () => void;
-  /** False in the tablet range, where the sidebar is force-collapsed to the
-   *  icon rail and the manual collapse toggle is hidden. */
-  collapsible: boolean;
-}
-
-const UIContext = createContext<UIContextType>({
-  sidebarCollapsed: false,
-  toggleSidebar: () => { },
-  collapsible: true,
-});
-
-export const useUI = () => useContext(UIContext);
-
-// ─── Legacy auth context shim ─────────────────────────────────────────────────
-// Sidebar and Header reference useAuth() from @/App. This shim re-exports a
-// compatible context so those components compile without changes.
-
-interface LegacyAuthContextType {
-  user: { id: string; name: string; email: string; role: string; avatar?: string } | null;
-  isAuthenticated: boolean;
-  isLoading: boolean;
-  login: () => Promise<boolean>;
-  logout: () => void;
-}
-
-const LegacyAuthContext = createContext<LegacyAuthContextType>({
-  user: null,
-  isAuthenticated: false,
-  isLoading: false,
-  login: async () => false,
-  logout: () => { },
-});
-
-export const useAuth = () => useContext(LegacyAuthContext);
-
-// ─── Legacy router context shim ───────────────────────────────────────────────
-// Header/Sidebar use useRouter().navigate(route). Map legacy route strings to
-// real URL paths.
-
-type LegacyRoute =
-  | 'overview' | 'orders' | 'products' | 'product-upload' | 'inventory' | 'customers'
-  | 'analytics' | 'notifications' | 'settings' | 'media' | 'tickets' | 'agency'
-  | 'services' | 'service-upload' | 'login' | 'transactions' | 'account';
-
-const LEGACY_ROUTE_MAP: Record<LegacyRoute, string> = {
-  overview: '/dashboard',
-  orders: '/dashboard/orders',
-  products: '/dashboard/products',
-  'product-upload': '/dashboard/product-upload',
-  inventory: '/dashboard/inventory',
-  customers: '/dashboard/customers',
-  analytics: '/dashboard/analytics',
-  notifications: '/dashboard/notifications',
-  settings: '/dashboard/settings',
-  account: '/dashboard/account',
-  media: '/dashboard/media',
-  tickets: '/dashboard/tickets',
-  agency: '/dashboard/agency',
-  services: '/dashboard/services',
-  'service-upload': '/dashboard/service-upload',
-  login: '/login',
-  transactions: '/dashboard/transactions',
-};
-
-// Reverse-map the current URL to a legacy route name so Sidebar/Header/MobileTabBar
-// can highlight the active item. Product wizard routes map to 'products'.
-function pathToLegacyRoute(pathname: string): LegacyRoute {
-  if (pathname === '/dashboard' || pathname === '/dashboard/') return 'overview';
-  if (
-    pathname.startsWith('/dashboard/product-edit') ||
-    pathname.startsWith('/dashboard/product-upload')
-  ) {
-    return 'products';
-  }
-  if (
-    pathname.startsWith('/dashboard/service-upload') ||
-    pathname.startsWith('/dashboard/service-edit')
-  ) {
-    return 'services';
-  }
-  const match = (Object.entries(LEGACY_ROUTE_MAP) as [LegacyRoute, string][])
-    .filter(([key]) => key !== 'overview')
-    .find(([, path]) => pathname === path || pathname.startsWith(`${path}/`));
-  return match ? match[0] : 'overview';
-}
-
-interface LegacyRouterContextType {
-  route: LegacyRoute;
-  navigate: (route: LegacyRoute) => void;
-}
-
-const LegacyRouterContext = createContext<LegacyRouterContextType>({
-  route: 'overview',
-  navigate: () => { },
-});
-
-export const useRouter = () => useContext(LegacyRouterContext);
+import {
+  UIContext, LegacyAuthContext, LegacyRouterContext,
+  LEGACY_ROUTE_MAP, pathToLegacyRoute, type LegacyRoute,
+} from '@/app-context';
 
 
 // ─── Dashboard warm-up ────────────────────────────────────────────────────────

@@ -8,6 +8,7 @@ import { BookingsPanel } from '@/components/services/BookingsPanel';
 import { CalendarConnectionPanel } from '@/components/services/CalendarConnectionPanel';
 import { MobilePageHeader } from '@/components/layout/MobilePageHeader';
 import { SubPageHeader } from '@/components/layout/SubPageHeader';
+import { RefreshButton } from '@/components/common/RefreshButton';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useRouteSwipe } from '@/hooks/use-route-swipe';
 import { fetchCalendarStatus } from '@/services/services.service';
@@ -77,7 +78,7 @@ export function Services() {
   // Before the redirect below — a hook cannot sit behind an early return.
   useRouteSwipe(TAB_RING);
 
-  const [reloadToken] = useState(0);
+  const [reloadToken, setReloadToken] = useState(0);
   const [calendarRefreshKey, setCalendarRefreshKey] = useState(0);
   const [calendar, setCalendar] = useState<CalendarStatus | null>(null);
 
@@ -167,6 +168,14 @@ export function Services() {
     reactNavigate(`/dashboard/service-edit/${serviceId}`);
   }, [reactNavigate]);
 
+  // The header's refresh icon — bookings arrive while the vendor is looking.
+  // Re-pulls the service list and the calendar status, and restarts the
+  // bookings panel, which loads itself.
+  const refreshPage = useCallback(() => {
+    setReloadToken((n) => n + 1);
+    setCalendarRefreshKey((k) => k + 1);
+  }, []);
+
   // Resolve the active tab from the URL segment. Unknown segments redirect home.
   const tab: ServicesTab | null = tabParam
     ? PARAM_TO_TAB[tabParam] ?? null
@@ -202,7 +211,7 @@ export function Services() {
       </TabsContent>
 
       <TabsContent value="bookings" className="mt-0">
-        <BookingsPanel openBookingId={bookingDeepLinkId} />
+        <BookingsPanel key={reloadToken} openBookingId={bookingDeepLinkId} />
       </TabsContent>
 
       <TabsContent value="calendar" className="mt-0 max-w-2xl">
@@ -221,6 +230,7 @@ export function Services() {
         <MobilePageHeader
           title={t(TAB_TITLE_KEYS[tab])}
           description={t(TAB_SUBTITLE_KEYS[tab])}
+          onRefresh={refreshPage}
         />
         <div className="space-y-4 px-4 pt-4 pb-24">
           {connectBanner}
@@ -239,9 +249,12 @@ export function Services() {
         current={t(TAB_TITLE_KEYS[tab])}
         description={t(TAB_SUBTITLE_KEYS[tab])}
         icon={
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-            <CalendarClock className="h-5 w-5 text-primary" />
-          </div>
+          <>
+            <RefreshButton onRefresh={refreshPage} />
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+              <CalendarClock className="h-5 w-5 text-primary" />
+            </div>
+          </>
         }
       />
 

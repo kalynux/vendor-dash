@@ -13,6 +13,7 @@ import { VendorReviewsTab } from '@/components/reviews/VendorReviewsTab';
 import { mapProfileError } from '@/components/vendor-settings/errors';
 import { MobilePageHeader } from '@/components/layout/MobilePageHeader';
 import { SubPageHeader } from '@/components/layout/SubPageHeader';
+import { RefreshButton } from '@/components/common/RefreshButton';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent } from '@/components/ui/tabs';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -97,6 +98,14 @@ export function Agency() {
         setRefreshKey((k) => k + 1);
     }, []);
 
+    // The header's refresh icon — an agency can approve or decline a request
+    // while the vendor is looking. Restarts the open tab, which loads itself.
+    const [paneKey, setPaneKey] = useState(0);
+    const handleRefresh = useCallback(() => {
+        setRefreshKey((k) => k + 1);
+        setPaneKey((k) => k + 1);
+    }, []);
+
     const handleSetDefault = useCallback(
         async (agencyId: string) => {
             setSettingDefaultAgencyId(agencyId);
@@ -177,7 +186,7 @@ export function Agency() {
     // );
 
     const panes = (
-        <Tabs value={tab} className="w-full">
+        <Tabs key={paneKey} value={tab} className="w-full">
             <TabsContent value="connections" className={cn('space-y-2 mt-0', isMobile && 'px-4 py-4')}>
                 <p className="text-sm font-medium">{t('agency.page.connectionsTitle')}</p>
                 <p className="text-xs text-muted-foreground">{t('agency.page.connectionsHint')}</p>
@@ -213,6 +222,7 @@ export function Agency() {
                 <MobilePageHeader
                     title={t(TAB_LABEL_KEYS[activeTab])}
                     description={t(TAB_SUBTITLE_KEYS[activeTab])}
+                    onRefresh={handleRefresh}
                     subheader={
                         <div className="flex gap-2">
                             {VALID_TABS.map((value) => (
@@ -247,6 +257,7 @@ export function Agency() {
         <div className="space-y-6 animate-fade-in">
             {/* Header — "Agency › <tab>", so the page names the surface you opened. */}
             <SubPageHeader
+                icon={<RefreshButton onRefresh={handleRefresh} />}
                 parent={t('nav.items.agency')}
                 current={t(TAB_LABEL_KEYS[activeTab])}
                 description={t(TAB_SUBTITLE_KEYS[activeTab])}

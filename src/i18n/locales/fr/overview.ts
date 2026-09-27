@@ -7,11 +7,6 @@ export const overview = {
     welcomeBack: 'Bon retour',
     myStore: 'Ma boutique',
 
-    notReady: {
-        short: 'Les statistiques de cette période ne sont pas encore prêtes. Revenez bientôt.',
-        long: 'Les statistiques de cette période ne sont pas encore prêtes. Les données sont agrégées quotidiennement — revenez bientôt.',
-    },
-
     metrics: {
         totalSales: 'Ventes totales',
         totalOrders: 'Commandes totales',
@@ -37,6 +32,7 @@ export const overview = {
     topProducts: {
         empty: 'Aucune vente de produit sur cette période.',
         sold: plural({ one: '{{count}} vendu', other: '{{count}} vendus' }),
+        orders: plural({ one: '{{count}} commande', other: '{{count}} commandes' }),
     },
 
     recentOrders: {

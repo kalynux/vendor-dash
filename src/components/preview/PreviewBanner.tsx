@@ -19,7 +19,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { useTranslation } from '@/i18n';
-import type { PreviewDevice } from './StorefrontFrame';
+import type { PreviewDevice } from './devices';
 
 /**
  * The vendor's half of a preview page.

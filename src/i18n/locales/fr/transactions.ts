@@ -27,6 +27,7 @@ export const transactions = {
         plan: 'Formules',
         credit: 'Crédits',
         earning: 'Gains',
+        payout: 'Versements',
     },
 
     category: {

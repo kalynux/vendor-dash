@@ -351,6 +351,15 @@ export const common = {
         clearPinned: 'Remove the pinned location',
     },
 
+    /**
+     * `VerifiedBadge` — the blue check beside an agency or agent name. Read by
+     * screen readers and shown on hover; admin has checked their documents.
+     */
+    verified: {
+        agency: 'Verified agency',
+        agent: 'Verified agent',
+    },
+
     a11y: {
         goBack: 'Go back',
         openSidebar: 'Open sidebar',

@@ -1,5 +1,4 @@
 import {
-    useContext,
     useEffect,
     useState,
     useCallback,
@@ -13,6 +12,7 @@ import { onboardingService } from '@/services/onboarding.service';
 import { deleteCurrentToken } from '@/lib/fcm';
 import { unregisterDevice } from '@/services/devices.service';
 import { stopRefreshScheduler } from '@/platform/auth/refreshScheduler';
+import { resetPendingOrdersCount } from '@/lib/pending-orders-count';
 import { ApiError } from '@/types/api';
 import type {
     AuthMeVendorResponse,
@@ -164,7 +164,7 @@ export interface OnboardingState {
 
 // ─── Step → route mapping ─────────────────────────────────────────────────────
 
-export function stepToRoute(step: VendorOnboardingStep | number): string {
+function stepToRoute(step: VendorOnboardingStep | number): string {
     switch (step) {
         case 1: return '/onboarding/basic-setup';
         case 2: return '/onboarding/delivery-linking';
@@ -521,6 +521,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
             // best-effort; redirect regardless
         } finally {
             setSession(null);
+            resetPendingOrdersCount();
             setDrafts({ basicSetup: null, deliveryLinking: null, branding: null, policySetup: null });
             initCalled.current = false;
             navigate('/login', { replace: true });
@@ -541,6 +542,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     useEffect(() => {
         const handler = () => {
             setSession(null);
+            resetPendingOrdersCount();
             setDrafts({ basicSetup: null, deliveryLinking: null, branding: null, policySetup: null });
             initCalled.current = false;
             navigate('/login', { replace: true });
@@ -580,14 +582,4 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
             {children}
         </OnboardingContext.Provider>
     );
-}
-
-// ─── Hook ─────────────────────────────────────────────────────────────────────
-
-export function useOnboarding(): OnboardingState {
-    const ctx = useContext(OnboardingContext);
-    if (!ctx) {
-        throw new Error('useOnboarding must be used within <OnboardingProvider>');
-    }
-    return ctx;
 }

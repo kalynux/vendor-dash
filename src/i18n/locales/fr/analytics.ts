@@ -1,3 +1,5 @@
+import { plural } from '../../types';
+
 /** Statistiques : graphiques, aperçu de la boutique, meilleurs produits. */
 export const analytics = {
     title: 'Statistiques',
@@ -6,7 +8,28 @@ export const analytics = {
     headerSubtitle: 'Suivez les performances et les tendances de votre boutique',
     export: 'Exporter',
 
-    notReady: 'Vos chiffres pour cette période ne sont pas encore prêts. Les données sont agrégées quotidiennement — revenez bientôt.',
+    earnings: {
+        title: 'Gains',
+        description: 'Ce que vos ventes ont rapporté sur la période, frais déduits',
+        grossSales: 'Ventes brutes',
+        bargainFee: 'Frais de marchandage',
+        commission: 'Commission',
+        deliveryFee: 'Frais de livraison',
+        codFee: 'Frais de paiement à la livraison',
+        deliveryAndCodFees: 'Frais de livraison + paiement à la livraison',
+        netRevenue: 'Revenu net',
+        netRevenueHint:
+            'Ce que vos ventes ont ajouté à vos gains : les ventes brutes, moins les frais de marchandage, la commission, les frais de livraison et les frais de paiement à la livraison.',
+        bookings: 'Réservations, commission déduite',
+        deliveryFeesReturned: 'Frais de livraison rendus',
+        earningsReversed: 'Gains repris',
+        netEarnings: 'Gains nets',
+        netEarningsHint:
+            'Tout ce que cette période a ajouté à vos gains : le revenu net, les réservations et les frais de livraison rendus, moins les gains repris (par exemple après un remboursement).',
+        refunds: 'Remboursements versés aux clients',
+        refundsCount: plural({ one: '{{count}} remboursement', other: '{{count}} remboursements' }),
+        refundsNote: 'Déjà compté dans « Gains repris ».',
+    },
 
     tabs: {
         overview: 'Vue d’ensemble',

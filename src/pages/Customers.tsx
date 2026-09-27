@@ -19,6 +19,7 @@ import { useInfiniteList } from '@/hooks/use-infinite-list';
 import { useScrollRestoration } from '@/hooks/use-scroll-restoration';
 import { getListCache, setListCache } from '@/lib/listCache';
 import { MobilePageHeader } from '@/components/layout/MobilePageHeader';
+import { RefreshButton } from '@/components/common/RefreshButton';
 import { MobileListFooter } from '@/components/layout/MobileListFooter';
 import { CustomerAvatar } from '@/components/customers/CustomerAvatar';
 import { FlagBadge, FlagDot } from '@/components/customers/FlagBadge';
@@ -198,6 +199,14 @@ export function Customers() {
     setOverrides({});
   }, [loadFlags, isMobile, infinite, load, queryParams]);
 
+  // The header's refresh icon. Fresh rows already carry any in-detail edit, so
+  // the local overrides go with it.
+  const refreshList = async () => {
+    if (isMobile) await infinite.refresh();
+    else await load(queryParams);
+    setOverrides({});
+  };
+
   function clearFilters() {
     setSearchQuery('');
     setFlagFilter('');
@@ -365,6 +374,7 @@ export function Customers() {
         <MobilePageHeader
           title={t('customers.title')}
           description={t('customers.subtitle')}
+          onRefresh={refreshList}
           actions={[
             {
               id: 'flags',
@@ -413,11 +423,14 @@ export function Customers() {
     <div className="space-y-5">
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">{t('customers.title')}</h1>
-          <p className="text-muted-foreground">
-            {meta ? t('common.units.customers', { count: meta.total }) : t('customers.subtitle')}
-          </p>
+        <div className="flex items-center gap-3">
+          <RefreshButton onRefresh={refreshList} />
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">{t('customers.title')}</h1>
+            <p className="text-muted-foreground">
+              {meta ? t('common.units.customers', { count: meta.total }) : t('customers.subtitle')}
+            </p>
+          </div>
         </div>
         <Button variant="outline" onClick={() => setFlagsManagerOpen(true)} className="gap-2">
           <Tag className="h-4 w-4" /> {t('customers.list.manageFlags')}

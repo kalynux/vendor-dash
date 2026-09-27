@@ -1,6 +1,7 @@
 import { api } from './api';
 import { apiErrorMessage, tStatic, type TranslationKey } from '@/i18n';
 import { fileRefUrl } from '@/services/files.service';
+import { refreshPendingOrdersCount } from '@/lib/pending-orders-count';
 import type { FileRef } from '@/types/file.types';
 import type { Order, OrderItem, Customer, OrderTimelineEvent, Entitlement, TimelineEventType, DisputeHold, OrderItemDelivery, OrderDeliveryTimelineEntry, VendorSettableStatus, PaymentMethod } from '@/types';
 
@@ -56,6 +57,8 @@ interface ApiDisputeHold {
 interface ApiOrderDelivery {
   agencyId?: string;
   agencyName?: string;
+  /** Added 2026-09-27 — `kyc_details.legit_verified`; absent on older servers. */
+  agencyVerified?: boolean;
   agencyPhone?: string;
   deliveryStatus?: string;
   shipmentId?: string;
@@ -75,6 +78,8 @@ interface ApiOrderDelivery {
     phone?: string;
     /** Populated file object (or `null`); legacy `avatarUrl` string still tolerated. */
     avatar?: FileRef | string | null;
+    /** Added 2026-09-27 — `kyc.status === 'verified'`; absent on older servers. */
+    verified?: boolean;
   } | null;
 }
 
@@ -83,6 +88,7 @@ interface ApiDeliveryTimelineEntry {
   shipmentId: string;
   agencyId: string;
   agencyName: string;
+  agencyVerified?: boolean;
   status: string;
   changedAt: string;
   changedByRole: string;
@@ -348,6 +354,7 @@ function adaptOrderDelivery(delivery: ApiOrderDelivery): OrderItemDelivery {
   return {
     agencyId: delivery.agencyId,
     agencyName: delivery.agencyName,
+    agencyVerified: delivery.agencyVerified === true,
     agencyPhone: delivery.agencyPhone,
     deliveryStatus: delivery.deliveryStatus,
     shipmentId: delivery.shipmentId,
@@ -366,6 +373,7 @@ function adaptOrderDelivery(delivery: ApiOrderDelivery): OrderItemDelivery {
           name: delivery.agent.name,
           phone: delivery.agent.phone,
           avatarUrl: fileRefUrl(delivery.agent.avatar) ?? undefined,
+          verified: delivery.agent.verified === true,
         }
       : null,
   };
@@ -376,6 +384,7 @@ function adaptDeliveryTimelineEntry(entry: ApiDeliveryTimelineEntry): OrderDeliv
     shipmentId: entry.shipmentId,
     agencyId: entry.agencyId,
     agencyName: entry.agencyName,
+    agencyVerified: entry.agencyVerified === true,
     status: entry.status,
     changedAt: entry.changedAt,
     changedByRole: entry.changedByRole,
@@ -618,6 +627,7 @@ export async function fetchOrderById(id: string): Promise<Order> {
 
 export async function updateOrderStatus(id: string, status: VendorSettableStatus): Promise<Order> {
   const res = await api.patch<UpdateStatusResponse>(`/vendor/orders/${id}/status`, { status });
+  void refreshPendingOrdersCount();
   return adaptDetailToOrder(res.data);
 }
 
@@ -653,6 +663,7 @@ export async function bulkUpdateOrderStatus(
   status: VendorSettableStatus,
 ): Promise<{ total: number; succeeded: string[]; failed: BulkActionFailure[]; message: string }> {
   const res = await api.post<BulkStatusResponse>('/vendor/orders/bulk/status', { orderIds, status });
+  void refreshPendingOrdersCount();
   return { ...res.data, message: res.message };
 }
 

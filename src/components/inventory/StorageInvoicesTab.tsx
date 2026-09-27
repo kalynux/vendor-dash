@@ -28,10 +28,11 @@ import { InventoryPagination } from '@/components/inventory/InventoryPagination'
 import { StorageInvoiceDetailSheet } from '@/components/inventory/StorageInvoiceDetailSheet';
 import { StorageInvoiceStatusBadge } from '@/components/inventory/StorageInvoiceStatusBadge';
 import { listStorageInvoices, storageInvoicePeriod } from '@/services/storage-invoices.service';
-import { getActiveConnectedAgencies } from '@/services/agency-connections.service';
 import type { StorageInvoice, StorageInvoiceStatus } from '@/types/storage-invoices.types';
 import type { InventoryPageMeta } from '@/types/inventory.types';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useConnectedAgencyLookup } from '@/hooks/use-connected-agency-lookup';
+import { VerifiedName } from '@/components/common/VerifiedBadge';
 import { useApiError, useFormatters, useTranslation } from '@/i18n';
 
 const PAGE_LIMIT = 20;
@@ -76,8 +77,6 @@ export function StorageInvoicesTab() {
   const [period, setPeriod] = useState('');
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [detail, setDetail] = useState<StorageInvoice | null>(null);
-  /** agencyId → display name. Best-effort; an invoice outlives its connection. */
-  const [agencyNames, setAgencyNames] = useState<Record<string, string>>({});
 
   // A half-typed month is not a filter. Sending `2026-0` would be a 400 on a
   // strict schema, so the value is only applied once it is a complete YYYY-MM.
@@ -106,41 +105,19 @@ export function StorageInvoicesTab() {
   }, [load]);
 
   /**
-   * Agency names, resolved once per mount and only when there is something to
-   * name — the invoice itself carries `agencyId` and nothing else, and a raw
-   * ObjectId is not an answer to "who is billing me".
-   *
-   * Best-effort by design: this resolves *active* connections, and an invoice
-   * outlives the relationship that produced it. An unresolved id falls back to a
-   * neutral label rather than to the id.
+   * Agency names — the invoice itself carries `agencyId` and nothing else, and
+   * a raw ObjectId is not an answer to "who is billing me". An unresolved id
+   * (the invoice outlived its connection) reads "Storage agency".
    */
-  useEffect(() => {
-    if (rows.length === 0) return;
-    const missing = rows.some((r) => !agencyNames[r.agencyId]);
-    if (!missing) return;
-    let cancelled = false;
-    getActiveConnectedAgencies()
-      .then(({ agencies }) => {
-        if (cancelled) return;
-        setAgencyNames((prev) => {
-          const next = { ...prev };
-          for (const agency of agencies) next[agency.id] = agency.agencyName;
-          return next;
-        });
-      })
-      .catch(() => {
-        // A missing name degrades to "Storage agency" — not worth a toast on a
-        // list that otherwise loaded.
-      });
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows]);
+  const agencies = useConnectedAgencyLookup(rows.map((r) => r.agencyId));
 
   const agencyLabel = useCallback(
-    (agencyId: string) => agencyNames[agencyId] ?? t('inventory.invoices.unknownAgency'),
-    [agencyNames, t],
+    (agencyId: string) => {
+      const agency = agencies[agencyId];
+      if (!agency) return t('inventory.invoices.unknownAgency');
+      return <VerifiedName name={agency.name} verified={agency.verified} kind="agency" badgeClassName="h-3.5 w-3.5" />;
+    },
+    [agencies, t],
   );
 
   const periodLabel = useCallback(

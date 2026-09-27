@@ -264,7 +264,7 @@ export async function getCurrentToken(): Promise<string | null> {
  * ⚠ The order at the call site is load-bearing and must be preserved: `DELETE
  * /vendor/devices` authenticates with the very credential the sign-out is about
  * to destroy, so the token has to be collected and sent BEFORE the session ends
- * (see `onboarding.store.tsx`).
+ * (see `OnboardingProvider.tsx`).
  */
 export async function deleteCurrentToken(): Promise<string | null> {
   if (isNative) return unregisterNativePush();

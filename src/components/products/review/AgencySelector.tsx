@@ -19,6 +19,7 @@ import { useOnboarding } from '@/onboarding/store/onboarding.store';
 import { formatAgencyLocationLocality } from '@/lib/agencyAddress';
 import { cn } from '@/lib/utils';
 import { useApiError, useMessage, useTranslation } from '@/i18n';
+import { VerifiedBadge } from '@/components/common/VerifiedBadge';
 import type {
   VendorAgencyListItemDto,
   AgencyLocationDto,
@@ -380,11 +381,13 @@ export function AgencySelector({
                 {defaultAgency && (
                   <SelectItem value="default">
                     {t('products.delivery.agencyDefaultNamed', { name: defaultAgency.agencyName })}
+                    {defaultAgency.kycVerified && <VerifiedBadge kind="agency" className="ml-1" />}
                   </SelectItem>
                 )}
                 {agencies.map((agency) => (
                   <SelectItem key={agency.id} value={agency.id}>
                     {agency.agencyName}
+                    {agency.kycVerified && <VerifiedBadge kind="agency" className="ml-1" />}
                   </SelectItem>
                 ))}
               </SelectContent>

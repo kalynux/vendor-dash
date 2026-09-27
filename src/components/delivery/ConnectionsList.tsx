@@ -3,6 +3,7 @@ import { Building2, Loader2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ReasonPopover } from '@/components/common/ReasonPopover';
+import { VerifiedBadge } from '@/components/common/VerifiedBadge';
 import {
     ActiveFilterChips,
     FilterChips,
@@ -321,8 +322,11 @@ export function ConnectionsList({
                                         )}
                                     </div>
                                     <div className="min-w-0">
-                                        <p className="text-sm font-medium truncate">
-                                            {agency?.agencyName ?? t('agency.connections.unnamedAgency', { ref: connection.agencyId.slice(-6) })}
+                                        <p className="flex items-center gap-1 text-sm font-medium">
+                                            <span className="truncate">
+                                                {agency?.agencyName ?? t('agency.connections.unnamedAgency', { ref: connection.agencyId.slice(-6) })}
+                                            </span>
+                                            {agency?.kycVerified && <VerifiedBadge kind="agency" />}
                                         </p>
                                         <Badge variant="secondary" className={cn('text-[10px] mt-0.5', STATUS_BADGE_CLASS[connection.status])}>
                                             {t(STATUS_LABEL_KEYS[connection.status])}

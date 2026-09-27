@@ -1505,10 +1505,15 @@ function InspectorBody({
   const [editing, setEditing] = useState(false);
   const [nameDraft, setNameDraft] = useState(file?.originalName ?? '');
 
-  useEffect(() => {
+  // Reset the rename form when the file (or its name) changes — adjusted during
+  // render (React's "reset state when a prop changes" pattern), not in an effect.
+  const resetKey = JSON.stringify([fileId, file?.originalName, detail?.originalName]);
+  const [resetFor, setResetFor] = useState(resetKey);
+  if (resetFor !== resetKey) {
+    setResetFor(resetKey);
     setEditing(false);
     setNameDraft(file?.originalName ?? detail?.originalName ?? '');
-  }, [fileId, file?.originalName, detail?.originalName]);
+  }
 
   const display = file ?? detail;
   if (!display) {

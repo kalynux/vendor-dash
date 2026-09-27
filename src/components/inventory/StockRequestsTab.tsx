@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { AlertTriangle, PackageSearch, Plus } from 'lucide-react';
 
 import { Card, CardContent } from '@/components/ui/card';
@@ -40,6 +40,8 @@ import {
 import { fetchStockRequests } from '@/services/stockRequests.service';
 import { useStockRequestActions } from '@/hooks/useStockRequestActions';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useConnectedAgencyLookup, type ConnectedAgencyIdentity } from '@/hooks/use-connected-agency-lookup';
+import { VerifiedName } from '@/components/common/VerifiedBadge';
 import { cn } from '@/lib/utils';
 import type { InventoryPageMeta } from '@/types/inventory.types';
 import type {
@@ -226,15 +228,21 @@ export function StockRequestsTab({
     setRaiseOpen(true);
   };
 
+  // The DTO carries `agencyId` only — the name (and verified badge) comes from
+  // the vendor's active connections, best-effort like the storage invoices tab.
+  const agencies = useConnectedAgencyLookup(rows.map((r) => r.agencyId));
+
   // Search matches what the row actually shows — SKU, product and the agency
   // that raised it. Resolved against `rows`, never against the server.
   const query = search.trim().toLowerCase();
   const visibleRows = useMemo(() => {
     if (!query) return rows;
     return rows.filter((r) =>
-      [r.sku, r.productTitle, r.agencyName].some((field) => field?.toLowerCase().includes(query)),
+      [r.sku, r.productTitle, r.agencyName ?? agencies[r.agencyId]?.name].some((field) =>
+        field?.toLowerCase().includes(query),
+      ),
     );
-  }, [rows, query]);
+  }, [rows, query, agencies]);
   const searchIsPartial = Boolean(query) && meta.totalPages > 1;
 
   // The chip label still resolves off the full page — hiding the row that
@@ -350,7 +358,7 @@ export function StockRequestsTab({
                     )}
                     <ChangeCell request={r} />
                     <p className="mt-1 text-xs text-muted-foreground">
-                      {raisedByLabel(r, t)} · {fmt.dateTime(r.requestedAt)}
+                      {raisedByLabel(r, agencies, t)} · {fmt.dateTime(r.requestedAt)}
                     </p>
                   </button>
                   <StockRequestActions
@@ -397,7 +405,7 @@ export function StockRequestsTab({
                     <TableCell>
                       <ChangeCell request={r} />
                     </TableCell>
-                    <TableCell className="text-sm">{raisedByLabel(r, t)}</TableCell>
+                    <TableCell className="max-w-[220px] text-sm">{raisedByLabel(r, agencies, t)}</TableCell>
                     <TableCell>
                       <StatusPill status={r.status} />
                     </TableCell>
@@ -540,12 +548,21 @@ function ChangeCell({ request }: { request: StockRequestDto }) {
 
 function raisedByLabel(
   request: StockRequestDto,
+  agencies: Record<string, ConnectedAgencyIdentity>,
   t: ReturnType<typeof useTranslation>['t'],
-): string {
+): ReactNode {
   if (request.requestedByRole === 'vendor') return t('inventory.requests.raisedByYou');
-  return request.agencyName
-    ? t('inventory.requests.raisedByNamedAgency', { name: request.agencyName })
-    : t('inventory.requests.raisedByAgency');
+  const agency = agencies[request.agencyId];
+  const name = request.agencyName ?? agency?.name;
+  if (!name) return t('inventory.requests.raisedByAgency');
+  return (
+    <VerifiedName
+      name={t('inventory.requests.raisedByNamedAgency', { name })}
+      verified={agency?.verified}
+      kind="agency"
+      badgeClassName="h-3.5 w-3.5"
+    />
+  );
 }
 
 export default StockRequestsTab;

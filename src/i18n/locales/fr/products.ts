@@ -637,6 +637,7 @@ export const products = {
         aiSearchDescription:
             'Indexez ce produit pour que les clients le trouvent via la recherche IA. S’applique une fois le produit actif et complet.',
         aiSearchToggle: 'Laisser les acheteurs le trouver via la recherche IA',
+        aiSearchAppliesOnSave: 'Prend effet à l’enregistrement.',
         suspendedNotice:
             'Ce produit est suspendu à cause d’un problème d’agence de livraison. Vous pouvez toujours le modifier — lui attribuer une agence opérationnelle ci-dessous le rétablit automatiquement.',
         sectionDetails: 'Détails',
@@ -709,6 +710,15 @@ export const products = {
         editLocked: 'Modifier (verrouillé — indexation)',
         editLockedToast: 'La modification est verrouillée pendant l’indexation IA.',
         indexingToast: 'Le produit est en cours d’indexation, réessayez plus tard',
+        switchLabel: 'Recherche IA',
+        confirmEnableTitle: 'Activer la recherche IA ?',
+        confirmEnableBody:
+            'Les acheteurs pourront le trouver via la recherche IA. L’indexation démarre tout de suite, et le produit ne peut pas être modifié avant la fin.',
+        confirmDisableTitle: 'Désactiver la recherche IA ?',
+        confirmDisableBody:
+            'Il n’apparaîtra plus dans la recherche IA. S’il a un prix affiché pour la négociation, les acheteurs verront son prix normal à la place.',
+        confirmEnableCta: 'Activer',
+        confirmDisableCta: 'Désactiver',
     },
 
     delivery: {

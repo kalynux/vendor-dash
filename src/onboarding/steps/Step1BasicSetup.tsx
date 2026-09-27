@@ -35,6 +35,7 @@ export function Step1BasicSetup() {
         payout_details: defaultPayoutDetails(),
     };
 
+    const roleVersion = roleEntity?.version;
     const onSubmit = useCallback(
         async (values: Step1FormValues) => {
             setApiError(null);
@@ -45,14 +46,14 @@ export function Step1BasicSetup() {
                     country: values.country,
                     timezone: values.timezone,
                     payout_details: values.payout_details,
-                    version: roleEntity?.version,
+                    version: roleVersion,
                 });
                 toast.success(t('onboarding.basicSetup.saved'));
             } catch (err) {
                 setApiError(errors.resolve(err, { fallbackKey: 'onboarding.errors.saveFailed' }));
             }
         },
-        [submitBasicSetup, saveDraft, roleEntity?.version, t, errors],
+        [submitBasicSetup, saveDraft, roleVersion, t, errors],
     );
 
     const ctaSlot = (

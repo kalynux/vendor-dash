@@ -7,11 +7,6 @@ export const overview = {
     welcomeBack: 'Welcome back',
     myStore: 'My Store',
 
-    notReady: {
-        short: "Analytics for this period aren't ready yet. Please check back shortly.",
-        long: "Analytics for this period aren't ready yet. Data is aggregated daily — please check back shortly.",
-    },
-
     metrics: {
         totalSales: 'Total Sales',
         totalOrders: 'Total Orders',
@@ -37,6 +32,7 @@ export const overview = {
     topProducts: {
         empty: 'No product sales in this period.',
         sold: plural({ one: '{{count}} sold', other: '{{count}} sold' }),
+        orders: plural({ one: '{{count}} order', other: '{{count}} orders' }),
     },
 
     recentOrders: {

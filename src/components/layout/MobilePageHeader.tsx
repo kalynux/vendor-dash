@@ -7,6 +7,7 @@ import { useTranslation } from '@/i18n';
 import { useHeaderReveal } from '@/hooks/use-header-reveal';
 import { useNotificationStore } from '@/store';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { RefreshButton } from '@/components/common/RefreshButton';
 
 const NOTIFICATIONS_PATH = '/dashboard/notifications';
 
@@ -48,6 +49,12 @@ interface MobilePageHeaderProps {
    * the caller; keep it to about 32px so the bar stays 56px tall.
    */
   leading?: ReactNode;
+  /**
+   * Shows the refresh icon at the left of the bar (after the back button, when
+   * there is one). For pages whose data moves while the vendor is on them.
+   * See `RefreshButton` for what to return.
+   */
+  onRefresh?: () => unknown;
   /** Page actions, most important first. See `MobileHeaderAction`. */
   actions?: MobileHeaderAction[];
   /**
@@ -121,6 +128,7 @@ export function MobilePageHeader({
   description,
   onBack,
   leading,
+  onRefresh,
   actions,
   actionsSlot,
   hideNotifications,
@@ -167,6 +175,12 @@ export function MobilePageHeader({
           >
             <ArrowLeft className="h-5 w-5" />
           </button>
+        )}
+
+        {/* Left, not among the actions: it costs none of the three-button
+            budget, and it sits where the eye starts reading the page. */}
+        {onRefresh && (
+          <RefreshButton onRefresh={onRefresh} className={cn(!onBack && '-ml-2', 'mr-1')} />
         )}
 
         {leading && <div className="mr-2 shrink-0">{leading}</div>}

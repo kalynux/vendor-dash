@@ -29,6 +29,7 @@ import { useInfiniteList } from '@/hooks/use-infinite-list';
 import { useScrollRestoration } from '@/hooks/use-scroll-restoration';
 import { getListCache, setListCache } from '@/lib/listCache';
 import { MobilePageHeader } from '@/components/layout/MobilePageHeader';
+import { RefreshButton } from '@/components/common/RefreshButton';
 import { MobileListFooter } from '@/components/layout/MobileListFooter';
 import { CreateTicketSheet } from '@/components/tickets/CreateTicketSheet';
 import { TicketDetailSheet } from '@/components/tickets/TicketDetailSheet';
@@ -228,6 +229,9 @@ export function Tickets() {
     else { setPage(1); refresh(); }
   }, [isMobile, infinite, refresh]);
 
+  // The header's refresh icon: same page and filters, support replies pulled in.
+  const refreshList = () => (isMobile ? infinite.refresh() : refresh());
+
   function clearFilters() {
     setStatusFilter(null);
     setPriorityFilter('');
@@ -422,6 +426,7 @@ export function Tickets() {
         <MobilePageHeader
           title={t('nav.items.tickets')}
           description={t('tickets.subtitle')}
+          onRefresh={refreshList}
           actions={[
             {
               id: 'new',
@@ -474,9 +479,12 @@ export function Tickets() {
     <div className="space-y-5">
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">{t('tickets.title')}</h1>
-          <p className="text-muted-foreground">{t('tickets.subtitle')}</p>
+        <div className="flex items-center gap-3">
+          <RefreshButton onRefresh={refreshList} />
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">{t('tickets.title')}</h1>
+            <p className="text-muted-foreground">{t('tickets.subtitle')}</p>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" onClick={() => setFaqOpen(true)} className="gap-2">

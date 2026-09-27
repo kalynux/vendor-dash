@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useRouter } from '@/App';
+import { useRouter } from '@/app-context';
 import { useNotificationStore, useStoreStore } from '@/store';
 import { useOnboarding } from '@/onboarding/store/onboarding.store';
 import {

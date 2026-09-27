@@ -38,9 +38,10 @@ export function StorePreview() {
   const [device, setDevice] = useState<PreviewDevice>(useDefaultPreviewDevice());
   const [reloadToken, setReloadToken] = useState(0);
 
+  const slug = store?.slug;
   const publicUrl = useMemo(
-    () => (store?.slug ? storefrontUrl(localeStorefrontPath(storePath(store.slug), locale)) : null),
-    [store?.slug, locale],
+    () => (slug ? storefrontUrl(localeStorefrontPath(storePath(slug), locale)) : null),
+    [slug, locale],
   );
 
   const goBack = usePreviewBack('/dashboard/account/store');

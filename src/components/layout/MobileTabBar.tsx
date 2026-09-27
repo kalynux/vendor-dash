@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LayoutDashboard, ShoppingCart, Package, Menu, Plus, ChevronRight } from 'lucide-react';
-import { useRouter } from '@/App';
+import { useRouter } from '@/app-context';
 import { useNotificationStore } from '@/store';
+import { usePendingOrdersCount } from '@/lib/pending-orders-count';
 import { cn } from '@/lib/utils';
 import { MobileMoreDrawer } from './MobileMoreDrawer';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
@@ -55,6 +56,7 @@ export function MobileTabBar() {
   const { t } = useTranslation();
   const reactNavigate = useNavigate();
   const { unreadCount } = useNotificationStore();
+  const pendingOrders = usePendingOrdersCount();
   const [moreOpen, setMoreOpen] = useState(false);
   const [quickActionsOpen, setQuickActionsOpen] = useState(false);
   // Always false on the web, so the browser build is unchanged (P3.2).
@@ -70,7 +72,7 @@ export function MobileTabBar() {
 
   const tabs: { labelKey: TranslationKey; icon: React.ElementType; route: LegacyRoute; badge?: number }[] = [
     { labelKey: 'nav.items.overview', icon: LayoutDashboard, route: 'overview' },
-    { labelKey: 'nav.items.orders', icon: ShoppingCart, route: 'orders', badge: 3 },
+    { labelKey: 'nav.items.orders', icon: ShoppingCart, route: 'orders', badge: pendingOrders },
   ];
 
   const rightTabs: { labelKey: TranslationKey; icon: React.ElementType; route: LegacyRoute }[] = [

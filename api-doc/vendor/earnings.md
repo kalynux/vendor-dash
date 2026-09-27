@@ -1,197 +1,289 @@
-# Earnings and payouts
+# Vendor Earnings
 
-**Verified against source on 2026-09-08** — all three routes, the balance fields, the four payout
-refusals *in the order they are checked*, both config thresholds, the destination snapshot and the
-auto-payout gate, against `jovi-mall/src/modules/earnings/` (`config/earnings.config.ts`,
-`services/earnings-account.service.ts`, `services/payout-request.service.ts`,
-`controllers/payout-request.controller.ts`, `workers/earnings-release.worker.ts`). **Every claim on
-this page held.** The one edit is the currency-units note, which contradicted the backend copy.
+**Verified against source on 2026-09-08** — R7 re-checked the three routes (`modules/earnings/routes/vendor-earnings.routes.ts:15,18,19`), the commission snapshot taken from the vendor's live plan entitlements at split time (`services/earnings-split.service.ts:173-174`) and the delivery-fee / `rto_fee` credit-back path (`services/earnings-quote.service.ts:116-117,196`). No defects found.
 
-**Routes: 3** — `GET /api/vendor/earnings` · `GET`/`POST /api/vendor/earnings/payout`
+**Verified against source on 2026-09-07** — every claim on this page was checked against
+`jovi-mall/src/`, including the whole inherited defect list that `vendor-dash` carried for it
+(DOC-PROGRAM § 24–28). Corrections are marked inline with ⚠ and a source citation.
+
+## Base Path
+
+```
+/api/vendor
+```
+
+## Authentication
+
+**Authorization**: Vendor access required. Bearer token with `vendor` role.
+
+## Endpoints
+
+- [`GET /api/vendor/earnings`](#earnings) — this vendor's held (pending) vs withdrawable (available) balance
+- [`POST /api/vendor/earnings/payout`](#requesting-a-payout) — request a payout of the entire available balance
+- [`GET /api/vendor/earnings/payout`](#requesting-a-payout) — your latest payout request
+
+For the itemized history behind these numbers (per-order/per-collection hold and release rows),
+see the unified feed: [**Vendor Transactions API**](./transactions.md) with `?category=earning`.
+This page covers the balance endpoints and how the numbers are computed.
 
 ---
 
-## 0 · 🔴 A payout withdraws the ENTIRE available balance
+## How the balance is built
 
-`POST /api/vendor/earnings/payout` **takes no request body.** The amount is forced to the whole
-`available_balance`. **There is no partial-payout option anywhere in the source.**
+Every **paid physical order**, **paid digital order**, **booking**, and **COD cash collection** is
+split at the moment it's confirmed paid/collected into your **net** share, held in escrow
+immediately:
 
-Do not build an amount field. Build a "Withdraw XAF 142,000" button that states the figure.
+- **Orders**: `net = gross − platform commission − agency delivery fee(s)`. The commission percent
+  is a snapshot of your **current pricing plan**'s `commission_percent` at the moment of the split
+  (see [billing-overview.md](./billing-overview.md) for plan rates) — a later plan change never
+  retroactively changes an already-split order. Physical orders also subtract each fulfilling
+  agency's delivery fee for its shipment(s) on that order (see
+  [agency/earnings.md](../agency/earnings.md) for how that fee is computed); digital orders and
+  bookings have no delivery agency, so only commission is subtracted.
+  > The delivery fee is **charged to you at payment** but only **paid out to the agency and its
+  > agent when the shipment is delivered**. This does not change your net. It does mean that if a
+  > shipment comes back (`returned`), the part of the fee the run did not earn — the difference
+  > between the quoted fee and the agency's `rto_fee` — is **credited back to you** as a separate
+  > entry against that shipment.
+- **COD collections**: same formula, but per **verified cash collection** (one per COD shipment),
+  and additionally subtracts the fulfilling agency's `cod_handling_fee` for that collection. See
+  [orders.md — Cash-on-delivery orders](./orders.md).
 
-## 0.1 · 🔴 It is not an instant transfer — it opens a support ticket
+If the order/booking is refunded/cancelled while the allocation is still `pending` (never
+released), the held amount is reversed and never counted — cleanly removed from `pending`, no
+impact on `available`. **A refund issued after the money has already moved to `available` is not
+automatically clawed back** — that reversal is a manual/admin operation.
 
-Requesting a payout:
+### Hold timing (prepaid orders & bookings)
 
-1. moves the money from `available` to `requested` (so it cannot be spent twice),
-2. **opens a `PAYOUT_REQUEST` support ticket assigned to the admin pool**,
-3. and waits for a human.
+1. Money is held (`pending`) the instant the order/booking is paid.
+2. It becomes eligible to start the withdrawal countdown once the order is **completed** — the
+   customer confirms delivery/satisfaction, or, failing that, the platform **auto-confirms** it
+   **7 days** after it reaches `delivered`/`fulfilled` (`EARNINGS_AUTO_CONFIRM_DAYS`, default 7).
+3. From that completion moment, a further **7-day hold window** runs (`EARNINGS_HOLD_DAYS`,
+   default 7). A daily sweep moves matured holds from `pending` to `available`.
 
-The response tells you so:
+### Hold timing (COD collections)
 
-```jsonc
-{ "success": true,
-  "data": { "id": "…", "amount": 142000, "currency": "XAF",
-            "status": "pending", "origin": "manual",
-            "ticketId": "66f1…", "createdAt": "…" },
-  "message": "Payout request created. Track its progress under Tickets." }
-```
+The verified delivery code **is** that shipment's customer confirmation, so there's no separate
+confirmation step. The 7-day hold window still starts when the **order** completes, not at
+collection — on a multi-shipment order, one collected shipment does not mature ahead of its
+siblings. Release is also **additionally gated on cash settlement**: your net only becomes
+`available` once the agency has
+remitted and the platform has confirmed the physical cash for that collection (remittances settle
+oldest-first). A slow remittance chain delays your `available` balance the same way it delays the
+agency's.
 
-**Link `ticketId` into [tickets.md](./tickets.md).** That is where the vendor follows it, and the
-backend's own message says as much.
+### `reserve`
 
-**The payout destination is frozen on the request.** A later profile edit never redirects money
-already in flight.
+Always `0` for vendors today — the rolling-reserve mechanism (a security margin held back after
+release) applies only to **agencies**, against COD cash-handling risk. The field is present in the
+response for shape-parity with the agency endpoint; don't build vendor UI around it changing.
 
----
+### `requested`
 
-## 1 · `GET /api/vendor/earnings`
-
-**Balances only.** The ledger endpoint was removed — history is
-`GET /api/vendor/transactions?category=earning`.
-
-```jsonc
-{ "success": true,
-  "data": { "pending": 84000, "available": 142000, "reserve": 0,
-            "requested": 0, "currency": "XAF" } }
-```
-
-| Field | Meaning |
-|---|---|
-| `pending` | in escrow — earned, not yet releasable |
-| `available` | **withdrawable now** |
-| `requested` | earmarked for an in-flight payout request |
-| `reserve` | 🔴 **always `0` for a vendor** — a COD rolling reserve for agencies. **Hide it** |
-
-All values default to `0` and `currency` to `XAF` when the vendor has no account yet.
-
-**Do not divide by 100.** The values are integers in the currency's *minor* units — which the
-backend's own copy says, and which reads as "divide by 100" to anyone used to Stripe. It is not,
-because **XAF is a zero-decimal currency**: its minor unit *is* the franc, so `142000` means
-XAF 142,000. The currency is one per deployment (`EARNINGS_CURRENCY`, default `XAF`,
-`earnings.config.ts:20`), so if a deployment ever sets a two-decimal one, this is the line that
-changes — read `currency` rather than hard-coding the assumption.
-
----
-
-## 2 · The earnings lifecycle
-
-🔴 **It is not `pending → available → paid`.** The states are:
-
-```
-held  →  released       (money becomes available)
-      →  reversed       (a refund clawed it back)
-```
-
-**`paid` is not a state.** Money leaves via a `PayoutRequest`, which moves
-`available → requested → gone`.
-
-### When money becomes available
-
-An earning is released when **both** hold:
-
-1. the **7-day escrow hold** has elapsed, counted from **order completion** — which is the customer
-   confirming, or an auto-confirmation 7 days after delivery; **and**
-2. for a **cash-on-delivery** order, the **physical cash has been settled** by the agency.
-
-A nightly worker does the releasing. **So money can appear without any user action** — refresh
-rather than caching balances across a session boundary.
-
-🔴 **The COD condition is the one that surprises vendors.** A COD order can sit past its escrow
-window indefinitely if the agency has not settled the cash. There is **no field on this surface
-explaining that**, so if your users sell COD, say it in the UI: *"COD earnings release once your
-agency settles the cash."*
+Money earmarked for an in-flight payout request (see [Requesting a payout](#requesting-a-payout)
+below). Moves out of `available` the instant a request is created and either leaves for good once
+an admin marks it paid, or returns to `available` if the admin rejects it.
 
 ---
 
-## 3 · `POST /api/vendor/earnings/payout`
+<a name="earnings"></a>
+### GET /api/vendor/earnings
 
-No body. `201`.
+**Description**: This vendor's current pending (held) and available (withdrawable) balance.
 
-### Refusals, in the order they are checked
+**Success Response** (`200 OK`):
+```json
+{
+  "success": true,
+  "data": {
+    "pending": 32000,
+    "available": 118500,
+    "reserve": 0,
+    "requested": 0,
+    "currency": "XAF",
+    "payoutAllowance": null
+  }
+}
+```
 
-| Status | Code | Meaning |
+| Field | Type | Description |
 |---|---|---|
-| **409** | `EARNINGS_PAYOUT_ALREADY_PENDING` | one at a time |
-| **409** | `EARNINGS_PAYOUT_METHOD_MISSING` | *"Add a payout method to your profile before requesting a payout"* |
-| 409 | `EARNINGS_PAYOUT_NO_AVAILABLE_BALANCE` | nothing to withdraw, or a concurrent change |
-| **409** | `EARNINGS_PAYOUT_BELOW_MINIMUM` | `details: { minAmount, available }` |
+| `pending` | `number` | Sum of net shares from paid/collected-but-not-yet-released sources (still within the completion/hold window, or COD cash not yet settled). Minor currency units. |
+| `available` | `number` | Sum of net shares whose hold window has elapsed (and, for COD, whose cash was settled). Withdrawable via a payout request (see below). Minor currency units. |
+| `reserve` | `number` | Always `0` for vendors (see above). Minor currency units. |
+| `payoutAllowance` | `null` | **Always `null`** since 2026-09-27 — deprecated, no limit applies. See below. |
 
-🔴 **The minimum is 10 000** by default. `details.minAmount` gives you the live figure — **render
-it**: *"You need at least XAF 10,000 to withdraw. You have XAF 4,200."*
+### `payoutAllowance` — retired, always `null`
 
-**Pre-empt all four.** Disable the button when `available < minAmount`, when a request is already
-pending, or when the profile has no payout method — checking is cheaper than explaining.
+⚠ **Always `null` since 2026-09-27, and deprecated.** From 2026-09-15 this could carry a limit on
+how much an account whose KYC was not verified could withdraw per rolling window. That limit was
+**deleted** (owner decision: *"we should not block someone's money just because he is not
+verified"*) — an unverified account now withdraws its whole `available` balance exactly like a
+verified one. The key is kept only so existing clients do not break.
 
-The payout method is `payout_details[0]` on the profile — the **first** entry, which is the
-preferred one. See
-[profile.md § 4](./profile.md#4---payout-details--read-is-lossy-write-is-a-full-replace).
-**Mobile money only right now.**
+`null` means **no limit**, never a limit of zero. Do not render a withdrawal limit, a "remaining"
+figure or a "get verified to withdraw more" prompt from it; new clients should ignore the field.
+
+> ⚠ **"Minor currency units" does not mean "divide by 100" here.** `EARNINGS_CURRENCY` defaults to
+> **XAF**, a zero-decimal currency whose minor unit *is* the franc — so `142000` is XAF 142,000,
+> not 1,420. A client that applies the Stripe habit will under-report every balance by two orders
+> of magnitude. Read `currency` and pick the exponent from it rather than assuming either way.
+| `requested` | `number` | Earmarked for a pending payout request (see below). Minor currency units. |
+| `currency` | `string` | Currency code for all balances. |
+
+**Error Responses**:
+- `401` – `AUTH_MISSING_TOKEN` · `AUTH_TOKEN_EXPIRED` · `AUTH_TOKEN_INVALID` – Missing or invalid auth token.
+- `403` – `AUTH_ROLE_NOT_FOUND` – Valid token but not a vendor.
 
 ---
 
-## 4 · `GET /api/vendor/earnings/payout`
+<a name="requesting-a-payout"></a>
+## Requesting a payout
 
-🔴 **Returns the single most recent request, of any status — not a history and not an eligibility
-check.**
+There is no self-service bank/mobile-money transfer yet. Instead, a payout request **atomically
+sweeps your entire `available` balance into `requested`** and opens a `PAYOUT_REQUEST` support
+ticket (visible under **Tickets**) assigned to the admin queue. An admin processes it out-of-band
+(bank transfer / mobile money) and marks it paid or rejected; you're notified either way (in-app +
+your configured secondary channel — see [Notifications](./notifications.md), event
+`payoutUpdates`) and can always track progress via the linked ticket.
 
-```jsonc
-{ "success": true,
-  "data": { "id": "…", "amount": 142000, "currency": "XAF",
-            "status": "pending", "origin": "manual",
-            "ticketId": "…", "rejectionReason": null,
-            "createdAt": "…", "resolvedAt": null } | null }
+- **Full balance only** — there's no partial-amount option; each request takes everything currently
+  `available` — whether or not your account is verified. (From 2026-09-15 to 2026-09-27 an
+  unverified account could be limited to an allowance; that limit no longer exists.)
+- **Minimum 10,000 XAF** — `available` must be at least this much to request a payout
+  (`EARNINGS_CONFIG.MIN_PAYOUT_AMOUNT`); below it you'll get `409 EARNINGS_PAYOUT_BELOW_MINIMUM`.
+- **One request at a time** — you can't open a second request while one is still `pending`
+  (`409 EARNINGS_PAYOUT_ALREADY_PENDING`).
+- **A payout method must be configured first** — ⚠ **mobile money only, today**; add one via
+  `PATCH /api/vendor/profile` (`payout_details`, see [Profile](./profile.md) and the canonical
+  [Payout methods](./payout-methods.md)) or you'll get
+  `409 EARNINGS_PAYOUT_METHOD_MISSING`. The **first** payout method on file is the one used, and a
+  snapshot of it is frozen onto the request at creation time — editing your payout details later
+  never changes where an already-pending request is headed.
+
+  > ⚠ **This said "mobile money, bank or card" until 2026-09-07, and only the first can be
+  > configured.** `ENABLED_PAYOUT_METHODS` is `['mobile_money']` (`core/types/payout.types.ts:180`)
+  > — a switch separate from which kinds *exist*, so a vendor posting a bank or card form is
+  > refused with *"not available right now"* rather than a field-level error. Its own
+  > [payout-methods.md](./payout-methods.md) has this right, so the two pages disagreed.
+  >
+  > **Reads are deliberately NOT switched**: a `bank` or `card` entry stored before the switch
+  > still reads back, is still snapshotted, and is still paid. Turning a kind off closes the door
+  > on *new configuration* only — it never hides an owner's stored destination or strands money
+  > already addressed to one.
+- **Rejections restore the balance** — a rejected request moves the full amount back to `available`
+  immediately; the ticket records the reason.
+
+### Automatic payout at 2,000,000 XAF
+
+> **Show this to vendors in the UI** (e.g. near the balance/earnings screen): *"If your available
+> balance reaches XAF 2,000,000, we automatically request a payout on your behalf so your funds
+> don't sit unclaimed. Make sure you have a payout method saved — otherwise the automatic request
+> can't be created and your balance will keep growing past the threshold until you add one."*
+
+You do **not** need to call `POST .../earnings/payout` yourself once `available` reaches
+`EARNINGS_CONFIG.AUTO_PAYOUT_THRESHOLD` (default **2,000,000 XAF**) — a daily platform sweep opens
+the request for you automatically, using the exact same ticket + notification flow as a manual
+request (including the "one request at a time" rule: if one is already pending, the sweep just
+waits). The only failure mode is having **no payout method configured** — the sweep logs it and
+tries again the next day, so your balance can keep climbing past the threshold until you add one.
+Check `origin` on the request (see below) to tell manual (`"manual"`) from automatic
+(`"auto_threshold"`) requests apart.
+
+<a name="post-payout"></a>
+### POST /api/vendor/earnings/payout
+
+**Description**: Request a payout of the entire current `available` balance.
+
+**Request Body**: none.
+
+**Success Response** (`201 Created`):
+```json
+{
+  "success": true,
+  "data": {
+    "id": "66f0a1...",
+    "amount": 118500,
+    "currency": "XAF",
+    "status": "pending",
+    "origin": "manual",
+    "ticketId": "66f0a2...",
+    "createdAt": "2026-07-14T10:00:00.000Z"
+  },
+  "message": "Payout request created. Track its progress under Tickets."
+}
 ```
 
-`null` when there has never been one.
+**Error Responses**:
+- `401` – `AUTH_MISSING_TOKEN` · `AUTH_TOKEN_EXPIRED` · `AUTH_TOKEN_INVALID` / `403` – `AUTH_ROLE_NOT_FOUND`
+- `409` – `EARNINGS_PAYOUT_ALREADY_PENDING` – A request is already pending.
+- `409` – `EARNINGS_PAYOUT_METHOD_MISSING` – No payout method configured on the profile yet.
+- `409` – `EARNINGS_PAYOUT_NO_AVAILABLE_BALANCE` – `available` is `0` — nothing to request.
+- `409` – `EARNINGS_PAYOUT_BELOW_MINIMUM` – `available` is below the 10,000 XAF minimum.
 
-`origin`: `manual` · `auto_threshold`.
+> ⚠ `409 EARNINGS_PAYOUT_UNVERIFIED_CAP_REACHED` was listed here from 2026-09-15 and was **removed
+> 2026-09-27** together with the unverified-account allowance. The code no longer exists; remove
+> any handling for it.
 
-### `status` — five values since 2026-09-15
+<a name="get-payout"></a>
+### GET /api/vendor/earnings/payout
 
-🔴 **`processing` and `failed` are new, neither is terminal, and BOTH still hold the money.** A map
-that was exhaustive over the old three sends them into whichever branch was last — which tells a
-vendor their payout was declined while it is in flight.
+**Description**: Your most recent payout request (or `null` if none was ever made). This also
+reflects requests the **platform** opened automatically at the balance threshold, not just ones
+you requested yourself.
 
-| `status` | Means | The vendor's money is | Say |
-|---|---|---|---|
-| `pending` | Waiting for an administrator | held | "Pending review" |
-| `processing` | Sent to the payment provider, not yet confirmed | held | "On its way" — **never** "Paid" |
-| `paid` | Settled | gone to them | "Paid" |
-| `rejected` | Closed. `rejectionReason` says why | **back in `available`** | "Rejected — &lt;reason&gt;" |
-| `failed` | The transfer was refused | **still held** | "Payment failed — we're looking into it" |
+**Success Response** (`200 OK`):
+```json
+{
+  "success": true,
+  "data": {
+    "id": "66f0a1...",
+    "amount": 118500,
+    "currency": "XAF",
+    "status": "paid",
+    "origin": "auto_threshold",
+    "ticketId": "66f0a2...",
+    "rejectionReason": null,
+    "createdAt": "2026-07-14T10:00:00.000Z",
+    "resolvedAt": "2026-07-15T09:00:00.000Z"
+  }
+}
+```
 
-🔴 **Only `rejected` gives the balance back.** `failed` returns nothing — the amount stays reserved
-while an admin retries or closes the request, so there is nothing for the vendor to re-request.
+| Field | Type | Description |
+|---|---|---|
+| `status` | `string` | `pending` \| `processing` \| `paid` \| `rejected` \| `failed`. See below. |
+| `origin` | `string` | `manual` (you requested it) or `auto_threshold` (the platform opened it automatically because `available` reached the threshold). |
+| `ticketId` | `string` | The linked `PAYOUT_REQUEST` ticket — open it under Tickets for the full conversation/history. |
+| `rejectionReason` | `string \| null` | Set when `status` is `rejected`. |
 
-🔴 **Gate "Request withdrawal" on all three open statuses**, not on `pending` alone. A request while
-any of them is live is refused with `409 EARNINGS_PAYOUT_ALREADY_PENDING`, and the backend's partial
-unique index is that exact list (`PAYOUT_HELD_STATUSES`).
+#### ⚠ `status` gained two values, and neither is terminal
 
-🔴 **Treat an unrecognised status as in-progress, never as a failure.** The safe default for a money
-record you do not recognise is "still happening".
+`processing` and `failed` arrived when payouts became automatable. **An app whose status map
+was exhaustive over the old three will mis-render both** — most likely showing a live payout as
+"Rejected", which tells a user their money is not coming when it is on its way.
 
-Two fields the `POST` response does not have: **`rejectionReason`** and **`resolvedAt`**. Both are
-`null` while pending.
+| `status` | What it means | What to tell the user |
+|---|---|---|
+| `pending` | Waiting for an administrator | "Being reviewed" |
+| `processing` | **Sent to the payment provider, not yet confirmed** | "On its way" — never "Paid" |
+| `paid` | Settled. The only status that means the money arrived | "Paid" |
+| `rejected` | Closed. `rejectionReason` says why, and the balance is back in `available` | "Declined — <reason>" |
+| `failed` | **The transfer was refused. The money is still held, NOT back in `available`** | "Payment failed — we are looking into it" |
 
-🔴 **Show `rejectionReason` when `status === "rejected"`** — a rejected payout returns the money to
-`available`, and this is the only explanation the vendor gets.
+⛔ **`failed` does NOT mean the request is over, and it does NOT return the balance.** The funds
+stay reserved while an administrator retries or closes it. An app that treats `failed` as
+terminal will tell the user to request again — and the request will be refused, because one is
+already open. Only `rejected` returns money to `available`.
 
-**There is no payout history on the vendor surface.** For a list, use
-`GET /api/vendor/transactions?category=payout` — ⚠ **which returns an empty feed today**, see
-[transactions.md](./transactions.md). So in practice: this endpoint, plus the ticket.
+⛔ **Treat any unrecognised status as in-progress, not as failure.** The safe default for a money
+record you do not understand is "still happening".
 
----
+⚠ **While `status` is `pending`, `processing` or `failed`, a new payout request is refused**
+with `409 EARNINGS_PAYOUT_ALREADY_PENDING` — the message names the actual status. Gate the
+"Request payout" control on all three, not on `pending` alone.
 
-## 5 · Automatic payouts
-
-A payout can open **without the vendor asking**. When `available` crosses a threshold
-(**2 000 000** by default), the nightly worker opens the same request with
-`origin: "auto_threshold"`.
-
-**Handle `origin` in the UI** — "Automatic payout" reads very differently from one the vendor
-initiated, and they will not remember requesting it.
-
-⚠ It is skipped entirely when the platform has no support-admin configured, so it may simply never
-fire on a given deployment. Do not promise it.
-
----
+| `resolvedAt` | `string \| null` | When an admin marked it paid/rejected; `null` while `pending`. |

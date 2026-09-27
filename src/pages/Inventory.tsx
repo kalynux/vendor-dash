@@ -60,6 +60,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { useRouteSwipe } from '@/hooks/use-route-swipe';
 import { MobilePageHeader } from '@/components/layout/MobilePageHeader';
 import { SubPageHeader } from '@/components/layout/SubPageHeader';
+import { RefreshButton } from '@/components/common/RefreshButton';
 import { StatTile } from '@/components/features/StatTile';
 import { InventoryPagination } from '@/components/inventory/InventoryPagination';
 import { StockRequestsTab } from '@/components/inventory/StockRequestsTab';
@@ -758,7 +759,7 @@ const RESERVATION_STATUS_STYLES: Record<ReservationStatus, string> = {
   expired: 'text-muted-foreground',
 };
 
-function ReservationsTab() {
+function ReservationsTab({ refreshToken }: { refreshToken: number }) {
   const { t } = useTranslation();
   const fmt = useFormatters();
   const apiError = useApiError();
@@ -779,7 +780,8 @@ function ReservationsTab() {
     } finally {
       setLoading(false);
     }
-  }, [page, apiError]);
+    // refreshToken bumps from the header's refresh icon.
+  }, [page, apiError, refreshToken]);
 
   useEffect(() => {
     load();
@@ -1188,11 +1190,13 @@ export function Inventory() {
           }}
         />
       )}
-      {tab === 'reservations' && <ReservationsTab />}
+      {tab === 'reservations' && <ReservationsTab refreshToken={refreshToken} />}
       {tab === 'history' && <HistoryTab refreshToken={refreshToken} />}
       {/* Read-only, and nothing on it feeds the three summary tiles — so it takes
-          no refresh token and reports nothing back to the page. */}
-      {tab === 'invoices' && <StorageInvoicesTab />}
+          no refresh token and reports nothing back to the page. The header's
+          refresh icon restarts it instead, which is the same thing for a list
+          with no state worth keeping. */}
+      {tab === 'invoices' && <StorageInvoicesTab key={refreshToken} />}
       {tab === 'requests' && (
         <StockRequestsTab
           refreshToken={refreshToken}
@@ -1227,6 +1231,7 @@ export function Inventory() {
         <MobilePageHeader
           title={t(`inventory.tabs.${tab}` as TranslationKey)}
           description={t(`inventory.tabSubtitles.${tab}` as TranslationKey)}
+          onRefresh={bumpRefresh}
           actions={[
             {
               id: 'import',
@@ -1249,6 +1254,7 @@ export function Inventory() {
       {/* "Inventory › <tab>" — the sidebar sub-tab you opened names the page. */}
       <div className="flex items-start justify-between gap-4">
         <SubPageHeader
+          icon={<RefreshButton onRefresh={bumpRefresh} />}
           parent={t('inventory.title')}
           current={t(`inventory.tabs.${tab}` as TranslationKey)}
           description={t(`inventory.tabSubtitles.${tab}` as TranslationKey)}

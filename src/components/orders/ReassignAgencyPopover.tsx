@@ -15,6 +15,7 @@ import { reassignItemDeliveryAgency, getOrderErrorMessage } from '@/services/ord
 import type { AgencyBrowseItemDto } from '@/types/agency-connection.types';
 import type { Order } from '@/types';
 import { useApiError, useTranslation } from '@/i18n';
+import { VerifiedBadge } from '@/components/common/VerifiedBadge';
 
 interface ReassignAgencyPopoverProps {
   orderId: string;
@@ -91,6 +92,7 @@ export function ReassignAgencyPopover({ orderId, itemId, currentAgencyId, onReas
               {agencies.map((agency) => (
                 <SelectItem key={agency.id} value={agency.id}>
                   {agency.agencyName}
+                  {agency.kycVerified && <VerifiedBadge kind="agency" className="ml-1 h-3.5 w-3.5" />}
                 </SelectItem>
               ))}
             </SelectContent>

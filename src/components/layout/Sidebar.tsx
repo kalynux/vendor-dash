@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useUI } from '@/App';
+import { useUI } from '@/app-context';
 import { useNotificationStore, useStoreStore } from '@/store';
 import {
   ChevronLeft,
@@ -15,6 +15,7 @@ import { AppLogo } from '@/components/layout/AppLogo';
 import { PlatformStatus } from '@/components/layout/PlatformStatus';
 import { PRIMARY_NAV, FOOTER_NAV, type NavItem, type NavChild, type NavBadge } from '@/config/navigation';
 import { useKycNeedsAttention } from '@/hooks/use-kyc-attention';
+import { usePendingOrdersCount } from '@/lib/pending-orders-count';
 import { useTranslation } from '@/i18n';
 import { cn } from '@/lib/utils';
 
@@ -245,6 +246,7 @@ export function Sidebar() {
   const { t } = useTranslation();
   const { unreadCount } = useNotificationStore();
   const kycNeedsAttention = useKycNeedsAttention();
+  const pendingOrders = usePendingOrdersCount();
   const navigate = useNavigate();
   const location = useLocation();
   const pathname = normalizePath(location.pathname);
@@ -316,7 +318,7 @@ export function Sidebar() {
 
   const getBadgeCount = (badge?: NavBadge) => {
     if (badge === 'notifications') return unreadCount;
-    if (badge === 'orders') return 3;
+    if (badge === 'orders') return pendingOrders;
     // Not a count: 1 means "a rejected identity submission is waiting", 0 means
     // nothing to do. See `useKycNeedsAttention` for why only a rejection badges.
     if (badge === 'verification') return kycNeedsAttention ? 1 : 0;

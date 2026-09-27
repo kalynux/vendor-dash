@@ -61,6 +61,7 @@ import { toast } from 'sonner';
 import { CustomerAvatar } from '@/components/customers/CustomerAvatar';
 import { formatPhoneInternational } from '@/lib/phone';
 import { useProductImages } from '@/hooks/use-product-images';
+import { VerifiedBadge } from '@/components/common/VerifiedBadge';
 import { useTranslation, useFormatters, Trans, type TranslationKey } from '@/i18n';
 import type { Order, Entitlement, OrderTimelineEvent, VendorSettableStatus } from '@/types';
 
@@ -507,7 +508,10 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                         {order.deliveries.map((shipment, i) => (
                           <div key={shipment.shipmentId ?? i} className={cn(i > 0 && 'pt-2 border-t mt-2')}>
                             <p className="text-xs text-muted-foreground">{t('orders.detail.shipping.agency')}</p>
-                            <p className="text-sm font-medium">{shipment.agencyName ?? t('common.labels.emptyValue')}</p>
+                            <p className="text-sm font-medium">
+                              {shipment.agencyName ?? t('common.labels.emptyValue')}
+                              {shipment.agencyName && shipment.agencyVerified && <VerifiedBadge kind="agency" className="ml-1" />}
+                            </p>
                             {shipment.agencyPhone && (
                               <p className="text-xs text-muted-foreground mt-0.5">
                                 {formatPhoneInternational(shipment.agencyPhone)}
@@ -515,7 +519,10 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                             )}
                             <div className="mt-1.5"><DeliveryStatusBadge status={shipment.deliveryStatus} size="xs" /></div>
                             {shipment.agent && (
-                              <p className="text-xs text-muted-foreground mt-1.5"><Trans i18nKey="orders.detail.shipping.agent" params={{ name: shipment.agent.name }} components={[<span className="font-medium text-foreground" />]} /></p>
+                              <p className="text-xs text-muted-foreground mt-1.5"><Trans i18nKey="orders.detail.shipping.agent" params={{ name: shipment.agent.name }} components={[<span className="font-medium text-foreground" />]} />
+                                {/* The name ends the sentence in every catalog, so the badge follows it. */}
+                                {shipment.agent.verified && <VerifiedBadge kind="agent" className="ml-1 h-3.5 w-3.5" />}
+                              </p>
                             )}
                             {shipment.trackingNumber && (
                               <p className="text-xs text-muted-foreground mt-0.5">{t('orders.detail.shipping.tracking', { number: shipment.trackingNumber })}</p>
@@ -607,7 +614,10 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                           <div className="pt-2 border-t space-y-1.5">
                             <div className="flex items-center gap-1.5 flex-wrap text-xs">
                               <Truck className="w-3 h-3 text-muted-foreground" />
-                              <span className="font-medium">{item.delivery.agencyName ?? t('orders.detail.shipping.noAgency')}</span>
+                              <span className="font-medium">
+                                {item.delivery.agencyName ?? t('orders.detail.shipping.noAgency')}
+                                {item.delivery.agencyName && item.delivery.agencyVerified && <VerifiedBadge kind="agency" className="ml-1 h-3.5 w-3.5" />}
+                              </span>
                               <DeliveryStatusBadge status={item.delivery.deliveryStatus} size="xs" />
                             </div>
                             {item.delivery.trackingNumber && (
@@ -713,7 +723,10 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                                 </div>
                                 <div className="flex-1 pb-4 rounded-lg p-2">
                                   <div className="flex items-center gap-1.5 flex-wrap">
-                                    <p className="font-medium text-sm">{entry.agencyName}</p>
+                                    <p className="font-medium text-sm">
+                                      {entry.agencyName}
+                                      {entry.agencyVerified && <VerifiedBadge kind="agency" className="ml-1" />}
+                                    </p>
                                     <DeliveryStatusBadge status={entry.status} size="xs" />
                                   </div>
                                   <div className="flex items-center gap-1.5 mt-0.5 text-xs text-muted-foreground capitalize">

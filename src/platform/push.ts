@@ -253,7 +253,7 @@ export async function getNativePushToken(): Promise<string | null> {
  *
  * Called on sign-out, and the caller needs the token BACK: `DELETE
  * /vendor/devices` authenticates with the very credential the sign-out is about
- * to destroy, so the order in `onboarding.store.tsx` is load-bearing.
+ * to destroy, so the order in `OnboardingProvider.tsx` is load-bearing.
  */
 export async function unregisterNativePush(): Promise<string | null> {
   const token = (await readCachedPushToken()) ?? latestToken;

@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
-import { Building2, Check, Info, MapPin, ShieldCheck, Truck, Warehouse } from 'lucide-react';
+import { Building2, Check, Info, MapPin, Truck, Warehouse } from 'lucide-react';
+import { VerifiedBadge } from '@/components/common/VerifiedBadge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { formatAgencyLocality } from '@/lib/agencyAddress';
@@ -47,11 +48,9 @@ export function AgencyCard({ agency, selected = false, onSelect, onInfo, rightSl
             </div>
 
             <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1.5 flex-wrap">
-                    <p className="font-semibold text-sm truncate">{agency.agencyName}</p>
-                    {agency.kycVerified && (
-                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" aria-label={t('agency.detail.kycVerified')} />
-                    )}
+                <div className="flex items-center gap-1.5">
+                    <p className="min-w-0 font-semibold text-sm truncate">{agency.agencyName}</p>
+                    {agency.kycVerified && <VerifiedBadge kind="agency" />}
                     {onSelect && selected && (
                         <div className="w-4 h-4 bg-primary rounded-full flex items-center justify-center flex-shrink-0 ml-auto">
                             <Check className="w-2.5 h-2.5 text-primary-foreground" />

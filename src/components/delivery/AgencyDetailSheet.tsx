@@ -1,8 +1,9 @@
 import type { ReactNode } from 'react';
 import {
-    AlertCircle, Building2, RotateCcw, Shield, ShieldCheck, Truck, Warehouse,
+    AlertCircle, Building2, RotateCcw, Shield, Truck, Warehouse,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { VerifiedBadge } from '@/components/common/VerifiedBadge';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
@@ -66,14 +67,14 @@ export function AgencyDetailSheet({ agency, open, onOpenChange, footerSlot }: Ag
                             )}
                         </div>
                         <div className="flex-1 min-w-0 pt-0.5">
-                            <SheetTitle className="text-base leading-tight">{agency.agencyName}</SheetTitle>
+                            <SheetTitle className="text-base leading-tight">
+                                {agency.agencyName}
+                                {agency.kycVerified && <VerifiedBadge kind="agency" className="ml-1" />}
+                            </SheetTitle>
                             <div className="flex flex-wrap gap-1.5 mt-1.5">
-                                {agency.kycVerified ? (
-                                    <Badge variant="secondary" className="gap-1 text-xs font-medium text-emerald-700 bg-emerald-50 border-emerald-200 dark:text-emerald-400 dark:bg-emerald-950 dark:border-emerald-800">
-                                        <ShieldCheck className="w-3 h-3" />
-                                        {t('agency.detail.kycVerified')}
-                                    </Badge>
-                                ) : (
+                                {/* Verified shows as the check beside the name; only the
+                                    missing check is worth a word of its own. */}
+                                {!agency.kycVerified && (
                                     <Badge variant="secondary" className="gap-1 text-xs font-medium text-amber-700 bg-amber-50 border-amber-200 dark:text-amber-400 dark:bg-amber-950 dark:border-amber-800">
                                         <Shield className="w-3 h-3" />
                                         {t('agency.detail.unverified')}

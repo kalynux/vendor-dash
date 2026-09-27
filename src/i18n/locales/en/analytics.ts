@@ -1,3 +1,5 @@
+import { plural } from '../../types';
+
 /** Analytics page: charts, snapshots, top products. */
 export const analytics = {
     title: 'Analytics',
@@ -6,7 +8,29 @@ export const analytics = {
     headerSubtitle: 'Track your store performance and insights',
     export: 'Export',
 
-    notReady: "Your figures for this period aren't ready yet. Data is aggregated daily — please check back shortly.",
+    /** The money summary: gross sales, each deduction, then what reached your earnings. */
+    earnings: {
+        title: 'Earnings',
+        description: 'What your sales brought in this period, after fees',
+        grossSales: 'Gross sales',
+        bargainFee: 'Bargain fee',
+        commission: 'Commission',
+        deliveryFee: 'Delivery fee',
+        codFee: 'Cash-on-delivery fee',
+        deliveryAndCodFees: 'Delivery + cash-on-delivery fees',
+        netRevenue: 'Net revenue',
+        netRevenueHint:
+            'What your sales added to your earnings: gross sales, minus the bargain fee, the commission, the delivery fee and the cash-on-delivery fee.',
+        bookings: 'Bookings, after commission',
+        deliveryFeesReturned: 'Delivery fees given back',
+        earningsReversed: 'Earnings taken back',
+        netEarnings: 'Net earnings',
+        netEarningsHint:
+            'Everything this period added to your earnings: net revenue, bookings and delivery fees given back, minus earnings taken back (for example after a refund).',
+        refunds: 'Refunds paid to customers',
+        refundsCount: plural({ one: '{{count}} refund', other: '{{count}} refunds' }),
+        refundsNote: 'Already counted in “Earnings taken back”.',
+    },
 
     tabs: {
         overview: 'Overview',

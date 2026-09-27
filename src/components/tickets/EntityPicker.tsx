@@ -269,6 +269,7 @@ async function searchEntities(entityType: TicketEntityType, query: string): Prom
         .map((s) => ({
           trackingNumber: s.trackingNumber as string,
           agencyName: s.agencyName,
+          agencyVerified: s.agencyVerified === true,
           deliveryStatus: s.status,
         })),
     }));

@@ -7,11 +7,12 @@ import { PlatformStatus } from '@/components/layout/PlatformStatus';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { nameInitials } from '@/components/customers/customer.constants';
-import { useAuth } from '@/App';
+import { useAuth } from '@/app-context';
 import { useNotificationStore } from '@/store';
 import { PRIMARY_NAV, FOOTER_NAV, type NavItem, type NavChild, type NavBadge } from '@/config/navigation';
 import { cn } from '@/lib/utils';
 import { useKycNeedsAttention } from '@/hooks/use-kyc-attention';
+import { usePendingOrdersCount } from '@/lib/pending-orders-count';
 import { useTranslation } from '@/i18n';
 
 // Items already present in the bottom tab bar — hidden from "More".
@@ -121,6 +122,7 @@ export function MobileMoreDrawer({ open, onOpenChange }: MobileMoreDrawerProps) 
   const navigate = useNavigate();
   const { unreadCount } = useNotificationStore();
   const kycNeedsAttention = useKycNeedsAttention();
+  const pendingOrders = usePendingOrdersCount();
 
   const handlers: NavHandlers = {
     go: (path) => {
@@ -129,7 +131,7 @@ export function MobileMoreDrawer({ open, onOpenChange }: MobileMoreDrawerProps) 
     },
     badgeCount: (badge) => {
       if (badge === 'notifications') return unreadCount;
-      if (badge === 'orders') return 3;
+      if (badge === 'orders') return pendingOrders;
       // Not a count — 1 means "a rejected identity submission is waiting".
       if (badge === 'verification') return kycNeedsAttention ? 1 : 0;
       return 0;

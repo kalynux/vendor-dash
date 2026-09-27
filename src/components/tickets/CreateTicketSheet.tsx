@@ -34,6 +34,7 @@ import type {
 } from '@/types/tickets.types';
 import { useApiError, useFormatters, useMessage, useTranslation, type TranslationKey } from '@/i18n';
 import type { ApiFile } from '@/types/file.types';
+import { VerifiedBadge } from '@/components/common/VerifiedBadge';
 
 // Option groups for the searchable Type / Related-to fields. Built per render so
 // the labels follow a language switch — the picker takes resolved strings.
@@ -416,6 +417,7 @@ export function CreateTicketSheet({ open, onOpenChange, onCreated }: CreateTicke
                             <span className="font-medium">{o.trackingNumber}</span>
                             <span className="text-xs text-muted-foreground">
                               {o.agencyName ?? t('tickets.create.deliveryAgencyFallback')}
+                              {o.agencyName && o.agencyVerified && <VerifiedBadge kind="agency" className="ml-1 h-3 w-3" />}
                               {o.deliveryStatus ? ` · ${humanizeEnum(o.deliveryStatus)}` : ''}
                             </span>
                           </span>

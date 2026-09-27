@@ -1,5 +1,5 @@
 import { useIsMobile } from '@/hooks/use-mobile';
-import type { PreviewDevice } from './StorefrontFrame';
+import type { PreviewDevice } from './devices';
 
 /**
  * Which frame to open on.

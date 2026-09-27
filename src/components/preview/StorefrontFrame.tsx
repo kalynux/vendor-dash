@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useTranslation } from '@/i18n';
+import { DEVICE_WIDTHS, type PreviewDevice } from './devices';
 
 /**
  * The customer storefront, embedded.
@@ -32,22 +33,6 @@ import { useTranslation } from '@/i18n';
  * not render this at all; see `ProductPreview`.
  */
 
-export type PreviewDevice = 'mobile' | 'tablet' | 'desktop';
-
-/**
- * Frame widths, in CSS pixels.
- *
- * `mobile` is a 390pt phone and `tablet` a portrait tablet — both chosen to sit
- * on the far side of the storefront's own breakpoints (640 / 1024 / 1280) rather
- * than near them, so each option shows a distinctly different layout. `desktop`
- * is unconstrained: the storefront caps its own content at 1200px.
- */
-export const DEVICE_WIDTHS: Record<PreviewDevice, number | null> = {
-  mobile: 390,
-  tablet: 820,
-  desktop: null,
-};
-
 interface StorefrontFrameProps {
   src: string;
   device: PreviewDevice;
@@ -63,10 +48,11 @@ export function StorefrontFrame({ src, device, reloadToken = 0, className }: Sto
 
   // Remounting via `key` gives a fresh iframe, but this component's own state
   // survives — so the spinner has to be re-armed by hand or the second load
-  // renders behind a frame that is still marked loaded.
-  const armedFor = useRef(frameKey);
-  if (armedFor.current !== frameKey) {
-    armedFor.current = frameKey;
+  // renders behind a frame that is still marked loaded. (State rather than a
+  // ref: React's "adjust state when a prop changes" pattern.)
+  const [armedFor, setArmedFor] = useState(frameKey);
+  if (armedFor !== frameKey) {
+    setArmedFor(frameKey);
     if (loaded) setLoaded(false);
   }
 

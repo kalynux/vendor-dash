@@ -1,11 +1,13 @@
 import { api } from './api';
-import { ApiError } from '@/types/api';
 import { apiErrorMessage, type TranslationKey } from '@/i18n';
 import type {
+  SalesBreakdown,
   SalesDataPoint,
   TopProduct,
   CustomerMetrics,
   BookingMetrics,
+  EarningsAdjustments,
+  CustomerRefunds,
 } from '@/types';
 
 // ─── Error Handling ──────────────────────────────────────────────────────────
@@ -15,22 +17,13 @@ import type {
  * `err.message` for any unmapped code (see getAnalyticsErrorMessage).
  */
 export const ANALYTICS_ERROR_LABELS: Record<string, string> = {
-  ANALYTICS_AGGREGATION_NOT_READY: "Analytics for this period aren't ready yet. Please check back shortly.",
   ANALYTICS_INVALID_DATE_RANGE: 'The selected date range is invalid.',
-  ANALYTICS_DATE_RANGE_EXCEEDED: "The date range can't exceed 365 days.",
+  ANALYTICS_DATE_RANGE_EXCEEDED: "The date range can't exceed 366 days.",
   ANALYTICS_UNSUPPORTED_TIMEZONE: 'That timezone is not supported.',
   VENDOR_UNSUPPORTED_FISCAL_CALENDAR: 'Unsupported fiscal calendar.',
   VALIDATION_ERROR: 'The analytics request was invalid.',
   AUTH_ROLE_NOT_FOUND: "Your account doesn't have access to analytics.",
 };
-
-/**
- * True when the backend has no aggregated data for the requested range yet.
- * Keys off the ANALYTICS_AGGREGATION_NOT_READY code, with an HTTP 503 fallback.
- */
-export function isAggregationNotReady(err: unknown): boolean {
-  return err instanceof ApiError && (err.code === 'ANALYTICS_AGGREGATION_NOT_READY' || err.status === 503);
-}
 
 /** Resolve a localized, user-safe message for any analytics API failure. */
 export function getAnalyticsErrorMessage(err: unknown): string {
@@ -38,60 +31,53 @@ export function getAnalyticsErrorMessage(err: unknown): string {
 }
 
 // ─── API Response Types (mirror api-doc/vendor/analytics.md exactly) ───────────
+//
+// Every body is `{ data, meta }` with no `success` key. An empty period answers
+// 200 with zeros — there is no "not ready" (503) state any more.
 
-interface ApiSalesTotals {
-  gmv: number;
-  refunds: number;
-  netRevenue: number;
-  orderCount: number;
-  aov: number;
+interface AnalyticsMeta {
+  /** `YYYY-MM-DD`, both days included. */
+  from: string;
+  to: string;
+  timezone: string;
+  computedAt: string;
+  /** e.g. "net = gross - bargainFee - commission - deliveryFee - codFee". */
+  netFormula: string;
+  fiscalCalendar: string;
 }
 
 interface DashboardResponse {
   data: {
-    sales: ApiSalesTotals;
-    bookings: { count: number; revenue: number };
+    sales: SalesBreakdown;
+    bookings: BookingMetrics;
+    adjustments: EarningsAdjustments;
+    netEarnings: number;
+    /** Refunds paid to customers — information only, already in `adjustments.earningsReversed`. */
+    refunds: CustomerRefunds;
   };
-  meta: {
-    from: string;
-    to: string;
-    lastCalculatedAt: string;
-    fiscalCalendar: string;
-    timezone: string;
-  };
+  meta: AnalyticsMeta & { currency: string };
 }
 
-interface SalesDailyResponse {
+interface SalesResponse {
   data: {
-    daily: Array<ApiSalesTotals & { date: string }>;
+    totals: SalesBreakdown;
+    /** Present only with `breakdown=daily`: one row for every day of the range. */
+    daily?: Array<SalesBreakdown & { date: string }>;
   };
-  meta: Record<string, unknown>;
-}
-
-interface ApiTopProduct {
-  variantId: string;
-  sku: string;
-  productTitle: string;
-  variantTitle: string;
-  revenue: number;
-  quantity: number;
+  meta: AnalyticsMeta & { breakdown: 'none' | 'daily' };
 }
 
 interface ProductsResponse {
   data: {
-    topByRevenue: ApiTopProduct[];
-    topByQuantity: ApiTopProduct[];
+    topByRevenue: TopProduct[];
+    topByQuantity: TopProduct[];
   };
-  meta: Record<string, unknown>;
+  meta: AnalyticsMeta & { limit: number };
 }
 
 interface CustomersResponse {
-  data: {
-    total: number;
-    repeat: number;
-    repeatRate: number;
-  };
-  meta: Record<string, unknown>;
+  data: CustomerMetrics;
+  meta: AnalyticsMeta;
 }
 
 // ─── Query params ──────────────────────────────────────────────────────────────
@@ -201,10 +187,8 @@ export function previousRange(from: Date, to: Date): { from: Date; to: Date } {
 
 // ─── Service Functions ─────────────────────────────────────────────────────────
 
-export interface DashboardMetrics {
-  sales: ApiSalesTotals;
-  bookings: BookingMetrics;
-}
+/** GET /vendor/analytics/dashboard `data`. */
+export type DashboardMetrics = DashboardResponse['data'];
 
 export async function fetchDashboard(range: AnalyticsRange): Promise<DashboardMetrics> {
   const res = await api.get<DashboardResponse>(
@@ -213,11 +197,24 @@ export async function fetchDashboard(range: AnalyticsRange): Promise<DashboardMe
   return res.data;
 }
 
-export async function fetchSalesDaily(range: AnalyticsRange): Promise<SalesDataPoint[]> {
-  const res = await api.get<SalesDailyResponse>(
+/**
+ * GET /vendor/analytics/sales?breakdown=daily. Every day of the range comes
+ * back, a quiet day as zeros, so the chart needs no gap filling.
+ */
+export async function fetchSalesDaily(
+  range: AnalyticsRange,
+): Promise<{ totals: SalesBreakdown; daily: SalesDataPoint[] }> {
+  const res = await api.get<SalesResponse>(
     `/vendor/analytics/sales?${buildRangeQuery(range, { breakdown: 'daily' })}`,
   );
-  return res.data.daily.map((d) => ({ date: d.date, sales: d.gmv, orders: d.orderCount }));
+  return {
+    totals: res.data.totals,
+    daily: (res.data.daily ?? []).map((d) => ({
+      date: d.date,
+      sales: d.grossSales,
+      orders: d.orderCount,
+    })),
+  };
 }
 
 export async function fetchTopProducts(

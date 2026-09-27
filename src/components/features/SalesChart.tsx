@@ -1,5 +1,5 @@
 import { useAnalyticsStore } from '@/store';
-import { useFormatters } from '@/i18n';
+import { useFormatters, useTranslation } from '@/i18n';
 import {
   Area,
   AreaChart,
@@ -12,6 +12,7 @@ import {
 
 export function SalesChart() {
   const { salesData } = useAnalyticsStore();
+  const { t } = useTranslation();
   const fmt = useFormatters();
 
   // Platform-default (XAF) via the shared, locale-aware formatter.
@@ -19,9 +20,10 @@ export function SalesChart() {
   const formatDate = (dateStr: string) => fmt.date(dateStr, 'dayMonth');
 
   return (
-    <div className="h-[300px] w-full">
+    // Shorter on a phone, where 300px of chart pushed everything else below the fold.
+    <div className="h-[220px] w-full md:h-[300px]">
       <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={salesData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+        <AreaChart data={salesData} margin={{ top: 10, right: 0, left: 0, bottom: 0 }}>
           <defs>
             <linearGradient id="colorSales" x1="0" y1="0" x2="0" y2="1">
               <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
@@ -43,6 +45,7 @@ export function SalesChart() {
           />
           <YAxis
             yAxisId="left"
+            width={40}
             tickFormatter={(value) => `${Math.round(value / 1000)}k`}
             stroke="hsl(var(--muted-foreground))"
             fontSize={12}
@@ -52,6 +55,8 @@ export function SalesChart() {
           <YAxis
             yAxisId="right"
             orientation="right"
+            width={28}
+            allowDecimals={false}
             stroke="#60a5fa"
             fontSize={12}
             tickLine={false}
@@ -65,10 +70,10 @@ export function SalesChart() {
                     <p className="text-sm font-medium mb-2">{formatDate(label)}</p>
                     <div className="space-y-1">
                       <p className="text-sm text-primary">
-                        Sales: {formatCurrency(payload[0].value as number)}
+                        {t('analytics.charts.legendSales')}: {formatCurrency(payload[0].value as number)}
                       </p>
                       <p className="text-sm text-blue-400">
-                        Orders: {payload[1]?.value as number}
+                        {t('analytics.charts.legendOrders')}: {payload[1]?.value as number}
                       </p>
                     </div>
                   </div>

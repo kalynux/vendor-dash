@@ -1,8 +1,8 @@
-import { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import type {
   Product, Order,
   AnalyticsMetrics, MetricWithChange, SalesDataPoint, TopProduct,
-  CustomerMetrics, BookingMetrics, DateRange, VendorSettableStatus
+  CustomerMetrics, DateRange, VendorSettableStatus
 } from '@/types';
 import type { VendorNotification, NotificationListParams } from '@/types/notifications.types';
 import type { VendorStore } from '@/types/store.types';
@@ -14,7 +14,6 @@ import {
   fetchCustomerMetrics,
   previousRange,
   toISODate,
-  isAggregationNotReady,
   getAnalyticsErrorMessage,
   type DashboardMetrics,
 } from '@/services/analytics.service';
@@ -38,6 +37,10 @@ import {
   fetchProducts as apiFetchProducts,
   updateProductStatus as apiUpdateProductStatus,
 } from '@/services/products.service';
+import {
+  UIStoreContext, StoreStoreContext, ProductStoreContext, OrderStoreContext,
+  NotificationStoreContext, AnalyticsStoreContext, type Theme, type OrderState,
+} from './contexts';
 import type { ProductListItem, ProductListMeta, ProductsQueryParams } from '@/types/product.types';
 
 // ─── Analytics helpers ──────────────────────────────────────────────────────
@@ -64,104 +67,6 @@ function computeChange(current: number, previous: number | undefined): MetricWit
   const changeType = pct > 0 ? 'increase' : pct < 0 ? 'decrease' : 'neutral';
   return { value: current, change: pct, changeType };
 }
-
-// UI Store Context
-type Theme = 'light' | 'dark' | 'system';
-
-interface UIState {
-  sidebarCollapsed: boolean;
-  theme: Theme;
-  toggleSidebar: () => void;
-  setTheme: (theme: Theme) => void;
-}
-
-const UIStoreContext = createContext<UIState | null>(null);
-
-// Store Store Context — the vendor's single storefront profile (GET /api/vendor/store).
-interface StoreState {
-  store: VendorStore | null;
-  isLoading: boolean;
-  fetchStore: () => Promise<void>;
-  /** Replace the cached store after a successful save (avoids a re-fetch). */
-  applyStore: (store: VendorStore) => void;
-}
-
-const StoreStoreContext = createContext<StoreState | null>(null);
-
-// Product Store Context
-interface ProductState {
-  products: ProductListItem[];
-  selectedProducts: string[];
-  isLoading: boolean;
-  pagination: ProductListMeta | null;
-  /**
-   * `silent`: background refresh — no `isLoading` (so no skeleton) and no
-   * error toast; on failure the rows already shown stay.
-   */
-  fetchProducts: (params?: ProductsQueryParams, opts?: { silent?: boolean }) => Promise<void>;
-  // createProduct / updateProduct are no-ops — the wizard pages handle their own saves
-  createProduct: (product: Partial<Product>) => Promise<void>;
-  updateProduct: (id: string, updates: Partial<Product>) => Promise<void>;
-  deleteProduct: (id: string) => Promise<void>;
-  toggleProductSelection: (id: string) => void;
-  selectAllProducts: (ids: string[]) => void;
-  clearSelection: () => void;
-}
-
-const ProductStoreContext = createContext<ProductState | null>(null);
-
-// Order Store Context
-interface OrderState {
-  orders: Order[];
-  selectedOrders: string[];
-  isLoading: boolean;
-  pagination: PaginationMeta | null;
-  filters: {
-    status?: string[];
-    dateRange?: DateRange;
-    search?: string;
-  };
-  fetchOrders: (params?: OrdersQueryParams) => Promise<void>;
-  fetchOrderById: (id: string) => Promise<Order>;
-  updateOrderStatus: (id: string, status: VendorSettableStatus) => Promise<void>;
-  toggleOrderSelection: (id: string) => void;
-  selectAllOrders: (ids: string[]) => void;
-  clearSelection: () => void;
-  setFilters: (filters: Partial<OrderState['filters']>) => void;
-}
-
-const OrderStoreContext = createContext<OrderState | null>(null);
-
-// Notification Store Context
-interface NotificationState {
-  notifications: VendorNotification[];
-  unreadCount: number;
-  isLoading: boolean;
-  fetchNotifications: (params?: NotificationListParams) => Promise<void>;
-  markAsRead: (id: string) => Promise<void>;
-  markAllAsRead: () => Promise<void>;
-  /** Prepend a live (push) notification and bump the unread badge. */
-  prependNotification: (n: VendorNotification) => void;
-}
-
-const NotificationStoreContext = createContext<NotificationState | null>(null);
-
-// Analytics Store Context
-interface AnalyticsState {
-  metrics: AnalyticsMetrics;
-  salesData: SalesDataPoint[];
-  topProducts: TopProduct[];
-  customerMetrics: CustomerMetrics | null;
-  bookings: BookingMetrics | null;
-  dateRange: DateRange;
-  isLoading: boolean;
-  /** True when the backend has no aggregated data for the range yet (503). */
-  notReady: boolean;
-  fetchAnalytics: () => Promise<void>;
-  setDateRange: (range: DateRange) => void;
-}
-
-const AnalyticsStoreContext = createContext<AnalyticsState | null>(null);
 
 // Note: Media is no longer in the global store. The Media Library
 // (src/pages/MediaGallery.tsx) and MediaPicker talk to the backend File
@@ -299,17 +204,27 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [orderLoading, setOrderLoading] = useState(false);
   const [orderPagination, setOrderPagination] = useState<PaginationMeta | null>(null);
   const [orderFilters, setOrderFilters] = useState<OrderState['filters']>({});
+  const orderRequestId = useRef(0);
 
-  const fetchOrders = useCallback(async (params: OrdersQueryParams = {}) => {
-    setOrderLoading(true);
+  const fetchOrders = useCallback(async (
+    params: OrdersQueryParams = {},
+    opts?: { silent?: boolean },
+  ) => {
+    const silent = opts?.silent ?? false;
+    // Latest call wins, same as products: a slow refresh must not land on top
+    // of the page or filter asked for after it started.
+    const id = ++orderRequestId.current;
+    if (!silent) setOrderLoading(true);
     try {
       const result = await apiFetchOrders({ page: 1, limit: 20, ...params });
+      if (id !== orderRequestId.current) return;
       setOrders(result.data);
       setOrderPagination(result.meta);
     } catch (err) {
+      if (silent) throw err;
       toast.error(getOrderErrorMessage(err));
     } finally {
-      setOrderLoading(false);
+      if (!silent) setOrderLoading(false);
     }
   }, []);
 
@@ -421,18 +336,18 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [salesData, setSalesData] = useState<SalesDataPoint[]>([]);
   const [topProducts, setTopProducts] = useState<TopProduct[]>([]);
   const [customerMetrics, setCustomerMetrics] = useState<CustomerMetrics | null>(null);
-  const [bookings, setBookings] = useState<BookingMetrics | null>(null);
+  const [analyticsSummary, setAnalyticsSummary] = useState<DashboardMetrics | null>(null);
   const [analyticsDateRange, setAnalyticsDateRange] = useState<DateRange>({
     from: new Date(Date.now() - 6 * 24 * 60 * 60 * 1000),
     to: new Date(),
     label: 'Last 7 days',
   });
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
-  const [analyticsNotReady, setAnalyticsNotReady] = useState(false);
 
+  // `from`/`to` go out as local `YYYY-MM-DD` days, both included — no "+1 day".
+  // An empty period is a 200 with zeros, so there is no "not ready" branch.
   const fetchAnalytics = useCallback(async () => {
     setAnalyticsLoading(true);
-    setAnalyticsNotReady(false);
 
     const range = {
       from: toISODate(analyticsDateRange.from),
@@ -461,26 +376,17 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       const s = dashboard.sales;
       const p = prevDash?.sales;
       setAnalyticsMetrics({
-        totalSales: computeChange(s.gmv, p?.gmv),
+        totalSales: computeChange(s.grossSales, p?.grossSales),
         totalOrders: computeChange(s.orderCount, p?.orderCount),
         netRevenue: computeChange(s.netRevenue, p?.netRevenue),
         averageOrderValue: computeChange(s.aov, p?.aov),
       });
-      setSalesData(salesDaily);
+      setSalesData(salesDaily.daily);
       setTopProducts(products.topByRevenue);
       setCustomerMetrics(customers);
-      setBookings(dashboard.bookings);
+      setAnalyticsSummary(dashboard);
     } catch (err) {
-      if (isAggregationNotReady(err)) {
-        setAnalyticsNotReady(true);
-        setAnalyticsMetrics(EMPTY_METRICS);
-        setSalesData([]);
-        setTopProducts([]);
-        setCustomerMetrics(null);
-        setBookings(null);
-      } else {
-        toast.error(getAnalyticsErrorMessage(err));
-      }
+      toast.error(getAnalyticsErrorMessage(err));
     } finally {
       setAnalyticsLoading(false);
     }
@@ -540,10 +446,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
                 salesData,
                 topProducts,
                 customerMetrics,
-                bookings,
+                summary: analyticsSummary,
                 dateRange: analyticsDateRange,
                 isLoading: analyticsLoading,
-                notReady: analyticsNotReady,
                 fetchAnalytics,
                 setDateRange: setAnalyticsDateRange
               }}>
@@ -555,41 +460,4 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       </StoreStoreContext.Provider>
     </UIStoreContext.Provider>
   );
-}
-
-// Hooks
-export function useUIStore() {
-  const context = useContext(UIStoreContext);
-  if (!context) throw new Error('useUIStore must be used within StoreProvider');
-  return context;
-}
-
-export function useStoreStore() {
-  const context = useContext(StoreStoreContext);
-  if (!context) throw new Error('useStoreStore must be used within StoreProvider');
-  return context;
-}
-
-export function useProductStore() {
-  const context = useContext(ProductStoreContext);
-  if (!context) throw new Error('useProductStore must be used within StoreProvider');
-  return context;
-}
-
-export function useOrderStore() {
-  const context = useContext(OrderStoreContext);
-  if (!context) throw new Error('useOrderStore must be used within StoreProvider');
-  return context;
-}
-
-export function useNotificationStore() {
-  const context = useContext(NotificationStoreContext);
-  if (!context) throw new Error('useNotificationStore must be used within StoreProvider');
-  return context;
-}
-
-export function useAnalyticsStore() {
-  const context = useContext(AnalyticsStoreContext);
-  if (!context) throw new Error('useAnalyticsStore must be used within StoreProvider');
-  return context;
 }

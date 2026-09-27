@@ -311,6 +311,11 @@ export const common = {
         clearPinned: 'Supprimer l’emplacement fixé',
     },
 
+    verified: {
+        agency: 'Agence vérifiée',
+        agent: 'Livreur vérifié',
+    },
+
     a11y: {
         goBack: 'Retour',
         openSidebar: 'Ouvrir le menu latéral',

@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { Camera, Globe, Lock, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -97,7 +97,7 @@ export function ProfileSettings() {
 
   // Pending-backend field (local placeholder data for now).
   const [whatsapp, setWhatsapp] = useState(() => normalizeStoredPhone(roleEntity?.phone));
-  const savedLocal = useRef({ whatsapp });
+  const [savedWhatsapp, setSavedWhatsapp] = useState(whatsapp);
 
   if (!roleEntity || !session) return null;
 
@@ -125,7 +125,7 @@ export function ProfileSettings() {
   const phoneChanged = phone !== savedPhone;
   const timezoneChanged = timezone !== (roleEntity.timezone ?? '');
   const languageChanged = language !== (roleEntity.preferred_language ?? 'en');
-  const whatsappChanged = whatsapp !== savedLocal.current.whatsapp;
+  const whatsappChanged = whatsapp !== savedWhatsapp;
   const dirty =
     nameChanged ||
     phoneChanged ||
@@ -161,7 +161,7 @@ export function ProfileSettings() {
     setTimezone(roleEntity.timezone ?? '');
     setLanguage(roleEntity.preferred_language ?? 'en');
     setPendingAvatar(undefined);
-    setWhatsapp(savedLocal.current.whatsapp);
+    setWhatsapp(savedWhatsapp);
     setError(null);
   };
 
@@ -200,7 +200,7 @@ export function ProfileSettings() {
         // screen would update the profile and leave the UI in the old one.
         if (languageChanged) clearManualLocale();
       }
-      savedLocal.current = { whatsapp };
+      setSavedWhatsapp(whatsapp);
       toast.success(t('account.profile.updated'));
     } catch (err) {
       setError(apiError.resolve(err));

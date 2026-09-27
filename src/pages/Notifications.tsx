@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import {
   Bell,
   Check,
-  RefreshCw,
   Settings,
   ArrowRight,
 } from 'lucide-react';
@@ -21,6 +20,7 @@ import {
 import { useNotificationStore } from '@/store';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { MobilePageHeader } from '@/components/layout/MobilePageHeader';
+import { RefreshButton } from '@/components/common/RefreshButton';
 import { cn } from '@/lib/utils';
 import { notificationRoute, notificationVisual, notificationTimeAgo, notificationActionLabel } from '@/lib/notifications.utils';
 import { PushPermissionBanner } from '@/components/notifications/PushPermissionBanner';
@@ -38,7 +38,7 @@ const READ_FILTERS: { value: ReadFilter; labelKey: TranslationKey }[] = [
 export function Notifications() {
   const { t } = useTranslation();
   const fmt = useFormatters();
-  const { notifications, unreadCount, isLoading, fetchNotifications, markAsRead, markAllAsRead } = useNotificationStore();
+  const { notifications, unreadCount, fetchNotifications, markAsRead, markAllAsRead } = useNotificationStore();
   const isMobile = useIsMobile();
   const navigate = useNavigate();
 
@@ -238,6 +238,7 @@ export function Notifications() {
         <MobilePageHeader
           title={t('notifications.title')}
           description={t('notifications.subtitle')}
+          onRefresh={refresh}
           actions={[
             // Conditional rather than disabled: "mark all read" with nothing
             // unread is not an action that is temporarily unavailable, it is
@@ -251,13 +252,6 @@ export function Notifications() {
               }]
               : []),
             {
-              id: 'refresh',
-              icon: RefreshCw,
-              label: t('common.actions.refresh'),
-              onClick: refresh,
-              busy: isLoading,
-            },
-            {
               id: 'settings',
               icon: Settings,
               label: t('notifications.settings.title'),
@@ -268,25 +262,28 @@ export function Notifications() {
         />
       ) : (
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            {/* The unread/total counts read as badges beside the title — they
-                replaced a pair of full-width stat cards that pushed the feed
-                itself below the fold. */}
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-              <h1 className="text-2xl font-bold">{t('notifications.title')}</h1>
-              <div className="flex items-center gap-2">
-                <Badge variant={unreadCount > 0 ? 'default' : 'secondary'}>
-                  <Bell />
-                  <span className="tabular-nums">{unreadCount}</span>
-                  {t('notifications.stats.unread')}
-                </Badge>
-                <Badge variant="outline">
-                  <span className="tabular-nums">{notifications.length}</span>
-                  {t('notifications.stats.total')}
-                </Badge>
+          <div className="flex items-center gap-3">
+            <RefreshButton onRefresh={refresh} />
+            <div>
+              {/* The unread/total counts read as badges beside the title — they
+                  replaced a pair of full-width stat cards that pushed the feed
+                  itself below the fold. */}
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                <h1 className="text-2xl font-bold">{t('notifications.title')}</h1>
+                <div className="flex items-center gap-2">
+                  <Badge variant={unreadCount > 0 ? 'default' : 'secondary'}>
+                    <Bell />
+                    <span className="tabular-nums">{unreadCount}</span>
+                    {t('notifications.stats.unread')}
+                  </Badge>
+                  <Badge variant="outline">
+                    <span className="tabular-nums">{notifications.length}</span>
+                    {t('notifications.stats.total')}
+                  </Badge>
+                </div>
               </div>
+              <p className="text-muted-foreground">{t('notifications.subtitle')}</p>
             </div>
-            <p className="text-muted-foreground">{t('notifications.subtitle')}</p>
           </div>
           <div className="flex items-center gap-2">
             {unreadCount > 0 && (
@@ -295,15 +292,6 @@ export function Notifications() {
                 {t('notifications.actions.markAllRead')}
               </Button>
             )}
-            <Button
-              variant="outline"
-              size="icon"
-              aria-label={t('common.actions.refresh')}
-              title={t('common.actions.refresh')}
-              onClick={refresh}
-            >
-              <RefreshCw className={cn('w-4 h-4', isLoading && 'animate-spin')} />
-            </Button>
             <Button
               variant="outline"
               size="icon"

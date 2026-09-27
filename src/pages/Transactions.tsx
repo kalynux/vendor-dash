@@ -1,12 +1,17 @@
+import { useState } from 'react';
 import { Receipt } from 'lucide-react';
 import { TransactionsTab } from '@/components/transactions/TransactionsTab';
 import { MobilePageHeader } from '@/components/layout/MobilePageHeader';
+import { RefreshButton } from '@/components/common/RefreshButton';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useTranslation } from '@/i18n';
 
 export function Transactions() {
   const { t } = useTranslation();
   const isMobile = useIsMobile();
+  // The header's refresh icon restarts the list, which loads itself.
+  const [refreshToken, setRefreshToken] = useState(0);
+  const refresh = () => setRefreshToken((n) => n + 1);
 
   // Mobile: full-bleed list — the page header replaces the card header and the
   // rows below run edge-to-edge, matching Products/Orders.
@@ -16,9 +21,10 @@ export function Transactions() {
         <MobilePageHeader
           title={t('transactions.title')}
           description={t('transactions.subtitle')}
+          onRefresh={refresh}
         />
         <div className="pb-28">
-          <TransactionsTab />
+          <TransactionsTab key={refreshToken} />
         </div>
       </div>
     );
@@ -27,6 +33,7 @@ export function Transactions() {
   return (
     <div className="space-y-5 animate-fade-in">
       <div className="flex items-center gap-3">
+        <RefreshButton onRefresh={refresh} />
         <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
           <Receipt className="h-5 w-5 text-primary" />
         </div>
@@ -36,7 +43,7 @@ export function Transactions() {
         </div>
       </div>
 
-      <TransactionsTab />
+      <TransactionsTab key={refreshToken} />
     </div>
   );
 }

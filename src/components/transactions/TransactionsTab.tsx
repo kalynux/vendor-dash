@@ -25,6 +25,7 @@ import {
   transactionStatusMeta,
   transactionAmount,
   isReversalTransaction,
+  isInternalTransaction,
 } from './transactions.constants';
 
 const PAGE_LIMIT = 20;
@@ -240,7 +241,14 @@ export function TransactionsTab({ refreshKey = 0 }: { refreshKey?: number }) {
                 <div key={tx.id} className="border-b px-4 py-3">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold">{tx.description}</p>
+                      <p
+                        className={cn(
+                          'truncate text-sm font-semibold',
+                          isInternalTransaction(tx) && 'font-medium text-muted-foreground',
+                        )}
+                      >
+                        {tx.description}
+                      </p>
                       <p className="mt-0.5 text-xs text-muted-foreground">
                         {fmt.date(tx.createdAt)}
                         {tx.gateway && ` · ${gatewayLabel(tx.gateway)}`}
@@ -310,7 +318,14 @@ export function TransactionsTab({ refreshKey = 0 }: { refreshKey?: number }) {
                       <tr key={tx.id} className="border-b align-top last:border-0">
                         <td className="px-4 py-2.5">
                           <div className="flex items-center gap-2">
-                            <span className="font-medium">{tx.description}</span>
+                            <span
+                              className={cn(
+                                'font-medium',
+                                isInternalTransaction(tx) && 'text-muted-foreground',
+                              )}
+                            >
+                              {tx.description}
+                            </span>
                             <CategoryChip category={tx.category} />
                           </div>
                           {tx.gateway && (

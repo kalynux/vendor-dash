@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { AlertCircle, CheckCircle2, ChevronLeft, CalendarClock, Globe, Sparkles } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -47,9 +47,14 @@ export function StepServiceReview({
   );
 
   // Sync local form value when the underlying service changes (load, save, refresh).
-  useEffect(() => {
+  // Adjusted during render (React's "reset state when a prop changes" pattern)
+  // rather than in an effect.
+  const syncKey = JSON.stringify([service?.id, service?.vectorisationEnabled]);
+  const [syncedFor, setSyncedFor] = useState(syncKey);
+  if (syncedFor !== syncKey) {
+    setSyncedFor(syncKey);
     setVectorisationEnabled(service?.vectorisationEnabled ?? false);
-  }, [service?.vectorisationEnabled, service?.id]);
+  }
 
   const isLockedForVectorisation = service?.vectorisationStatus === 'pending';
 

@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { X, GripVertical, ImagePlus, Info, Plus, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { MediaPicker } from '@/components/features/MediaPicker';
@@ -83,14 +83,20 @@ export function ProductMediaUpload({
   const [infoIndex, setInfoIndex] = useState<number | null>(null);
 
   // Populate from existingFiles the first time they arrive (e.g. after async load).
-  const [initialized, setInitialized] = useState(false);
-  useEffect(() => {
-    if (initialized || existingFiles.length === 0) return;
-    setInitialized(true);
+  // Local state is seeded during render (React's "adjust state when a prop
+  // changes" pattern); only the parent callback runs in an effect, exactly once.
+  const [seed, setSeed] = useState<GalleryFile[] | null>(null);
+  if (seed === null && existingFiles.length > 0) {
     const initial = existingFiles.map(fromDetail);
+    setSeed(initial);
     setItems(initial);
-    onMediaChange(initial.map((f) => f.id));
-  }, [existingFiles, initialized, onMediaChange]);
+  }
+  const seedReported = useRef(false);
+  useEffect(() => {
+    if (seed === null || seedReported.current) return;
+    seedReported.current = true;
+    onMediaChange(seed.map((f) => f.id));
+  }, [seed, onMediaChange]);
 
   const commit = useCallback(
     (next: GalleryFile[]) => {

@@ -11,7 +11,7 @@ import { useRouteSwipe } from '@/hooks/use-route-swipe';
 import { useKeyboardOpen } from '@/platform/shell/keyboard';
 import { cn } from '@/lib/utils';
 import { useStoreStore } from '@/store';
-import { useUI } from '@/App';
+import { useUI } from '@/app-context';
 import { DeepLinkFallback } from '@/routes/DeepLinkFallback';
 import {
     Account,

@@ -30,6 +30,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Switch } from '@/components/ui/switch';
 import { Card, CardContent } from '@/components/ui/card';
 import {
   DropdownMenu,
@@ -62,12 +63,13 @@ import {
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useProductStore } from '@/store';
-import { useRouter } from '@/App';
+import { useRouter } from '@/app-context';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useInfiniteList } from '@/hooks/use-infinite-list';
 import { useScrollRestoration } from '@/hooks/use-scroll-restoration';
 import { getListCache, setListCache } from '@/lib/listCache';
 import { MobilePageHeader } from '@/components/layout/MobilePageHeader';
+import { RefreshButton } from '@/components/common/RefreshButton';
 import { MobileListFooter } from '@/components/layout/MobileListFooter';
 import { ConvertToAdvancedDialog } from '@/components/products/simple/ConvertToAdvancedDialog';
 import { ShareProductDialog } from '@/components/products/ShareProductDialog';
@@ -363,6 +365,15 @@ export function Products() {
     else fetchProducts();
   }, [isMobile, infinite, fetchProducts]);
 
+  // The header's refresh icon: same page and search, rows swapped in place.
+  const refreshList = () =>
+    isMobile
+      ? infinite.refresh()
+      : fetchProducts(
+          { page: pagination?.page, q: debouncedSearch || undefined },
+          { silent: true },
+        );
+
   const handleEdit = useCallback(
     (product: ProductListItem) => {
       if (product.vectorisationStatus === 'pending') {
@@ -542,6 +553,13 @@ export function Products() {
     }
   }, [transitionState, reloadList, t, apiError]);
 
+  /** The card switch's pending question: nothing is sent until it is confirmed. */
+  const [aiSwitchRequest, setAiSwitchRequest] = useState<{
+    product: ProductListItem;
+    enable: boolean;
+  } | null>(null);
+  const [aiSwitchBusy, setAiSwitchBusy] = useState(false);
+
   const handleVectorisationAction = useCallback(
     async (id: string, action: 'enable' | 'disable' | 'retry') => {
       try {
@@ -562,6 +580,20 @@ export function Products() {
     },
     [reloadList, t, apiError],
   );
+
+  const confirmAiSwitch = useCallback(async () => {
+    if (!aiSwitchRequest) return;
+    setAiSwitchBusy(true);
+    try {
+      await handleVectorisationAction(
+        aiSwitchRequest.product.id,
+        aiSwitchRequest.enable ? 'enable' : 'disable',
+      );
+    } finally {
+      setAiSwitchBusy(false);
+      setAiSwitchRequest(null);
+    }
+  }, [aiSwitchRequest, handleVectorisationAction]);
 
   const toggleStatusFilter = useCallback((status: string) => {
     setStatusFilter((prev) =>
@@ -726,6 +758,48 @@ export function Products() {
     );
   })();
 
+  const aiSwitchDialog = (
+    <Dialog
+      open={!!aiSwitchRequest}
+      onOpenChange={(open) => {
+        if (!open && !aiSwitchBusy) setAiSwitchRequest(null);
+      }}
+    >
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader className="text-left">
+          <DialogTitle>
+            {t(aiSwitchRequest?.enable
+              ? 'products.ai.confirmEnableTitle'
+              : 'products.ai.confirmDisableTitle')}
+          </DialogTitle>
+          <DialogDescription className="pt-3 text-left">
+            <span className="font-semibold text-foreground">
+              {aiSwitchRequest?.product.title}
+            </span>
+            {' — '}
+            {t(aiSwitchRequest?.enable
+              ? 'products.ai.confirmEnableBody'
+              : 'products.ai.confirmDisableBody')}
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <DialogClose asChild disabled={aiSwitchBusy}>
+            <Button variant="outline">{t('common.actions.cancel')}</Button>
+          </DialogClose>
+          <Button disabled={aiSwitchBusy} onClick={() => void confirmAiSwitch()}>
+            {aiSwitchBusy ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              t(aiSwitchRequest?.enable
+                ? 'products.ai.confirmEnableCta'
+                : 'products.ai.confirmDisableCta')
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+
   const shareDialog = (
     <ShareProductDialog
       productId={productToShare}
@@ -791,6 +865,7 @@ export function Products() {
         <MobilePageHeader
           title={t('products.title')}
           description={t('products.subtitle')}
+          onRefresh={refreshList}
           actions={[
             {
               id: 'add',
@@ -867,6 +942,11 @@ export function Products() {
                       <p className="font-semibold text-sm truncate">{product.title}</p>
                       <p className="text-xs text-muted-foreground mt-0.5"><TypeLabel type={product.type} /></p>
                       <p className="text-xs text-muted-foreground mt-0.5">{product.category}</p>
+                      <AiSearchSwitch
+                        product={product}
+                        onRequest={(enable) => setAiSwitchRequest({ product, enable })}
+                        className="mt-1.5 justify-start"
+                      />
                     </div>
                     <div className="flex items-center gap-1 flex-shrink-0">
                       <div className="flex flex-col items-end gap-1">
@@ -1014,6 +1094,7 @@ export function Products() {
 
         {archiveDialog}
         {transitionDialog}
+        {aiSwitchDialog}
         {convertDialog}
         {shareDialog}
       </div>
@@ -1026,9 +1107,12 @@ export function Products() {
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold">{t('products.title')}</h1>
-          <p className="text-muted-foreground">{t('products.subtitle')}</p>
+        <div className="flex items-center gap-3">
+          <RefreshButton onRefresh={refreshList} />
+          <div>
+            <h1 className="text-2xl font-bold">{t('products.title')}</h1>
+            <p className="text-muted-foreground">{t('products.subtitle')}</p>
+          </div>
         </div>
         <Button onClick={() => legacyNavigate('product-upload')} className="gap-2">
           <Plus className="w-4 h-4" />
@@ -1152,6 +1236,7 @@ export function Products() {
                   onVectorisationAction={(action) =>
                     handleVectorisationAction(product.id, action)
                   }
+                  onAiSwitch={(enable) => setAiSwitchRequest({ product, enable })}
                   onStatusTransition={(transition) =>
                     requestStatusTransition(product, transition)
                   }
@@ -1268,6 +1353,7 @@ export function Products() {
 
       {archiveDialog}
       {transitionDialog}
+      {aiSwitchDialog}
       {convertDialog}
         {shareDialog}
 
@@ -1334,6 +1420,45 @@ function ProductThumbnail({ product, size }: { product: ProductListItem; size: '
   );
 }
 
+/**
+ * The AI-search on/off switch on a product card. It never writes by itself: a
+ * flip only asks the page to confirm, and the switch shows the saved value
+ * until that confirmation succeeds and the list reloads.
+ *
+ * The click and key traps matter — the card and the phone row both open the
+ * editor on click, and the row also on Space / Enter.
+ */
+function AiSearchSwitch({
+  product,
+  onRequest,
+  className,
+}: {
+  product: ProductListItem;
+  onRequest: (enable: boolean) => void;
+  className?: string;
+}) {
+  const { t } = useTranslation();
+  const id = `ai-search-${product.id}`;
+  return (
+    <div
+      className={cn('flex items-center justify-between gap-3', className)}
+      onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => e.stopPropagation()}
+    >
+      <label htmlFor={id} className="text-xs text-muted-foreground">
+        {t('products.ai.switchLabel')}
+      </label>
+      <Switch
+        id={id}
+        checked={product.vectorisationEnabled}
+        // Mid-indexing the backend refuses both directions.
+        disabled={product.vectorisationStatus === 'pending'}
+        onCheckedChange={onRequest}
+      />
+    </div>
+  );
+}
+
 interface ProductGridCardProps {
   product: ProductListItem;
   selected: boolean;
@@ -1341,6 +1466,7 @@ interface ProductGridCardProps {
   onEdit: () => void;
   onPreview: () => void;
   onVectorisationAction: (action: 'enable' | 'disable' | 'retry') => void;
+  onAiSwitch: (enable: boolean) => void;
   onStatusTransition: (transition: StatusTransition) => void;
   onConvertToAdvanced: () => void;
   onShare: () => void;
@@ -1353,6 +1479,7 @@ function ProductGridCard({
   onEdit,
   onPreview,
   onVectorisationAction,
+  onAiSwitch,
   onStatusTransition,
   onConvertToAdvanced,
   onShare,
@@ -1433,6 +1560,7 @@ function ProductGridCard({
               </Badge>
             )} */}
           </div>
+          <AiSearchSwitch product={product} onRequest={onAiSwitch} className="mt-3" />
         </CardContent>
       </Card>
     </div>

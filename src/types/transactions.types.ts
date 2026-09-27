@@ -36,8 +36,13 @@ export type TransactionStatus =
 /** `money` rows carry a `currency`; `credit` rows are in credit units. */
 export type TransactionUnit = 'money' | 'credit';
 
-/** `in` = value into the vendor; `out` = value leaving. Drives the displayed sign. */
-export type TransactionDirection = 'in' | 'out';
+/**
+ * `in` = value into the vendor; `out` = value leaving. Drives the displayed sign.
+ * `internal` = money moved between the vendor's own balances (escrow release,
+ * a pending/rejected/failed payout, a COD reserve move): shown unsigned and
+ * muted, and never added to a total — a sale's hold and release would count twice.
+ */
+export type TransactionDirection = 'in' | 'out' | 'internal';
 
 export interface TransactionSource {
   type: string;

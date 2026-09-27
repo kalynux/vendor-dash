@@ -253,6 +253,8 @@ export interface TicketReferenceShipment {
   shipmentId: string;
   agencyId: string | null;
   agencyName: string | null;
+  /** Added 2026-09-27 — admin verified the agency; absent on older servers. */
+  agencyVerified?: boolean;
   agentId: string | null;
   trackingNumber: string | null;
   status: string;
@@ -311,6 +313,7 @@ export interface TicketReferenceQueryParams {
 export interface OrderTrackingOption {
   trackingNumber: string;
   agencyName?: string | null;
+  agencyVerified?: boolean;
   deliveryStatus?: string;
 }
 

@@ -1,189 +1,186 @@
-# Analytics
+# Vendor Analytics API
 
-**Verified against source on 2026-09-08** — R7 re-checked every claim: the four routes and their `{data, meta}` envelope with **no** `success` key (`modules/vendors/controllers/vendor-analytics.controller.ts:44,77,110,142`), the 365-day cap and the `limit` silent coercion to 5 (`validators/analytics.validator.ts:84-100`), the 02:00 default aggregation cron (`core/jobs/aggregation-scheduler.ts:32,43`), and that `timezone` is echoed into `meta` and never used in the query — `vendor-analytics.service.ts` does not mention it at all. No defects found.
+**Rebuilt 2026-09-27. ⚠ BREAKING for every consumer — read the [changelog](../FRONTEND-CHANGELOG-analytics-net-revenue.md) first.**
+Verified against `modules/vendors/services/vendor-analytics.service.ts`,
+`controllers/vendor-analytics.controller.ts`, `validators/analytics.validator.ts` and
+`analytics/net-revenue.ts`. Pinned by `npm run test:vendor-analytics`.
 
-**Verified against backend source on 2026-08-24.**
+**Base Path:** `/api/vendor/analytics`
 
-**Base path:** `/api/vendor/analytics` · **Routes: 4, all `GET`**
-
----
-
-## 0 · 🔴 These four responses have no `success` key
-
-Every other endpoint on the platform returns `{ success: true, data, … }`. **These four return
-`{ data, meta }` only.**
-
-```jsonc
-{ "data": { /* … */ }, "meta": { /* … */ } }
-```
-
-If your client unwraps by checking for `success`, analytics will fall through to your "unenveloped
-payload" branch. `unwrapEnvelope` in this repository already tolerates that — it requires **both**
-`success` and `data` before unwrapping, so an analytics response is returned as-is. **That is the
-wrong shape** — you get `{data, meta}` instead of the inner payload. Handle these four explicitly.
+**Authentication Required:** Yes, **vendor role only.** Any other role gets `403 AUTH_ROLE_NOT_FOUND`.
 
 ---
 
-## 1 · Data is precomputed nightly, not live
+## What the numbers mean
 
-All four read a pre-aggregated table. **Nothing is computed at request time.**
+These endpoints report the **money that reached your earnings**. They are read from the
+platform's earnings records, the same records that fill your wallet.
 
-- Aggregated by a **daily job, by default at 02:00**, for the **previous day**.
-- **Today's data does not exist**, and yesterday's may not until the job has run.
-- Skipped entirely during a maintenance window.
+**Finished days are pre-computed at night; today is always calculated live.** A nightly job stores
+each finished day, computed from those earnings records, and a request calculates only today
+(plus any day the job has not covered yet). A finished day cannot change afterwards, because
+every sale is dated when its money arrived. So the figures are always current, and the result is
+the same as a fully live calculation. This replaced the old nightly snapshot of *orders*, which
+missed cash-on-delivery sales.
 
-**Never present analytics as real-time**, and expect the most recent day to be missing.
-
-`meta.lastCalculatedAt` is the newest aggregation timestamp in your range — **show it**.
-
-⚠ It is **absent on `/analytics/products`** and present on the other three.
-
----
-
-## 2 · The shared query
-
-| Param | Required | Notes |
-|---|---|---|
-| `from` | ✅ | parsed with `new Date()` |
-| `to` | ✅ | |
-| `timezone` | | 🔴 **has no effect — see below** |
-| `fiscalCalendar` | | `gregorian` only |
-
-| Status | Code |
+| Term | Meaning |
 |---|---|
-| 400 | `ANALYTICS_INVALID_DATE_RANGE` — unparseable, or `from > to` |
-| 400 | `ANALYTICS_DATE_RANGE_EXCEEDED` — **span over 365 days** |
-| 400 | `ANALYTICS_UNSUPPORTED_TIMEZONE` — `details: { timezone }` |
-| **503** | `ANALYTICS_AGGREGATION_NOT_READY` |
+| **Gross sales** | What customers paid: the order total (online) or the cash collected (cash on delivery). |
+| **Bargain fee** | The platform's 30% share of the amount agreed **above your floor price** on bargained items. Nothing is charged on a sale at the listed price. |
+| **Commission** | Your plan's commission, taken on gross − bargain fee. |
+| **Delivery fee** | The delivery charged for the shipment, which is taken out of your side of the sale. |
+| **COD fee** | The agency's cash-handling fee, on cash-on-delivery sales only. |
+| **Net revenue** | **gross − bargain fee − commission − delivery fee − COD fee.** This is what was credited to your earnings. `meta.netFormula` states the formula. |
 
-### 🔴 `timezone` is validated, echoed, and ignored
+**When a sale is counted: the day the money was received.** For an online order, that is when
+it was paid. For cash on delivery, it is when the agent collected the cash. The date the order
+was placed does not matter, so a cash-on-delivery order placed on the 28th and collected on the
+2nd counts on the 2nd.
 
-It is checked, copied into `meta.timezone`, and **never used in the query**. The buckets were already
-computed in the **vendor's own timezone** at aggregation time.
+**The same figures appear on the account statement** that support can email you. Both use the
+same formula on the same records, so your dashboard and your statement agree.
 
-So `?timezone=UTC` changes one string in `meta` and nothing else. **Do not offer a timezone
-selector** — it will visibly do nothing.
+### Date range
 
-### 🔴 The 503 tells you nothing
+| Parameter | Rule |
+|---|---|
+| `from`, `to` | Your **local calendar days**, as `YYYY-MM-DD`. **Both are included.** A full ISO timestamp is accepted too, and only its date part is used. |
+| `timezone` | Optional IANA zone. It defaults to your profile's timezone, then `Africa/Douala`. **It is applied**: it decides which local day each sale falls on. |
+| Range | At most **366 days**. `from` must not be after `to`. |
+| `fiscalCalendar` | `gregorian` only. |
 
-When no data exists for the range:
+### No more "not ready"
 
-```jsonc
-{ "success": false, "requestId": "…",
-  "error": { "code": "ANALYTICS_AGGREGATION_NOT_READY", "statusCode": 503,
-             "message": "Analytics data not yet available for requested period",
-             "category": "external_service" } }
+An empty period answers **200 with zeros**. `503 ANALYTICS_AGGREGATION_NOT_READY` is no longer
+raised by these endpoints, because a live read has nothing to wait for.
+
+### Response envelope
+
+These four responses have **no `success` key**. The body is `{ data, meta }`. Errors still use
+the standard `{ success: false, error }` envelope.
+
+Every response includes this `meta`:
+
+```json
+{
+  "from": "2026-09-01",
+  "to": "2026-09-30",
+  "timezone": "Africa/Douala",
+  "computedAt": "2026-09-27T10:15:02.114Z",
+  "netFormula": "net = gross - bargainFee - commission - deliveryFee - codFee",
+  "fiscalCalendar": "gregorian"
+}
 ```
-
-Its category is `external_service`, so **the message is replaced and `details` is dropped in every
-environment**. The `vendorId`/`from`/`to` the backend attaches never arrive.
-
-**Treat it as an empty state, not an error.** "No data for this period yet" with a hint that
-analytics are compiled overnight.
-
-### 🔴 Send `to` with a time component
-
-`from=2026-08-01&to=2026-08-20` parses `to` as **UTC midnight**, and the stored rows carry a real
-timestamp — so **the last day is silently dropped**.
-
-```
-?from=2026-08-01T00:00:00Z&to=2026-08-20T23:59:59Z
-```
-
-This follows from a known inconsistency in how the aggregation stamps its day key. Always send an
-end-of-day `to`.
 
 ---
 
-## 3 · Money and currency
+## Endpoints
 
-**Whole currency units, not minor units.** No division by 100.
+### GET /api/vendor/analytics/dashboard
 
-🔴 **No `currency` field is returned anywhere on this surface**, and the aggregation does not group
-by currency. **A vendor trading in two currencies gets a meaningless sum.** Format with the vendor's
-profile currency and, if multi-currency is possible for your users, say so.
+```json
+{
+  "data": {
+    "sales": {
+      "grossSales": 1250000,
+      "bargainFee": 18000,
+      "commission": 61600,
+      "deliveryFee": 84000,
+      "codFee": 9000,
+      "deliveryAndCodFees": 93000,
+      "netRevenue": 1077400,
+      "orderCount": 52,
+      "aov": 24038
+    },
+    "bookings": { "count": 4, "grossRevenue": 80000, "commission": 4000, "netRevenue": 76000 },
+    "adjustments": { "deliveryFeesReturned": 1500, "earningsReversed": 12000 },
+    "netEarnings": 1142900,
+    "refunds": { "count": 1, "amount": 12500 }
+  },
+  "meta": { "...": "see above", "currency": "XAF" }
+}
+```
+
+| Field | Notes |
+|---|---|
+| `sales.deliveryFee`, `sales.codFee` | **`null`** when at least one cash-on-delivery sale in the period has no recorded delivery fee, so the two cannot be separated. `deliveryAndCodFees` always has the combined figure. Render the combined figure when either one is `null`. |
+| `sales.orderCount` | Distinct **orders** with money received in the period. A cash-on-delivery order split into two shipments counts once. |
+| `sales.aov` | Average **gross** per order, which is what a customer spent (not what you kept). |
+| `adjustments.deliveryFeesReturned` | Delivery fee given back to you when a shipment earned less than was reserved, e.g. a return. |
+| `adjustments.earningsReversed` | Earnings taken back in the period, e.g. after a full refund. |
+| `netEarnings` | `sales.netRevenue + bookings.netRevenue + deliveryFeesReturned − earningsReversed`: what this period added to your earnings. |
+| `refunds` | Refunds **paid to customers** in the period. This is for information only; the effect on your earnings is already in `adjustments.earningsReversed`. |
+
+### GET /api/vendor/analytics/sales
+
+Extra parameter: `breakdown`, either `none` (the default) or `daily`.
+
+```json
+{
+  "data": {
+    "totals": { "grossSales": 1250000, "...": "same shape as dashboard.sales" },
+    "daily": [
+      { "date": "2026-09-01", "grossSales": 42000, "bargainFee": 0, "commission": 2100, "deliveryFee": 3000, "codFee": 0, "deliveryAndCodFees": 3000, "netRevenue": 36900, "orderCount": 2, "aov": 21000 },
+      { "date": "2026-09-02", "grossSales": 0, "...": "zeros" }
+    ]
+  },
+  "meta": { "...": "see above", "breakdown": "daily" }
+}
+```
+
+`daily` has **one row for every day** of the range, and a day with no sales has zeros instead of
+being left out. `daily` is present only when `breakdown=daily`.
+
+### GET /api/vendor/analytics/products
+
+Extra parameter: `limit`, from 1 to 50. The default is 5, and any out-of-range value falls back to 5.
+
+```json
+{
+  "data": {
+    "topByRevenue": [
+      { "variantId": "…", "productId": "…", "productTitle": "Wax print dress", "sku": "WAX-01-M", "revenue": 180000, "quantity": 12, "orderCount": 9 }
+    ],
+    "topByQuantity": [ "…same shape…" ]
+  },
+  "meta": { "...": "see above", "limit": 5 }
+}
+```
+
+- `revenue` is the line value at the price the customer **actually paid**, which is the negotiated price when the item was bargained. Deductions are per order, so they are on `/sales`, not here.
+- An order's items are counted **once**, in the period when its first payment arrived.
+- `orderCount` is distinct orders, not order lines.
+- `productTitle` is the real title stored on the order.
+
+### GET /api/vendor/analytics/customers
+
+```json
+{ "data": { "total": 38, "repeat": 6, "repeatRate": 15.8 }, "meta": { "...": "see above" } }
+```
+
+- `total` is the number of **distinct** customers over the whole period.
+- `repeat` is customers with **two or more** orders whose money arrived in this period.
+- `repeatRate` is a percentage with one decimal place.
 
 ---
 
-## 4 · The four endpoints
+## Error codes
 
-### `GET /analytics/dashboard`
-
-```jsonc
-{ "data": { "sales":    { "gmv", "refunds", "netRevenue", "orderCount", "aov" },
-            "bookings": { "count", "revenue" } },
-  "meta": { "from", "to", "lastCalculatedAt", "fiscalCalendar", "timezone" } }
-```
-
-`aov` is recomputed across the whole range as `netRevenue / orderCount` — **not** an average of daily
-averages. It is `0` when there are no orders.
-
-`bookings.revenue` is already **net of booking refunds**.
-
-⚠ Booking refunds, conversion rate and cancellation rate are stored but **exposed nowhere**.
-
-### `GET /analytics/sales`
-
-Extra param: `breakdown` — `daily` or `none` (**default `none`**).
-
-```jsonc
-// breakdown=none
-{ "data": { "gmv", "refunds", "netRevenue", "orderCount", "aov" }, "meta": { … } }
-
-// breakdown=daily
-{ "data": { "daily": [ { "date": "2026-08-01", "gmv", "refunds",
-                         "netRevenue", "orderCount", "aov" } ] },
-  "meta": { …, "breakdown": "daily" } }
-```
-
-Two things about the daily branch:
-
-- 🔴 **Days with no activity are absent — there is no zero-filling.** A chart bound directly to this
-  array will compress the x-axis and misrepresent gaps. **Fill the range yourself.**
-- Here `aov` is the **stored per-day value**, unlike the aggregate branch which recomputes. The two
-  will not tie out; that is expected.
-
-`date` is `YYYY-MM-DD` in **UTC**.
-
-### `GET /analytics/products`
-
-Extra param: `limit` — 🔴 **default 5, and silently coerced.** Out-of-range or non-numeric values
-become **5** rather than erroring. Valid range is 1–50.
-
-```jsonc
-{ "data": { "topByRevenue": [ { "variantId", "sku", "productTitle",
-                                "variantTitle", "revenue", "quantity" } ],
-            "topByQuantity": [ /* same shape */ ] },
-  "meta": { "from", "to", "limit", "fiscalCalendar", "timezone" } }
-```
-
-- **Ranked by variant, not by product.** Two variants of one product occupy two rows. Label the axis
-  accordingly, or group client-side.
-- `variantTitle` is `null` when the variant has none.
-- **`orderCount` is not on the wire** here even though it is computed.
-- ⚠ **`meta.lastCalculatedAt` is absent on this route only.**
-- The 503 fires only when **both** lists are empty.
-
-### `GET /analytics/customers`
-
-```jsonc
-{ "data": { "total": 340, "repeat": 88, "repeatRate": 25.88 }, "meta": { … } }
-```
-
-🔴 **`total` and `repeat` are summed across days, so a customer active on five days counts five
-times.** These are **customer-days, not distinct customers.** Labelling this "Total customers" is
-wrong and will not match the customer list.
-
-Label it "customer activity" or similar, or present only `repeatRate`.
-
-`repeatRate` is a **percentage 0–100**, not a fraction, recomputed over the summed totals.
+| Status | Code | When |
+|---|---|---|
+| 400 | `ANALYTICS_INVALID_DATE_RANGE` | `from`/`to` is not a real date, or `from` is after `to`. |
+| 400 | `ANALYTICS_DATE_RANGE_EXCEEDED` | The range is longer than 366 days. |
+| 400 | `ANALYTICS_UNSUPPORTED_TIMEZONE` | `timezone` is not a valid IANA zone. |
+| 400 | `VALIDATION_ERROR` / `VENDOR_UNSUPPORTED_FISCAL_CALENDAR` | The fiscal calendar is not `gregorian`. |
+| 403 | `AUTH_ROLE_NOT_FOUND` | The caller is not a vendor. |
 
 ---
 
-## 5 · Rate-limit note
+## Examples
 
-Every analytics request passes the auth stack **twice**, so it consumes **two tokens** from the
-900/min vendor bucket — an effective ~450/min on this surface. A dashboard that refreshes four
-analytics panels on a timer spends eight. See [rate-limits.md](../rate-limits.md).
-
----
+```
+GET /api/vendor/analytics/dashboard?from=2026-09-01&to=2026-09-30
+GET /api/vendor/analytics/sales?from=2026-09-21&to=2026-09-27&breakdown=daily
+GET /api/vendor/analytics/products?from=2026-09-01&to=2026-09-30&limit=10
+GET /api/vendor/analytics/customers?from=2026-07-01&to=2026-09-30&timezone=UTC
+```
