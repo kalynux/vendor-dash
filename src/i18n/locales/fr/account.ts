@@ -179,6 +179,7 @@ export const account = {
             confirmAction: 'Envoyer',
             freezeWarning: 'Une fois envoyés, vos documents ne pourront plus être modifiés avant la décision du vérificateur. Vous pourrez toujours consulter ce que vous avez envoyé.',
             unsavedWarning: "Vous avez des modifications non enregistrées ci-dessus. Enregistrez-les d'abord, sinon elles ne feront pas partie de votre envoi.",
+            legalNotice: 'En créant un compte, vous acceptez nos <0>Conditions générales d\'utilisation</0> et notre <1>Politique de confidentialité</1>.',
         },
     },
 

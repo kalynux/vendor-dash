@@ -4,11 +4,13 @@ import { useNavigate } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { LegalLink } from '@/components/common/LegalLink';
 import { PhoneInput } from '@/components/phone';
 import { useOnboarding } from '@/onboarding/store/onboarding.store';
-import { useTranslation, useMessage, useApiError } from '@/i18n';
+import { useTranslation, useMessage, useApiError, Trans } from '@/i18n';
 import { AuthLayout, AuthLink } from './AuthLayout';
 import { PasswordField } from './PasswordField';
 import { registerSchema, type RegisterFormValues } from './schemas';
@@ -42,6 +44,7 @@ export function Register() {
       email: '',
       password: '',
       confirmPassword: '',
+      terms_accepted: false,
     },
   });
 
@@ -55,6 +58,7 @@ export function Register() {
         // value the backend would have to decide what to do with.
         ...(values.email ? { email: values.email } : {}),
         password: values.password,
+        terms_accepted: true,
       });
       navigate('/onboarding', { replace: true });
     } catch (err) {
@@ -170,14 +174,44 @@ export function Register() {
           registration={register('confirmPassword')}
         />
 
+        {/* Required and unticked. The two names are links; tapping one opens
+            the document without ticking the box (see LegalLink). */}
+        <div className="space-y-1.5">
+          <div className="flex items-start gap-3">
+            <Controller
+              control={control}
+              name="terms_accepted"
+              render={({ field }) => (
+                <Checkbox
+                  id="terms_accepted"
+                  checked={field.value}
+                  onCheckedChange={(checked) => field.onChange(checked === true)}
+                  onBlur={field.onBlur}
+                  aria-invalid={!!errors.terms_accepted}
+                  aria-required
+                  className="mt-0.5"
+                />
+              )}
+            />
+            <Label
+              htmlFor="terms_accepted"
+              className="block cursor-pointer text-sm font-normal leading-snug"
+            >
+              <Trans
+                i18nKey="auth.register.termsLabel"
+                components={[<LegalLink doc="terms" />, <LegalLink doc="privacy" />]}
+              />
+            </Label>
+          </div>
+          {errors.terms_accepted && (
+            <p className="text-xs text-destructive">{m(errors.terms_accepted.message)}</p>
+          )}
+        </div>
+
         <Button type="submit" className="h-11 w-full" disabled={isSubmitting}>
           {isSubmitting && <Loader2 className="mr-2 size-4 animate-spin" />}
           {isSubmitting ? t('auth.register.submitting') : t('auth.register.submit')}
         </Button>
-
-        <p className="text-center text-xs text-muted-foreground">
-          {t('auth.register.terms')}
-        </p>
       </form>
     </AuthLayout>
   );

@@ -20,6 +20,12 @@ export const settings = {
             system: 'Système',
         },
 
+        legal: {
+            title: 'Mentions légales',
+            terms: 'Conditions générales d’utilisation',
+            privacy: 'Politique de confidentialité',
+        },
+
         orderAutomation: {
             title: 'Automatisation des commandes',
             info: 'Deux règles automatiques qui gardent votre liste de commandes propre : l’une transmet les commandes payées à l’agence de livraison, l’autre annule les commandes jamais payées.',

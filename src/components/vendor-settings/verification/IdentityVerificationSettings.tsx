@@ -11,7 +11,8 @@ import { ResponsiveModal } from '@/components/services/ResponsiveModal';
 import { SettingsSection, SettingsSections } from '@/components/vendor-settings/SettingsSection';
 import { UnsavedChangesBar } from '@/components/vendor-settings/UnsavedChangesBar';
 import { useOnboarding } from '@/onboarding/store/onboarding.store';
-import { apiErrorMessage, useTranslation, type TranslationKey } from '@/i18n';
+import { LegalLink } from '@/components/common/LegalLink';
+import { apiErrorMessage, useTranslation, Trans, type TranslationKey } from '@/i18n';
 import { getUploadErrorMessage } from '@/lib/uploadErrors';
 import { kycChecklist, type KycChecklistItemId } from '@/lib/kyc/checklist';
 import {
@@ -435,6 +436,12 @@ export function IdentityVerificationSettings() {
                 ? t('account.verification.submit.resubmitAction')
                 : t('account.verification.submit.action')}
             </Button>
+            <p className="text-xs text-muted-foreground">
+              <Trans
+                i18nKey="account.verification.submit.legalNotice"
+                components={[<LegalLink doc="terms" />, <LegalLink doc="privacy" />]}
+              />
+            </p>
           </SettingsSection>
         )}
       </SettingsSections>

@@ -186,6 +186,8 @@ export const account = {
             confirmAction: 'Send',
             freezeWarning: 'Once you send, you cannot change your documents until a reviewer decides. You will still be able to see what you sent.',
             unsavedWarning: 'You have unsaved changes above. Save them first, or they will not be part of what you send.',
+            /** Under the Send button. <0> = Terms of Service link, <1> = Privacy Policy link. */
+            legalNotice: 'By creating an account, you agree to our <0>Terms of Service</0> and <1>Privacy Policy</1>.',
         },
     },
 

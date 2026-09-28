@@ -50,6 +50,13 @@ export interface RegisterPayload {
     name: string;
     email?: string;
     business_name: string;
+    /**
+     * The vendor ticked "I agree to the Terms of Service and Privacy Policy".
+     * The backend refuses a vendor registration without it (400
+     * VALIDATION_ERROR on `terms_accepted`), and the form cannot submit
+     * unticked, so it is only ever `true`.
+     */
+    terms_accepted: true;
 }
 
 export const authService = {

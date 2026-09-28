@@ -20,6 +20,13 @@ export const settings = {
             system: 'System',
         },
 
+        /** Links to the CDN-hosted documents (src/lib/legal.ts). */
+        legal: {
+            title: 'Legal',
+            terms: 'Terms of Service',
+            privacy: 'Privacy Policy',
+        },
+
         orderAutomation: {
             title: 'Order Automation',
             info: 'Two hands-off rules that keep your order list clean: one moves paid orders on to the delivery agency for you, the other cancels orders customers never paid for.',

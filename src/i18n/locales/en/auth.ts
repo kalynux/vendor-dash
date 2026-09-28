@@ -56,7 +56,8 @@ export const auth = {
         submitting: 'Creating your account…',
         haveAccount: 'Already have an account?',
         signIn: 'Sign in',
-        terms: 'By creating an account you agree to the Wi-Mall vendor terms.',
+        /** Checkbox label. <0> = Terms of Service link, <1> = Privacy Policy link. */
+        termsLabel: 'I agree to the <0>Terms of Service</0> and <1>Privacy Policy</1>.',
     },
 
     forgot: {
@@ -136,6 +137,7 @@ export const auth = {
         confirmMismatch: 'The two passwords do not match.',
         nameRequired: 'Enter your name.',
         businessRequired: 'Enter your business name.',
+        termsRequired: 'Please accept the Terms of Service and Privacy Policy to continue.',
     },
 
     errors: {

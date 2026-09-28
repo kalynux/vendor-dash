@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Send, Clock, Moon, Sun } from 'lucide-react';
+import { Send, Clock, Moon, Sun, FileText, ShieldCheck, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { onboardingService } from '@/services/onboarding.service';
 import { useUIStore } from '@/store';
+import { LegalLink } from '@/components/common/LegalLink';
 import { useTranslation, useApiError } from '@/i18n';
 import { UnsavedChangesBar } from '@/components/vendor-settings/UnsavedChangesBar';
 import {
@@ -164,6 +165,32 @@ export function PreferencesSettings() {
     </SettingsSection>
   );
 
+  // Links out to the CDN-hosted documents — nothing to save, so it sits outside
+  // the dirty/save machinery and renders the same while the rest loads.
+  const legalRows = [
+    { doc: 'terms' as const, icon: FileText, label: t('settings.preferences.legal.terms') },
+    { doc: 'privacy' as const, icon: ShieldCheck, label: t('settings.preferences.legal.privacy') },
+  ];
+  const legalSection = (
+    <SettingsSection title={t('settings.preferences.legal.title')} contentClassName="divide-y">
+      {legalRows.map(({ doc, icon: Icon, label }) => (
+        <LegalLink
+          key={doc}
+          doc={doc}
+          className="flex min-h-11 items-center justify-between gap-3 py-2 font-medium text-foreground no-underline first:pt-0 last:pb-0 hover:text-primary"
+        >
+          <span className="flex min-w-0 items-center gap-3">
+            <span className="p-2 rounded-lg bg-muted text-muted-foreground flex-shrink-0">
+              <Icon className="w-4 h-4" />
+            </span>
+            <span className="min-w-0">{label}</span>
+          </span>
+          <ExternalLink className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+        </LegalLink>
+      ))}
+    </SettingsSection>
+  );
+
   if (loading) {
     return (
       <SettingsSections>
@@ -175,6 +202,7 @@ export function PreferencesSettings() {
           <Skeleton className="h-16 w-full rounded-lg" />
           <Skeleton className="h-16 w-full rounded-lg" />
         </SettingsSection>
+        {legalSection}
       </SettingsSections>
     );
   }
@@ -279,6 +307,7 @@ export function PreferencesSettings() {
             </div>
           </div>
         </SettingsSection>
+        {legalSection}
       </SettingsSections>
 
       <UnsavedChangesBar

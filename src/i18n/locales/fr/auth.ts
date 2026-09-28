@@ -57,8 +57,8 @@ export const auth = {
         submitting: 'Création de votre compte…',
         haveAccount: 'Vous avez déjà un compte ?',
         signIn: 'Se connecter',
-        terms:
-            'En créant un compte, vous acceptez les conditions vendeur de Wi-Mall.',
+        termsLabel:
+            'J’accepte les <0>Conditions générales d’utilisation</0> et la <1>Politique de confidentialité</1>.',
     },
 
     forgot: {
@@ -134,6 +134,8 @@ export const auth = {
         confirmMismatch: 'Les deux mots de passe ne correspondent pas.',
         nameRequired: 'Saisissez votre nom.',
         businessRequired: 'Saisissez le nom de votre entreprise.',
+        termsRequired:
+            'Veuillez accepter les Conditions générales d’utilisation et la Politique de confidentialité pour continuer.',
     },
 
     errors: {

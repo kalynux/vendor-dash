@@ -113,6 +113,9 @@ export const registerSchema = z
             .refine((v) => v === '' || isValidEmail(v), 'common.validation.email'),
         password,
         confirmPassword: z.string(),
+        // Unticked by default and required: the backend refuses a vendor
+        // registration without `terms_accepted: true`.
+        terms_accepted: z.boolean().refine((v) => v === true, 'auth.validation.termsRequired'),
     })
     .refine((v) => v.password === v.confirmPassword, {
         message: 'auth.validation.confirmMismatch',
