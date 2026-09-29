@@ -24,6 +24,8 @@ export const account = {
     /** Shared by every settings/account tab (the floating save pill). */
     unsavedBar: {
         label: 'Unsaved changes',
+        /** Phone width, where the full label would be cut off. */
+        labelShort: 'Not saved',
         discard: 'Discard',
         save: 'Save',
         saveChanges: 'Save changes',
@@ -47,14 +49,7 @@ export const account = {
         emailHintLabel: 'About your email',
         emailHint: "This is the address you sign in with, and where receipts and account notices are sent. It can't be edited here — contact support to change it.",
         phone: 'Phone',
-        phoneHintLabel: 'About your phone number',
-        phoneHint: 'Your account phone number, used for account and payout follow-ups. Pick the country it belongs to, then enter it the way you would dial it there — it is saved with the country code.',
         whatsapp: 'WhatsApp Number',
-        whatsappHintLabel: 'About your WhatsApp number',
-        whatsappHint: 'The number you take order questions on. Separate from your account phone — the one customers see on your storefront is set under Store → Support & contact.',
-        role: 'Role',
-        roleHintLabel: 'About your role',
-        roleHint: 'What this account may do on the platform. Set by the platform and not editable.',
         roles: {
             vendor: 'Vendor',
         },
@@ -187,7 +182,7 @@ export const account = {
             freezeWarning: 'Once you send, you cannot change your documents until a reviewer decides. You will still be able to see what you sent.',
             unsavedWarning: 'You have unsaved changes above. Save them first, or they will not be part of what you send.',
             /** Under the Send button. <0> = Terms of Service link, <1> = Privacy Policy link. */
-            legalNotice: 'By creating an account, you agree to our <0>Terms of Service</0> and <1>Privacy Policy</1>.',
+            legalNotice: 'By submitting, you agree to our <0>Terms of Service</0> and <1>Privacy Policy</1>.',
         },
     },
 
@@ -361,21 +356,14 @@ export const account = {
         biometricTurnedOff: 'Fingerprint sign-in is off on this phone.',
 
         twoFactorTitle: 'Two-Factor Authentication',
-        twoFactorInfo:
-            'A second step at login — a code from your phone on top of your password. Not available yet.',
-        twoFactorToggle: 'Enable two-factor authentication',
-        sessionsTitle: 'Signed-in Devices',
         /**
          * There will be no device list to show: sign-in tokens are stateless by
          * design, so the platform keeps no record of which devices hold one.
          * Changing the password is the revocation — that is the whole mechanism,
          * so the panel says so instead of promising a list that isn't coming.
          */
-        sessionsInfo:
-            'Signing out other devices is done by changing your password — it invalidates every sign-in but this one, everywhere, straight away.',
         sessionsHowTo:
             'Changing your password above signs out every other device and browser immediately. Use it if you think someone else has access.',
-        notAvailableYet: 'Not available yet — this will be enabled in a future update.',
     },
 
     /** Account → Payout: the earnings balance and withdrawal requests. */
@@ -456,8 +444,6 @@ export const account = {
         countryHint: 'Set once during onboarding and locked afterwards — it decides your tax, shipping, and address rules, and your business addresses must fall inside it. Contact support if it needs to change.',
         countryReadOnly: 'Country (read-only)',
         timezone: 'Timezone',
-        timezoneHintLabel: 'About your timezone',
-        timezoneHint: "Every order time, report, and schedule in the dashboard is shown in this zone. Changing it re-labels existing timestamps; it doesn't move them.",
         timezonePlaceholder: 'Select your timezone',
         language: 'Language',
         languageHintLabel: 'About your language',

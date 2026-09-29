@@ -39,12 +39,9 @@ export const settings = {
             maxOrderTotalHint: 'Un plafond de sécurité. Réglez-le sur 50 000 et les commandes jusqu’à 50 000 partent seules, tandis qu’une commande de 75 000 reste en attente pour que vous la regardiez d’abord. Laissez-le vide et toutes les commandes payées partent, quel que soit le montant.',
             maxOrderTotalPlaceholder: 'Aucun plafond',
 
-            autoCancel: 'Annulation automatique des commandes impayées',
+            autoCancel: 'Annuler les commandes impayées après',
             autoCancelHintLabel: 'À propos de l’annulation automatique',
-            autoCancelHint: 'Les commandes toujours impayées après le nombre de jours ci-dessous sont annulées automatiquement et leur stock réservé est remis dans votre inventaire.',
 
-            daysBeforeCancel: 'Jours avant annulation',
-            daysBeforeCancelHintLabel: 'À propos du délai avant annulation',
             daysBeforeCancelHint: 'Combien de temps une commande impayée est conservée avant d’être annulée et son stock libéré. Réglez-le sur 3 et une commande passée lundi est annulée jeudi si elle est toujours impayée. Entre {{min}} et {{max}} jours.',
         },
 
@@ -273,8 +270,6 @@ export const settings = {
         notPinned: 'Pas encore fixé.',
 
         label: 'Libellé',
-        labelHintLabel: 'À propos du libellé d’adresse',
-        labelHint: 'Votre propre nom pour cet emplacement, par exemple « Boutique principale » ou « Entrepôt ». C’est ainsi que vous choisissez un point de retrait au moment de publier un produit.',
         labelPlaceholder: 'ex. Boutique principale, Entrepôt',
         street: 'Adresse / point de repère',
         streetPlaceholder: '123 rue du Marché',
@@ -302,7 +297,7 @@ export const settings = {
     policies: {
         tabTitle: 'Conditions',
         tabInfo1:
-            'Les règles que voient vos clients sur votre vitrine et sur lesquelles le support s’appuie en cas de litige. Chaque champ ci-dessous a son propre pictogramme d’information expliquant ce qu’il modifie.',
+            'Les règles que voient vos clients sur votre vitrine et sur lesquelles le support s’appuie en cas de litige.',
         tabInfo2:
             'Désactiver entièrement une politique la supprime — votre boutique n’affiche alors aucune politique pour ce domaine, ce que les clients interprètent comme « non proposé ».',
         fieldHintLabel: 'Ce que ce champ change',
@@ -310,23 +305,18 @@ export const settings = {
 
         return: {
             title: 'Politique de retour',
-            subtitle: 'Comment vous gérez les retours et les remboursements',
 
             accept: 'Accepter les retours',
-            acceptHintLabel: 'À propos de l’acceptation des retours',
-            acceptHint: 'Activé, les clients voient un bouton « Demander un retour » sur les commandes livrées et les règles ci-dessous s’appliquent. Désactivé, votre boutique affiche « Aucun retour accepté » et tous les champs ci-dessous disparaissent.',
 
-            windowDays: 'Délai de retour (jours)',
-            windowDaysHint: 'Combien de temps après l’achat un client peut ouvrir un retour. Réglez-le sur 14 et une commande passée le 1er mars peut être retournée jusqu’au 15 mars — le 16, le bouton de retour a disparu. 0 signifie que les retours ferment immédiatement. Maximum 180.',
+            windowDays: 'Délai de retour',
 
-            refundType: 'Type de remboursement',
-            refundTypeHint: 'Ce que le client récupère sur un retour accepté. Intégral → tout le prix de l’article. Partiel → uniquement le pourcentage défini ci-dessous (80 % d’une commande de 10 000 = 8 000 rendus). Aucun remboursement → le retour est accepté mais aucun argent n’est rendu, par exemple pour les boutiques en échange seulement.',
-            refundTypeFull: 'Remboursement intégral',
-            refundTypePartial: 'Remboursement partiel',
-            refundTypeNone: 'Aucun remboursement',
+            refundType: 'Remboursement',
+            refundTypeHint: 'Ce que le client récupère sur un retour accepté. Intégral → tout le prix de l’article. Partiel → uniquement le pourcentage défini ci-dessous (80 % d’une commande de 10 000 = 8 000 rendus). Aucun → le retour est accepté mais aucun argent n’est rendu, par exemple pour les boutiques en échange seulement.',
+            refundTypeFull: 'Intégral',
+            refundTypePartial: 'Partiel',
+            refundTypeNone: 'Aucun',
 
-            refundPercentage: 'Pourcentage remboursé (%)',
-            refundPercentageHint: 'La part de la commande remboursée, de 0 à 100. À 80, une commande de 10 000 rembourse 8 000 et vous gardez 2 000 en frais de remise en stock. Obligatoire tant que le type de remboursement est Partiel.',
+            refundPercentage: 'Pourcentage remboursé',
             refundPercentagePlaceholder: 'ex. 80',
 
             shippingPayer: 'Frais de retour payés par',
@@ -335,21 +325,17 @@ export const settings = {
             shippingPayerVendor: 'Vendeur (vous)',
             shippingPayerReimbursed: 'Client (remboursé si défectueux)',
 
-            processingDays: 'Délai de traitement du remboursement (jours)',
+            processingDays: 'Remboursé sous',
             processingDaysHint: 'Jours ouvrés entre la réception de l’article retourné et le versement de l’argent. Réglez 5 et un colis reçu un lundi est remboursé le lundi suivant — c’est cette date qui est montrée au client, prévoyez donc une marge. Maximum 30.',
 
             conditionNotes: 'Conditions de retour',
-            conditionNotesHint: 'Texte libre affiché à côté de votre politique de retour, par exemple « Non utilisé, dans son emballage d’origine, étiquette encore attachée. » Le support cite ce texte lorsqu’un retour est contesté, soyez donc précis. Laissez vide si vous n’avez pas de condition supplémentaire.',
             conditionNotesPlaceholder: 'ex. L’article doit être non utilisé et dans son emballage d’origine.',
         },
 
         cancellation: {
             title: 'Politique d’annulation',
-            subtitle: 'Quand et comment les clients peuvent annuler leurs commandes',
 
             allow: 'Autoriser les annulations',
-            allowHintLabel: 'À propos de l’autorisation des annulations',
-            allowHint: 'Activé, les clients peuvent annuler eux-mêmes une commande passée selon les règles ci-dessous. Désactivé, le bouton d’annulation est masqué et ils doivent vous contacter — chaque annulation passe alors par le support.',
 
             deadline: 'Date limite d’annulation',
             deadlineHint: 'La limite pour une annulation gratuite. « Sous 24 heures » permet à quelqu’un ayant commandé lundi à 9 h d’annuler jusqu’à mardi 9 h ; après cela, les règles d’annulation tardive plus bas prennent le relais. « Avant confirmation du vendeur » ferme la fenêtre dès que vous acceptez la commande, elle se réduit donc à mesure que vous êtes rapide.',
@@ -360,8 +346,7 @@ export const settings = {
             deadlineBeforeServiceStart: 'Avant la date/heure de début du service',
             deadlineDaysBeforeDelivery: 'À tout moment jusqu’à X jours avant la livraison',
 
-            deadlineDays: 'Jours avant la livraison',
-            deadlineDaysHint: 'Combien de jours avant la date de livraison l’annulation reste gratuite. À 3, une commande prévue vendredi peut être annulée jusqu’à mardi ; à partir du mercredi elle compte comme tardive.',
+            deadlineDays: 'Avant la livraison',
             deadlineDaysPlaceholder: 'ex. 3',
 
             fee: 'Frais d’annulation',
@@ -372,10 +357,8 @@ export const settings = {
             feeFull: 'Montant total (non remboursable)',
 
             feeAmount: 'Montant des frais',
-            feeAmountHint: 'La somme forfaitaire que vous gardez sur une annulation. À 500, une commande de 10 000 rembourse 9 500 et une commande de 2 000 rembourse 1 500 — les mêmes frais dans les deux cas, gardez-les donc modestes.',
             feeAmountPlaceholder: 'ex. 500',
-            feePercentageValue: 'Pourcentage des frais (%)',
-            feePercentageHint: 'La part de la commande que vous gardez, de 0 à 100. À 10, une commande de 10 000 rembourse 9 000 et une commande de 2 000 rembourse 1 800 — les frais suivent le montant de la commande.',
+            feePercentageValue: 'Pourcentage des frais',
             feePercentagePlaceholder: 'ex. 10',
 
             lateRefund: 'Remboursement en cas d’annulation tardive',
@@ -385,17 +368,13 @@ export const settings = {
             lateRefundPercentage: 'Pourcentage remboursé',
 
             lateRefundAmount: 'Montant remboursé',
-            lateRefundAmountHint: 'La somme forfaitaire rendue sur une annulation tardive. À 2 000, une commande de 10 000 rend 2 000 et vous gardez 8 000.',
-            lateRefundPercentageValue: 'Pourcentage remboursé (%)',
-            lateRefundPercentageHint: 'La part rendue sur une annulation tardive, de 0 à 100. À 50, une commande de 10 000 rend 5 000.',
+            lateRefundPercentageValue: 'Pourcentage remboursé',
         },
 
         support: {
             title: 'Politique d’assistance',
-            subtitle: 'Comment les clients peuvent vous joindre pour être aidés',
 
             channels: 'Canaux d’assistance',
-            channelsHint: 'Où les clients vous joignent pour être aidés. Ces coordonnées sont publiées sur votre boutique et jointes aux e-mails de commande, n’ajoutez donc que des adresses que vous consultez vraiment. Chaque type ne peut être ajouté qu’une fois, jusqu’à 4 au total.',
             addChannel: 'Ajouter un canal',
             noChannels: 'Aucun canal ajouté pour l’instant. Ajoutez-en au moins un pour que les clients puissent vous joindre.',
             removeChannel: 'Supprimer le canal {{type}}',
@@ -411,23 +390,19 @@ export const settings = {
             requiredTrackingNumber: 'Numéro de suivi',
 
             availability: 'Disponibilité',
-            availabilityHint: 'Quand vous répondez. Affichée en badge à côté de vos canaux d’assistance, elle fixe le délai de réponse que les clients attendent. Choisissez « Limitée » pour préciser vos horaires exacts dans le champ qui apparaît.',
-            availabilityPlaceholder: 'Choisissez une disponibilité…',
-            availability247: '24 h/24, 7 j/7',
+            availability247: '24 h/24',
             availabilityBusinessHours: 'Heures de bureau',
-            availabilityLimited: 'Limitée (à préciser ci-dessous)',
+            availabilityLimited: 'Limitée',
 
-            availabilityDescription: 'Description de la disponibilité',
-            availabilityDescriptionHint: 'Vos horaires exacts, montrés aux clients mot pour mot — par exemple « Lun–Ven, 10:00–18:00 (WAT), fermé les jours fériés. »',
+            availabilityDescription: 'Vos horaires',
             availabilityDescriptionPlaceholder: 'ex. Lun–Ven, 10:00–18:00',
 
             languages: 'Langues',
-            languagesHint: 'Les langues dans lesquelles vous pouvez réellement mener une conversation d’assistance. Tapez-en une et appuyez sur Entrée ou +, par exemple English, puis Français. Jusqu’à 20. C’est ce que les clients filtrent, n’indiquez donc pas une langue dans laquelle vous ne pouvez pas répondre.',
             languagesPlaceholder: 'ex. Français',
+            addLanguage: 'Ajouter la langue',
             removeLanguage: 'Supprimer {{language}}',
 
             eligibilityNotes: 'Conditions d’éligibilité',
-            eligibilityNotesHint: 'Qui a droit à l’assistance, par exemple « Uniquement les commandes des 90 derniers jours » ou « Les commandes en gros sont traitées par votre gestionnaire de compte. » Affiché sous votre politique d’assistance.',
             eligibilityNotesPlaceholder: 'ex. Uniquement les clients avec une commande valide.',
         },
 

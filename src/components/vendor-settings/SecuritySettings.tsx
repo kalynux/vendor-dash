@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Eye, EyeOff, Fingerprint, Globe, Loader2, Lock, Save, Shield } from 'lucide-react';
+import { Eye, EyeOff, Loader2, Save } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { authService } from '@/services/auth.service';
@@ -19,7 +19,6 @@ import {
 } from '@/components/vendor-settings/SettingsSection';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { useMessage, useTranslation, type TranslationKey } from '@/i18n';
 
@@ -120,8 +119,14 @@ export function SecuritySettings() {
       {/* Password change */}
       <SettingsSection
         title={t('account.security.passwordTitle')}
-        icon={Lock}
-        info={t('account.security.passwordInfo')}
+        // The sessions note lives here now: changing the password IS how other
+        // devices get signed out, so it explains this section, not one of its own.
+        info={
+          <div className="space-y-2">
+            <p>{t('account.security.passwordInfo')}</p>
+            <p>{t('account.security.sessionsHowTo')}</p>
+          </div>
+        }
         contentClassName="space-y-4 max-w-md"
       >
           {error && (
@@ -217,7 +222,7 @@ export function SecuritySettings() {
           </div>
 
           <div className="pt-2">
-            <Button onClick={handleSubmit} disabled={!canSubmit} className="gap-2">
+            <Button onClick={handleSubmit} disabled={!canSubmit} className="gap-2 max-md:h-11 max-md:w-full">
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
               {t('account.security.updatePassword')}
             </Button>
@@ -235,7 +240,6 @@ export function SecuritySettings() {
       */}
       {biometry?.supported && (
         <SettingsSection
-          icon={Fingerprint}
           title={t('account.security.biometricTitle')}
           info={t('account.security.biometricInfo')}
         >
@@ -269,41 +273,10 @@ export function SecuritySettings() {
         </SettingsSection>
       )}
 
-      {/* Not-yet-implemented security features, greyed out. */}
-      <SettingsSection
-        className="opacity-60"
-        icon={Shield}
-        title={
-          <span className="flex items-center gap-2">
-            {t('account.security.twoFactorTitle')}
-            <Badge variant="outline">{t('common.states.comingSoon')}</Badge>
-          </span>
-        }
-        info={t('account.security.twoFactorInfo')}
-      >
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-sm text-muted-foreground">
-              {t('account.security.notAvailableYet')}
-            </p>
-            <Switch disabled aria-label={t('account.security.twoFactorToggle')} />
-          </div>
-      </SettingsSection>
-
-      {/*
-        Not a "coming soon" panel. Sign-in tokens are stateless by design, so
-        there is no device list to render and never will be — changing the
-        password is the revocation, and it is already live. Saying so is more
-        useful than a disabled Revoke button promising a screen that isn't
-        coming.
-      */}
-      <SettingsSection
-        icon={Globe}
-        title={t('account.security.sessionsTitle')}
-        info={t('account.security.sessionsInfo')}
-      >
-          <p className="text-sm text-muted-foreground">
-            {t('account.security.sessionsHowTo')}
-          </p>
+      {/* Not built yet — one quiet line rather than a greyed-out panel with a
+          badge, an info icon and a switch that does nothing. */}
+      <SettingsSection title={t('account.security.twoFactorTitle')}>
+        <p className="text-sm text-muted-foreground">{t('common.states.comingSoon')}</p>
       </SettingsSection>
     </SettingsSections>
   );

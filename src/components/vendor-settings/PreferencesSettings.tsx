@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Send, Clock, Moon, Sun, FileText, ShieldCheck, ExternalLink } from 'lucide-react';
+import { ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { onboardingService } from '@/services/onboarding.service';
@@ -14,14 +14,9 @@ import {
 import { Input } from '@/components/ui/input';
 import { InfoHint, LabelWithHint } from '@/components/ui/info-hint';
 import { Switch } from '@/components/ui/switch';
+import { ChoiceChips } from '@/components/ui/choice-chips';
+import { UnitInput } from '@/components/ui/unit-input';
 import { Skeleton } from '@/components/ui/skeleton';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 
 const MIN_CANCEL_DAYS = 1;
 const MAX_CANCEL_DAYS = 90;
@@ -141,50 +136,34 @@ export function PreferencesSettings() {
       title={t('settings.preferences.appearance.title')}
       info={t('settings.preferences.appearance.info')}
     >
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-muted text-muted-foreground flex-shrink-0">
-              {theme === 'dark' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
-            </div>
-            <p className="font-medium">{t('settings.preferences.appearance.theme')}</p>
-          </div>
-          <Select
-            value={theme}
-            onValueChange={(v) => setTheme(v as 'light' | 'dark' | 'system')}
-          >
-            <SelectTrigger className="w-36">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="light">{t('settings.preferences.appearance.light')}</SelectItem>
-              <SelectItem value="dark">{t('settings.preferences.appearance.dark')}</SelectItem>
-              <SelectItem value="system">{t('settings.preferences.appearance.system')}</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+      <ChoiceChips
+        label={t('settings.preferences.appearance.theme')}
+        value={theme}
+        onChange={setTheme}
+        options={[
+          { value: 'light', label: t('settings.preferences.appearance.light') },
+          { value: 'dark', label: t('settings.preferences.appearance.dark') },
+          { value: 'system', label: t('settings.preferences.appearance.system') },
+        ]}
+      />
     </SettingsSection>
   );
 
   // Links out to the CDN-hosted documents — nothing to save, so it sits outside
   // the dirty/save machinery and renders the same while the rest loads.
   const legalRows = [
-    { doc: 'terms' as const, icon: FileText, label: t('settings.preferences.legal.terms') },
-    { doc: 'privacy' as const, icon: ShieldCheck, label: t('settings.preferences.legal.privacy') },
+    { doc: 'terms' as const, label: t('settings.preferences.legal.terms') },
+    { doc: 'privacy' as const, label: t('settings.preferences.legal.privacy') },
   ];
   const legalSection = (
     <SettingsSection title={t('settings.preferences.legal.title')} contentClassName="divide-y">
-      {legalRows.map(({ doc, icon: Icon, label }) => (
+      {legalRows.map(({ doc, label }) => (
         <LegalLink
           key={doc}
           doc={doc}
-          className="flex min-h-11 items-center justify-between gap-3 py-2 font-medium text-foreground no-underline first:pt-0 last:pb-0 hover:text-primary"
+          className="flex min-h-12 items-center justify-between gap-3 text-sm font-medium text-foreground no-underline hover:text-primary"
         >
-          <span className="flex min-w-0 items-center gap-3">
-            <span className="p-2 rounded-lg bg-muted text-muted-foreground flex-shrink-0">
-              <Icon className="w-4 h-4" />
-            </span>
-            <span className="min-w-0">{label}</span>
-          </span>
+          <span className="min-w-0">{label}</span>
           <ExternalLink className="size-4 shrink-0 text-muted-foreground" aria-hidden />
         </LegalLink>
       ))}
@@ -225,20 +204,16 @@ export function PreferencesSettings() {
             </div>
           )}
 
-          {/* Auto-redirect orders to agency */}
+          {/* Auto-redirect orders to agency. The cap only matters while the
+              rule is on, so it only shows then. */}
           <div className="space-y-4">
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="p-2 rounded-lg bg-muted text-muted-foreground flex-shrink-0">
-                  <Send className="w-4 h-4" />
-                </div>
-                <div className="flex min-w-0 items-center gap-1">
-                  <p className="font-medium">{t('settings.preferences.orderAutomation.autoDispatch')}</p>
-                  <InfoHint label={t('settings.preferences.orderAutomation.autoDispatchHintLabel')}>
-                    {t('settings.preferences.orderAutomation.autoDispatchHint')}
-                  </InfoHint>
-                </div>
-              </div>
+            <div className="flex min-h-11 items-center justify-between gap-4">
+              <span className="flex min-w-0 items-center gap-1">
+                <span className="text-sm font-medium">{t('settings.preferences.orderAutomation.autoDispatch')}</span>
+                <InfoHint label={t('settings.preferences.orderAutomation.autoDispatchHintLabel')}>
+                  {t('settings.preferences.orderAutomation.autoDispatchHint')}
+                </InfoHint>
+              </span>
               <Switch
                 checked={autoRedirect}
                 onCheckedChange={setAutoRedirect}
@@ -246,65 +221,55 @@ export function PreferencesSettings() {
               />
             </div>
 
-            <div className="space-y-1.5 sm:pl-12">
-              <LabelWithHint
-                htmlFor="auto-redirect-threshold"
-                optional
-                hintLabel={t('settings.preferences.orderAutomation.maxOrderTotalHintLabel')}
-                hint={t('settings.preferences.orderAutomation.maxOrderTotalHint')}
-              >
-                {t('settings.preferences.orderAutomation.maxOrderTotal')}
-              </LabelWithHint>
-              <Input
-                id="auto-redirect-threshold"
-                type="number"
-                inputMode="numeric"
-                min={0}
-                placeholder={t('settings.preferences.orderAutomation.maxOrderTotalPlaceholder')}
-                value={threshold}
-                onChange={(e) => setThreshold(e.target.value)}
-                disabled={!autoRedirect}
-                aria-invalid={thresholdInvalid}
-              />
-            </div>
+            {autoRedirect && (
+              <div className="space-y-2">
+                <LabelWithHint
+                  htmlFor="auto-redirect-threshold"
+                  optional
+                  hintLabel={t('settings.preferences.orderAutomation.maxOrderTotalHintLabel')}
+                  hint={t('settings.preferences.orderAutomation.maxOrderTotalHint')}
+                >
+                  {t('settings.preferences.orderAutomation.maxOrderTotal')}
+                </LabelWithHint>
+                <Input
+                  id="auto-redirect-threshold"
+                  type="number"
+                  inputMode="numeric"
+                  min={0}
+                  placeholder={t('settings.preferences.orderAutomation.maxOrderTotalPlaceholder')}
+                  value={threshold}
+                  onChange={(e) => setThreshold(e.target.value)}
+                  aria-invalid={thresholdInvalid}
+                  className="h-11"
+                />
+              </div>
+            )}
           </div>
 
-          {/* Auto-cancel unpaid orders */}
-          <div className="space-y-1.5 border-t pt-6">
-            <div className="flex items-center gap-3 mb-1">
-              <div className="p-2 rounded-lg bg-muted text-muted-foreground flex-shrink-0">
-                <Clock className="w-4 h-4" />
-              </div>
-              <div className="flex min-w-0 items-center gap-1">
-                <p className="font-medium">{t('settings.preferences.orderAutomation.autoCancel')}</p>
-                <InfoHint label={t('settings.preferences.orderAutomation.autoCancelHintLabel')}>
-                  {t('settings.preferences.orderAutomation.autoCancelHint')}
-                </InfoHint>
-              </div>
-            </div>
-            <div className="sm:pl-12 space-y-1.5">
-              <LabelWithHint
-                htmlFor="auto-cancel-days"
-                hintLabel={t('settings.preferences.orderAutomation.daysBeforeCancelHintLabel')}
-                hint={t('settings.preferences.orderAutomation.daysBeforeCancelHint', {
-                  min: MIN_CANCEL_DAYS,
-                  max: MAX_CANCEL_DAYS,
-                })}
-              >
-                {t('settings.preferences.orderAutomation.daysBeforeCancel')}
-              </LabelWithHint>
-              <Input
-                id="auto-cancel-days"
-                type="number"
-                inputMode="numeric"
-                min={MIN_CANCEL_DAYS}
-                max={MAX_CANCEL_DAYS}
-                value={cancelDays}
-                onChange={(e) => setCancelDays(e.target.value)}
-                aria-invalid={daysInvalid}
-                className="max-w-[8rem]"
-              />
-            </div>
+          {/* Auto-cancel unpaid orders — one sentence: "Cancel unpaid orders after [3 days]". */}
+          <div className="space-y-2 border-t pt-5">
+            <LabelWithHint
+              htmlFor="auto-cancel-days"
+              hintLabel={t('settings.preferences.orderAutomation.autoCancelHintLabel')}
+              hint={t('settings.preferences.orderAutomation.daysBeforeCancelHint', {
+                min: MIN_CANCEL_DAYS,
+                max: MAX_CANCEL_DAYS,
+              })}
+            >
+              {t('settings.preferences.orderAutomation.autoCancel')}
+            </LabelWithHint>
+            <UnitInput
+              id="auto-cancel-days"
+              type="number"
+              inputMode="numeric"
+              min={MIN_CANCEL_DAYS}
+              max={MAX_CANCEL_DAYS}
+              unit={t('common.units.daysSuffix')}
+              value={cancelDays}
+              onChange={(e) => setCancelDays(e.target.value)}
+              invalid={daysInvalid}
+              wrapperClassName="max-w-[10rem]"
+            />
           </div>
         </SettingsSection>
         {legalSection}

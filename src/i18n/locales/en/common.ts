@@ -241,6 +241,8 @@ export const common = {
         customers: plural({ one: '{{count}} customer', other: '{{count}} customers' }),
         tickets: plural({ one: '{{count}} ticket', other: '{{count}} tickets' }),
         unlimited: 'Unlimited',
+        /** Unit written inside a number field, after the value: "14 days". */
+        daysSuffix: 'days',
     },
 
     validation: {

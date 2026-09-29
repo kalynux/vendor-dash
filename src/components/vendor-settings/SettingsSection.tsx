@@ -43,6 +43,11 @@ interface SettingsSectionProps {
   className?: string;
   /** Classes for the body wrapper (spacing between the section's own fields). */
   contentClassName?: string;
+  /**
+   * Classes for the title row — e.g. `max-md:hidden` when the phone's page
+   * header already names this section and a second heading is just noise.
+   */
+  headerClassName?: string;
   /** React 19 passes `ref` as a plain prop — used for scroll-into-view targets. */
   ref?: Ref<HTMLElement>;
 }
@@ -56,6 +61,7 @@ export function SettingsSection({
   children,
   className,
   contentClassName,
+  headerClassName,
   ref,
 }: SettingsSectionProps) {
   const { t } = useTranslation();
@@ -69,11 +75,16 @@ export function SettingsSection({
         // layouts, where zeroing the top padding would jam them against the
         // divider above.
         'max-md:py-5',
+        // Thumb-sized fields on a phone, the same rule as `ProductFormBody`:
+        // inputs and select triggers go from 36px to 44px (16px type, below
+        // which iOS zooms a focused field). Opt out with `max-md:!h-9`.
+        'max-md:[&_[data-slot=input]]:h-11',
+        'max-md:[&_[data-slot=select-trigger]]:h-11 max-md:[&_[data-slot=select-trigger]]:text-base',
         'md:rounded-xl md:border md:bg-card md:p-6 md:text-card-foreground md:shadow-sm',
         className,
       )}
     >
-      <div className="mb-4 flex items-start justify-between gap-3">
+      <div className={cn('mb-4 flex items-start justify-between gap-3', headerClassName)}>
         <div className="min-w-0">
           <h3 className="flex items-center gap-1.5 font-display text-base font-semibold leading-none tracking-tight">
             {Icon && <Icon className="size-4 shrink-0 text-muted-foreground" />}

@@ -1,24 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  Bell,
-  Mail,
-  Loader2,
-  Lock,
-  ShoppingCart,
-  PackageX,
-  CalendarPlus,
-  CalendarX2,
-  CircleDollarSign,
-  CheckCircle2,
-  HardDrive,
-  Warehouse,
-  Handshake,
-  Wallet,
-  CalendarClock,
-  ShieldCheck,
-  ShieldAlert,
-  type LucideIcon,
-} from 'lucide-react';
+import { Bell, Mail, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { useOnboarding } from '@/onboarding/store/onboarding.store';
@@ -48,7 +29,6 @@ import type { MessagingChannel, MessagingConnection } from '@/types/connections.
 
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
-import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   SettingsSection,
@@ -77,7 +57,8 @@ type ChannelMeta = {
   /** Brand names (Telegram, WhatsApp) still go through the catalog so a locale can transliterate them. */
   labelKey: TranslationKey;
   Icon: (props: { className?: string }) => React.JSX.Element;
-  iconWrap: string;
+  /** Brand colour for the bare icon. */
+  iconColor: string;
   verifyKey: 'emailVerified' | 'telegramVerified' | 'whatsappVerified';
   /** Whether the link can be removed in-app (email can't be un-verified). */
   unlinkable: boolean;
@@ -88,7 +69,7 @@ const SECONDARY_CHANNELS: ChannelMeta[] = [
     value: 'telegram',
     labelKey: 'notifications.settings.channels.telegram',
     Icon: TelegramIcon,
-    iconWrap: 'bg-[#0088cc]/10 text-[#0088cc]',
+    iconColor: 'text-[#0088cc]',
     verifyKey: 'telegramVerified',
     unlinkable: true,
   },
@@ -96,7 +77,7 @@ const SECONDARY_CHANNELS: ChannelMeta[] = [
     value: 'email',
     labelKey: 'notifications.settings.channels.email',
     Icon: ({ className }) => <Mail className={className} />,
-    iconWrap: 'bg-primary/10 text-primary',
+    iconColor: 'text-muted-foreground',
     verifyKey: 'emailVerified',
     unlinkable: false,
   },
@@ -104,7 +85,7 @@ const SECONDARY_CHANNELS: ChannelMeta[] = [
     value: 'whatsapp',
     labelKey: 'notifications.settings.channels.whatsapp',
     Icon: WhatsappIcon,
-    iconWrap: 'bg-[#25D366]/10 text-[#25D366]',
+    iconColor: 'text-[#25D366]',
     verifyKey: 'whatsappVerified',
     unlinkable: true,
   },
@@ -114,7 +95,11 @@ type EventMeta = {
   key: NotificationEventKey;
   labelKey: TranslationKey;
   descriptionKey: TranslationKey;
-  Icon: LucideIcon;
+  /**
+   * Show the explanation behind an info icon. Only for labels that are easy to
+   * mix up — the rest say what they are, and twelve icons read as clutter.
+   */
+  hint?: boolean;
   /**
    * Returned by GET and honoured at send time, but absent from the update
    * schema — sending it is silently stripped, so the switch would report a
@@ -124,21 +109,21 @@ type EventMeta = {
 };
 
 const EVENTS: EventMeta[] = [
-  { key: 'orderCreated', labelKey: 'notifications.settings.events.orderCreated', descriptionKey: 'notifications.settings.events.orderCreatedHint', Icon: ShoppingCart },
-  { key: 'orderCancelled', labelKey: 'notifications.settings.events.orderCancelled', descriptionKey: 'notifications.settings.events.orderCancelledHint', Icon: PackageX },
-  { key: 'bookingCreated', labelKey: 'notifications.settings.events.bookingCreated', descriptionKey: 'notifications.settings.events.bookingCreatedHint', Icon: CalendarPlus },
-  { key: 'bookingCancelled', labelKey: 'notifications.settings.events.bookingCancelled', descriptionKey: 'notifications.settings.events.bookingCancelledHint', Icon: CalendarX2 },
-  { key: 'paymentReceivedPartial', labelKey: 'notifications.settings.events.paymentReceivedPartial', descriptionKey: 'notifications.settings.events.paymentReceivedPartialHint', Icon: CircleDollarSign },
-  { key: 'paymentReceivedFull', labelKey: 'notifications.settings.events.paymentReceivedFull', descriptionKey: 'notifications.settings.events.paymentReceivedFullHint', Icon: CheckCircle2 },
+  { key: 'orderCreated', labelKey: 'notifications.settings.events.orderCreated', descriptionKey: 'notifications.settings.events.orderCreatedHint' },
+  { key: 'orderCancelled', labelKey: 'notifications.settings.events.orderCancelled', descriptionKey: 'notifications.settings.events.orderCancelledHint' },
+  { key: 'bookingCreated', labelKey: 'notifications.settings.events.bookingCreated', descriptionKey: 'notifications.settings.events.bookingCreatedHint' },
+  { key: 'bookingCancelled', labelKey: 'notifications.settings.events.bookingCancelled', descriptionKey: 'notifications.settings.events.bookingCancelledHint' },
+  { key: 'paymentReceivedPartial', labelKey: 'notifications.settings.events.paymentReceivedPartial', descriptionKey: 'notifications.settings.events.paymentReceivedPartialHint' },
+  { key: 'paymentReceivedFull', labelKey: 'notifications.settings.events.paymentReceivedFull', descriptionKey: 'notifications.settings.events.paymentReceivedFullHint' },
   // These two share only the word "storage": `storageAlert` is the media-file
   // quota, `agencyStorageUpdates` is physical goods in an agency's building.
   // Kept adjacent so their labels are read against each other.
-  { key: 'storageAlert', labelKey: 'notifications.settings.events.storageAlert', descriptionKey: 'notifications.settings.events.storageAlertHint', Icon: HardDrive },
-  { key: 'agencyStorageUpdates', labelKey: 'notifications.settings.events.agencyStorageUpdates', descriptionKey: 'notifications.settings.events.agencyStorageUpdatesHint', Icon: Warehouse },
-  { key: 'connectionUpdated', labelKey: 'notifications.settings.events.connectionUpdated', descriptionKey: 'notifications.settings.events.connectionUpdatedHint', Icon: Handshake },
-  { key: 'payoutUpdates', labelKey: 'notifications.settings.events.payoutUpdates', descriptionKey: 'notifications.settings.events.payoutUpdatesHint', Icon: Wallet },
-  { key: 'shipmentRejected', labelKey: 'notifications.settings.events.shipmentRejected', descriptionKey: 'notifications.settings.events.shipmentRejectedHint', Icon: PackageX },
-  { key: 'planUpdates', labelKey: 'notifications.settings.events.planUpdates', descriptionKey: 'notifications.settings.events.planUpdatesHint', Icon: CalendarClock, readOnly: true },
+  { key: 'storageAlert', labelKey: 'notifications.settings.events.storageAlert', descriptionKey: 'notifications.settings.events.storageAlertHint', hint: true },
+  { key: 'agencyStorageUpdates', labelKey: 'notifications.settings.events.agencyStorageUpdates', descriptionKey: 'notifications.settings.events.agencyStorageUpdatesHint', hint: true },
+  { key: 'connectionUpdated', labelKey: 'notifications.settings.events.connectionUpdated', descriptionKey: 'notifications.settings.events.connectionUpdatedHint' },
+  { key: 'payoutUpdates', labelKey: 'notifications.settings.events.payoutUpdates', descriptionKey: 'notifications.settings.events.payoutUpdatesHint' },
+  { key: 'shipmentRejected', labelKey: 'notifications.settings.events.shipmentRejected', descriptionKey: 'notifications.settings.events.shipmentRejectedHint' },
+  { key: 'planUpdates', labelKey: 'notifications.settings.events.planUpdates', descriptionKey: 'notifications.settings.events.planUpdatesHint', readOnly: true },
 ];
 
 /** The events a PATCH can actually change — everything except `planUpdates`. */
@@ -418,74 +403,74 @@ export function NotificationSettings() {
     <div className="space-y-6">
       <PushPermissionBanner />
       <SettingsSections>
-        {/* Delivery channel */}
+        {/* Delivery channel — plain rows, not a stack of cards with badges: one
+            icon, the name, one status line, one action. */}
         <SettingsSection
           title={t('notifications.settings.delivery.title')}
-          info={t('notifications.settings.delivery.info')}
-          contentClassName="space-y-3"
-        >
-          {/* In-app — always on, locked */}
-          <div className="rounded-lg border bg-muted/30 p-3 sm:p-4">
-            <div className="flex items-center gap-3">
-              <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                <Bell className="size-5" />
-              </div>
-              <p className="min-w-0 flex-1 font-medium leading-none">
-                {t('notifications.settings.delivery.inApp')}
-              </p>
-              <Badge variant="secondary" className="shrink-0">
-                <Lock /> {t('notifications.settings.delivery.alwaysOn')}
-              </Badge>
+          info={
+            <div className="space-y-2">
+              <p>{t('notifications.settings.delivery.info')}</p>
+              <p>{t('notifications.settings.delivery.inAppHint')}</p>
             </div>
-            <p className="mt-2.5 text-sm text-muted-foreground sm:pl-12">
-              {t('notifications.settings.delivery.inAppHint')}
-            </p>
-          </div>
+          }
+        >
+          <div className="divide-y">
+            {/* In-app — always on, locked */}
+            <div className="flex min-h-14 items-center gap-3 pb-3">
+              <Bell className="size-5 shrink-0 text-muted-foreground" />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium">{t('notifications.settings.delivery.inApp')}</p>
+                <p className="text-sm text-muted-foreground">{t('notifications.settings.delivery.alwaysOn')}</p>
+              </div>
+            </div>
 
-          {/* Secondary channels — connect first, then make one active */}
-          <div className="space-y-3" role="radiogroup" aria-label={t('notifications.settings.delivery.groupLabel')}>
-            {SECONDARY_CHANNELS.map((c) => {
-              const verified = prefs[c.verifyKey];
-              const selected = channel === c.value;
-              const busy = unlinking === c.value;
-              const messaging = asMessagingChannel(c.value);
-              const connection = messaging ? connectionFor(messaging) : undefined;
-              const identityHint = connection?.identityHint ?? null;
-              return (
-                <div
-                  key={c.value}
-                  className={cn(
-                    'rounded-lg border p-3 transition-colors sm:p-4',
-                    selected && 'border-primary ring-1 ring-primary',
-                    !verified && 'bg-muted/20',
-                  )}
-                >
-                  {/* Identity, with the active indicator pinned to the top right.
-                      The old leading radio dot cost the label row ~32px and a 20px
-                      tap target; folding it into this pill gives the text the width
-                      and makes the state readable at a glance. */}
-                  <div className="flex items-center gap-3">
-                    <div className={cn('flex size-9 shrink-0 items-center justify-center rounded-full', c.iconWrap)}>
-                      <c.Icon className="size-5" />
+            {/* Secondary channels — connect first, then make one active */}
+            <div className="divide-y" role="radiogroup" aria-label={t('notifications.settings.delivery.groupLabel')}>
+              {SECONDARY_CHANNELS.map((c) => {
+                const verified = prefs[c.verifyKey];
+                const selected = channel === c.value;
+                const busy = unlinking === c.value;
+                const messaging = asMessagingChannel(c.value);
+                const connection = messaging ? connectionFor(messaging) : undefined;
+                const identityHint = connection?.identityHint ?? null;
+                // A linked channel shows what it is linked TO. `identityHint` is
+                // null for a Telegram account with no @handle — a normal state for
+                // a connected channel — so it falls back to "Connected".
+                const status = !verified
+                  ? t('notifications.settings.delivery.notConnected')
+                  : c.value === 'email' && roleEntity?.email
+                    ? roleEntity.email
+                    : identityHint ?? t('notifications.settings.delivery.connected');
+                return (
+                  <div key={c.value} className="flex min-h-14 items-center gap-3 py-3 last:pb-0">
+                    <c.Icon className={cn('size-5 shrink-0', c.iconColor)} />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium">{t(c.labelKey)}</p>
+                      <p className="flex min-w-0 items-center gap-1.5 text-sm text-muted-foreground">
+                        <span className="truncate">{status}</span>
+                        {verified && c.unlinkable && (
+                          <>
+                            <span aria-hidden>·</span>
+                            <button
+                              type="button"
+                              className="shrink-0 hover:text-destructive hover:underline disabled:opacity-50"
+                              disabled={busy}
+                              onClick={() => handleUnlink(c.value)}
+                            >
+                              {busy
+                                ? <Loader2 className="size-3.5 animate-spin" />
+                                : t('notifications.settings.disconnect')}
+                            </button>
+                          </>
+                        )}
+                      </p>
                     </div>
 
-                    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
-                      <p className="font-medium leading-none">{t(c.labelKey)}</p>
-                      {verified ? (
-                        <Badge className="border-transparent bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                          <ShieldCheck /> {t('notifications.settings.delivery.connected')}
-                        </Badge>
-                      ) : (
-                        <Badge variant="outline" className="text-muted-foreground">
-                          <ShieldAlert /> {t('notifications.settings.delivery.notConnected')}
-                        </Badge>
-                      )}
-                    </div>
-
-                    {/* Only rendered once verified — before that "Connect" below is
-                        the only meaningful action, and a dead control just crowds
-                        the row. */}
-                    {verified && (
+                    {!verified ? (
+                      <Button variant="outline" size="sm" className="shrink-0" onClick={() => setSetupChannel(c.value)}>
+                        {t('notifications.settings.delivery.connect')}
+                      </Button>
+                    ) : (
                       <button
                         type="button"
                         role="radio"
@@ -498,7 +483,7 @@ export function NotificationSettings() {
                         )}
                         onClick={() => selectChannel(c.value)}
                         className={cn(
-                          'flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold transition-colors',
+                          'tap-target flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold transition-colors',
                           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
                           selected
                             ? 'border-primary bg-primary/10 text-primary'
@@ -520,54 +505,15 @@ export function NotificationSettings() {
                       </button>
                     )}
                   </div>
-
-                  {/* Helper copy + action share a full-width row, so neither has to
-                      fight the icon and the indicator for horizontal space. */}
-                  <div className="mt-2.5 flex items-center justify-between gap-3 sm:pl-12">
-                    <p className="min-w-0 flex-1 truncate text-sm text-muted-foreground">
-                      {/* A linked messaging channel shows what it is linked TO.
-                          `identityHint` is null for a Telegram account with no
-                          @handle — a normal state for a connected channel, not
-                          missing data — so fall through to the generic copy. */}
-                      {c.value === 'email' && verified && roleEntity?.email
-                        ? roleEntity.email
-                        : verified && identityHint
-                          ? identityHint
-                          : !verified
-                            ? t('notifications.settings.delivery.connectToUse')
-                            : selected
-                              ? t('notifications.settings.delivery.alsoGoHere')
-                              : t('notifications.settings.delivery.tapUse')}
-                    </p>
-
-                    {!verified ? (
-                      <Button variant="outline" size="sm" className="shrink-0" onClick={() => setSetupChannel(c.value)}>
-                        {t('notifications.settings.delivery.connect')}
-                      </Button>
-                    ) : c.unlinkable ? (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="shrink-0 text-muted-foreground hover:text-destructive"
-                        disabled={busy}
-                        onClick={() => handleUnlink(c.value)}
-                      >
-                        {busy
-                          ? <Loader2 className="w-4 h-4 animate-spin" />
-                          : t('notifications.settings.disconnect')}
-                      </Button>
-                    ) : null}
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
         </SettingsSection>
 
         {/* Language */}
         {/* <SettingsSection
           title="Language"
-          icon={Languages}
           info="The language every notification is written in — email, WhatsApp, Telegram and in-app alike. It doesn't change the language of this dashboard."
         >
           <Select value={language} onValueChange={(v) => setLanguage(v as PreferredLanguage)}>
@@ -589,17 +535,14 @@ export function NotificationSettings() {
         >
           <div className="divide-y">
             {EVENTS.map((e) => (
-              <div key={e.key} className="flex items-center justify-between gap-3 py-3">
-                <div className="flex min-w-0 flex-1 items-center gap-3">
-                  <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-                    <e.Icon className="size-4" />
-                  </div>
-                  <div className="flex min-w-0 items-center gap-1">
-                    <p className="truncate font-medium">{t(e.labelKey)}</p>
+              <div key={e.key} className="flex min-h-12 items-center justify-between gap-3 py-2 first:pt-0 last:pb-0">
+                <div className="flex min-w-0 items-center gap-1">
+                  <p className="truncate text-sm font-medium">{t(e.labelKey)}</p>
+                  {e.hint && (
                     <InfoHint label={t('notifications.settings.events.about', { event: t(e.labelKey) })}>
                       {t(e.descriptionKey)}
                     </InfoHint>
-                  </div>
+                  )}
                 </div>
                 <Switch
                   className="shrink-0"

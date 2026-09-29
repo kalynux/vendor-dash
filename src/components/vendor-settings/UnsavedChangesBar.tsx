@@ -55,34 +55,42 @@ export function UnsavedChangesBar({
                 'md:bottom-6',
             )}
         >
-            <div className="pointer-events-auto flex w-full max-w-sm items-center gap-2 rounded-full border bg-background/95 py-1.5 pl-3.5 pr-1.5 shadow-lg backdrop-blur animate-fade-in md:w-auto md:max-w-none md:gap-3 md:pl-4">
+            {/* Inverted colours (a light pill on the dark theme, a dark one on the
+                light theme): in the page's own colours the bar blended into the
+                form behind it and went unnoticed. */}
+            <div className="pointer-events-auto flex w-full max-w-sm items-center gap-2 rounded-full bg-foreground py-1.5 pl-4 pr-1.5 text-background shadow-xl shadow-black/25 animate-fade-in md:w-auto md:max-w-none md:gap-3">
                 <span className="relative flex h-2 w-2 shrink-0">
                     <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-500 opacity-60" />
                     <span className="relative inline-flex h-2 w-2 rounded-full bg-amber-500" />
                 </span>
-                <p className="min-w-0 flex-1 truncate text-xs font-medium md:flex-none md:text-sm">
-                    {t('account.unsavedBar.label')}
+                <p className="min-w-0 flex-1 truncate text-sm font-medium md:flex-none">
+                    <span className="md:hidden">{t('account.unsavedBar.labelShort')}</span>
+                    <span className="hidden md:inline">{t('account.unsavedBar.label')}</span>
                 </p>
                 <div className="flex shrink-0 items-center gap-1 md:gap-1.5">
                     <Button
                         type="button"
-                        variant="ghost" // destructive, outline, secondary
+                        variant="ghost"
                         size="sm"
-                        className="rounded-full"
+                        className="rounded-full text-background/80 hover:bg-background/10 hover:text-background dark:hover:bg-background/10"
                         onClick={onDiscard}
                         disabled={saving}
                     >
                         {t('account.unsavedBar.discard')}
                     </Button>
+                    {/* The light theme's primary is a deep green that disappears
+                        against the near-black pill, so there Save borrows the
+                        dark theme's brighter green (`.dark` --primary). */}
                     <Button
                         type={formId ? 'submit' : 'button'}
                         form={formId}
                         size="sm"
-                        className="gap-1.5 rounded-full"
+                        className="gap-1.5 rounded-full bg-[hsl(152_72%_45%)] text-[hsl(165_92%_8%)] hover:bg-[hsl(152_72%_45%/0.9)] dark:bg-primary dark:text-primary-foreground dark:hover:bg-primary/90"
                         onClick={formId ? undefined : onSave}
                         disabled={saving || saveDisabled}
                     >
-                        {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                        {/* No icon on a phone unless saving — the room goes to the label. */}
+                        {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="hidden w-3.5 h-3.5 md:block" />}
                         <span className="md:hidden">{t('account.unsavedBar.save')}</span>
                         <span className="hidden md:inline">{t('account.unsavedBar.saveChanges')}</span>
                     </Button>

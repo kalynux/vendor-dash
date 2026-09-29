@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { CheckCircle2, Circle, FileCheck2, Loader2, MapPin, ShieldCheck } from 'lucide-react';
+import { CheckCircle2, Circle, Loader2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { LabelWithHint } from '@/components/ui/info-hint';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AddressSearch } from '@/components/features/AddressSearch';
 import { ResponsiveModal } from '@/components/services/ResponsiveModal';
@@ -231,7 +231,6 @@ export function IdentityVerificationSettings() {
       <SettingsSections>
         <SettingsSection
           title={t('account.verification.title')}
-          icon={ShieldCheck}
           info={
             <div className="space-y-2">
               <p>{t('account.verification.info1')}</p>
@@ -247,7 +246,7 @@ export function IdentityVerificationSettings() {
               something to do and hidden once the record is verified — a
               completed checklist on a frozen record is noise. */}
           {phase !== 'verified' && (
-            <div className="rounded-lg border p-3 md:p-4">
+            <div>
               <p className="mb-2 text-sm font-medium">
                 {checklist.complete
                   ? t('account.verification.checklist.complete')
@@ -275,14 +274,13 @@ export function IdentityVerificationSettings() {
 
         <SettingsSection
           title={t('account.verification.identity.title')}
-          icon={FileCheck2}
-          description={locked ? undefined : t('account.verification.uploadsSaveImmediately')}
+          info={locked ? undefined : t('account.verification.uploadsSaveImmediately')}
           contentClassName="space-y-5"
         >
           <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <Label htmlFor="kyc-id-number">{t('account.verification.identity.idNumber')}</Label>
-            </div>
+            <LabelWithHint htmlFor="kyc-id-number" hint={t('account.verification.identity.idNumberHint')}>
+              {t('account.verification.identity.idNumber')}
+            </LabelWithHint>
             <Input
               id="kyc-id-number"
               value={idNumber}
@@ -297,9 +295,6 @@ export function IdentityVerificationSettings() {
             {/* No format check, on purpose — Cameroonian ID formats have changed
                 more than once and a regex from today's cards silently refuses a
                 valid older one. A person checks it against the scans. */}
-            <p className="text-xs text-muted-foreground">
-              {t('account.verification.identity.idNumberHint')}
-            </p>
           </div>
 
           <KycSlotField
@@ -347,14 +342,13 @@ export function IdentityVerificationSettings() {
 
         <SettingsSection
           title={t('account.verification.locations.title')}
-          icon={MapPin}
           info={<p>{t('account.verification.locations.info')}</p>}
           contentClassName="space-y-5"
         >
           <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <Label>{t('account.verification.locations.homeAddress')}</Label>
-            </div>
+            <LabelWithHint hint={t('account.verification.locations.homeAddressHint')}>
+              {t('account.verification.locations.homeAddress')}
+            </LabelWithHint>
             {locked ? (
               <p className="rounded-lg border bg-muted/40 p-3 text-sm">
                 {record.homeAddress?.formattedAddress ?? t('account.verification.locations.noHomeAddress')}
@@ -387,9 +381,6 @@ export function IdentityVerificationSettings() {
                 })}
               </p>
             )}
-            <p className="text-xs text-muted-foreground">
-              {t('account.verification.locations.homeAddressHint')}
-            </p>
           </div>
 
           <KycSlotField

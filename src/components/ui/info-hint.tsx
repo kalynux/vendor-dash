@@ -84,7 +84,9 @@ export function LabelWithHint({
 }) {
   const { t } = useTranslation();
   return (
-    <div className={cn('flex items-center gap-1', className)}>
+    // `min-h-5` = the info icon's height, so a label with a hint and one without
+    // are the same height and fields laid side by side line up.
+    <div className={cn('flex min-h-5 items-center gap-1', className)}>
       <label
         htmlFor={htmlFor}
         className="flex select-none items-center text-sm font-medium leading-none"

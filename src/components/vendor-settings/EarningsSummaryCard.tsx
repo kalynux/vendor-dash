@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertCircle, Banknote, ExternalLink, Loader2 } from 'lucide-react';
+import { AlertCircle, ExternalLink, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
@@ -88,7 +88,7 @@ export function EarningsSummaryCard() {
 
   if (loadError) {
     return (
-      <SettingsSection title={t('account.earnings.title')} icon={Banknote}>
+      <SettingsSection title={t('account.earnings.title')}>
         <div className="flex flex-col items-center gap-3 py-6 text-center">
           <AlertCircle className="h-8 w-8 text-destructive" />
           <p className="text-sm text-destructive">{loadError}</p>
@@ -105,7 +105,6 @@ export function EarningsSummaryCard() {
   return (
     <SettingsSection
       title={t('account.earnings.title')}
-      icon={Banknote}
       info={
         <div className="space-y-2">
           <p>

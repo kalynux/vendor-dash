@@ -83,6 +83,10 @@ export function PoliciesSettings() {
                     </div>
                 }
                 contentClassName="space-y-6"
+                // The phone's page header already reads "Policies"; a second
+                // heading straight under it was one more line to read past.
+                headerClassName="max-md:hidden"
+                className="max-md:pt-0"
             >
                     {error && (
                         <div

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useForm, useFieldArray, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Building, Plus, Trash2, Image as ImageIcon } from 'lucide-react';
+import { Plus, Trash2, Image as ImageIcon } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { step3Schema, type Step3FormValues } from '@/onboarding/schemas/onboarding.schemas';
@@ -24,6 +24,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { useFormatters, useMessage, useTranslation } from '@/i18n';
 import { cn } from '@/lib/utils';
+import { hasDirtyField } from '@/components/vendor-settings/forms/dirty';
 import type { ApiFile } from '@/types/file.types';
 
 // ─── Shared Branding & Addresses form body ────────────────────────────────────
@@ -101,18 +102,15 @@ function AddressRowHeading({
     return (
         // Negative margins pull the band out to the card's own padding edges.
         <div className="flex items-center justify-between gap-2 md:-mx-4 md:-mt-4 md:rounded-t-lg md:border-b md:bg-muted/40 md:px-4 md:py-2.5">
-            <span className="flex min-w-0 items-center gap-2">
-                <Building className="w-4 h-4 shrink-0 text-muted-foreground" />
-                <span className="min-w-0">
-                    <span className="block truncate text-sm font-semibold leading-tight">
-                        {name || role}
-                    </span>
-                    {name && (
-                        <span className="block truncate text-[11px] leading-tight text-muted-foreground">
-                            {role}
-                        </span>
-                    )}
+            <span className="min-w-0">
+                <span className="block truncate text-base font-semibold leading-tight md:text-sm">
+                    {name || role}
                 </span>
+                {name && (
+                    <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                        {role}
+                    </span>
+                )}
             </span>
             <button
                 type="button"
@@ -151,17 +149,20 @@ export function BrandingFields({
         setError,
         clearErrors,
         watch,
-        formState: { errors, isDirty },
+        formState: { errors, dirtyFields },
     } = useForm<Step3FormValues>({
         resolver: zodResolver(step3Schema),
         defaultValues,
     });
 
+    // From `dirtyFields`, not `isDirty` — see `hasDirtyField`.
+    const dirty = hasDirtyField(dirtyFields);
+
     // Reported up so the parent can show a single floating save bar. The parent
     // remounts this component (via `key`) after a save or discard to reset it.
     useEffect(() => {
-        onDirtyChange?.(isDirty);
-    }, [isDirty, onDirtyChange]);
+        onDirtyChange?.(dirty);
+    }, [dirty, onDirtyChange]);
 
     const { fields, append, remove } = useFieldArray({
         control,
@@ -341,24 +342,10 @@ export function BrandingFields({
             {/* Business addresses */}
             {showAddresses && (
             <div className={cn('space-y-4', showBranding && 'border-t pt-4')}>
-                <div className={cn('flex items-center', showAddressesHeading ? 'justify-between' : 'justify-end')}>
-                    {showAddressesHeading && <h2 className="font-semibold text-sm">{t('settings.branding.addressesTitle')}</h2>}
-                    <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() =>
-                            append({ label: '', address_line1: '', address_line2: '', city: '', state: '', geo: null })
-                        }
-                        className="h-8 gap-1.5 text-xs"
-                    >
-                        <Plus className="w-3 h-3" />
-                        {t('settings.branding.addAddress')}
-                    </Button>
-                </div>
+                {showAddressesHeading && <h2 className="font-semibold text-sm">{t('settings.branding.addressesTitle')}</h2>}
 
                 {fields.length === 0 ? (
-                    <p className="text-xs text-muted-foreground py-2">
+                    <p className="text-sm text-muted-foreground">
                         {t('settings.branding.noAddresses')}
                     </p>
                 ) : (
@@ -420,12 +407,7 @@ export function BrandingFields({
 
                                 {/* Label — required by backend */}
                                 <div className="space-y-2">
-                                    <LabelWithHint
-                                        htmlFor={`addr-label-${index}`}
-                                        required
-                                        hintLabel={t('settings.branding.labelHintLabel')}
-                                        hint={t('settings.branding.labelHint')}
-                                    >
+                                    <LabelWithHint htmlFor={`addr-label-${index}`} required>
                                         {t('settings.branding.label')}
                                     </LabelWithHint>
                                     <Input
@@ -543,6 +525,18 @@ export function BrandingFields({
                         })}
                     </div>
                 )}
+
+                <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() =>
+                        append({ label: '', address_line1: '', address_line2: '', city: '', state: '', geo: null })
+                    }
+                    className="h-11 w-full gap-1.5 border-dashed"
+                >
+                    <Plus className="size-4" />
+                    {t('settings.branding.addAddress')}
+                </Button>
             </div>
             )}
 

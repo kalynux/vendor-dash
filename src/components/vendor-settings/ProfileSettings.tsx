@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Camera, Globe, Lock, ShieldCheck } from 'lucide-react';
+import { Camera } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { useOnboarding } from '@/onboarding/store/onboarding.store';
@@ -72,7 +72,7 @@ function initialsFrom(name: string): string {
  * backend exposes a dedicated field — it persists locally for now.
  */
 export function ProfileSettings() {
-  const { t, tDynamic, hasKey } = useTranslation();
+  const { t } = useTranslation();
   const fmt = useFormatters();
   const apiError = useApiError();
   const { session, updateVendorProfile, isSubmitting } = useOnboarding();
@@ -105,10 +105,6 @@ export function ProfileSettings() {
   // Label for the avatar / initials. The business name moved to the Store, so the
   // fallback chain is personal display name → store name → email local-part.
   const displayLabel = fullName || store?.name || email.split('@')[0];
-  const role = session.role; // e.g. "vendor" — not editable
-  // Localized where we know the role, otherwise the raw value title-cased.
-  const roleKey = `account.profile.roles.${role}`;
-  const roleLabel = hasKey(roleKey) ? tDynamic(roleKey) : role.charAt(0).toUpperCase() + role.slice(1);
   const countryLabel = roleEntity.country
     ? fmt.country(roleEntity.country)
     : '—';
@@ -311,13 +307,7 @@ export function ProfileSettings() {
             </div>
 
             <div className="space-y-2">
-              <LabelWithHint
-                htmlFor="profile-phone"
-                hintLabel={t('account.profile.phoneHintLabel')}
-                hint={t('account.profile.phoneHint')}
-              >
-                {t('account.profile.phone')}
-              </LabelWithHint>
+              <Label htmlFor="profile-phone">{t('account.profile.phone')}</Label>
               <PhoneInput
                 id="profile-phone"
                 value={phone}
@@ -328,13 +318,7 @@ export function ProfileSettings() {
             </div>
 
             <div className="space-y-2">
-              <LabelWithHint
-                htmlFor="profile-whatsapp"
-                hintLabel={t('account.profile.whatsappHintLabel')}
-                hint={t('account.profile.whatsappHint')}
-              >
-                {t('account.profile.whatsapp')}
-              </LabelWithHint>
+              <Label htmlFor="profile-whatsapp">{t('account.profile.whatsapp')}</Label>
               <PhoneInput
                 id="profile-whatsapp"
                 value={whatsapp}
@@ -342,26 +326,12 @@ export function ProfileSettings() {
               />
             </div>
 
-            <div className="space-y-2 md:col-span-2">
-              <LabelWithHint
-                htmlFor="profile-role"
-                hintLabel={t('account.profile.roleHintLabel')}
-                hint={t('account.profile.roleHint')}
-              >
-                {t('account.profile.role')}
-              </LabelWithHint>
-              <div className="relative">
-                <Input id="profile-role" value={roleLabel} disabled />
-                <ShieldCheck className="w-4 h-4 text-muted-foreground absolute right-3 top-1/2 -translate-y-1/2" />
-              </div>
-            </div>
           </div>
       </SettingsSection>
 
       {/* Localization — profile-level regional settings (PATCH /vendor/profile) */}
       <SettingsSection
         title={t('account.localization.title')}
-        icon={Globe}
         info={t('account.localization.info')}
       >
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -370,7 +340,7 @@ export function ProfileSettings() {
                 hintLabel={t('account.localization.countryHintLabel')}
                 hint={t('account.localization.countryHint')}
               >
-                <Lock className="mr-1.5 w-3 h-3 text-muted-foreground" /> {t('account.localization.country')}
+                {t('account.localization.country')}
               </LabelWithHint>
               <Input
                 value={countryLabel}
@@ -381,15 +351,9 @@ export function ProfileSettings() {
             </div>
 
             <div className="space-y-2">
-              <LabelWithHint
-                htmlFor="profile-timezone"
-                hintLabel={t('account.localization.timezoneHintLabel')}
-                hint={t('account.localization.timezoneHint')}
-              >
-                {t('account.localization.timezone')}
-              </LabelWithHint>
+              <Label htmlFor="profile-timezone">{t('account.localization.timezone')}</Label>
               <Select value={timezone} onValueChange={setTimezone}>
-                <SelectTrigger id="profile-timezone">
+                <SelectTrigger id="profile-timezone" className="w-full">
                   <SelectValue placeholder={t('account.localization.timezonePlaceholder')} />
                 </SelectTrigger>
                 <SelectContent>
@@ -411,7 +375,7 @@ export function ProfileSettings() {
                 {t('account.localization.language')}
               </LabelWithHint>
               <Select value={language} onValueChange={setLanguage}>
-                <SelectTrigger id="profile-language">
+                <SelectTrigger id="profile-language" className="w-full">
                   <SelectValue placeholder={t('account.localization.languagePlaceholder')} />
                 </SelectTrigger>
                 <SelectContent>

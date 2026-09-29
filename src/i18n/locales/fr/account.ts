@@ -17,6 +17,7 @@ export const account = {
 
     unsavedBar: {
         label: 'Modifications non enregistrées',
+        labelShort: 'Non enregistré',
         discard: 'Abandonner',
         save: 'Enregistrer',
         saveChanges: 'Enregistrer les modifications',
@@ -40,14 +41,7 @@ export const account = {
         emailHintLabel: 'À propos de votre e-mail',
         emailHint: "C'est l'adresse avec laquelle vous vous connectez, et celle qui reçoit vos reçus et avis de compte. Elle ne se modifie pas ici — contactez le support pour la changer.",
         phone: 'Téléphone',
-        phoneHintLabel: 'À propos de votre numéro de téléphone',
-        phoneHint: 'Le numéro de votre compte, utilisé pour le suivi du compte et des versements. Choisissez le pays auquel il appartient, puis saisissez-le comme vous le composeriez sur place — il est enregistré avec l’indicatif.',
         whatsapp: 'Numéro WhatsApp',
-        whatsappHintLabel: 'À propos de votre numéro WhatsApp',
-        whatsappHint: 'Le numéro sur lequel vous recevez les questions sur les commandes. Distinct du téléphone de votre compte — celui que voient vos clients se règle dans Boutique → Support et contact.',
-        role: 'Rôle',
-        roleHintLabel: 'À propos de votre rôle',
-        roleHint: 'Ce que ce compte peut faire sur la plateforme. Défini par la plateforme, non modifiable.',
         roles: {
             vendor: 'Vendeur',
         },
@@ -179,7 +173,7 @@ export const account = {
             confirmAction: 'Envoyer',
             freezeWarning: 'Une fois envoyés, vos documents ne pourront plus être modifiés avant la décision du vérificateur. Vous pourrez toujours consulter ce que vous avez envoyé.',
             unsavedWarning: "Vous avez des modifications non enregistrées ci-dessus. Enregistrez-les d'abord, sinon elles ne feront pas partie de votre envoi.",
-            legalNotice: 'En créant un compte, vous acceptez nos <0>Conditions générales d\'utilisation</0> et notre <1>Politique de confidentialité</1>.',
+            legalNotice: 'En envoyant, vous acceptez nos <0>Conditions générales d\'utilisation</0> et notre <1>Politique de confidentialité</1>.',
         },
     },
 
@@ -297,16 +291,8 @@ export const account = {
         biometricTurnedOff: 'La connexion par empreinte est désactivée sur ce téléphone.',
 
         twoFactorTitle: 'Authentification à deux facteurs',
-        twoFactorInfo:
-            'Une seconde étape à la connexion — un code sur votre téléphone en plus de votre mot de passe. Pas encore disponible.',
-        twoFactorToggle: 'Activer l’authentification à deux facteurs',
-        sessionsTitle: 'Appareils connectés',
-        sessionsInfo:
-            'La déconnexion des autres appareils passe par le changement de mot de passe : il invalide immédiatement toutes les connexions sauf celle-ci, partout.',
         sessionsHowTo:
             'Changer votre mot de passe ci-dessus déconnecte immédiatement tous les autres appareils et navigateurs. Utilisez-le si vous pensez que quelqu’un d’autre y a accès.',
-        notAvailableYet:
-            'Pas encore disponible — cette fonctionnalité arrivera dans une prochaine mise à jour.',
     },
 
     earnings: {
@@ -382,8 +368,6 @@ export const account = {
         countryHint: "Défini une seule fois lors de l'inscription puis verrouillé — il détermine vos règles de taxe, de livraison et d'adresse, et vos adresses professionnelles doivent s'y trouver. Contactez le support si cela doit changer.",
         countryReadOnly: 'Pays (lecture seule)',
         timezone: 'Fuseau horaire',
-        timezoneHintLabel: 'À propos de votre fuseau horaire',
-        timezoneHint: 'Toutes les heures de commande, rapports et plannings du tableau de bord sont affichés dans ce fuseau. Le changer ré-étiquette les horodatages existants ; il ne les déplace pas.',
         timezonePlaceholder: 'Sélectionnez votre fuseau horaire',
         language: 'Langue',
         languageHintLabel: 'À propos de votre langue',

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { AtSign, BadgeCheck, Loader2, MessageCircle, Phone } from 'lucide-react';
+import { BadgeCheck, Loader2, MessageCircle, Phone } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
@@ -309,7 +309,7 @@ export function ContactDetailsSection() {
 
   if (loading) {
     return (
-      <SettingsSection title={t('account.contact.title')} icon={AtSign}>
+      <SettingsSection title={t('account.contact.title')}>
         <div className="space-y-3">
           <Skeleton className="h-10 w-full" />
           <Skeleton className="h-10 w-full" />
@@ -355,7 +355,6 @@ export function ContactDetailsSection() {
   return (
     <SettingsSection
       title={t('account.contact.title')}
-      icon={AtSign}
       info={t('account.contact.info')}
       contentClassName="space-y-5"
     >

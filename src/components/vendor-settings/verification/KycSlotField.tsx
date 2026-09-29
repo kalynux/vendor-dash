@@ -139,7 +139,7 @@ export function KycSlotField({
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1">
         <Label>{label}</Label>
         <RequirementBadge required={required} />
       </div>

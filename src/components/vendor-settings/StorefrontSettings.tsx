@@ -1,20 +1,15 @@
-import { useCallback, useEffect, useMemo, useState, type ComponentProps, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   Loader2,
   Image as ImageIcon,
   X,
   Eye,
   ExternalLink,
-  Lock,
   Store as StoreIcon,
   Camera,
   Copy,
   Check,
-  Mail,
   Globe,
-  CalendarDays,
-  LifeBuoy,
-  type LucideIcon,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -43,7 +38,6 @@ import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Separator } from '@/components/ui/separator';
 import { InfoHint } from '@/components/ui/info-hint';
 import {
   SettingsSection,
@@ -422,10 +416,20 @@ export function StorefrontSettings() {
               </a>
             </div>
 
-            <div className="flex shrink-0 items-center gap-2">
-              <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={handleCopyUrl}>
+            {/* On a phone the three buttons used to overflow the screen and drag
+                the whole page sideways: Copy shrinks to its icon there, and the
+                other two share what is left of the row. */}
+            <div className="flex w-full items-center gap-2 sm:w-auto sm:shrink-0">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="gap-1.5 max-sm:h-10 max-sm:w-10 max-sm:px-0"
+                onClick={handleCopyUrl}
+                aria-label={t(copied ? 'common.actions.copied' : 'common.actions.copyLink')}
+              >
                 {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                {t(copied ? 'common.actions.copied' : 'common.actions.copyLink')}
+                <span className="max-sm:hidden">{t(copied ? 'common.actions.copied' : 'common.actions.copyLink')}</span>
               </Button>
               {/* The preview renders the real storefront page, so it stays
                   truthful when the storefront team changes it — unlike the hero
@@ -434,13 +438,13 @@ export function StorefrontSettings() {
                 type="button"
                 variant="outline"
                 size="sm"
-                className="gap-1.5"
+                className="gap-1.5 max-sm:h-10 max-sm:flex-1"
                 onClick={() => openPreview('/preview/store')}
               >
                 <Eye className="w-3.5 h-3.5" />
                 {t('settings.storefront.preview.action')}
               </Button>
-              <Button asChild size="sm" className="gap-1.5">
+              <Button asChild size="sm" className="gap-1.5 max-sm:h-10 max-sm:flex-1">
                 <a href={publicStoreUrl} target="_blank" rel="noopener noreferrer">
                   <ExternalLink className="w-3.5 h-3.5" />
                   {t('settings.storefront.viewStore')}
@@ -463,7 +467,6 @@ export function StorefrontSettings() {
           {/* Identity */}
           <SettingsSection
             title={t('settings.storefront.identity.title')}
-            icon={StoreIcon}
             info={t('settings.storefront.identity.info')}
             contentClassName="space-y-5"
           >
@@ -510,14 +513,12 @@ export function StorefrontSettings() {
           {/* Support contacts */}
           <SettingsSection
             title={t('settings.storefront.support.title')}
-            icon={LifeBuoy}
             info={t('settings.storefront.support.info')}
           >
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-2 sm:col-span-2">
                   <Label htmlFor="store-email">{t('settings.storefront.support.email')}</Label>
-                  <IconInput
-                    icon={Mail}
+                  <Input
                     id="store-email"
                     type="email"
                     value={form.supportEmail}
@@ -557,18 +558,8 @@ export function StorefrontSettings() {
             title={t('settings.storefront.status.title')}
             info={t('settings.storefront.status.info')}
           >
-              <div className="flex items-center justify-between gap-3 rounded-lg border p-3 sm:p-4">
+              <div className="flex items-center justify-between gap-3">
                 <div className="flex min-w-0 items-center gap-3">
-                  <div
-                    className={cn(
-                      'shrink-0 rounded-lg p-2',
-                      store.isOpen
-                        ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
-                        : 'bg-amber-500/15 text-amber-600 dark:text-amber-400',
-                    )}
-                  >
-                    <StoreIcon className="w-5 h-5" />
-                  </div>
                   <div className="min-w-0">
                     <p className="text-sm font-medium">{t(store.isOpen ? 'settings.storefront.status.openTitle' : 'settings.storefront.status.closed')}</p>
                     <p className="text-xs text-muted-foreground">
@@ -592,36 +583,21 @@ export function StorefrontSettings() {
           <SettingsSection
             title={t('settings.storefront.details.title')}
             info={t('settings.storefront.details.info')}
-            contentClassName="space-y-4"
+            contentClassName="divide-y"
           >
-              <DetailRow icon={Globe} label={t('settings.storefront.details.publicUrl')}>
-                <a
-                  href={publicStoreUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="break-all text-sm text-primary hover:underline"
-                >
-                  {publicStoreUrl}
-                </a>
-              </DetailRow>
-              <Separator />
               <DetailRow
-                icon={Lock}
                 label={t('settings.storefront.details.slug')}
                 hint={t('settings.storefront.details.slugHint')}
               >
                 <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">{store.slug}</code>
               </DetailRow>
-              <Separator />
               <DetailRow
-                icon={Lock}
                 label={t('settings.storefront.details.country')}
                 hint={t('settings.storefront.details.countryHint')}
               >
                 <span className="text-sm">{store.country ?? t('common.labels.emptyValue')}</span>
               </DetailRow>
-              <Separator />
-              <DetailRow icon={CalendarDays} label={t('settings.storefront.details.lastUpdated')}>
+              <DetailRow label={t('settings.storefront.details.lastUpdated')}>
                 <span className="text-sm">{fmt.date(store.updatedAt)}</span>
               </DetailRow>
           </SettingsSection>
@@ -665,16 +641,6 @@ function StatusBadge({ isOpen, label }: { isOpen: boolean; label: string }) {
   );
 }
 
-/** Input with a leading icon (support-contact fields). */
-function IconInput({ icon: Icon, className, ...props }: ComponentProps<typeof Input> & { icon: LucideIcon }) {
-  return (
-    <div className="relative">
-      <Icon className="pointer-events-none absolute left-3 top-1/2 w-4 h-4 -translate-y-1/2 text-muted-foreground" />
-      <Input className={cn('pl-9', className)} {...props} />
-    </div>
-  );
-}
-
 function FieldError({ messageKey }: { messageKey?: TranslationKey }) {
   const { t } = useTranslation();
   if (!messageKey) return null;
@@ -683,12 +649,10 @@ function FieldError({ messageKey }: { messageKey?: TranslationKey }) {
 
 /** Labeled read-only row in the "Store details" section. */
 function DetailRow({
-  icon: Icon,
   label,
   hint,
   children,
 }: {
-  icon: LucideIcon;
   label: string;
   /** Explanation folded behind an info icon rather than printed under the value. */
   hint?: ReactNode;
@@ -696,16 +660,16 @@ function DetailRow({
 }) {
   const { t } = useTranslation();
   return (
-    <div className="space-y-1">
-      <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        <Icon className="w-3 h-3" /> {label}
+    <div className="flex min-h-11 items-center justify-between gap-3 py-2 first:pt-0 last:pb-0">
+      <p className="flex items-center gap-1 text-sm text-muted-foreground">
+        {label}
         {hint && (
-          <InfoHint label={t('settings.storefront.details.hintLabel', { label })} align="start" className="-my-1">
+          <InfoHint label={t('settings.storefront.details.hintLabel', { label })} align="start">
             {hint}
           </InfoHint>
         )}
       </p>
-      {children}
+      <div className="min-w-0 text-right">{children}</div>
     </div>
   );
 }
