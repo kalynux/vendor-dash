@@ -8,6 +8,8 @@ import type {
   PlanPurchasePayload,
   PaymentAuthorizeResult,
   PaymentInitResult,
+  PaymentOption,
+  PaymentOptionsResponse,
   PaymentStatus,
   PlansResponse,
   CurrentPlanResponse,
@@ -74,7 +76,22 @@ export async function updateBillingSettings(
   return res.data;
 }
 
-// ─── Gateway-agnostic payment flows ─────────────────────────────────────────────
+// ─── What can be paid with ──────────────────────────────────────────────────────
+
+/**
+ * The providers that can be charged right now, in the order to show them.
+ *
+ * Asked every time the payment dialog opens (the answer is `no-store`): an
+ * administrator can switch a provider off, or switch the company behind it,
+ * with no release. An empty list is a valid answer — online payment is off —
+ * not an error. Standard envelope, unlike the flat `/payments/*` charge routes.
+ */
+export async function fetchPaymentOptions(): Promise<PaymentOption[]> {
+  const res = await api.get<PaymentOptionsResponse>('/payments/options');
+  return res.data.providers ?? [];
+}
+
+// ─── Payment flows ──────────────────────────────────────────────────────────────
 // Both top-up and plan purchase share an identical initiate→poll-verify lifecycle.
 // These wrappers normalize the two endpoints to a single { id, status, instructions }
 // shape so PaymentDialog can drive either without knowing which it is.
@@ -86,8 +103,8 @@ export async function initiateTopup(payload: TopupInitPayload): Promise<PaymentI
 }
 
 /**
- * Relay the SMS code for a top-up (My-CoolPay + Orange Money only — the one
- * gateway/operator pair whose initiate answers `instructions.requiresOtp`).
+ * Relay the SMS code for a top-up whose initiate answered
+ * `instructions.requiresOtp` (with no `ussdCode`).
  *
  * 🔴 **NOT `POST /payments/:transactionId/authorize`.** That route is for order,
  * cart and booking payments: it resolves its argument with `PaymentTransaction`,

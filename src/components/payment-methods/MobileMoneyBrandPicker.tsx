@@ -2,6 +2,7 @@ import * as RadioGroupPrimitive from '@radix-ui/react-radio-group';
 import { Check } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
+import type { PhoneOperator } from '@/types/billing.types';
 import { useFormatters, useTranslation } from '@/i18n';
 import { PaymentBrandLogo } from './PaymentBrandLogo';
 import { MOBILE_MONEY_BRANDS, type MobileMoneyBrand, type MobileMoneyBrandId } from './paymentBrands';
@@ -16,6 +17,12 @@ export interface MobileMoneyBrandPickerProps {
      * your wallet", which is the wrong message: they work for payouts today.
      */
     chargeableOnly?: boolean;
+    /**
+     * With `chargeableOnly`: the providers the server offers right now (from
+     * `GET /payments/options`). A chargeable wallet missing from it renders
+     * disabled as "unavailable" — switched off for now, not unsupported.
+     */
+    offered?: readonly PhoneOperator[];
     disabled?: boolean;
     /** Draws the error outline and flags the group for assistive tech. */
     invalid?: boolean;
@@ -37,6 +44,7 @@ export function MobileMoneyBrandPicker({
     value,
     onChange,
     chargeableOnly = false,
+    offered,
     disabled = false,
     invalid = false,
     className,
@@ -46,9 +54,16 @@ export function MobileMoneyBrandPicker({
     const { t } = useTranslation();
     const fmt = useFormatters();
 
-    const isUnavailable = (brand: MobileMoneyBrand) =>
+    // Two different "no"s: a wallet no payment company can charge yet (payout
+    // only — "Soon"), and one that can be charged but is switched off right now.
+    const isPayoutOnly = (brand: MobileMoneyBrand) =>
         chargeableOnly && brand.chargeOperator === null;
-    const unavailable = MOBILE_MONEY_BRANDS.filter(isUnavailable);
+    const isOffline = (brand: MobileMoneyBrand) =>
+        chargeableOnly &&
+        brand.chargeOperator !== null &&
+        offered !== undefined &&
+        !offered.includes(brand.chargeOperator);
+    const unavailable = MOBILE_MONEY_BRANDS.filter(isPayoutOnly);
 
     return (
         <div className={className}>
@@ -67,13 +82,21 @@ export function MobileMoneyBrandPicker({
                 className="grid grid-cols-3 gap-2 sm:grid-cols-5"
             >
                 {MOBILE_MONEY_BRANDS.map((brand) => {
-                    const blocked = isUnavailable(brand);
+                    const payoutOnly = isPayoutOnly(brand);
+                    const offline = isOffline(brand);
+                    const blocked = payoutOnly || offline;
                     return (
                         <RadioGroupPrimitive.Item
                             key={brand.id}
                             value={brand.id}
                             disabled={blocked}
-                            title={blocked ? t('payments.providers.soonHint', { brand: brand.name }) : brand.name}
+                            title={
+                                payoutOnly
+                                    ? t('payments.providers.soonHint', { brand: brand.name })
+                                    : offline
+                                      ? t('payments.providers.offlineHint', { brand: brand.name })
+                                      : brand.name
+                            }
                             className={cn(
                                 'group relative flex min-h-[5.5rem] flex-col items-center justify-start gap-1.5 rounded-xl border-2 px-1.5 py-2.5',
                                 'transition-[border-color,background-color,box-shadow,transform] duration-200',
@@ -94,7 +117,7 @@ export function MobileMoneyBrandPicker({
 
                             {blocked && (
                                 <span className="rounded-full bg-muted px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">
-                                    {t('payments.providers.soon')}
+                                    {payoutOnly ? t('payments.providers.soon') : t('payments.providers.offline')}
                                 </span>
                             )}
 

@@ -1,8 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
-import { Loader2, Smartphone, CreditCard } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { ResponsiveModal } from '@/components/services/ResponsiveModal';
@@ -10,147 +9,145 @@ import { isValidPhone, toE164 } from '@/lib/phone';
 import { PhoneInput } from '@/components/phone';
 import {
   MobileMoneyBrandSelect,
-  PaymentOptionCard,
-  PaymentOptionGroup,
-  PaymentOptionIcon,
   mobileMoneyBrandById,
+  mobileMoneyBrandByOperator,
   type MobileMoneyBrandId,
 } from '@/components/payment-methods';
 import { useTranslation, useApiError } from '@/i18n';
 import { ApiError } from '@/types/api';
+import type { PhoneOperator } from '@/types/billing.types';
 import type { AddPaymentMethodPayload, SavedPaymentMethod } from '@/types/payment-method.types';
-import { isStripeConfigured } from '@/lib/stripe';
 import { addPaymentMethod } from '@/services/payment-methods.service';
-import { StripeCardField, type StripeCardFieldHandle } from './StripeCardField';
-import { CardPreview } from './CardPreview';
-import { MOBILE_MONEY_GATEWAY } from './billing.constants';
+import { providerMismatchDetected } from './billing.constants';
 
 export interface AddPaymentMethodDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** Whether the new method should be saved as default (true when wallet is empty). */
   forceDefault?: boolean;
+  /** Methods already saved — the server has no duplicate check, so we do it here. */
+  existing?: SavedPaymentMethod[];
   onAdded: (method: SavedPaymentMethod) => void;
 }
-
-/** The two top-level choices. Card only appears when Stripe is configured. */
-type MethodCategory = 'card' | 'mobile_money';
 
 /** Wallet pre-selected when the dialog opens — the largest operator in our markets. */
 const DEFAULT_BRAND: MobileMoneyBrandId = 'mtn';
 
+/**
+ * Save a mobile-money wallet: the network the vendor holds and its number.
+ * Cards can't be saved (the server refuses them since 2026-09-30); paying by
+ * card still works in the payment dialog.
+ */
 export function AddPaymentMethodDialog({
   open,
   onOpenChange,
   forceDefault = false,
+  existing = [],
   onAdded,
 }: AddPaymentMethodDialogProps) {
   const { t } = useTranslation();
   const apiError = useApiError();
 
-  const [category, setCategory] = useState<MethodCategory>(
-    isStripeConfigured ? 'card' : 'mobile_money',
-  );
   const [brandId, setBrandId] = useState<MobileMoneyBrandId>(DEFAULT_BRAND);
   const [phone, setPhone] = useState('');
-  const [holderName, setHolderName] = useState('');
   const [makeDefault, setMakeDefault] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [phoneError, setPhoneError] = useState<string | null>(null);
+  // The network the server says the number is on, when it isn't the one picked.
+  const [detected, setDetected] = useState<PhoneOperator | null>(null);
 
-  const cardRef = useRef<StripeCardFieldHandle>(null);
   const brand = mobileMoneyBrandById(brandId);
 
   useEffect(() => {
     if (open) {
-      setCategory(isStripeConfigured ? 'card' : 'mobile_money');
       setBrandId(DEFAULT_BRAND);
       setPhone('');
-      setHolderName('');
       setMakeDefault(false);
       setSubmitting(false);
       setError(null);
+      setPhoneError(null);
+      setDetected(null);
     }
   }, [open]);
 
-  async function buildPayload(): Promise<AddPaymentMethodPayload> {
-    const isDefault = forceDefault || makeDefault;
+  function clearErrors() {
+    setError(null);
+    setPhoneError(null);
+    setDetected(null);
+  }
 
-    if (category === 'card') {
-      // Stripe gives us a reusable PaymentMethod (instrument) + card metadata.
-      const card = await cardRef.current!.createPaymentMethod(holderName.trim() || undefined);
-      const label = `${(card.brand ?? 'CARD').toUpperCase()} •••• ${card.last4 ?? '••••'}`;
-      return {
-        provider: 'stripe',
-        // No customer id is available client-side with a publishable key; the backend
-        // resolves/creates it. We send the instrument id as a non-empty placeholder to
-        // satisfy the contract (best-effort id mapping).
-        gateway_customer_id: card.instrumentId,
-        gateway_instrument_id: card.instrumentId,
-        method_type: 'card',
-        display_label: label,
-        brand: card.brand,
-        last4: card.last4,
-        exp_month: card.expMonth,
-        exp_year: card.expYear,
-        holder_name: holderName.trim() || null,
-        is_default: isDefault,
-      };
-    }
+  function networkName(operator: PhoneOperator): string {
+    return mobileMoneyBrandByOperator(operator)?.name ?? operator;
+  }
 
-    // Mobile money — no client SDK to tokenise; store display metadata + provider.
-    // The phone reference stands in for the gateway token ids until real tokenisation
-    // is wired (charging a saved method is a future backend step per the docs).
-    // The operator code is what a charge will later carry, so a wallet no gateway
-    // can debit must never reach the payload — the picker already blocks it.
+  /** Returns the body to send, or `null` after showing why it can't be sent. */
+  function buildPayload(): AddPaymentMethodPayload | null {
+    // The picker only offers wallets that can be charged, but guard anyway: the
+    // server takes exactly MTN / ORANGE / MOOV.
     const operator = brand?.chargeOperator;
     if (!operator) {
-      throw new Error(t('payments.providers.soonHint', { brand: brand?.name ?? '' }));
+      setError(t('payments.providers.soonHint', { brand: brand?.name ?? '' }));
+      return null;
     }
     const e164 = toE164(phone);
     if (!e164) {
-      throw new Error(t('common.validation.phone'));
+      setPhoneError(t('common.validation.phone'));
+      return null;
     }
-    // The gateway is fixed: NotchPay is the only processor that debits a wallet
-    // for us, which is why the dialog states it rather than offering a choice.
-    const provider = MOBILE_MONEY_GATEWAY.toLowerCase();
     const last4 = e164.slice(-4);
-    const ref = `${provider}:${e164}`;
-    return {
-      provider,
-      gateway_customer_id: ref,
-      gateway_instrument_id: ref,
-      method_type: 'mobile_money',
-      display_label: `${operator} •••• ${last4}`,
-      brand: operator,
-      last4,
-      holder_name: holderName.trim() || null,
-      is_default: isDefault,
-    };
+    if (existing.some((m) => m.provider === operator && m.last4 === last4)) {
+      setPhoneError(t('billing.methods.duplicate', { network: networkName(operator) }));
+      return null;
+    }
+    const payload: AddPaymentMethodPayload = { provider: operator, phoneNumber: e164 };
+    // A first method is made default by the server anyway; only send it when set.
+    if (forceDefault || makeDefault) payload.isDefault = true;
+    return payload;
   }
 
   async function handleSubmit() {
-    setError(null);
+    clearErrors();
+    const payload = buildPayload();
+    if (!payload) return;
     setSubmitting(true);
     try {
-      const payload = await buildPayload();
       const created = await addPaymentMethod(payload);
       toast.success(t('billing.toast.methodAdded'));
       onAdded(created);
       onOpenChange(false);
     } catch (err) {
-      // Client-side validation and Stripe card errors are thrown as plain `Error`s
-      // whose message is already user-facing; API failures resolve by code.
-      setError(
-        err instanceof ApiError
-          ? apiError.resolve(err, { context: 'billing', fallbackKey: 'billing.errors.methodFailed' })
-          : err instanceof Error
-            ? err.message
-            : t('billing.errors.methodFailed'),
-      );
+      // Every refusal keeps the dialog open with what was typed.
+      const other = providerMismatchDetected(err);
+      if (other) {
+        setDetected(other);
+        setPhoneError(
+          t('billing.methods.phoneMismatch', {
+            detected: networkName(other),
+            provider: networkName(payload.provider),
+          }),
+        );
+        return;
+      }
+      if (err instanceof ApiError && err.code === 'VALIDATION_ERROR') {
+        const fields = apiError.fields(err);
+        const phoneMessage = fields.phoneNumber;
+        if (phoneMessage) setPhoneError(phoneMessage);
+        if (!phoneMessage || Object.keys(fields).length > 1) {
+          setError(apiError.resolve(err, { context: 'billing', fallbackKey: 'billing.errors.methodFailed' }));
+        }
+        return;
+      }
+      setError(apiError.resolve(err, { context: 'billing', fallbackKey: 'billing.errors.methodFailed' }));
     } finally {
       setSubmitting(false);
     }
+  }
+
+  function switchToDetected() {
+    const target = detected ? mobileMoneyBrandByOperator(detected) : undefined;
+    if (target) setBrandId(target.id);
+    clearErrors();
   }
 
   return (
@@ -176,10 +173,8 @@ export function AddPaymentMethodDialog({
           </Button>
           <Button
             onClick={handleSubmit}
-            // Saving a half-typed number would store an unusable payout target.
-            disabled={
-              submitting || (category === 'mobile_money' && (!isValidPhone(phone) || !brand?.chargeOperator))
-            }
+            // Saving a half-typed number would store an unusable wallet.
+            disabled={submitting || !isValidPhone(phone) || !brand?.chargeOperator}
             className="max-sm:w-full"
           >
             {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -189,97 +184,51 @@ export function AddPaymentMethodDialog({
       }
     >
       <div className="space-y-5">
-        {/* Category first: the vendor picks a way to pay, not a gateway name. */}
-        <div className="space-y-2">
-          <Label id="add-method-category" className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            {t('billing.methods.type')}
-          </Label>
-          <PaymentOptionGroup
-            aria-labelledby="add-method-category"
-            value={category}
-            onValueChange={(v) => {
-              setCategory(v as MethodCategory);
-              setError(null);
-            }}
-            disabled={submitting}
-            // Two abreast so the whole choice is one glance; a lone card (no
-            // Stripe key) keeps the full width rather than sitting half-empty.
-            className={isStripeConfigured ? 'grid-cols-2' : undefined}
-          >
-            {isStripeConfigured && (
-              <PaymentOptionCard
-                value="card"
-                orientation="stacked"
-                visual={<PaymentOptionIcon icon={CreditCard} />}
-                title={t('payments.category.card.title')}
-                description={t('payments.category.card.provider')}
-              />
-            )}
-            <PaymentOptionCard
-              value="mobile_money"
-              orientation="stacked"
-              visual={<PaymentOptionIcon icon={Smartphone} />}
-              title={t('payments.category.mobileMoney.title')}
-              description={t('payments.category.mobileMoney.payFrom')}
-              // The processor never varies for a wallet, so it is stated here
-              // instead of taking up a field the vendor cannot change.
-              footer={<GatewayBadge />}
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <Label id="add-provider-label">{t('payments.providers.label')}</Label>
+            <MobileMoneyBrandSelect
+              id="add-provider"
+              aria-labelledby="add-provider-label"
+              value={brandId}
+              onChange={(id) => {
+                setBrandId(id);
+                clearErrors();
+              }}
+              chargeableOnly
+              disabled={submitting}
             />
-          </PaymentOptionGroup>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="add-phone">{t('billing.methods.phone')}</Label>
+            <PhoneInput
+              id="add-phone"
+              value={phone}
+              onChange={(v) => {
+                setPhone(v);
+                setPhoneError(null);
+                setDetected(null);
+              }}
+              required
+            />
+            {phoneError && (
+              <div className="space-y-1.5" role="alert">
+                <p className="text-sm text-destructive">{phoneError}</p>
+                {detected && mobileMoneyBrandByOperator(detected) && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={switchToDetected}
+                    disabled={submitting}
+                  >
+                    {t('billing.methods.useDetected', { network: networkName(detected) })}
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
         </div>
-
-        {category === 'mobile_money' ? (
-          <div className="space-y-4">
-            <div className="space-y-1.5">
-              <Label id="add-provider-label">{t('payments.providers.label')}</Label>
-              <MobileMoneyBrandSelect
-                id="add-provider"
-                aria-labelledby="add-provider-label"
-                value={brandId}
-                onChange={setBrandId}
-                chargeableOnly
-                disabled={submitting}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="add-phone">{t('billing.methods.phone')}</Label>
-              <PhoneInput
-                id="add-phone"
-                value={phone}
-                onChange={setPhone}
-                required
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="add-holder-mm">{t('billing.methods.holderNameOptional')}</Label>
-              <Input
-                id="add-holder-mm"
-                placeholder={t('billing.methods.holderNamePlaceholder')}
-                value={holderName}
-                onChange={(e) => setHolderName(e.target.value)}
-                disabled={submitting}
-              />
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            <CardPreview holderName={holderName} className="mx-auto max-w-xs" />
-            <div className="space-y-1.5">
-              <Label htmlFor="add-holder">{t('billing.methods.cardHolderName')}</Label>
-              <Input
-                id="add-holder"
-                placeholder={t('billing.methods.cardHolderPlaceholder')}
-                value={holderName}
-                onChange={(e) => setHolderName(e.target.value)}
-                disabled={submitting}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>{t('billing.methods.cardDetails')}</Label>
-              <StripeCardField ref={cardRef} disabled={submitting} />
-            </div>
-          </div>
-        )}
 
         {!forceDefault && (
           <div className="flex items-center justify-between gap-3 rounded-xl border p-3">
@@ -303,20 +252,5 @@ export function AddPaymentMethodDialog({
         )}
       </div>
     </ResponsiveModal>
-  );
-}
-
-/**
- * "Processed by NotchPay", as a pill on the Mobile Money card. Visually it is
- * the brand alone — the row it sits in already reads as metadata — but a screen
- * reader gets the full phrase, which a bare processor name would not convey.
- */
-function GatewayBadge() {
-  const { t } = useTranslation();
-  return (
-    <span className="inline-flex items-center rounded-full border bg-muted/60 px-1.5 py-px text-[10px] font-medium leading-4 text-muted-foreground">
-      <span className="sr-only">{t('billing.methods.processedBy')}: </span>
-      {t('billing.gateway.notchpay')}
-    </span>
   );
 }

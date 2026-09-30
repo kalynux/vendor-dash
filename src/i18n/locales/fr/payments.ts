@@ -22,6 +22,8 @@ export const payments = {
         soon: 'Bientôt',
         soonHint: '{{brand}} n’est pas encore débitable.',
         soonNote: '{{brands}} peuvent recevoir vos versements, mais ne sont pas encore débitables.',
+        offline: 'Indisponible',
+        offlineHint: '{{brand}} ne peut pas être utilisé pour payer en ce moment.',
     },
 };
 

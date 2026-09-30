@@ -16,7 +16,7 @@ import type { LucideIcon } from 'lucide-react';
 import type { TranslationKey } from '@/i18n';
 import type { CardBrandId } from '@/onboarding/schemas/onboarding.schemas';
 import type { PhoneOperator } from '@/types/billing.types';
-import type { PaymentMethodType, SavedPaymentMethod } from '@/types/payment-method.types';
+import type { SavedPaymentMethod } from '@/types/payment-method.types';
 
 import airtelLogo from '@/assets/payment-methods/airtel.png';
 import mastercardLogo from '@/assets/payment-methods/mastercard.png';
@@ -48,10 +48,11 @@ export interface MobileMoneyBrand extends PaymentBrand {
     /** Exact string stored in `payout_details[].mobile_money.provider`. */
     payoutValue: string;
     /**
-     * Operator code for `channel.phoneOperator`, or `null` when no gateway can
-     * debit this wallet yet.
+     * The charge `provider` for this wallet, or `null` when it cannot be
+     * charged at all yet. Whether it is on offer *right now* is a separate
+     * question, answered by `GET /payments/options`.
      *
-     * The backend enum is `MTN | ORANGE | MOOV` (payments/validators), so Airtel
+     * The backend's mobile providers are `MTN | ORANGE | MOOV`, so Airtel
      * and Wave are payout-only today: they still render — disabled — wherever a
      * charge is involved, so the brand set stays complete and the vendor is not
      * left wondering whether we support their wallet. Enabling one later is a
@@ -129,7 +130,7 @@ export const CARD_PAYOUT_BRANDS: CardBrand[] = [
 ];
 
 /** Neutral marks used when a saved instrument's brand can't be identified. */
-export const GENERIC_BRANDS: Record<PaymentMethodType, PaymentBrand> = {
+export const GENERIC_BRANDS: Record<'card' | 'mobile_money' | 'bank_transfer', PaymentBrand> = {
     card: { id: 'generic-card', labelKey: 'billing.methodType.card', logo: null, icon: CreditCard },
     mobile_money: {
         id: 'generic-mobile-money',
@@ -172,7 +173,7 @@ export function mobileMoneyBrandByOperator(
     return MOBILE_MONEY_BRANDS.find((b) => b.chargeOperator === operator);
 }
 
-/** Brands a gateway can actually charge — the selectable set in billing/checkout. */
+/** Brands that can be charged at all (still subject to `/payments/options`). */
 export const CHARGEABLE_MOBILE_MONEY_BRANDS = MOBILE_MONEY_BRANDS.filter(
     (b) => b.chargeOperator !== null,
 );
@@ -180,9 +181,9 @@ export const CHARGEABLE_MOBILE_MONEY_BRANDS = MOBILE_MONEY_BRANDS.filter(
 /**
  * Best-effort match of a free-form brand string against the catalog.
  *
- * `SavedPaymentMethod.brand` is whatever was stored at save time — an operator
- * code (`MTN`), a payout provider name (`Orange Money`), or a network slug
- * (`visa`) — so match on a normalised substring rather than equality.
+ * A stored payout provider can be an operator code (`MTN`), a provider name
+ * (`Orange Money`), or a slug — so match on a normalised substring rather than
+ * equality.
  */
 export function matchMobileMoneyBrand(raw: string | null | undefined): MobileMoneyBrand | undefined {
     if (!raw) return undefined;
@@ -217,13 +218,20 @@ export function matchCardBrand(raw: string | null | undefined): PaymentBrand | u
     );
 }
 
-/** The mark to show for a saved instrument, falling back to a neutral one. */
+/**
+ * The mark to show for a saved instrument, falling back to a neutral one. An
+ * older card row no longer says its network, so it gets the generic card.
+ */
 export function brandForSavedMethod(method: SavedPaymentMethod): PaymentBrand {
-    if (method.method_type === 'card') {
-        return matchCardBrand(method.brand) ?? GENERIC_BRANDS.card;
+    switch (method.kind) {
+        case 'CARD':
+            return GENERIC_BRANDS.card;
+        case 'MOBILE_MONEY':
+            return (
+                mobileMoneyBrandByOperator(method.provider === 'CARD' ? null : method.provider) ??
+                GENERIC_BRANDS.mobile_money
+            );
+        default:
+            return GENERIC_BRANDS.bank_transfer;
     }
-    if (method.method_type === 'mobile_money') {
-        return matchMobileMoneyBrand(method.brand) ?? GENERIC_BRANDS.mobile_money;
-    }
-    return GENERIC_BRANDS.bank_transfer;
 }

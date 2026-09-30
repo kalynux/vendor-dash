@@ -24,7 +24,7 @@ import type {
   CreditPack,
   PaymentAuthorizeResult,
   PaymentChannel,
-  PaymentGateway,
+  PaymentProvider,
   PaymentInitResult,
   PaymentStatus,
 } from '@/types/billing.types';
@@ -55,7 +55,7 @@ interface PaymentRequest {
   currency: string;
   successLabelKey: TranslationKey;
   paymentKind: StripeResumeKind;
-  initiate: (gateway: PaymentGateway, channel: PaymentChannel) => Promise<PaymentInitResult>;
+  initiate: (provider: PaymentProvider, channel: PaymentChannel) => Promise<PaymentInitResult>;
   // Plans and top-ups authorize on their OWN route — `/plan-purchases/:id/authorize`
   // and `/credits/topups/:id/authorize`. Neither is `POST /payments/:id/authorize`,
   // which only knows `PaymentTransaction` rows and 404s on everything billing.
@@ -207,7 +207,7 @@ export function BillingTab() {
       currency: plan.currency,
       successLabelKey: 'billing.toast.planPurchased',
       paymentKind: 'plan',
-      initiate: (gateway, channel) => initiatePlanPurchase(plan._id, { gateway, channel }),
+      initiate: (provider, channel) => initiatePlanPurchase(plan._id, { provider, channel }),
       authorize: authorizePlanPurchase,
       verify: verifyPlanPurchase,
     });
@@ -223,7 +223,7 @@ export function BillingTab() {
       currency: pack.currency,
       successLabelKey: 'billing.toast.creditsAdded',
       paymentKind: 'topup',
-      initiate: (gateway, channel) => initiateTopup({ packCode: pack.code, gateway, channel }),
+      initiate: (provider, channel) => initiateTopup({ packCode: pack.code, provider, channel }),
       authorize: authorizeTopup,
       verify: verifyTopup,
     });

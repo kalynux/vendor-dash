@@ -135,7 +135,6 @@ appear in any of these files.
 | `VITE_API_BASE_URL` | ✅ | `http://localhost:8022/api` | Backend. Must end in `/api`. |
 | `VITE_FILE_BASE_URL` | — | *(the API origin `/uploads`)* | Where uploaded files are served from, when split off the API origin. |
 | `VITE_STOREFRONT_BASE_URL` | ✅ **incl. mobile** | `http://localhost:3000` | The customer storefront (`landing`). The `/preview/store` and `/preview/product/:id` routes embed it in an iframe, and every share / copy link is built from it. NOT the API origin. |
-| `VITE_STRIPE_PUBLISHABLE_KEY` | — | *(unset → mobile money only)* | **Web only.** Billing is read-only on mobile (D2 / Phase 5), so `.env.mobile` omits it deliberately. |
 | `VITE_FIREBASE_*` (6 vars) | — | *(unset → push inert)* | **Web only.** P2.6 disables web push inside a native shell; native push is configured by `android/app/google-services.json` (P4.1). Keep in sync with `public/firebase-messaging-sw.js`, which cannot read Vite env vars. |
 | `VITE_FORCE_MOBILE_AUTH` | — (dev only) | *(unset)* | `true` switches the app onto the **mobile** auth transport — bearer tokens against `/api/auth/mobile/*`, `credentials:'omit'` — so the native path can be exercised in a desktop browser with no device. Inlined to `false` by any production build. Set it in `.env.development.local`. |
 

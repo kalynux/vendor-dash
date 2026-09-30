@@ -92,6 +92,7 @@ export const errors = {
     fields: {
         email: 'Enter a valid email address.',
         phone: 'Enter a valid phone number, including the country code.',
+        phoneNumber: 'Enter a valid phone number, including the country code.',
         password: 'Enter a valid password.',
         displayName: 'Enter a name between 2 and 100 characters.',
         title: 'Enter a title.',
@@ -389,6 +390,13 @@ export const errors = {
         PAYMENT_OTP_NOT_REQUIRED: 'This payment is not waiting for a code.',
         PAYMENT_OTP_ATTEMPTS_EXCEEDED:
             'Too many incorrect codes. Start the payment again to get a new one.',
+        PAYMENT_PROVIDER_PHONE_MISMATCH:
+            'This number belongs to a different network. Pick its network, or enter another number.',
+        PAYMENT_PROVIDER_UNAVAILABLE:
+            "That way to pay isn't available right now. Pick another one.",
+        /** Only an out-of-date app can get this — a current build always names the provider. */
+        PAYMENT_PROVIDER_REQUIRED:
+            'Something went wrong on our side while starting the payment. Please refresh the page and try again.',
         PAYMENT_CART_NOT_FOUND: 'We could not find that cart.',
         PAYMENT_CART_NO_PAYABLE_ORDERS: 'There is nothing to pay for in this cart.',
         PAYMENT_CART_MIXED_CURRENCY: 'All items in one payment must use the same currency.',
@@ -406,7 +414,7 @@ export const errors = {
             "We couldn't reach the payment provider. Please try again in a few minutes.",
         PAYMENT_METHOD_NOT_FOUND: 'We could not find that payment method.',
         PAYMENT_METHOD_LIMIT_REACHED:
-            'You have reached the maximum number of saved payment methods. Remove one to add another.',
+            'You can save up to 10 payment methods. Remove one first.',
 
         // ── Refunds ───────────────────────────────────────────────────────────
         REFUND_NOT_ELIGIBLE: 'This order is not eligible for a refund.',

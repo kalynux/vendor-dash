@@ -8,9 +8,12 @@ import type { TranslationKey } from '@/i18n';
 import type {
     GatewayInstructions,
     PaymentGateway,
+    PaymentOption,
+    PaymentProvider,
+    PhoneOperator,
     SubscriberPlanStatus,
 } from '@/types/billing.types';
-import type { PaymentMethodType } from '@/types/payment-method.types';
+import type { PaymentMethodKind, SavedPaymentMethod } from '@/types/payment-method.types';
 
 type Translate = (key: TranslationKey, params?: Record<string, string | number>) => string;
 
@@ -27,11 +30,11 @@ export const PAYMENT_POLL_INTERVAL_MS = 4000;
 export const PAYMENT_POLL_TIMEOUT_MS = 3 * 60 * 1000;
 
 // ─── Mobile-money OTP relay ─────────────────────────────────────────────────────
-// My-CoolPay + Orange Money is the one gateway/operator pair with an OTP step:
-// the initiate call answers `requiresOtp` with no `ussdCode`, the buyer is SMSed
-// a one-time code, and NOTHING IS CHARGED until that code is relayed back to the
-// row's `/authorize` endpoint. Every other pair authorises via the USSD prompt
-// and never reaches this branch.
+// Some providers, depending on which company the server routes them through,
+// have an OTP step: the initiate call answers `requiresOtp` with no `ussdCode`,
+// the buyer is SMSed a one-time code, and NOTHING IS CHARGED until that code is
+// relayed back to the row's `/authorize` endpoint. `/options` hints at it
+// (`flow: "OTP"`), but only the initiate answer decides.
 
 /** The backend accepts 4-8 digits; reject anything else before it leaves the client. */
 const OTP_CODE_PATTERN = /^\d{4,8}$/;
@@ -61,7 +64,7 @@ export function requiresOtpStep(instructions: GatewayInstructions | null | undef
  *
  * The two `*_INVALID_STATE` conflicts are a settled row (a second code would be
  * a second charge) or one with no gateway reference yet; `PAYMENT_OTP_NOT_REQUIRED`
- * is a gateway with no OTP step at all, and should be unreachable while the
+ * is a payment with no OTP step at all, and should be unreachable while the
  * screen is gated on `requiresOtpStep`. In all three the verify poll — idempotent
  * by contract — is the reconciliation.
  */
@@ -95,77 +98,82 @@ export function otpAttemptsRemaining(err: unknown): number | null {
     return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
-// ─── Mobile-money operators ──────────────────────────────────────────────────────
-// The operator list itself now lives in `@/components/payment-methods` —
-// `MOBILE_MONEY_BRANDS[].chargeOperator` pairs each `PhoneOperator` with the
-// brand's logo and payout name, so a wallet is described in exactly one place.
+// ─── Providers (what the vendor pays with) ───────────────────────────────────────
+// The vendor picks a provider — MTN, Orange, a card — and the server decides
+// which payment company carries it. The choices come from `GET /payments/options`
+// every time the dialog opens; nothing here lists them. The wallet logos and names
+// live in `@/components/payment-methods` (`MOBILE_MONEY_BRANDS[].chargeOperator`).
 
-/** Gateway used for mobile-money charges (default operator gateway). */
-export const MOBILE_MONEY_GATEWAY: PaymentGateway = 'NOTCHPAY';
-export const CARD_GATEWAY: PaymentGateway = 'STRIPE';
-
-// ─── Gateway catalog ─────────────────────────────────────────────────────────────
-// Each gateway maps to the method type it collects: mobile-money gateways need a
-// phone + operator; the card gateway (Stripe) tokenises a card. Vendors choose a
-// method category, not a gateway — this drives the "Processed by" select and the
-// currency each category settles in.
-
-export interface GatewayMeta {
-  value: PaymentGateway;
-  labelKey: TranslationKey;
-  /** Which channel fields this gateway collects. */
-  methodType: Extract<PaymentMethodType, 'card' | 'mobile_money'>;
-  /** Short helper line shown under the chip row. */
-  descriptionKey: TranslationKey;
-  /** Currency the vendor is actually charged in (mobile money: XAF, card: USD). */
-  chargeCurrency: 'XAF' | 'USD';
+/**
+ * The network a saved method can pay with right now, or `null`. A saved wallet's
+ * `provider` is already the charge value (`MTN`…), but only a mobile-money row
+ * whose network is on offer counts: an older card (`CARD`) or a row with an
+ * unknown network (`null`) is listed, never used to pre-fill a payment.
+ */
+export function payableSavedWallet(
+    method: SavedPaymentMethod,
+    offered: readonly PhoneOperator[],
+): PhoneOperator | null {
+    if (method.kind !== 'MOBILE_MONEY') return null;
+    const { provider } = method;
+    return provider && provider !== 'CARD' && offered.includes(provider) ? provider : null;
 }
 
-export const GATEWAYS: GatewayMeta[] = [
-  {
-    value: 'NOTCHPAY',
-    labelKey: 'billing.gateway.notchpay',
-    methodType: 'mobile_money',
-    descriptionKey: 'billing.gatewayHelp.mobileMoney',
-    chargeCurrency: 'XAF',
-  },
-  {
-    value: 'MYCOOLPAY',
-    labelKey: 'billing.gateway.mycoolpay',
-    methodType: 'mobile_money',
-    descriptionKey: 'billing.gatewayHelp.mobileMoney',
-    chargeCurrency: 'XAF',
-  },
-  {
-    value: 'STRIPE',
-    labelKey: 'billing.gateway.card',
-    methodType: 'card',
-    descriptionKey: 'billing.gatewayHelp.card',
-    chargeCurrency: 'USD',
-  },
-];
+/** The currency a choice settles in: wallets in XAF, cards in USD. */
+export function chargeCurrencyOf(option: Pick<PaymentOption, 'kind'>): 'XAF' | 'USD' {
+    return option.kind === 'CARD' ? 'USD' : 'XAF';
+}
 
-/** The gateways that collect a phone + operator, in offer order. */
-export const MOBILE_MONEY_GATEWAYS: GatewayMeta[] = GATEWAYS.filter(
-    (g) => g.methodType === 'mobile_money',
-);
+// ─── Charge refusals (nothing written, nothing charged) ─────────────────────────
+
+/**
+ * `422 PAYMENT_PROVIDER_PHONE_MISMATCH`: the number belongs to another network
+ * than the one chosen. Returns the network the server detected (`MTN`/`ORANGE`),
+ * or `null` when this is not that refusal or the detail is missing.
+ */
+export function providerMismatchDetected(err: unknown): PhoneOperator | null {
+    if (!(err instanceof ApiError) || err.code !== 'PAYMENT_PROVIDER_PHONE_MISMATCH') return null;
+    const detected = err.detailsObject?.detected;
+    return detected === 'MTN' || detected === 'ORANGE' || detected === 'MOOV' ? detected : null;
+}
+
+/**
+ * `422 PAYMENT_PROVIDER_UNAVAILABLE`: the choice was switched off after the
+ * dialog loaded. Returns `details.offered` — the fresh list of providers — or
+ * `null` when this is not that refusal. An empty list means online payment is
+ * now off altogether.
+ */
+export function unavailableProviderOffered(err: unknown): PaymentProvider[] | null {
+    if (!(err instanceof ApiError) || err.code !== 'PAYMENT_PROVIDER_UNAVAILABLE') return null;
+    const offered = err.detailsObject?.offered;
+    if (!Array.isArray(offered)) return [];
+    return offered.filter((v): v is PaymentProvider =>
+        v === 'MTN' || v === 'ORANGE' || v === 'MOOV' || v === 'CARD',
+    );
+}
+
+/**
+ * A stored row's `gateway` — which company carried the money — as a label.
+ * Display only, and deliberately not a lookup table: the server can start using
+ * a new company with no release, so any value has to render.
+ */
+export function gatewayLabel(gateway: PaymentGateway): string {
+    const raw = gateway.trim();
+    if (!raw) return raw;
+    return raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
+}
 
 // ─── Saved payment-method display ────────────────────────────────────────────────
 
-const METHOD_TYPE_KEYS: Record<PaymentMethodType, TranslationKey> = {
-  card: 'billing.methodType.card',
-  mobile_money: 'billing.methodType.mobile_money',
-  bank_transfer: 'billing.methodType.bank_transfer',
+const METHOD_TYPE_KEYS: Record<PaymentMethodKind, TranslationKey> = {
+  CARD: 'billing.methodType.card',
+  MOBILE_MONEY: 'billing.methodType.mobile_money',
+  BANK_TRANSFER: 'billing.methodType.bank_transfer',
 };
 
-export function methodTypeLabel(type: PaymentMethodType, t: Translate): string {
+export function methodTypeLabel(type: PaymentMethodKind, t: Translate): string {
   const key = METHOD_TYPE_KEYS[type];
   return key ? t(key) : type;
-}
-
-/** Provider/operator string for the gateway used to tokenise a mobile-money method. */
-export function gatewayProvider(gateway: PaymentGateway): string {
-  return gateway.toLowerCase();
 }
 
 // ─── Plan tier accents ────────────────────────────────────────────────────────

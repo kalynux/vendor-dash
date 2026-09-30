@@ -37,6 +37,9 @@ export const payments = {
         soon: 'Soon',
         soonHint: '{{brand}} cannot be charged yet.',
         soonNote: '{{brands}} can receive payouts, but cannot be charged yet.',
+        /** Badge on a wallet that can normally be charged but is switched off right now. */
+        offline: 'Unavailable',
+        offlineHint: '{{brand}} cannot be used to pay right now.',
     },
 } as const;
 

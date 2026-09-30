@@ -117,29 +117,22 @@ export const billing = {
     methods: {
         title: 'Moyens de paiement',
         info:
-            'Les moyens enregistrés pré-remplissent le paiement lors de l’achat d’une formule ou de ' +
-            'crédits. Seuls un jeton et les derniers chiffres sont conservés — jamais le numéro complet ' +
-            'ni le CVV. Jusqu’à {{max}} moyens. Supprimer votre moyen par défaut n’en promeut pas un ' +
-            'autre : choisissez-en un vous-même.',
+            'Vos portefeuilles mobile money enregistrés sont prêts à choisir lors de l’achat d’une ' +
+            'formule ou de crédits. Jusqu’à {{max}} moyens. Supprimer votre moyen par défaut n’en ' +
+            'promeut pas un autre : choisissez-en un vous-même.',
         atLimit: 'Vous pouvez enregistrer jusqu’à {{max}} moyens de paiement.',
         empty: 'Aucun moyen de paiement enregistré. Ajoutez-en un pour accélérer le paiement.',
         default: 'Par défaut',
-        expires: 'Expire {{date}}',
         setDefault: 'Définir par défaut',
         removeAria: 'Supprimer ce moyen de paiement',
         removeTitle: 'Supprimer ce moyen de paiement ?',
         removeDescription: '{{label}} sera supprimé. C’est irréversible.',
         addTitle: 'Ajouter un moyen de paiement',
-        addDescription:
-            'Enregistrez un moyen pour accélérer le paiement. Nous ne conservons jamais le numéro de carte complet ni le CVV.',
-        type: 'Moyen de paiement',
+        addDescription: 'Enregistrez un portefeuille mobile money pour accélérer le paiement.',
         phone: 'Numéro mobile money',
-        processedBy: 'Traité par',
-        holderNameOptional: 'Nom du titulaire (facultatif)',
-        holderNamePlaceholder: 'Titulaire du compte',
-        cardHolderName: 'Nom du titulaire de la carte',
-        cardHolderPlaceholder: 'Nom sur la carte',
-        cardDetails: 'Coordonnées de la carte',
+        phoneMismatch: 'Ce numéro est sur {{detected}}. Choisissez {{detected}}, ou saisissez un numéro {{provider}}.',
+        useDetected: 'Utiliser {{network}}',
+        duplicate: 'Vous avez déjà enregistré ce numéro {{network}}.',
         makeDefault: 'Définir par défaut',
         makeDefaultHint: 'Pré-sélectionné au moment du paiement.',
         save: 'Enregistrer le moyen',
@@ -149,17 +142,6 @@ export const billing = {
         card: 'Carte',
         mobile_money: 'Mobile money',
         bank_transfer: 'Virement bancaire',
-    },
-
-    gateway: {
-        notchpay: 'NotchPay',
-        mycoolpay: 'MyCoolPay',
-        card: 'Carte',
-    },
-
-    gatewayHelp: {
-        mobileMoney: 'Mobile money — débité en XAF',
-        card: 'Visa, Mastercard et plus — débité en USD',
     },
 
     checkout: {
@@ -223,15 +205,23 @@ export const billing = {
         resumePending:
             'Nous confirmons encore votre paiement par carte — la mise à jour apparaîtra ici sous peu.',
         resumeFailed: 'Le paiement par carte n’a pas abouti.',
+        optionsLoading: 'Chargement des moyens de paiement…',
+        optionsFailed: 'Impossible de charger les moyens de paiement. Vérifiez votre connexion et réessayez.',
+        onlineUnavailable: 'Le paiement en ligne est indisponible pour le moment.',
+        onlineUnavailableHint: 'Merci de réessayer plus tard.',
+        otpMayFollow: 'Vous recevrez peut-être un code par SMS pour confirmer ce paiement.',
+        phoneMismatch: 'Ce numéro appartient à {{detected}}. Choisissez {{detected}} ci-dessus, ou saisissez un numéro {{chosen}}.',
+        providerSwitchedOff: '{{brand}} n’est pas disponible en ce moment. Choisissez un autre moyen de paiement.',
+        providerSwitchedOffAll: 'Le paiement en ligne vient d’être désactivé. Merci de réessayer plus tard.',
+        redirectPrompt: 'Terminez le paiement sur la page de paiement, puis revenez ici.',
+        openPaymentPage: 'Ouvrir la page de paiement',
     },
 
     cardForm: {
         unavailable: 'Les paiements par carte sont indisponibles pour le moment.',
         loadFailed: 'Impossible de charger le formulaire de carte. Réessayez.',
-        loading: 'Chargement du formulaire de carte…',
         loadingSecure: 'Chargement du formulaire de carte sécurisé…',
         notReady: 'Le formulaire de carte n’est pas encore prêt.',
-        invalidCard: 'Impossible de valider la carte.',
         chargeFailed: 'Votre carte n’a pas pu être débitée. Réessayez.',
         notCompleted: 'Le paiement par carte n’a pas abouti. Réessayez.',
         failed: 'Le paiement par carte a échoué. Réessayez.',

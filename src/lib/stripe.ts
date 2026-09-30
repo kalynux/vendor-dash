@@ -4,8 +4,12 @@ import { purchasesEnabled } from '@/platform/purchases';
 // Loads Stripe's hosted script (https://js.stripe.com/v3) on demand and returns a
 // configured Stripe instance. We use the hosted script directly (rather than the
 // @stripe/stripe-js npm package) so the card data never touches our bundle — the
-// recommended PCI-friendly approach. If no publishable key is configured, card
-// payments are unavailable and the UI falls back to mobile money only.
+// recommended PCI-friendly approach.
+//
+// The publishable key comes from the server, on the card entry of
+// `GET /payments/options` — never from the build. The key belongs to whichever
+// Stripe account the server is configured with, and a key baked into the build
+// can go stale without anyone noticing. No card entry, no card payments.
 
 // Minimal typing for the bits of the Stripe.js global we use. The full SDK has
 // far richer types; we keep this narrow and local to avoid a dependency.
@@ -102,23 +106,7 @@ declare global {
   }
 }
 
-const PUBLISHABLE_KEY = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY as string | undefined;
 const STRIPE_JS_URL = 'https://js.stripe.com/v3';
-
-/**
- * Whether Stripe card payments are configured (publishable key present).
- *
- * Also false in a packaged app, whatever the environment says
- * (CAPACITOR-PLAN.md → P5.2). Every mounting path is already behind
- * `purchasesEnabled`, so this is the backstop rather than the mechanism — but it
- * is the backstop that matters, because it is the single choke point through
- * which `js.stripe.com` could ever be injected. ⚠ A packaged app should not be
- * pulling executable code off a CDN at runtime at all: it is invisible to store
- * review, it breaks offline, and it is exactly the pattern both stores' policies
- * are written against. `.env.mobile` omits `VITE_STRIPE_PUBLISHABLE_KEY` for the
- * same reason; this makes the guarantee independent of that file staying right.
- */
-export const isStripeConfigured = Boolean(PUBLISHABLE_KEY) && purchasesEnabled;
 
 let scriptPromise: Promise<StripeConstructor> | null = null;
 
@@ -147,18 +135,30 @@ function loadScript(): Promise<StripeConstructor> {
   return scriptPromise;
 }
 
-let stripeInstance: StripeInstance | null = null;
+// One instance per key: the server may start answering with a different key
+// (another Stripe account) without the page reloading.
+const stripeInstances = new Map<string, StripeInstance>();
 
-/** Lazily load Stripe.js and return a configured instance (memoised). */
-export async function getStripe(): Promise<StripeInstance | null> {
+/**
+ * Lazily load Stripe.js and return an instance for `publishableKey` (memoised).
+ * Pass the `publishableKey` of the card entry from `GET /payments/options`.
+ */
+export async function getStripe(
+  publishableKey: string | null | undefined,
+): Promise<StripeInstance | null> {
   // Guarded here and not only at the call sites: this is the one function that
   // can cause the CDN script to be injected, so the promise "js.stripe.com never
-  // loads in the native build" is kept by one line rather than by every future
-  // caller remembering. Callers already treat null as "cards unavailable".
+  // loads in the native build" (CAPACITOR-PLAN.md → P5.2) is kept by one line
+  // rather than by every future caller remembering. ⚠ A packaged app should not
+  // pull executable code off a CDN at runtime at all: it is invisible to store
+  // review, it breaks offline, and both stores' policies are written against
+  // it. Callers already treat null as "cards unavailable".
   if (!purchasesEnabled) return null;
-  if (!PUBLISHABLE_KEY) return null;
-  if (stripeInstance) return stripeInstance;
+  if (!publishableKey) return null;
+  const cached = stripeInstances.get(publishableKey);
+  if (cached) return cached;
   const Stripe = await loadScript();
-  stripeInstance = Stripe(PUBLISHABLE_KEY);
-  return stripeInstance;
+  const instance = Stripe(publishableKey);
+  stripeInstances.set(publishableKey, instance);
+  return instance;
 }

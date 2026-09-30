@@ -16,6 +16,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { ApiError } from '@/types/api';
 import type { SavedPaymentMethod } from '@/types/payment-method.types';
 import {
   fetchPaymentMethods,
@@ -59,13 +60,19 @@ export function SavedPaymentMethodsCard() {
     load();
   }, [load]);
 
+  /** The method was removed elsewhere (another device): show the list as it is now. */
+  function refreshIfGone(err: unknown) {
+    if (err instanceof ApiError && err.code === 'PAYMENT_METHOD_NOT_FOUND') void load();
+  }
+
   async function handleSetDefault(id: string) {
     setPendingDefaultId(id);
     try {
       await setDefaultPaymentMethod(id);
-      setMethods((prev) => prev.map((m) => ({ ...m, is_default: m.id === id })));
+      setMethods((prev) => prev.map((m) => ({ ...m, isDefault: m.id === id })));
     } catch (err) {
       apiError.toast(err, { context: 'billing', fallbackKey: 'billing.errors.defaultFailed' });
+      refreshIfGone(err);
     } finally {
       setPendingDefaultId(null);
     }
@@ -73,7 +80,7 @@ export function SavedPaymentMethodsCard() {
 
   async function handleDelete() {
     if (!deleteTarget) return;
-    const wasDefault = deleteTarget.is_default;
+    const wasDefault = deleteTarget.isDefault;
     setDeleting(true);
     try {
       await deletePaymentMethod(deleteTarget.id);
@@ -86,6 +93,7 @@ export function SavedPaymentMethodsCard() {
       }
     } catch (err) {
       apiError.toast(err, { context: 'billing', fallbackKey: 'billing.errors.removeMethodFailed' });
+      refreshIfGone(err);
     } finally {
       setDeleting(false);
       setDeleteTarget(null);
@@ -137,24 +145,21 @@ export function SavedPaymentMethodsCard() {
           <ul className="divide-y">
             {methods.map((m) => (
               <li key={m.id} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
-                {/* The brand is spelled out in `display_label` next to it. */}
+                {/* The brand is spelled out in `label` next to it. */}
                 <PaymentBrandLogo brand={brandForSavedMethod(m)} size="md" decorative />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <span className="truncate font-medium">{m.display_label}</span>
-                    {m.is_default && <Badge variant="secondary">{t('billing.methods.default')}</Badge>}
+                    <span className="truncate font-medium">{m.label}</span>
+                    {m.isDefault && <Badge variant="secondary">{t('billing.methods.default')}</Badge>}
                   </div>
+                  {/* The masked number when there is one (wallets); otherwise what
+                      kind of method it is — an older card or unknown row. */}
                   <p className="text-xs text-muted-foreground">
-                    {methodTypeLabel(m.method_type, t)}
-                    {m.method_type === 'card' && m.exp_month && m.exp_year
-                      ? ` · ${t('billing.methods.expires', {
-                          date: `${String(m.exp_month).padStart(2, '0')}/${String(m.exp_year).slice(-2)}`,
-                        })}`
-                      : ''}
+                    {m.maskedPhone ?? methodTypeLabel(m.kind, t)}
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
-                  {!m.is_default && (
+                  {!m.isDefault && (
                     <Button
                       variant="ghost"
                       size="sm"
@@ -185,18 +190,19 @@ export function SavedPaymentMethodsCard() {
           </ul>
         )}
 
-      {/* Never mounted on a packaged app — this is what keeps `StripeCardField`,
-          `CardPreview` and `lib/stripe.ts` off the screen and out of the network
-          log entirely, rather than merely hiding the button that opens them. */}
+      {/* Never mounted on a packaged app: adding a wallet is the first step of
+          a checkout, so the dialog stays out of the store build entirely rather
+          than merely hiding the button that opens it. */}
       {purchasesEnabled && (
         <AddPaymentMethodDialog
           open={addOpen}
           onOpenChange={setAddOpen}
           forceDefault={methods.length === 0}
+          existing={methods}
           onAdded={(created) => {
             // A new default clears the previous one locally; first method is always default.
             setMethods((prev) =>
-              created.is_default ? [created, ...prev.map((m) => ({ ...m, is_default: false }))] : [...prev, created],
+              created.isDefault ? [created, ...prev.map((m) => ({ ...m, isDefault: false }))] : [...prev, created],
             );
           }}
         />
@@ -208,7 +214,7 @@ export function SavedPaymentMethodsCard() {
             <AlertDialogTitle>{t('billing.methods.removeTitle')}</AlertDialogTitle>
             <AlertDialogDescription>
               {t('billing.methods.removeDescription', {
-                label: deleteTarget?.display_label ?? '',
+                label: deleteTarget?.label ?? '',
               })}
             </AlertDialogDescription>
           </AlertDialogHeader>

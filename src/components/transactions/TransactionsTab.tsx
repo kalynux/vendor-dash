@@ -17,7 +17,7 @@ import type {
   TransactionsListMeta,
 } from '@/types/transactions.types';
 import { LedgerSkeleton } from '@/components/billing/BillingSkeletons';
-import { GATEWAYS } from '@/components/billing/billing.constants';
+import { gatewayLabel } from '@/components/billing/billing.constants';
 import { useTranslation, useFormatters, useApiError, type TranslationKey } from '@/i18n';
 import {
   TRANSACTION_CATEGORY_TABS,
@@ -44,11 +44,6 @@ export function TransactionsTab({ refreshKey = 0 }: { refreshKey?: number }) {
   const fmt = useFormatters();
   const apiError = useApiError();
 
-  // The gateway catalog lives in billing; resolve its label key for display.
-  const gatewayLabel = (gateway: string) => {
-    const meta = GATEWAYS.find((g) => g.value === gateway);
-    return meta ? t(meta.labelKey) : gateway;
-  };
   const [category, setCategory] = useState<CategoryFilter>('all');
   const [search, setSearch] = useState('');
   const [filterSheetOpen, setFilterSheetOpen] = useState(false);

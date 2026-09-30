@@ -63,7 +63,7 @@ export interface Transaction {
   /** Credits granted (top-up) or the magnitude of a credit move. */
   credits?: number;
   description: string;
-  /** Present for billing rows. */
+  /** Present for billing rows. Display only: any company name, never branched on. */
   gateway?: PaymentGateway;
   source?: TransactionSource;
   createdAt: string;

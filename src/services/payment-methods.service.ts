@@ -16,7 +16,7 @@ export async function fetchPaymentMethods(): Promise<SavedPaymentMethod[]> {
   return res.data;
 }
 
-/** Save a new tokenized method. Returns the created method (without gateway ids). */
+/** Save a mobile-money wallet (network + number). Returns the created method. */
 export async function addPaymentMethod(
   payload: AddPaymentMethodPayload,
 ): Promise<SavedPaymentMethod> {

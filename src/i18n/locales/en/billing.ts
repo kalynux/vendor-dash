@@ -123,29 +123,22 @@ export const billing = {
     methods: {
         title: 'Payment methods',
         info:
-            'Saved methods pre-fill checkout when you buy a plan or credits. Only a token and the ' +
-            'last digits are stored — never the full card number or the CVV. Up to {{max}} ' +
-            "methods. Deleting your default doesn't promote another one, so pick a new default " +
-            'yourself.',
+            'Saved mobile money wallets are ready to pick when you buy a plan or credits. Up to ' +
+            "{{max}} methods. Deleting your default doesn't promote another one, so pick a new " +
+            'default yourself.',
         atLimit: 'You can save up to {{max}} methods.',
         empty: 'No saved payment methods yet. Add one to speed up checkout.',
         default: 'Default',
-        expires: 'Expires {{date}}',
         setDefault: 'Set default',
         removeAria: 'Remove payment method',
         removeTitle: 'Remove payment method?',
         removeDescription: "{{label}} will be removed. This can't be undone.",
         addTitle: 'Add payment method',
-        addDescription: 'Save a method to speed up checkout. We never store full card numbers or CVV.',
-        type: 'Payment method',
+        addDescription: 'Save a mobile money wallet to speed up checkout.',
         phone: 'Mobile money number',
-        /** Which gateway will hold the token — a processor detail, not the brand. */
-        processedBy: 'Processed by',
-        holderNameOptional: 'Account holder name (optional)',
-        holderNamePlaceholder: 'Account holder',
-        cardHolderName: 'Card holder name',
-        cardHolderPlaceholder: 'Name on card',
-        cardDetails: 'Card details',
+        phoneMismatch: 'This number is on {{detected}}. Choose {{detected}}, or enter a {{provider}} number.',
+        useDetected: 'Use {{network}}',
+        duplicate: 'You already saved this {{network}} number.',
         makeDefault: 'Set as default',
         makeDefaultHint: 'Pre-selected at checkout.',
         save: 'Save method',
@@ -155,17 +148,6 @@ export const billing = {
         card: 'Card',
         mobile_money: 'Mobile money',
         bank_transfer: 'Bank transfer',
-    },
-
-    gateway: {
-        notchpay: 'NotchPay',
-        mycoolpay: 'MyCoolPay',
-        card: 'Card',
-    },
-
-    gatewayHelp: {
-        mobileMoney: 'Mobile money — charged in XAF',
-        card: 'Visa, Mastercard & more — charged in USD',
     },
 
     /** The plan / credit checkout dialog. */
@@ -191,7 +173,7 @@ export const billing = {
         pay: 'Pay {{amount}}',
         payNow: 'Pay now',
         /**
-         * The Orange Money SMS step (My-CoolPay). It is the only checkout branch
+         * The SMS-code step some wallets need. It is the only checkout branch
          * where the vendor has NOT been charged by the time they see a prompt —
          * the code is what starts the charge — so the copy has to say that
          * outright, and must never imply the code completes the payment.
@@ -234,16 +216,30 @@ export const billing = {
         /** Shown after returning from a 3-D Secure bank redirect. */
         resumePending: "We're still confirming your card payment — it'll update here shortly.",
         resumeFailed: 'The card payment was not completed.',
+        /** While the list of ways to pay (GET /payments/options) loads. */
+        optionsLoading: 'Loading ways to pay…',
+        optionsFailed: "We couldn't load the ways to pay. Check your connection and try again.",
+        /** The server offers no way to pay online. Not an error — no retry. */
+        onlineUnavailable: 'Online payment is unavailable right now.',
+        onlineUnavailableHint: 'Please come back later.',
+        /** Shown when the chosen wallet may send an SMS code after you confirm. */
+        otpMayFollow: 'You may get an SMS code to confirm this payment.',
+        /** The number belongs to another network than the one picked. Brand names are proper nouns. */
+        phoneMismatch: 'This number belongs to {{detected}}. Pick {{detected}} above, or enter a number on {{chosen}}.',
+        /** The picked way to pay was switched off after the dialog opened. */
+        providerSwitchedOff: "{{brand}} can't be used right now. Pick another way to pay.",
+        providerSwitchedOffAll: 'Online payment was just switched off. Please come back later.',
+        /** The payment continues on a separate page. */
+        redirectPrompt: 'Finish paying on the payment page, then come back here.',
+        openPaymentPage: 'Open payment page',
     },
 
     /** The Stripe-hosted card fields. */
     cardForm: {
         unavailable: 'Card payments are unavailable right now.',
         loadFailed: 'Could not load the card form. Please try again.',
-        loading: 'Loading card form…',
         loadingSecure: 'Loading secure card form…',
         notReady: 'Card form is not ready yet.',
-        invalidCard: 'Could not validate the card.',
         chargeFailed: 'Your card could not be charged. Please try again.',
         notCompleted: 'The card payment was not completed. Please try again.',
         failed: 'The card payment failed. Please try again.',

@@ -27,6 +27,8 @@ export interface StripePaymentElementHandle {
 }
 
 interface StripePaymentElementProps {
+  /** The card entry's `publishableKey` from `GET /payments/options`. */
+  publishableKey: string;
   /** PaymentIntent client secret from the initiate response. */
   clientSecret: string;
   disabled?: boolean;
@@ -40,7 +42,7 @@ interface StripePaymentElementProps {
  * `confirm()` (via ref) on submit; Stripe handles 3-D Secure / redirects.
  */
 export const StripePaymentElement = forwardRef<StripePaymentElementHandle, StripePaymentElementProps>(
-  function StripePaymentElement({ clientSecret, disabled, onReady }, ref) {
+  function StripePaymentElement({ publishableKey, clientSecret, disabled, onReady }, ref) {
     const { t } = useTranslation();
     const { locale } = useLocale();
     const mountRef = useRef<HTMLDivElement>(null);
@@ -54,7 +56,7 @@ export const StripePaymentElement = forwardRef<StripePaymentElementHandle, Strip
       let cancelled = false;
       (async () => {
         try {
-          const stripe = await getStripe();
+          const stripe = await getStripe(publishableKey);
           if (cancelled) return;
           if (!stripe || !mountRef.current) {
             setLoadError(t('billing.cardForm.unavailable'));
@@ -89,9 +91,9 @@ export const StripePaymentElement = forwardRef<StripePaymentElementHandle, Strip
         paymentElRef.current = null;
         elementsRef.current = null;
       };
-      // clientSecret is stable for the lifetime of this element (one PaymentIntent).
+      // Both are stable for the lifetime of this element (one PaymentIntent).
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [clientSecret]);
+    }, [publishableKey, clientSecret]);
 
     useImperativeHandle(ref, () => ({
       async confirm(returnUrl: string): Promise<StripeConfirmOutcome> {

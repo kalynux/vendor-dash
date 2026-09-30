@@ -3,8 +3,21 @@
 
 // ─── Enums ──────────────────────────────────────────────────────────────────────
 
-export type PaymentGateway = 'NOTCHPAY' | 'MYCOOLPAY' | 'STRIPE';
-export type PhoneOperator = 'MTN' | 'ORANGE' | 'MOOV';
+/**
+ * Which company carried the money on a stored row. **Display only**: never
+ * branch on it, and never send it. The server picks the company itself, and an
+ * administrator can switch it with no release, so new values appear without
+ * warning — hence a plain string rather than a closed list.
+ */
+export type PaymentGateway = string;
+
+/**
+ * What the vendor pays with — the value a charge sends as `provider`, taken
+ * from `GET /payments/options`. See api-doc/payments/routing.md.
+ */
+export type PaymentProvider = 'MTN' | 'ORANGE' | 'MOOV' | 'CARD';
+/** The mobile-money providers — also the operator a phone number belongs to. */
+export type PhoneOperator = Exclude<PaymentProvider, 'CARD'>;
 /**
  * Status of a top-up / plan purchase (the payment lifecycle). `reversed` is a
  * post-payment terminal state: the card charge was disputed/refunded and the
@@ -108,6 +121,9 @@ export interface CreditTopup {
   price: number;
   currency: string;
   status: PaymentStatus;
+  /** What it was paid with. `null` on rows made before 2026-09-30. */
+  provider?: PaymentProvider | null;
+  /** Display only — see `PaymentGateway`. */
   gateway: PaymentGateway;
   gateway_ref?: string | null;
   payment_transaction_id?: string | null;
@@ -124,6 +140,9 @@ export interface PlanPurchase {
   price: number;
   currency: string;
   status: PaymentStatus;
+  /** What it was paid with. `null` on rows made before 2026-09-30. */
+  provider?: PaymentProvider | null;
+  /** Display only — see `PaymentGateway`. */
   gateway: PaymentGateway;
   gateway_ref?: string | null;
   /** The `SubscriberPlan` created once the purchase is applied (null until `paid`). */
@@ -132,30 +151,54 @@ export interface PlanPurchase {
   updated_at: string;
 }
 
-// ─── Payment channel + gateway instructions ─────────────────────────────────────
+// ─── What can be paid with: GET /payments/options ────────────────────────────────
+
+/** Which screen a provider needs. A hint only — the charge's `instructions` decide. */
+export type PaymentFlow = 'PUSH' | 'OTP' | 'CARD_ELEMENT' | 'REDIRECT';
+
+export interface PaymentOption {
+  provider: PaymentProvider;
+  kind: 'MOBILE_MONEY' | 'CARD';
+  flow: PaymentFlow;
+  /** The `channel` fields this provider needs, e.g. `['phoneNumber']`; `[]` for a card. */
+  fields: string[];
+  /** True when an SMS code may be asked for after the charge starts. */
+  mayRequireOtp: boolean;
+  /** Only on a card entry: the key Stripe.js is loaded with. */
+  publishableKey?: string;
+}
+
+export interface PaymentOptionsResponse {
+  success: boolean;
+  data: { providers: PaymentOption[] };
+}
+
+// ─── Payment channel + charge instructions ──────────────────────────────────────
 
 export interface PaymentChannel {
   phoneNumber?: string;
-  phoneOperator?: PhoneOperator;
-  // `cardToken` is deprecated/ignored by the backend — Stripe cards are now
-  // collected client-side with the returned `clientSecret`. Do NOT send it.
+  // `phoneOperator` (the provider says it now) and `cardToken` (cards are
+  // confirmed client-side with the returned `clientSecret`) are legacy: never send.
   customerEmail?: string;
   customerName?: string;
 }
 
 export interface GatewayInstructions {
-  // Mobile money (NotchPay / MyCoolPay)
+  // Mobile money
   ussdCode?: string;
   /**
-   * My-CoolPay + Orange Money only: the buyer was SMSed a one-time code and
-   * **nothing has been charged yet** — the gateway does nothing at all until that
-   * code is relayed back through the row's own `/authorize` endpoint. It arrives
-   * with no `ussdCode`, which is what separates this branch from every other
-   * mobile-money one, where the USSD prompt *is* the authorisation.
+   * The buyer was SMSed a one-time code and **nothing has been charged yet** —
+   * nothing happens until that code is relayed back through the row's own
+   * `/authorize` endpoint. It arrives with no `ussdCode`, which is what
+   * separates this branch from the others, where the USSD prompt *is* the
+   * authorisation. Honour it whatever `/options` said: the server can switch
+   * companies between the two calls.
    */
   requiresOtp?: boolean;
   expiresAt?: string;
-  // Stripe (card) — charge is in USD while the catalog price stays XAF.
+  /** Open this page to finish paying, then keep polling. Reserved; unused today. */
+  redirectUrl?: string;
+  // Card — charge is in USD while the catalog price stays XAF.
   /** PaymentIntent client secret — bind Stripe Elements + confirm the card with it. */
   clientSecret?: string;
   /** Exact amount the card will be charged (in `chargedCurrency`). */
@@ -170,12 +213,12 @@ export interface GatewayInstructions {
 
 export interface TopupInitPayload {
   packCode: string;
-  gateway: PaymentGateway;
+  provider: PaymentProvider;
   channel?: PaymentChannel;
 }
 
 export interface PlanPurchasePayload {
-  gateway: PaymentGateway;
+  provider: PaymentProvider;
   channel?: PaymentChannel;
 }
 
@@ -212,7 +255,8 @@ export interface CreditPacksResponse {
 }
 export interface TopupInitResponse {
   success: boolean;
-  data: { topup: CreditTopup; instructions: GatewayInstructions | null };
+  /** `provider`: what this attempt is charged on (a reused live attempt keeps its own). */
+  data: { topup: CreditTopup; instructions: GatewayInstructions | null; provider?: PaymentProvider | null };
   message?: string;
 }
 export interface TopupVerifyResponse {
@@ -221,7 +265,8 @@ export interface TopupVerifyResponse {
 }
 export interface PlanPurchaseInitResponse {
   success: boolean;
-  data: { purchase: PlanPurchase; instructions: GatewayInstructions | null };
+  /** `provider`: what this attempt is charged on (a reused live attempt keeps its own). */
+  data: { purchase: PlanPurchase; instructions: GatewayInstructions | null; provider?: PaymentProvider | null };
   message?: string;
 }
 export interface PlanPurchaseVerifyResponse {
@@ -246,9 +291,9 @@ export interface BillingSettingsResponse {
   message?: string;
 }
 
-// ─── Shared payment-flow shape (gateway-agnostic, used by PaymentDialog) ─────────
+// ─── Shared payment-flow shape (used by PaymentDialog for both flows) ────────────
 
-/** Normalised result of initiating any gateway payment (top-up or plan purchase). */
+/** Normalised result of starting a payment (top-up or plan purchase). */
 export interface PaymentInitResult {
   id: string;
   status: PaymentStatus;

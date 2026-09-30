@@ -1,23 +1,6 @@
 # Billing Module — Overview (Pricing Plans & Credit Wallet)
 
-**Verified against source on 2026-09-08** — R7 re-checked the seeded plan table against `scripts/seed/seed-pricing-plans.ts:45-52` (all three rows exact), and the bulk-vectorise route move to `POST /api/internal/admin/dev-tools/catalogue/vectorise` (`modules/dev-tools/admin-dev-tools.routes.ts:278`). No defects found.
-
-**Verified against backend source on 2026-08-24** — `scripts/seed/seed-pricing-plans.ts:47-51`,
-`src/modules/billing/services/entitlement.service.ts`, `src/modules/billing/validators/billing.validators.ts`.
-**Partially re-verified against source on 2026-09-08** — the seeded plan table (against
-`scripts/seed/seed-pricing-plans.ts:44-52`), the `BILLING_LIMIT_EXCEEDED` `details` shape
-(`entitlement.service.ts:100-113`), the bulk-vectorise route, and the new § 3.1 on plan-quota
-enforcement. The rest of the page still carries its 2026-08-24 verification.
-
-> **This is the concept page.** The routes are at [`billing.md`](./billing.md); the cross-role
-> model is at [`../billing-plans-across-roles.md`](../billing-plans-across-roles.md); Stripe
-> specifics are at [`stripe-payments.md`](./stripe-payments.md).
->
-> 🔴 **The Admin Billing API is no longer browser-reachable.** jovi-mall's public `/api/admin`
-> mount was removed; the catalog now lives at `/api/internal/admin/billing/*` behind
-> `INTERNAL_SERVICE_TOKEN`, answered only to wi-admin. Its page is not mirrored here. The
-> reference below is kept unlinked because the *field names* on that surface are the field
-> names you read back.
+**Verified against source on 2026-09-08** — the seeded plan table (`scripts/seed/seed-pricing-plans.ts:44-52`), the `BILLING_LIMIT_EXCEEDED` `details` shape (`services/entitlement.service.ts:100-113`), the bulk-vectorise route, and the new § 3.1 on plan-quota enforcement (`modules/plan-quota/`).
 
 The billing module monetizes vendors through **pricing plans** and meters two
 costly platform actions (AI product **vectorisation** and outbound **WhatsApp
@@ -27,7 +10,7 @@ This overview explains the domain concepts and data shapes shared by all billing
 endpoints. See the companion docs for the actual requests:
 
 - [**Vendor Billing API**](./billing.md) — plans, plan purchase, current plan, credit balance/ledger, top-ups, settings (vendor role)
-- **Admin Billing API** — pricing plan catalog CRUD + manual plan assignment. **wi-admin only** (`/api/internal/admin/billing/*`); see the note above
+- [**Admin Billing API**](../admin/billing.md) — pricing plan catalog CRUD + manual plan assignment (admin role)
 
 ---
 
@@ -47,11 +30,21 @@ All billing endpoints use the platform-standard envelope.
 
 **Error:**
 ```json
-{ "success": false, "requestId": "3f8a1c74-…",
-  "error": { "code": "ERROR_CODE", "message": "Human-readable description",
-             "statusCode": 400, "category": "validation", "details": { } } }
+{
+  "success": false,
+  "requestId": "3f8a1c74-9b2e-4d10-8c55-6a0f2b7e19dd",
+  "error": {
+    "code": "BILLING_INSUFFICIENT_CREDITS",
+    "message": "Human-readable description",
+    "statusCode": 402,
+    "category": "business_rule",
+    "details": { }
+  }
+}
 ```
-`details` is present on some errors (e.g. insufficient credits, limit exceeded).
+`category` is one of the nine values listed in [`../errors/README.md`](../errors/README.md) and is
+**always present**. `details` is present on some errors (e.g. insufficient credits, limit
+exceeded) and is omitted entirely when absent.
 
 ---
 
@@ -86,7 +79,7 @@ A vendor may not queue a second pending plan while one already exists (`BILLING_
 
 `SubscriberPlan.status` values: `active`, `pending_activation`, `expired`, `cancelled`. (The plan-assignment model is now owner-scoped — `SubscriberPlan`, `owner_type`/`owner_id` — and shared by vendor/agency/agent.)
 
-**How a vendor gets a plan.** New vendors start on free Starter automatically. To upgrade, the vendor **buys a plan themselves** — `POST /vendor/plans/:planId/purchase` opens a gateway payment; once confirmed (via `POST /vendor/plan-purchases/:id/verify`) the plan is **assigned/activated automatically, with no admin step**: immediately if currently on free/lapsed, or queued as `pending_activation` behind a still-running paid plan. Admins can also assign a plan manually for comps/overrides. This mirrors the credit top-up flow exactly.
+**How a vendor gets a plan.** New vendors start on free Starter automatically. To upgrade, the vendor **buys a plan themselves** — `POST /vendor/plans/:planId/purchase` opens a payment on the provider the vendor chose from `GET /api/payments/options`; once confirmed (via `POST /vendor/plan-purchases/:id/verify`) the plan is **assigned/activated automatically, with no admin step**: immediately if currently on free/lapsed, or queued as `pending_activation` behind a still-running paid plan. Admins can also assign a plan manually for comps/overrides. This mirrors the credit top-up flow exactly.
 
 ### 3. Credit wallet (single pooled balance)
 
@@ -141,20 +134,20 @@ Detail: [products.md](./products.md) and [storage.md](./storage.md).
 
 Notes:
 - Vendor-facing vectorisation is charged automatically; if the balance is too low the product still saves but its `vectorisationStatus` becomes `skipped_no_credits` (no error to the request). A failed external vectorisation is **refunded**.
-- Admin bulk re-vectorisation is **not** charged to vendors. ⚠ Its route is
-  **`POST /api/internal/admin/dev-tools/catalogue/vectorise`**, reachable only by wi-admin
-  server-to-server; the old `POST /api/admin/products/bulk-vectorise` mount was deleted on
-  2026-09-07 and now 404s. Nothing vendor-facing triggers it.
+- Admin bulk re-vectorisation is **not** charged to vendors. ⚠ The route is `POST /api/internal/admin/dev-tools/catalogue/vectorise` (wi-admin surfaces it at `/api/v1/dev-tools/catalogue/vectorise`); this line named the pre-cutover `POST /admin/products/bulk-vectorise` until 2026-09-06, and no `/api/admin/*` route has existed since Phase 5 Part E (DOC-PROGRAM P-7).
 - WhatsApp system messages (verification codes, delivery-agent dispatch) are **exempt** — only vendor→customer templates are billed.
 - Costs are configurable server-side and may change; don't hardcode them in the UI if you can read them from responses.
 
 ### 5. Top-ups
 
-Vendors can buy additional credits in fixed **packs** via a payment gateway (NotchPay / MyCoolPay mobile money, or Stripe card). Flow:
+Vendors can buy additional credits in fixed **packs**, paid with a **provider** from `GET /api/payments/options` (MTN or Orange mobile money today; card when switched on). The server picks the aggregator. Flow:
 
-1. `POST /vendor/credits/topups` → creates a `pending` top-up and returns gateway `instructions`.
-2. Vendor completes the payment on the gateway (USSD / card confirmation).
-3. `POST /vendor/credits/topups/:id/verify` → polls the gateway; on success the wallet is credited and the top-up becomes `paid` (idempotent).
+1. `GET /api/payments/options` → the providers on offer. An empty list means online payment is off.
+2. `POST /vendor/credits/topups` with `{ packCode, provider, channel }` → creates a `pending` top-up and returns payment `instructions`.
+3. Vendor completes the payment (handset prompt, SMS code, or card confirmation, as `instructions` say).
+4. `POST /vendor/credits/topups/:id/verify` → re-checks with the aggregator that holds the top-up; on success the wallet is credited and the top-up becomes `paid` (idempotent).
+
+Request body, refusals and legacy `gateway` handling: [billing.md § Paying for a plan or a top-up](./billing.md#paying-for-a-plan-or-a-top-up-providers-not-gateways-2026-09-30).
 
 Seeded packs (read live via `GET /vendor/credits/packs`):
 
@@ -243,6 +236,7 @@ Vendors choose how many days **before** plan expiry they want to be warned (`not
   "price": 600,
   "currency": "XAF",
   "status": "pending",
+  "provider": "MTN",
   "gateway": "NOTCHPAY",
   "gateway_ref": "notch_tx_abc123",
   "payment_transaction_id": null,
@@ -250,7 +244,7 @@ Vendors choose how many days **before** plan expiry they want to be warned (`not
   "updated_at": "2026-06-19T11:05:00.000Z"
 }
 ```
-`status` ∈ `pending | paid | failed`. `gateway` ∈ `NOTCHPAY | MYCOOLPAY | STRIPE`.
+`status` ∈ `pending | paid | failed`. `provider` ∈ `MTN | ORANGE | MOOV | CARD`, or `null` on a row created before 2026-09-30. `gateway` (`NOTCHPAY | MYCOOLPAY | STRIPE`, more later) is **informational only**: which aggregator carried the money. Never branch on it; a client must accept a value it does not know.
 
 ### `PlanPurchase`
 ```json
@@ -263,6 +257,7 @@ Vendors choose how many days **before** plan expiry they want to be warned (`not
   "price": 5000,
   "currency": "XAF",
   "status": "pending",
+  "provider": "MTN",
   "gateway": "NOTCHPAY",
   "gateway_ref": "notch_tx_p1",
   "subscriber_plan_id": null,
@@ -296,9 +291,13 @@ Vendors choose how many days **before** plan expiry they want to be warned (`not
 | `BILLING_PLAN_NOT_PURCHASABLE` | 409 | Tried to purchase the free/0-price plan (it's the default tier) |
 | `BILLING_PLAN_PURCHASE_NOT_FOUND` | 404 | Plan-purchase id not found / not owned by the vendor |
 | `BILLING_PURCHASE_INVALID_STATE` | 409 | Plan purchase has no gateway reference yet (cannot verify) |
-| `PAYMENT_GATEWAY_NOT_SUPPORTED` | 400 | Unsupported `gateway` value on a top-up or plan purchase |
-| `PAYMENT_INITIATION_FAILED` | 502 | Gateway rejected the top-up / plan-purchase initiation |
+| `PAYMENT_PROVIDER_REQUIRED` | 400 | No `provider`, and none could be derived from a legacy body |
+| `PAYMENT_PROVIDER_UNAVAILABLE` | 422 | The provider is switched off or cannot be routed right now. `details.offered` is the fresh list. Nothing written |
+| `PAYMENT_PROVIDER_PHONE_MISMATCH` | 422 | The number belongs to another network than `provider` (`details.detected`). Nothing written |
+| `PAYMENT_INITIATION_FAILED` | 502 | The aggregator could not be reached for the top-up / plan-purchase initiation |
+
+`PAYMENT_GATEWAY_NOT_SUPPORTED` is **no longer raised** on a top-up or plan purchase (since 2026-09-30): `gateway` is accepted and ignored.
 
 Plus the platform-standard `VALIDATION_ERROR` (400), the `AUTH_*` family on 401/403 — `AUTH_MISSING_TOKEN` · `AUTH_TOKEN_EXPIRED` · `AUTH_TOKEN_INVALID` on 401, `AUTH_ROLE_NOT_FOUND` on 403 — and `INTERNAL_SERVER_ERROR` (500).
 
-> ⚠ **This line named four codes that do not exist** (`UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND` for a resource miss, `INTERNAL_ERROR`) until 2026-09-06. `NOT_FOUND` **is** in the registry but is marked *"unmatched routes only"* (`error-codes.ts:1531`) — a resource miss gets a domain-prefixed code such as `ORDER_NOT_FOUND`. Corrected from source.
+> ⚠ **This line named four codes that do not exist** (`UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND` for a resource miss, `INTERNAL_ERROR`) until 2026-09-06. The registry has none of the first, second or fourth; the real ones are `AUTH_MISSING_TOKEN` / `AUTH_TOKEN_EXPIRED` / `AUTH_TOKEN_INVALID` on 401 and `AUTH_ROLE_NOT_FOUND` on 403 (`error-codes.ts:61-64`, raised at `auth.middleware.ts:126` and `:366`), and `INTERNAL_SERVER_ERROR` on 500 (`error-codes.ts:1530`). `NOT_FOUND` **is** in the registry but is marked *"unmatched routes only"* (`error-codes.ts:1531`) — a resource miss gets a domain-prefixed code such as `BILLING_TOPUP_NOT_FOUND` above. Corrected from source.

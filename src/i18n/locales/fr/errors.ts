@@ -44,6 +44,7 @@ export const errors = {
     fields: {
         email: 'Saisissez une adresse e-mail valide.',
         phone: 'Saisissez un numéro de téléphone valide, avec l’indicatif du pays.',
+        phoneNumber: 'Saisissez un numéro de téléphone valide, avec l’indicatif du pays.',
         password: 'Saisissez un mot de passe valide.',
         displayName: 'Saisissez un nom de 2 à 100 caractères.',
         title: 'Saisissez un titre.',
@@ -277,6 +278,12 @@ export const errors = {
         PAYMENT_OTP_NOT_REQUIRED: 'Ce paiement n’attend aucun code.',
         PAYMENT_OTP_ATTEMPTS_EXCEEDED:
             'Trop de codes incorrects. Relancez le paiement pour en obtenir un nouveau.',
+        PAYMENT_PROVIDER_PHONE_MISMATCH:
+            'Ce numéro appartient à un autre réseau. Choisissez son réseau, ou saisissez un autre numéro.',
+        PAYMENT_PROVIDER_UNAVAILABLE:
+            'Ce moyen de paiement n’est pas disponible en ce moment. Choisissez-en un autre.',
+        PAYMENT_PROVIDER_REQUIRED:
+            'Un problème de notre côté a empêché de lancer le paiement. Actualisez la page et réessayez.',
         PAYMENT_CART_NOT_FOUND: 'Ce panier est introuvable.',
         PAYMENT_CART_NO_PAYABLE_ORDERS: "Il n'y a rien à payer dans ce panier.",
         PAYMENT_CART_MIXED_CURRENCY: 'Tous les articles d’un même paiement doivent utiliser la même devise.',
@@ -295,7 +302,7 @@ export const errors = {
             "Nous n'avons pas pu joindre le prestataire de paiement. Réessayez dans quelques minutes.",
         PAYMENT_METHOD_NOT_FOUND: 'Ce moyen de paiement est introuvable.',
         PAYMENT_METHOD_LIMIT_REACHED:
-            'Vous avez atteint le nombre maximum de moyens de paiement enregistrés. Supprimez-en un pour en ajouter un autre.',
+            'Vous pouvez enregistrer jusqu’à 10 moyens de paiement. Supprimez-en un d’abord.',
 
         // ── Remboursements ────────────────────────────────────────────────────
         REFUND_NOT_ELIGIBLE: "Cette commande n'est pas éligible à un remboursement.",

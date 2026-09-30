@@ -22,13 +22,6 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { isValidPhone, toE164 } from '@/lib/phone';
 import { isValidEmail, normalizeEmail } from '@/lib/email';
@@ -40,37 +33,39 @@ import {
   PaymentOptionGroup,
   PaymentOptionIcon,
   brandForSavedMethod,
-  matchMobileMoneyBrand,
   mobileMoneyBrandById,
+  mobileMoneyBrandByOperator,
   type MobileMoneyBrandId,
 } from '@/components/payment-methods';
 import { useTranslation, useFormatters, useApiError, type TranslationKey } from '@/i18n';
 import type {
   PaymentAuthorizeResult,
   PaymentChannel,
-  PaymentGateway,
   PaymentInitResult,
+  PaymentOption,
+  PaymentProvider,
   PaymentStatus,
+  PhoneOperator,
 } from '@/types/billing.types';
 import type { SavedPaymentMethod } from '@/types/payment-method.types';
-import { isStripeConfigured } from '@/lib/stripe';
+import { fetchPaymentOptions } from '@/services/billing.service';
 import { fetchPaymentMethods } from '@/services/payment-methods.service';
 import { StripePaymentElement, type StripePaymentElementHandle } from './StripePaymentElement';
 import { CardPreview } from './CardPreview';
 import {
-  CARD_GATEWAY,
-  GATEWAYS,
-  MOBILE_MONEY_GATEWAY,
-  MOBILE_MONEY_GATEWAYS,
   OTP_CODE_MAX_LENGTH,
   PAYMENT_POLL_INTERVAL_MS,
   PAYMENT_POLL_TIMEOUT_MS,
+  chargeCurrencyOf,
   formatCharged,
   isOtpAttemptsExceeded,
   isOtpReconcileError,
   isValidOtpCode,
   otpAttemptsRemaining,
+  payableSavedWallet,
+  providerMismatchDetected,
   requiresOtpStep,
+  unavailableProviderOffered,
   saveStripeResume,
   clearStripeResume,
   type StripeResumeKind,
@@ -82,6 +77,8 @@ type Phase = 'form' | 'card' | 'otp' | 'processing' | 'success' | 'failed' | 'ti
 interface StripeInit {
   id: string;
   clientSecret: string;
+  /** From the card entry of `/options` — Stripe.js is loaded with this key. */
+  publishableKey: string;
   chargedAmount?: number;
   chargedCurrency?: string;
 }
@@ -96,15 +93,17 @@ export interface PaymentDialogProps {
   currency: string;
   /** Which flow this is — drives the Stripe 3-D Secure resume marker. */
   paymentKind: StripeResumeKind;
-  /** Initiate the gateway payment. Returns the normalised init result. */
-  initiate: (gateway: PaymentGateway, channel: PaymentChannel) => Promise<PaymentInitResult>;
+  /**
+   * Start the payment on the chosen provider (one `/payments/options` listed).
+   * Returns the normalised init result.
+   */
+  initiate: (provider: PaymentProvider, channel: PaymentChannel) => Promise<PaymentInitResult>;
   /**
    * Relay the SMS code for a payment whose `initiate` answered `requiresOtp`
-   * with no `ussdCode` — My-CoolPay + Orange Money, the one gateway/operator
-   * pair with an OTP step. Required rather than optional: the plan and top-up
+   * with no `ussdCode`. Required rather than optional: the plan and top-up
    * flows each have their own `/authorize` route, and a caller that quietly
-   * omitted one would leave that flow's Orange Money payments unable to
-   * complete at all — which is the bug this step exists to fix.
+   * omitted one would leave that flow's OTP payments unable to complete at
+   * all — which is the bug this step exists to fix.
    */
   authorize: (id: string, code: string) => Promise<PaymentAuthorizeResult>;
   /** Poll a pending payment; resolves with its current status. */
@@ -116,21 +115,25 @@ export interface PaymentDialogProps {
 }
 
 
-/** The two top-level choices. Card only appears when Stripe is configured. */
+/** The two top-level choices. Card only appears when `/options` lists it. */
 type MethodCategory = 'card' | 'mobile_money';
 
-/** Wallet pre-selected when the dialog opens — the largest operator in our markets. */
-const DEFAULT_BRAND: MobileMoneyBrandId = 'mtn';
-
-/** Map a saved mobile-money method's provider to the gateway that can charge it. */
-function providerToMobileMoneyGateway(provider: string): PaymentGateway | null {
-  const match = MOBILE_MONEY_GATEWAYS.find((g) => g.value.toLowerCase() === provider.toLowerCase());
-  return match?.value ?? null;
+/** The card entry, when the server offers cards (and gave a key to load Stripe with). */
+function cardOptionOf(options: PaymentOption[] | null): PaymentOption | undefined {
+  return options?.find((o) => o.kind === 'CARD' && !!o.publishableKey);
 }
 
-/** The currency a gateway actually settles in — XAF for wallets, USD for cards. */
-function chargeCurrencyOf(gateway: PaymentGateway): string | undefined {
-  return GATEWAYS.find((g) => g.value === gateway)?.chargeCurrency;
+function mobileOptionsOf(options: PaymentOption[] | null): PaymentOption[] {
+  return (options ?? []).filter((o) => o.kind === 'MOBILE_MONEY');
+}
+
+/** The wallet to pre-select: the first one offered, in the server's order. */
+function firstOfferedBrand(options: PaymentOption[]): MobileMoneyBrandId | null {
+  for (const o of mobileOptionsOf(options)) {
+    const brand = mobileMoneyBrandByOperator(o.provider as PhoneOperator);
+    if (brand) return brand.id;
+  }
+  return null;
 }
 
 export function PaymentDialog({
@@ -152,11 +155,11 @@ export function PaymentDialog({
   const apiError = useApiError();
   const successLabel = t(successLabelKey);
 
-  const [category, setCategory] = useState<MethodCategory>(
-    isStripeConfigured ? 'card' : 'mobile_money',
-  );
-  const [brandId, setBrandId] = useState<MobileMoneyBrandId>(DEFAULT_BRAND);
-  const [mobileGateway, setMobileGateway] = useState<PaymentGateway>(MOBILE_MONEY_GATEWAY);
+  // What can be paid with, from `GET /payments/options`. `null` while loading.
+  const [options, setOptions] = useState<PaymentOption[] | null>(null);
+  const [optionsFailed, setOptionsFailed] = useState(false);
+  const [category, setCategory] = useState<MethodCategory>('mobile_money');
+  const [brandId, setBrandId] = useState<MobileMoneyBrandId | null>(null);
   const [phone, setPhone] = useState('');
   const [holderName, setHolderName] = useState('');
   const [email, setEmail] = useState('');
@@ -166,6 +169,8 @@ export function PaymentDialog({
   const [cardError, setCardError] = useState<string | null>(null);
   const [instructionMsg, setInstructionMsg] = useState<string | null>(null);
   const [ussd, setUssd] = useState<string | null>(null);
+  // Set when the charge answered with a page to finish paying on.
+  const [redirectUrl, setRedirectUrl] = useState<string | null>(null);
   const [stripeInit, setStripeInit] = useState<StripeInit | null>(null);
   const [cardReady, setCardReady] = useState(false);
 
@@ -184,22 +189,63 @@ export function PaymentDialog({
   // Saved methods power the quick-select chip row + autofill.
   const [savedMethods, setSavedMethods] = useState<SavedPaymentMethod[]>([]);
   const [selectedSavedId, setSelectedSavedId] = useState<string | null>(null);
+  // Loaded (or failed to load) for this opening — the default is picked only after.
+  const [savedLoaded, setSavedLoaded] = useState(false);
+  const autoPicked = useRef(false);
 
   const cardRef = useRef<StripePaymentElementHandle>(null);
   const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollDeadline = useRef<number>(0);
 
+  const cardOption = cardOptionOf(options);
+  const mobileOptions = mobileOptionsOf(options);
+  const offeredOperators = mobileOptions.map((o) => o.provider as PhoneOperator);
+  const payableMethods = savedMethods.filter((m) => payableSavedWallet(m, offeredOperators));
   const isStripe = category === 'card';
   const brand = mobileMoneyBrandById(brandId);
-  /** The gateway the initiate call will actually use. */
-  const gateway = isStripe ? CARD_GATEWAY : mobileGateway;
+  /** The `/options` entry the charge will be made on, if the current pick is offered. */
+  const selectedOption = isStripe
+    ? cardOption
+    : mobileOptions.find((o) => o.provider === brand?.chargeOperator);
+  const needsPhone = !isStripe && (selectedOption?.fields.includes('phoneNumber') ?? true);
 
-  // Reset everything when the dialog is (re)opened or closed.
+  /**
+   * Show a (new) list of ways to pay, keeping the vendor's pick when it is
+   * still on offer and falling back to the first offered one when it is not.
+   */
+  function applyOptions(next: PaymentOption[], preferCard = false) {
+    const card = cardOptionOf(next);
+    const mobile = mobileOptionsOf(next);
+    setOptions(next);
+    setCategory((prev) => {
+      const want = preferCard ? 'card' : prev;
+      if (want === 'card' && card) return 'card';
+      return mobile.length > 0 ? 'mobile_money' : card ? 'card' : 'mobile_money';
+    });
+    setBrandId((prev) => {
+      const op = mobileMoneyBrandById(prev)?.chargeOperator;
+      if (op && mobile.some((o) => o.provider === op)) return prev;
+      return firstOfferedBrand(next);
+    });
+  }
+
+  async function loadOptions() {
+    setOptions(null);
+    setOptionsFailed(false);
+    try {
+      applyOptions(await fetchPaymentOptions(), true);
+    } catch {
+      setOptionsFailed(true);
+    }
+  }
+
+  // Reset everything when the dialog is (re)opened or closed, and ask the
+  // server afresh what can be paid with — it can change between two openings.
   useEffect(() => {
     if (open) {
-      setCategory(isStripeConfigured ? 'card' : 'mobile_money');
-      setBrandId(DEFAULT_BRAND);
-      setMobileGateway(MOBILE_MONEY_GATEWAY);
+      setCategory('mobile_money');
+      setBrandId(null);
+      void loadOptions();
       setPhone('');
       setHolderName('');
       setEmail('');
@@ -209,9 +255,12 @@ export function PaymentDialog({
       setCardError(null);
       setInstructionMsg(null);
       setUssd(null);
+      setRedirectUrl(null);
       setStripeInit(null);
       setCardReady(false);
       setSelectedSavedId(null);
+      setSavedLoaded(false);
+      autoPicked.current = false;
       setPaymentId(null);
       setOtpCode('');
       setOtpError(null);
@@ -219,6 +268,8 @@ export function PaymentDialog({
       setFailedReason(null);
     }
     return stopPolling;
+    // Runs on open/close only; `loadOptions` reads nothing from render scope.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   // Load saved methods for the quick-select row (best-effort — autofill only).
@@ -226,15 +277,22 @@ export function PaymentDialog({
     if (!open) return;
     let cancelled = false;
     (async () => {
+      let methods: SavedPaymentMethod[] = [];
       try {
-        const methods = await fetchPaymentMethods();
-        if (!cancelled) setSavedMethods(methods);
+        methods = await fetchPaymentMethods();
       } catch {
-        if (!cancelled) setSavedMethods([]);
+        // Autofill only — the form works without them.
+      }
+      if (!cancelled) {
+        setSavedMethods(methods);
+        setSavedLoaded(true);
       }
     })();
     return () => {
       cancelled = true;
+      // Closing forgets the load, so a reopening waits for fresh lists before
+      // picking the default rather than acting on the previous opening's.
+      setSavedLoaded(false);
     };
   }, [open]);
 
@@ -272,33 +330,38 @@ export function PaymentDialog({
     }, PAYMENT_POLL_INTERVAL_MS);
   }
 
-  /** Quick-select a saved method: switch category + prefill what we can. */
+  /**
+   * Quick-select a saved wallet: switch to mobile money on its network. Only a
+   * wallet whose network is on offer right now can be picked — an older card or
+   * a row with an unknown network is never used to pre-fill a payment. The
+   * server never returns the full number, so the vendor still types it.
+   */
   function selectSaved(method: SavedPaymentMethod) {
+    const operator = payableSavedWallet(method, offeredOperators);
+    if (!operator) return;
     setSelectedSavedId(method.id);
     setFormError(null);
-    if (method.holder_name) setHolderName(method.holder_name);
-
-    if (method.method_type === 'card') {
-      if (isStripeConfigured) setCategory('card');
-      return;
-    }
     setCategory('mobile_money');
-    const gw = providerToMobileMoneyGateway(method.provider);
-    if (gw) setMobileGateway(gw);
-    // Only wallets a gateway can debit are offered, so a saved Airtel/Wave
-    // method (payout-only) leaves the current pick alone rather than selecting
-    // a brand the picker would then refuse.
-    const saved = matchMobileMoneyBrand(method.brand);
-    if (saved?.chargeOperator) setBrandId(saved.id);
+    const saved = mobileMoneyBrandByOperator(operator);
+    if (saved) setBrandId(saved.id);
   }
 
   function clearSaved() {
     setSelectedSavedId(null);
-    setHolderName('');
-    setPhone('');
   }
 
-  /** Build the `channel` for the chosen gateway. Returns null + sets formError on bad input. */
+  // Pre-select the default wallet once per opening, as soon as both lists are
+  // in — and only when it can be paid with right now.
+  useEffect(() => {
+    if (!open || autoPicked.current || options === null || !savedLoaded) return;
+    autoPicked.current = true;
+    const preferred = savedMethods.find((m) => m.isDefault);
+    if (preferred) selectSaved(preferred);
+    // `selectSaved` reads the offered list from this same render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, options, savedLoaded]);
+
+  /** Build the `channel` for the chosen provider. Returns null + sets formError on bad input. */
   function buildChannel(): PaymentChannel | null {
     if (isStripe) {
       // Stripe collects the card client-side — send only identification fields.
@@ -311,30 +374,80 @@ export function PaymentDialog({
       if (holderName.trim()) channel.customerName = holderName.trim();
       return channel;
     }
-    // Mobile money — phone + operator are required. The gateway is given E.164.
-    // The picker only offers debitable wallets, so this guard is belt-and-braces
-    // against a future brand landing in state before its gateway support does.
-    if (!brand?.chargeOperator) {
-      setFormError(t('payments.providers.soonHint', { brand: brand?.name ?? '' }));
+    // Mobile money — the provider names the network, so only the fields its
+    // `/options` entry lists are sent (today the number, in E.164). The picker
+    // only lets an offered wallet be chosen; this guard is belt-and-braces.
+    if (!selectedOption) {
+      setFormError(t('payments.providers.offlineHint', { brand: brand?.name ?? '' }));
       return null;
     }
+    if (!needsPhone) return {};
     const phoneNumber = toE164(phone);
     if (!phoneNumber) {
       setFormError(t('common.validation.phone'));
       return null;
     }
-    return { phoneNumber, phoneOperator: brand.chargeOperator };
+    return { phoneNumber };
+  }
+
+  /** How a provider is named on screen: the wallet's brand, or "Card". */
+  function providerName(provider: PaymentProvider): string {
+    if (provider === 'CARD') return t('payments.category.card.title');
+    return mobileMoneyBrandByOperator(provider)?.name ?? provider;
+  }
+
+  /**
+   * The server refused the charge before writing anything. Returns true when
+   * the refusal was one of the two provider ones, which keep the form filled
+   * in and say exactly what to change.
+   */
+  function handleProviderRefusal(err: unknown, provider: PaymentProvider): boolean {
+    // The number is on another network than the one picked. Say which, and
+    // leave the pick alone — silently switching the vendor's choice is not ok.
+    const detected = providerMismatchDetected(err);
+    if (detected) {
+      setFormError(
+        t('billing.checkout.phoneMismatch', {
+          detected: providerName(detected),
+          chosen: providerName(provider),
+        }),
+      );
+      return true;
+    }
+
+    // The pick was switched off after the dialog loaded. `offered` is the
+    // fresh list: show only those, and keep everything else as typed.
+    const offered = unavailableProviderOffered(err);
+    if (offered) {
+      const kept = (options ?? []).filter((o) => offered.includes(o.provider));
+      applyOptions(kept);
+      // `offered` only names providers. One the dialog never had details for
+      // (fields, card key) needs a fresh `/options` before it can be shown.
+      if (kept.length < offered.length) {
+        fetchPaymentOptions()
+          .then((fresh) => applyOptions(fresh))
+          .catch(() => undefined);
+      }
+      setFormError(
+        offered.length > 0
+          ? t('billing.checkout.providerSwitchedOff', { brand: providerName(provider) })
+          : t('billing.checkout.providerSwitchedOffAll'),
+      );
+      return true;
+    }
+    return false;
   }
 
   /** Step 1: initiate the payment server-side. */
   async function handleInitiate() {
     setFormError(null);
+    const provider = selectedOption?.provider;
     const channel = buildChannel();
-    if (!channel) return;
+    if (!channel || !provider) return;
 
     setSubmitting(true);
     try {
-      const result = await initiate(gateway, channel);
+      const result = await initiate(provider, channel);
 
       if (result.status === 'paid') {
         setPhase('success');
@@ -351,23 +464,13 @@ export function PaymentDialog({
       // verify poll, or both.
       setPaymentId(result.id);
 
-      // For Stripe, mount the Payment Element and confirm the card next.
-      if (isStripe && result.instructions?.clientSecret) {
-        setStripeInit({
-          id: result.id,
-          clientSecret: result.instructions.clientSecret,
-          chargedAmount: result.instructions.chargedAmount,
-          chargedCurrency: result.instructions.chargedCurrency,
-        });
-        setCardError(null);
-        setCardReady(false);
-        setPhase('card');
-        return;
-      }
+      // What happens next is read off the answer, never off which company the
+      // server used, and never off what `/options` hinted: the server can
+      // switch companies between the two calls.
 
-      // My-CoolPay + Orange Money: the buyer has been SMSed a one-time code and
-      // NOTHING has been charged — the gateway sits idle until that code comes
-      // back. There is nothing to poll for yet, so collect it first.
+      // An SMS code was sent and NOTHING has been charged — nothing moves
+      // until that code comes back. There is nothing to poll for yet, so
+      // collect it first.
       if (requiresOtpStep(result.instructions)) {
         setOtpCode('');
         setOtpError(null);
@@ -377,7 +480,38 @@ export function PaymentDialog({
         return;
       }
 
-      // Mobile money (or a gateway that already confirmed): show instructions + poll.
+      // A card: mount the Payment Element and confirm the card next.
+      if (result.instructions?.clientSecret) {
+        if (!cardOption?.publishableKey) {
+          setFormError(t('billing.cardForm.unavailable'));
+          return;
+        }
+        setStripeInit({
+          id: result.id,
+          clientSecret: result.instructions.clientSecret,
+          publishableKey: cardOption.publishableKey,
+          chargedAmount: result.instructions.chargedAmount,
+          chargedCurrency: result.instructions.chargedCurrency,
+        });
+        setCardError(null);
+        setCardReady(false);
+        setPhase('card');
+        return;
+      }
+
+      // The payment carries on on a separate page. Offer it as a link (a
+      // window opened after an await is blocked by most browsers) and poll
+      // meanwhile, so coming back to the dialog picks the result up.
+      if (result.instructions?.redirectUrl) {
+        setRedirectUrl(result.instructions.redirectUrl);
+        setUssd(null);
+        setInstructionMsg(t('billing.checkout.redirectPrompt'));
+        setPhase('processing');
+        startPolling(result.id);
+        return;
+      }
+
+      // Otherwise: approve the prompt on the handset, and poll.
       setUssd(result.instructions?.ussdCode ?? null);
       setInstructionMsg(
         result.instructions?.message ?? t('billing.checkout.phonePrompt'),
@@ -385,6 +519,7 @@ export function PaymentDialog({
       setPhase('processing');
       startPolling(result.id);
     } catch (err) {
+      if (handleProviderRefusal(err, provider)) return;
       setFormError(
         apiError.resolve(err, { context: 'billing', fallbackKey: 'billing.errors.paymentFailed' }),
       );
@@ -394,13 +529,13 @@ export function PaymentDialog({
   }
 
   /**
-   * Step 2 (My-CoolPay + Orange Money only): relay the SMS code, then poll.
+   * Step 2 (only when the charge asked for an SMS code): relay it, then poll.
    *
    * 🔴 **A 200 here is not a payment.** The row comes back still `pending`, and
    * that is correct — the code only authorises the charge, and the buyer has
    * still to confirm it on the handset. So this drops straight into the same
    * verify poll every other branch uses: no success state, no `onPaid()`, no
-   * wallet or plan refresh. The gateway callback or the poll settles it.
+   * wallet or plan refresh. The payment callback or the poll settles it.
    */
   async function handleAuthorize() {
     if (!paymentId) return;
@@ -435,7 +570,7 @@ export function PaymentDialog({
       }
       if (isOtpReconcileError(err)) {
         // This row is not waiting on a code: already settled, not yet charged, or
-        // a gateway with no OTP step at all. Reconcile with the idempotent verify
+        // a payment with no OTP step at all. Reconcile with the idempotent verify
         // poll rather than resubmit — a second accepted code is a second charge.
         setUssd(null);
         setInstructionMsg(t('billing.checkout.otpReconciling'));
@@ -496,6 +631,7 @@ export function PaymentDialog({
 
   function backToForm() {
     setStripeInit(null);
+    setRedirectUrl(null);
     setCardError(null);
     setCardReady(false);
     setSubmitting(false);
@@ -531,16 +667,53 @@ export function PaymentDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {phase === 'form' && (
+        {phase === 'form' && options === null && !optionsFailed && (
+          <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            {t('billing.checkout.optionsLoading')}
+          </div>
+        )}
+
+        {phase === 'form' && optionsFailed && (
+          <ResultState
+            icon={<XCircle className="mx-auto h-10 w-10 text-destructive" />}
+            title={t('billing.checkout.optionsFailed')}
+            action={
+              <>
+                <Button variant="outline" onClick={() => handleClose(false)}>
+                  {t('common.actions.close')}
+                </Button>
+                <Button onClick={() => void loadOptions()}>{t('common.actions.retry')}</Button>
+              </>
+            }
+          />
+        )}
+
+        {/* The server offers nothing to pay with: online payment is switched
+            off. A valid answer, not an error — so no retry and no pay button. */}
+        {phase === 'form' && options !== null && !cardOption && mobileOptions.length === 0 && (
+          <ResultState
+            icon={<Info className="mx-auto h-10 w-10 text-muted-foreground" />}
+            title={t('billing.checkout.onlineUnavailable')}
+            description={formError ?? t('billing.checkout.onlineUnavailableHint')}
+            action={
+              <Button variant="outline" onClick={() => handleClose(false)}>
+                {t('common.actions.close')}
+              </Button>
+            }
+          />
+        )}
+
+        {phase === 'form' && options !== null && (cardOption || mobileOptions.length > 0) && (
           <div className="space-y-5">
             {/* Saved-method quick-select row */}
-            {savedMethods.length > 0 && (
+            {payableMethods.length > 0 && (
               <div className="space-y-1.5">
                 <Label>{t('billing.checkout.savedMethods')}</Label>
                 {/* Horizontally scrollable rather than wrapped: ten saved methods
                     would otherwise push the actual form off a phone screen. */}
                 <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
-                  {savedMethods.map((m) => (
+                  {payableMethods.map((m) => (
                     <SavedChip
                       key={m.id}
                       method={m}
@@ -566,7 +739,8 @@ export function PaymentDialog({
               </div>
             )}
 
-            {/* Category first: the vendor picks a way to pay, not a gateway name. */}
+            {/* Category first: the vendor picks a way to pay. Only what the
+                server offers right now is shown. */}
             <div className="space-y-2">
               <Label id="pay-category-label" className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 {t('billing.checkout.payWith')}
@@ -579,28 +753,30 @@ export function PaymentDialog({
                   setFormError(null);
                 }}
                 disabled={submitting}
-                // Two abreast so the whole choice is one glance; a lone card (no
-                // Stripe key) keeps the full width rather than sitting half-empty.
-                className={isStripeConfigured ? 'grid-cols-2' : undefined}
+                // Two abreast so the whole choice is one glance; a lone choice
+                // keeps the full width rather than sitting half-empty.
+                className={cardOption && mobileOptions.length > 0 ? 'grid-cols-2' : undefined}
               >
-                {isStripeConfigured && (
+                {cardOption && (
                   <PaymentOptionCard
                     value="card"
                     orientation="stacked"
                     visual={<PaymentOptionIcon icon={CreditCard} />}
                     title={t('payments.category.card.title')}
                     description={t('payments.category.card.provider')}
-                    badge={<CurrencyPill code={chargeCurrencyOf(CARD_GATEWAY)} />}
+                    badge={<CurrencyPill code={chargeCurrencyOf(cardOption)} />}
                   />
                 )}
-                <PaymentOptionCard
-                  value="mobile_money"
-                  orientation="stacked"
-                  visual={<PaymentOptionIcon icon={Smartphone} />}
-                  title={t('payments.category.mobileMoney.title')}
-                  description={t('payments.category.mobileMoney.payFrom')}
-                  badge={<CurrencyPill code={chargeCurrencyOf(mobileGateway)} />}
-                />
+                {mobileOptions.length > 0 && (
+                  <PaymentOptionCard
+                    value="mobile_money"
+                    orientation="stacked"
+                    visual={<PaymentOptionIcon icon={Smartphone} />}
+                    title={t('payments.category.mobileMoney.title')}
+                    description={t('payments.category.mobileMoney.payFrom')}
+                    badge={<CurrencyPill code={chargeCurrencyOf(mobileOptions[0])} />}
+                  />
+                )}
               </PaymentOptionGroup>
             </div>
 
@@ -611,39 +787,36 @@ export function PaymentDialog({
                   <MobileMoneyBrandPicker
                     aria-labelledby="pay-provider-label"
                     value={brandId}
-                    onChange={setBrandId}
+                    onChange={(id) => {
+                      setBrandId(id);
+                      setFormError(null);
+                    }}
                     chargeableOnly
+                    offered={offeredOperators}
                     disabled={submitting}
                   />
                 </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="pay-phone">{t('billing.checkout.phone')}</Label>
-                  <PhoneInput
-                    id="pay-phone"
-                    value={phone}
-                    onChange={setPhone}
-                    required
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="pay-gateway">{t('billing.methods.processedBy')}</Label>
-                  <Select
-                    value={mobileGateway}
-                    onValueChange={(v) => setMobileGateway(v as PaymentGateway)}
-                    disabled={submitting}
-                  >
-                    <SelectTrigger id="pay-gateway">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {MOBILE_MONEY_GATEWAYS.map((g) => (
-                        <SelectItem key={g.value} value={g.value}>
-                          {t(g.labelKey)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                {needsPhone && (
+                  <div className="space-y-1.5">
+                    <Label htmlFor="pay-phone">{t('billing.checkout.phone')}</Label>
+                    <PhoneInput
+                      id="pay-phone"
+                      value={phone}
+                      onChange={(value) => {
+                        setPhone(value);
+                        setFormError(null);
+                      }}
+                      required
+                    />
+                  </div>
+                )}
+                {/* Only a hint: the charge's answer decides whether a code is asked for. */}
+                {selectedOption?.mayRequireOtp && (
+                  <p className="flex gap-2 text-xs text-muted-foreground">
+                    <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                    <span>{t('billing.checkout.otpMayFollow')}</span>
+                  </p>
+                )}
               </div>
             ) : (
               <div className="space-y-4">
@@ -697,11 +870,9 @@ export function PaymentDialog({
               </Button>
               <Button
                 onClick={handleInitiate}
-                // An incomplete mobile-money number can't be charged — don't let
-                // it reach the gateway.
-                disabled={
-                  submitting || (!isStripe && (!isValidPhone(phone) || !brand?.chargeOperator))
-                }
+                // Nothing offered is picked, or the number is incomplete — don't
+                // send a charge that can only be refused.
+                disabled={submitting || !selectedOption || (needsPhone && !isValidPhone(phone))}
                 className="max-sm:w-full"
               >
                 {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -745,6 +916,7 @@ export function PaymentDialog({
               <Label>{t('billing.checkout.cardDetails')}</Label>
               <StripePaymentElement
                 ref={cardRef}
+                publishableKey={stripeInit.publishableKey}
                 clientSecret={stripeInit.clientSecret}
                 disabled={submitting}
                 onReady={() => setCardReady(true)}
@@ -852,6 +1024,13 @@ export function PaymentDialog({
               {instructionMsg && <p className="text-sm text-muted-foreground">{instructionMsg}</p>}
               {ussd && <p className="text-sm">{t('billing.checkout.dialUssd', { code: ussd })}</p>}
             </div>
+            {redirectUrl && (
+              <Button asChild>
+                <a href={redirectUrl} target="_blank" rel="noopener noreferrer">
+                  {t('billing.checkout.openPaymentPage')}
+                </a>
+              </Button>
+            )}
             <p className="text-xs text-muted-foreground">
               {t('billing.checkout.keepOpen')}
             </p>
@@ -942,11 +1121,11 @@ function SavedChip({
           ? 'border-primary bg-primary/5 text-primary'
           : 'border-border text-muted-foreground hover:bg-muted',
       )}
-      title={method.display_label}
+      title={method.label}
     >
       {/* The label right next to it already names the brand. */}
       <PaymentBrandLogo brand={brandForSavedMethod(method)} size="sm" decorative />
-      <span className="max-w-[8rem] truncate">{method.display_label}</span>
+      <span className="max-w-[8rem] truncate">{method.label}</span>
     </button>
   );
 }
@@ -959,7 +1138,7 @@ function ResultState({
 }: {
   icon: React.ReactNode;
   title: string;
-  description: string;
+  description?: string;
   action: React.ReactNode;
 }) {
   return (
@@ -967,7 +1146,7 @@ function ResultState({
       {icon}
       <div className="space-y-1">
         <p className="font-medium">{title}</p>
-        <p className="text-sm text-muted-foreground">{description}</p>
+        {description && <p className="text-sm text-muted-foreground">{description}</p>}
       </div>
       <div className="flex justify-center gap-2">{action}</div>
     </div>
