@@ -1,119 +1,270 @@
-# Shipping configuration
+# Shipping Configuration
 
-**Verified against source on 2026-09-08** — the request schema, the units, and the serialised key,
-against `jovi-mall/src/modules/catalog/controllers/vendor-shipping.controller.ts:13-21`,
-`models/shipping-config.model.ts:21` and `src/core/base.schema.ts:17-26`. All three claims held;
-the backend's own page was wrong on units and positivity and was corrected.
+**Verified against source on 2026-09-08** — the request schema, the units and the serialised key,
+against `src/modules/catalog/controllers/vendor-shipping.controller.ts:13-21`,
+`src/modules/catalog/models/shipping-config.model.ts:21` and `src/core/base.schema.ts:17-26`.
+**Two live defects fixed:** `weight` is in **grams**, not kilograms (stated wrongly in two
+places), and all four measurements accept **`0`** — the "must be positive (> 0)" table was reading
+the Zod *message*, not the constraint.
 
-**Routes: 3** — `GET`/`POST`/`DELETE /api/vendor/products/:id/shipping`
+## Base Path
 
----
+All endpoints in this document share this base path:
 
-## 0 · 🔴 This is not `product.delivery`
+```
+/api/vendor/products/:id/shipping
+```
 
-Two things carry "delivery" meanings and they share no field and no endpoint.
+## Authentication
 
-| | `shipping_config` — **this page** | `product.delivery` |
-|---|---|---|
-| Holds | weight, dimensions, origin postcode, handling days | agency, free-delivery flag, pickup location |
-| Written by | `POST /:id/shipping` | `PATCH /api/vendor/products/:id` |
-| Read on | `GET /:id/shipping` | the product object |
-| Gates activation | ❌ no | ✅ yes |
+**Authorization**: Vendor access required.
 
-Editing one never touches the other. If a vendor asks "why is my product still blocked from
-publishing after I set up shipping?", the answer is that they set this and the activation gate wants
-the other. See [products.md § 5.2](./products.md#52-the-activation-gate).
+All requests must include a valid Bearer token with vendor role:
 
----
+```
+Authorization: Bearer <access_token>
+```
 
-## 1 · `POST /api/vendor/products/:id/shipping` — upsert
+## Endpoints
 
-**Physical products only.**
+### POST /api/vendor/products/:id/shipping
 
-| Field | Type | Required | Default |
-|---|---|---|---|
-| `weight` | number ≥ 0 | ✅ | |
-| `length` | number ≥ 0 | ✅ | |
-| `width` | number ≥ 0 | ✅ | |
-| `height` | number ≥ 0 | ✅ | |
-| `originZipCode` | string 1–20 | ✅ | |
-| `handlingDays` | integer ≥ 0 | | **1** |
-| `shippingEnabled` | boolean | | **true** |
+**Description**: Create or update shipping configuration for a physical product. This endpoint performs an upsert operation.
 
-### 🔴 Two things that are easy to get wrong about these fields
+**Authorization**: Vendor access required.
 
-1. **`weight` is in GRAMS, not kilograms** (`shipping-config.model.ts:21`). **Label your input
-   "g".** A vendor entering `2` for a 2 kg parcel will produce a 2 g parcel.
-2. **`0` is accepted** for all four measurements — the validator is
-   `z.number().min(0, 'Weight must be positive')` (`vendor-shipping.controller.ts:14-17`). The Zod
-   *message* reads "must be positive"; the constraint does not. Do not add a client-side `> 0`
-   rule.
+**Request Headers**:
+- `Authorization: Bearer <token>`
+- `Content-Type: application/json`
 
-*(The backend's own doc said kilograms and `> 0` until 2026-09-08; it now agrees on both.)*
+**Path Parameters**:
+- `id` (string, required) - Product ID
 
-### It is a **full replace**, not a merge
+**Query Parameters**: None
 
-An existing configuration is overwritten field by field, and **the defaults re-apply**. So a `POST`
-that omits `handlingDays` resets it to 1 even if it was 5.
+**Request Body**:
+```json
+{
+  "weight": "number (required, >= 0) - Weight in GRAMS (not kilograms)",
+  "length": "number (required, >= 0) - Length in centimeters",
+  "width": "number (required, >= 0) - Width in centimeters",
+  "height": "number (required, >= 0) - Height in centimeters",
+  "originZipCode": "string (required, min 1, max 20) - Origin postal code",
+  "handlingDays": "number (optional, integer, >= 0, default: 1) - Processing time in days",
+  "shippingEnabled": "boolean (optional, default: true) - Whether shipping is enabled"
+}
+```
 
-**Always send the complete object.**
+**Success Response**:
 
-### Response `200`
+Status: `200 OK`
 
-```jsonc
+Body:
+```json
 {
   "success": true,
   "data": {
-    "id": "66e1…",          // 🔴 `id`, not `_id`
-    "productId": "66b1…",
-    "vendorId": "66a0…",
-    "weight": 600, "length": 30, "width": 20, "height": 4,
-    "originZipCode": "00237",
+    "id": "string",
+    "productId": "string",
+    "weight": 5.5,
+    "length": 30,
+    "width": 20,
+    "height": 10,
+    "originZipCode": "12345",
     "handlingDays": 1,
     "shippingEnabled": true,
-    "deletedAt": null, "purgeAt": null,
-    "createdAt": "…", "updatedAt": "…"
+    "createdAt": "2026-02-09T23:54:00.000Z",
+    "updatedAt": "2026-02-09T23:54:00.000Z"
   },
   "message": "Shipping configuration saved successfully"
 }
 ```
 
-🔴 **The wire key is `id`.** `BaseSchemaOptions.toJSON` deletes `_id` and adds an `id` virtual
-(`core/base.schema.ts:17-26`). A client reading `_id` gets `undefined`.
-
-`vendorId` and `purgeAt` are also on the wire and absent from the doc's field list.
-
----
-
-## 2 · `GET` and `DELETE`
-
-`GET /api/vendor/products/:id/shipping` returns the same object with **no `message` key**.
-
-`DELETE /api/vendor/products/:id/shipping` returns
-`{ "success": true, "message": "Shipping configuration deleted successfully" }` — **no `data`**.
-
-It is a **soft delete**. The product's status is untouched, and a subsequent `POST` creates a fresh
-configuration.
+**Error Responses**:
+- `404` – `CATALOG_PRODUCT_NOT_FOUND` – Product not found or does not belong to vendor
+- `400` – `CATALOG_PRODUCT_INVALID_TYPE` – Only physical products can have shipping configuration
+- `400` – `VALIDATION_ERROR` – Invalid request body (e.g., negative dimensions, invalid zip code)
 
 ---
 
-## 3 · Errors
+### GET /api/vendor/products/:id/shipping
 
-| Status | Code | When |
-|---|---|---|
-| 404 | `CATALOG_PRODUCT_NOT_FOUND` | |
-| 400 | `CATALOG_PRODUCT_INVALID_TYPE` | non-physical product |
-| 404 | `CATALOG_SHIPPING_NOT_FOUND` | `GET` and `DELETE` with no configuration |
-| **403** | `CATALOG_SHIPPING_ACCESS_DENIED` | ownership |
-| **409** | `CATALOG_PRODUCT_VECTORISATION_PENDING` | `POST` and `DELETE` only |
-| 400 | `VALIDATION_ERROR` | |
+**Description**: Retrieve the shipping configuration for a product.
 
-⚠ **Ownership here is a 403, not the 404 used everywhere else in the catalog.** This surface
-discloses that the product exists. Do not rely on the 404 convention when writing shared error
-handling.
+**Authorization**: Vendor access required.
 
-⚠ **Validation runs *after* the product lookup and type check.** So an invalid body against a
-foreign product id returns `404`, not `400`. Do not infer "the body was fine" from a 404.
+**Request Headers**:
+- `Authorization: Bearer <token>`
 
-Three of these — the 403, the `CATALOG_SHIPPING_NOT_FOUND` on `DELETE`, and the vectorisation 409 —
-are absent from the backend's own error tables.
+**Path Parameters**:
+- `id` (string, required) - Product ID
+
+**Query Parameters**: None
+
+**Request Body**: None
+
+**Success Response**:
+
+Status: `200 OK`
+
+Body:
+```json
+{
+  "success": true,
+  "data": {
+    "id": "string",
+    "productId": "string",
+    "weight": 5.5,
+    "length": 30,
+    "width": 20,
+    "height": 10,
+    "originZipCode": "12345",
+    "handlingDays": 1,
+    "shippingEnabled": true,
+    "createdAt": "2026-02-09T23:54:00.000Z",
+    "updatedAt": "2026-02-09T23:54:00.000Z"
+  }
+}
+```
+
+**Error Responses**:
+- `404` – `CATALOG_PRODUCT_NOT_FOUND` – Product not found or does not belong to vendor
+- `404` – `CATALOG_SHIPPING_NOT_FOUND` – No shipping configuration exists for this product
+
+---
+
+### DELETE /api/vendor/products/:id/shipping
+
+**Description**: Delete the shipping configuration for a product.
+
+**Authorization**: Vendor access required.
+
+**Request Headers**:
+- `Authorization: Bearer <token>`
+
+**Path Parameters**:
+- `id` (string, required) - Product ID
+
+**Query Parameters**: None
+
+**Request Body**: None
+
+**Success Response**:
+
+Status: `200 OK`
+
+Body:
+```json
+{
+  "success": true,
+  "message": "Shipping configuration deleted successfully"
+}
+```
+
+**Error Responses**:
+- `404` – `CATALOG_PRODUCT_NOT_FOUND` – Product not found or does not belong to vendor
+
+---
+
+## Error Responses
+
+All error responses follow this format. `category` is one of the nine values listed in
+[`errors/README.md`](../errors/README.md) and is **always present**; `details` is omitted
+entirely when absent.
+
+```json
+{
+  "success": false,
+  "requestId": "3f8a1c74-9b2e-4d10-8c55-6a0f2b7e19dd",
+  "error": {
+    "code": "CATALOG_PRODUCT_NOT_FOUND",
+    "message": "Product not found",
+    "statusCode": 404,
+    "category": "not_found"
+  }
+}
+```
+
+For validation errors:
+
+```json
+{
+  "success": false,
+  "requestId": "3f8a1c74-9b2e-4d10-8c55-6a0f2b7e19dd",
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Request validation failed",
+    "statusCode": 400,
+    "category": "validation",
+    "details": {
+      "fields": [
+        {
+          "path": "weight",
+          "message": "Weight must be positive",
+          "code": "too_small"
+        }
+      ]
+    }
+  }
+}
+```
+
+## Notes & Constraints
+
+### Product Type Restriction
+
+Only **physical products** can have shipping configuration. Attempting to configure shipping for `digital` or `service` products returns:
+
+```json
+{
+  "success": false,
+  "requestId": "3f8a1c74-9b2e-4d10-8c55-6a0f2b7e19dd",
+  "error": {
+    "code": "CATALOG_PRODUCT_INVALID_TYPE",
+    "message": "Only physical products can have shipping configuration",
+    "statusCode": 400,
+    "category": "validation"
+  }
+}
+```
+
+### Units
+
+- 🔴 **Weight: GRAMS (g).** This page said *kilograms* in two places until 2026-09-08 and was
+  wrong in both. `shipping-config.model.ts:21` reads *"Default weight in grams"*, and the variant
+  documentation has always agreed with the model. **Label the input "g"** — a vendor typing `2`
+  for a 2 kg parcel otherwise records a 2 g one.
+- **Dimensions**: Centimeters (cm)
+- **Handling Days**: Integer representing business days
+
+### Upsert Behavior
+
+The `POST` endpoint performs an upsert:
+- If no shipping configuration exists, it creates one
+- If shipping configuration already exists, it updates the existing record
+
+There is no separate `PUT` or `PATCH` endpoint for updates.
+
+### Validation Constraints
+
+| Field | Constraint |
+|-------|------------|
+| `weight` | `>= 0` — **`0` is accepted** |
+| `length` | `>= 0` — **`0` is accepted** |
+| `width` | `>= 0` — **`0` is accepted** |
+| `height` | `>= 0` — **`0` is accepted** |
+
+> ⚠ These four rows said *"Must be positive (> 0)"* until 2026-09-08. The schema is
+> `z.number().min(0, 'Weight must be positive')` (`vendor-shipping.controller.ts:14-17`) — the
+> **message** says "positive", the **constraint** is `>= 0`, and that message is where the wrong
+> claim came from. Do not add a client-side `> 0` rule the server does not have.
+| `originZipCode` | Required, 1-20 characters |
+| `handlingDays` | Non-negative integer |
+
+### Shipping Enabled Flag
+
+The `shippingEnabled` flag allows vendors to temporarily disable shipping without deleting the configuration. When `false`, the product cannot be shipped but configuration is preserved.
+
+### Shipping Deletion
+
+Deleting shipping configuration does **not** archive or deactivate the product. The product remains in its current status, but shipping is no longer available.

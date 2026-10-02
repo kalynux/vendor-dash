@@ -1,75 +1,56 @@
-# Messaging connections — WhatsApp and Telegram
+# Messaging Connections (WhatsApp / Telegram)
 
-**Verified against source on 2026-09-08** — re-checked the whole claim list: the three routes, the
-six error codes and their statuses, the 6-character code and its 10-minute life, the
-5-attempts-per-account counter and the 30/min per-IP limiter, against
-`src/modules/channel-connections/` and `src/api/rate-limit/policy.ts`. Nothing was wrong.
-*(First written against source 2026-08-24, when this surface had never been documented here.)*
+**Verified against source on 2026-09-08** — the three routes and their mount, the `GET` / redeem
+response shapes, the six error codes with their statuses, the 6-character code, its 10-minute life,
+the 5-attempts-per-account counter and the 30/min per-IP limiter, against
+`jovi-mall/src/modules/channel-connections/` (routes, controller, service, DTO, validators,
+`domain/channel.ts`, `services/connection-code.store.ts`) and `src/api/rate-limit/policy.ts`.
 
-**Base path:** `/api/me/connections` · **Auth:** any signed-in role · **Routes: 3**
+One mechanism connects **any** messaging channel to a platform account. It replaces the two
+separate flows that existed before (WhatsApp `/link:CODE` verification and the Telegram
+deep-link token), which disagreed on almost everything.
 
----
-
-## 0 · Read this first
-
-**This replaces seven endpoints that this dashboard still calls and that no longer exist.** All
-seven return 404 today. See [MIGRATION-2026-08.md](../MIGRATION-2026-08.md) for the full table and
-the file and line of each call site.
-
-| Dead | Replacement |
-|---|---|
-| `POST /webhooks/telegram/link-token` | `POST /api/me/connections` |
-| `GET /webhooks/telegram/status` | `GET /api/me/connections` |
-| `POST /webhooks/telegram/disconnect` | `DELETE /api/me/connections/telegram` |
-| `POST /auth/request-wa-verification` | `POST /api/me/connections` |
-| `GET /webhooks/whatsapp/link/status` | `GET /api/me/connections` |
-| `DELETE /webhooks/whatsapp/link` | `DELETE /api/me/connections/whatsapp` |
-| `POST /webhooks/telegram/toggle` | **not here** — see [§ 6](#6--the-toggle-did-not-disappear--it-moved) |
-
-**The direction of the handshake is inverted.** The old flow had the *platform* mint a token that
-the user carried *to* the bot. The new flow has the **bot mint a 6-character code that the user
-carries back to the dashboard**. There is no deep-link-and-wait step, and nothing to poll.
-
-**The connection binds to the `User`, not to a role.** Linking Telegram once serves every role that
-person holds. There is no `requireRole` on these routes.
+- **Base path**: `/api/me/connections`
+- **Auth**: required, cookie or `Bearer`, **any role**. The connection binds to the *User*, so
+  a person who is both a vendor and a customer connects once and it holds everywhere.
+- **Envelope**: standard `{ success, data, message? }` — see [../README.md](../README.md).
 
 ---
 
-## 1 · The flow, end to end
+## The flow
+
+The code is minted by the **bot**, not by the platform. That inversion is the design:
 
 ```
-┌─ 1 ─ dashboard ────────────────────────────────────────────────────────┐
-│ GET /api/me/connections                                                 │
-│ → { channel: "whatsapp", connected: false,                              │
-│     howToConnect: { command: "/connect",                                │
-│                     botHandle: "+237…",                                 │
-│                     deepLink: "https://wa.me/237…?text=%2Fconnect" } }  │
-│ Render: "Send /connect to our WhatsApp bot" + the deep link.            │
-└─────────────────────────────────────────────────────────────────────────┘
-                              ↓  the user leaves your app
-┌─ 2 ─ the bot ──────────────────────────────────────────────────────────┐
-│ User sends /connect. The bot mints a 6-character code against the       │
-│ identity it observes in the webhook, and replies with it.               │
-│ Your dashboard is not involved and receives no signal.                  │
-└─────────────────────────────────────────────────────────────────────────┘
-                              ↓  the user comes back and types it
-┌─ 3 ─ dashboard ────────────────────────────────────────────────────────┐
-│ POST /api/me/connections  { "code": "A7K9P2" }                          │
-│ → 200 { channel: "whatsapp", connected: true, identityHint: "••••1234" }│
-└─────────────────────────────────────────────────────────────────────────┘
+1. User opens the connections screen.
+   GET /api/me/connections
+   → for each unconnected channel, `howToConnect` says which bot and what to send.
+
+2. User opens WhatsApp or Telegram and sends:  /connect
+
+3. The bot replies with a 6-character code, e.g.  A7K9P2
+   (valid 10 minutes, single use)
+
+4. User types the code on the platform.
+   POST /api/me/connections  { "code": "A7K9P2" }
+
+5. The account is connected. The code is dead the instant it is used.
 ```
 
-🔴 **There is nothing to poll.** The platform is entirely passive between steps 1 and 3 — the user
-brings the code back by hand. **Build an input box, not a poller.** A spinner that waits for a
-connection to appear will spin forever.
+The user never carries a platform secret into a chat window, and the platform never has to
+trust a webhook's claim about who sent a message.
+
+> **The code is case-insensitive and forgiving.** `a7k9p2`, `A7K9-P2` and `A7K9P2` are the same
+> code. `O` is read as `0`, and `I`/`L` as `1`. Send whatever the user typed — do not
+> normalise, uppercase or strip it in the client.
 
 ---
 
-## 2 · `GET /api/me/connections`
+## `GET /api/me/connections`
 
-No parameters. Always returns **one entry per channel**, connected or not.
+Every channel, connected or not, in one call — enough to render the whole screen.
 
-```jsonc
+```json
 {
   "success": true,
   "data": {
@@ -77,9 +58,9 @@ No parameters. Always returns **one entry per channel**, connected or not.
       {
         "channel": "whatsapp",
         "connected": true,
-        "displayName": "Ada N.",
+        "displayName": "Jane D.",
         "identityHint": "••••1234",
-        "connectedAt": "2026-08-20T09:11:04.000Z"
+        "connectedAt": "2026-08-15T09:00:00.000Z"
       },
       {
         "channel": "telegram",
@@ -89,8 +70,8 @@ No parameters. Always returns **one entry per channel**, connected or not.
         "connectedAt": null,
         "howToConnect": {
           "command": "/connect",
-          "botHandle": "@jovimall_bot",
-          "deepLink": "https://t.me/jovimall_bot"
+          "botHandle": "@WiMallBot",
+          "deepLink": "https://t.me/WiMallBot"
         }
       }
     ]
@@ -98,182 +79,175 @@ No parameters. Always returns **one entry per channel**, connected or not.
 }
 ```
 
-**`howToConnect` is present only when `connected` is `false`.** Use its presence, not a separate
-flag, to decide which card to render.
-
-### The channel enum
-
-`whatsapp` · `telegram`. Exactly two, and they come from a single declaration shared by the model,
-the validator and this DTO — so a third channel would appear here automatically.
-
-### `identityHint` — and what is deliberately not returned
-
-| Channel | `identityHint` |
+| Field | Notes |
 |---|---|
-| WhatsApp | the **last 4 digits**, masked: `"••••1234"`. `null` if the number has fewer than 4 digits |
-| Telegram | the **`@handle`**. 🔴 **`null` when the user has no handle** — the numeric chat id is *never* used as a fallback |
+| `channel` | `whatsapp` \| `telegram`. Iterate the array — do not hardcode two cards |
+| `connected` | the only flag that decides Connect vs Disconnect |
+| `displayName` | the WhatsApp profile name or Telegram display name. May be `null` |
+| `identityHint` | `••••1234` for WhatsApp, `@handle` for Telegram. **May be `null`** — render `displayName` alone then |
+| `howToConnect` | present **only** when `connected` is `false` |
+| `howToConnect.deepLink` | may be `null` if the bot is not configured server-side. Show `command` and `botHandle` as text in that case — the flow still works |
 
-🔒 **The raw external identity is never on the wire.** There is no `external_id` field, no expanded
-variant, and no query parameter that reveals it. Design your UI so that
-`identityHint === null && connected === true` is a normal, renderable state — "Connected"
-without a subtitle.
+> **There is no phone number or chat id in this response, by design.** The raw messaging
+> identifier never leaves the backend. `identityHint` is all the confirmation a settings screen
+> needs, and it is not reversible.
 
-`botHandle` and `deepLink` are `null` when the bot's number or name is not configured on that
-deployment. **The flow still works** — the user just has to find the bot themselves. Do not gate
-the instructions on those being non-null.
+> `deepLink` for WhatsApp pre-fills the message (`https://wa.me/<n>?text=%2Fconnect`).
+> Telegram's cannot — it only opens the chat, and the user types `/connect`. Show the command
+> next to the button on both.
 
 ---
 
-## 3 · `POST /api/me/connections`
+## `POST /api/me/connections`
 
-```http
-POST /api/me/connections
-Content-Type: application/json
-
+```json
 { "code": "A7K9P2" }
 ```
 
-🔴 **The client never says which channel.** The code carries it. Do not send `channel`.
+Returns the newly connected channel, in the same shape as a `GET` entry:
 
-Success is **`200`, not 201**, and `data` is a **single** entry in the same shape as a `GET`
-element, with `connected: true` and no `howToConnect`.
+```json
+{
+  "success": true,
+  "data": {
+    "channel": "whatsapp",
+    "connected": true,
+    "displayName": "Jane D.",
+    "identityHint": "••••1234",
+    "connectedAt": "2026-08-15T09:04:11.000Z"
+  },
+  "message": "Connected"
+}
+```
 
-### 🔴 Do not normalise the code client-side
+**The client does not say which channel it is redeeming.** The code carries that. One input
+box, one button.
 
-Send **exactly what the user typed**. The server strips whitespace and dashes, uppercases, and maps
-the confusable characters `O→0`, `I→1`, `L→1`. The request schema is deliberately loose on
-characters (6–32 chars) so that `a7k9p-2` reaches that normaliser intact.
+**Re-connecting replaces.** If the caller already has a WhatsApp connection and redeems a code
+for a different number, the new one wins. There is no "disconnect first" step.
 
-If you uppercase or strip characters yourself you will get it subtly wrong and produce
-`CONNECTION_CODE_INVALID` for codes that would have worked.
+### The linking rules, in full
 
-The alphabet is Crockford-style base32 — `0123456789ABCDEFGHJKMNPQRSTVWXYZ`, with **I, L, O and U
-omitted**. Do not offer those characters on a custom keypad.
-
-### Errors — and what to tell the user
-
-| Status | Code | What happened | What to say |
-|---|---|---|---|
-| 400 | `CONNECTION_CODE_INVALID` | malformed, never existed, already used, or expired more than 10 min ago | "That code isn't valid. Send `/connect` to the bot for a new one." |
-| 400 | `CONNECTION_CODE_EXPIRED` | real, but past its 10-minute life | "That code has expired. Send `/connect` for a new one." |
-| 429 | `CONNECTION_CODE_ATTEMPTS_EXCEEDED` | **5 attempts per 10 minutes**, per account | "Too many attempts. Try again in a few minutes." |
-| 409 | `MESSAGING_IDENTITY_ALREADY_LINKED` | that WhatsApp number / Telegram account belongs to **another** jovi-mall account | see below |
-| 429 | `RATE_LIMIT_EXCEEDED` | 30 redeems/min from this IP | back off |
-
-🔴 **`MESSAGING_IDENTITY_ALREADY_LINKED` carries `details.channel` and nothing else.** It never
-says *which* account holds it — deliberately. Do not write copy that implies you can tell them.
-
-🔴 **A code is spent by the attempt, even when the redeem fails.** The code is consumed atomically
-*before* the ownership check. So a `409` means "get a new code", **not** "try again". Say so:
-retrying the same code after a 409 gives `CONNECTION_CODE_INVALID` and looks like a second, different
-failure.
-
-### Idempotent and replacing cases
-
-- Redeeming a code for an identity **this account already has** → **`200`**, display name
-  refreshed, no duplicate. Safe to retry.
-- Redeeming a code for a *different* identity on a channel this account already uses →
-  **the old one is replaced**, silently. If that matters to your users, show the current
-  `identityHint` beside the input.
-
-### Code mechanics, for your copy
-
-| | |
+| Situation | Outcome |
 |---|---|
-| Length | 6 characters |
-| TTL | **10 minutes** |
-| Uses | **single-use** |
-| Per identity | **one live code** — a second `/connect` revokes the first |
-| Attempts | 5 per 10 minutes, per account, counted **before** consumption |
+| The identity is connected to nobody | Connected. `200` |
+| The identity is already connected to **this** account | **Idempotent success**, `200`. No duplicate row; the display name is refreshed |
+| The identity is connected to **another** account | `409 MESSAGING_IDENTITY_ALREADY_LINKED`. Ownership is **never** transferred silently |
+| This account already has a *different* identity on that channel | Replaced. The old one is dropped, the new one wins |
+| The code expired | `400 CONNECTION_CODE_EXPIRED` |
+| The code is wrong, malformed, or already spent | `400 CONNECTION_CODE_INVALID` |
 
-The attempt counter is per *account*, not per code — so a user guessing cannot spend another
-person's live code for free. It resets on a successful redeem.
+> A code is single-use even when the redeem *fails*: it is spent by the attempt. So a `409`
+> means send `/connect` again, not retry with the same code.
+
+### Errors
+
+| Status | `error.code` | When |
+|---|---|---|
+| 400 | `CONNECTION_CODE_EXPIRED` | The code was real and is past its 10 minutes. **Actionable** — tell the user to send `/connect` again |
+| 400 | `CONNECTION_CODE_INVALID` | Wrong, malformed, or already used — **one code for all three**, so a response cannot confirm whether a guessed code was ever real |
+| 409 | `MESSAGING_IDENTITY_ALREADY_LINKED` | That messaging account belongs to a different platform account. `details.channel` says which |
+| 429 | `CONNECTION_CODE_ATTEMPTS_EXCEEDED` | More than 5 attempts in 10 minutes, per account |
+| 429 | `RATE_LIMIT_EXCEEDED` | More than 30 redeem calls a minute from this IP |
+| 400 | `VALIDATION_ERROR` | `code` missing or absurdly long |
+
+> **`EXPIRED` and `INVALID` are genuinely different and should read differently.** Expiry is the
+> common failure — somebody read the code, got distracted, came back — and "send `/connect`
+> again" is the fix. `INVALID` means check what you typed. Do not collapse them in the UI.
+>
+> The backend can only tell them apart for a limited window after expiry; an ancient code
+> reads as `INVALID`. That is correct, not a bug: it is old enough that a fresh one is the
+> answer either way.
+
+> **`MESSAGING_IDENTITY_ALREADY_LINKED` says nothing about the other account, deliberately** —
+> no email, no name, no masked identifier. Do not present it as "this number belongs to
+> user X". The honest message is: this WhatsApp/Telegram account is connected elsewhere;
+> disconnect it there first, or contact support.
+
+> **Two rate limits guard this endpoint and they count different things.**
+> `CONNECTION_CODE_ATTEMPTS_EXCEEDED` is per account (5 per 10 min); `RATE_LIMIT_EXCEEDED` is
+> per IP address (30/min). A shared office network can hit the second without any one person
+> hitting the first. Neither should be retried in a loop.
 
 ---
 
-## 4 · `DELETE /api/me/connections/:channel`
+## `DELETE /api/me/connections/:channel`
 
-`:channel` must be `whatsapp` or `telegram`; anything else is `400 VALIDATION_ERROR`.
+`:channel` is `whatsapp` or `telegram`.
 
-```jsonc
+```json
 { "success": true, "data": null, "message": "Disconnected" }
 ```
 
-Nothing bound → **`404 MESSAGING_CONNECTION_NOT_FOUND`** with `details.channel`.
+| Status | `error.code` | When |
+|---|---|---|
+| 404 | `MESSAGING_CONNECTION_NOT_FOUND` | Nothing connected on that channel |
+| 400 | `VALIDATION_ERROR` | `:channel` is not a known channel |
 
-**Not idempotent** — a second delete 404s. Gate the button on `connected === true`.
-
----
-
-## 5 · Where this is mounted, and why it matters
-
-These routes live under `/api/me`, **not** under `/api/webhooks` where their predecessors were.
-
-That is a deliberate security change: `/api/webhooks/*` is exempt from **both** rate limiting and
-maintenance mode, because gateway callbacks must always get through. The old linking endpoints
-inherited both exemptions for no reason. `/api/me/connections` inherits neither.
-
-Practical consequences for you:
-
-- `POST /api/me/connections` carries a **dedicated 30/min per-IP limiter** on top of the usual
-  layers.
-- **All three routes are refused during a `down` maintenance window**, and the two writes are
-  refused in `readonly` too. See [rate-limits.md](../rate-limits.md).
+> [!NOTE]
+> **The bot surface serves this verb too, with ONE extra refusal.** Since MCP parity step 7,
+> `DELETE /api/internal/bot/connections/:channel` answers
+> **`409 BOT_CONNECTION_ACTIVE_CHANNEL`** when the channel named is the one the chat request
+> arrived on. A `channel_connections` row is step 1 of the identity ladder, so cutting the
+> current one leaves that surface unable to resolve the sender it is mid-conversation with —
+> and reconnecting needs a session the customer reaches from the storefront, not from the chat
+> that has just lost its binding. **This endpoint has no such rule and needs none**: a browser
+> caller already holds the session it would be protecting.
+>
+> The read is served there too, dropping `howToConnect` and adding `isCurrentChannel`.
+> Contract: `api-doc/n8n/bot-surface.md` § 16.
 
 ---
 
-## 6 · The toggle did not disappear — it moved
+## Connecting is not the same as enabling
 
-The audit records `POST /webhooks/telegram/toggle` as having "no replacement; the toggle concept is
-gone". **That is not quite right, and the difference matters for your settings screen.**
+Two independent steps, and both are required before anything is delivered:
 
-Connecting and *muting* are now two separate things on two separate endpoints:
+1. **Connect** the channel — this page.
+2. **Enable** it in notification preferences (`PATCH /api/{vendor,agency,agent,customer}/notification-preferences`).
 
-| Concern | Where |
+`GET …/notification-preferences` reports `whatsappVerified` / `telegramVerified`, which mirror
+whether a connection exists. Only **one** secondary channel can be enabled at a time; enabling
+one disables the others.
+
+> ⚠️ **Changed:** Telegram used to have a third switch — `POST /webhooks/telegram/toggle` — which
+> muted delivery *and* made `telegramVerified` report `false`, so a connected user's settings
+> screen offered them "Connect" again. That endpoint is **gone**. `telegramEnabled` in
+> notification preferences is now the only mute, exactly as WhatsApp already worked.
+
+---
+
+## What was removed
+
+Every endpoint below is **deleted**, not deprecated.
+
+| Gone | Replacement |
 |---|---|
-| **Is this channel linked to my account?** | `/api/me/connections` — this page |
-| **Should notifications actually be sent there?** | `GET`/`PATCH /api/vendor/notification-preferences` — [vendor/notifications.md](../vendor/notifications.md) |
+| `POST /api/auth/request-wa-verification` | `GET /api/me/connections` (instructions) + `POST /api/me/connections` (redeem) |
+| `GET /api/webhooks/whatsapp/link/status` | `GET /api/me/connections` |
+| `DELETE /api/webhooks/whatsapp/link` | `DELETE /api/me/connections/whatsapp` |
+| `POST /api/webhooks/telegram/link-token` | `GET /api/me/connections` |
+| `GET /api/webhooks/telegram/status` | `GET /api/me/connections` |
+| `POST /api/webhooks/telegram/toggle` | nothing — use `telegramEnabled` in notification preferences |
+| `POST /api/webhooks/telegram/disconnect` | `DELETE /api/me/connections/telegram` |
 
-On the vendor preferences payload:
+Four other things changed with them:
 
-- `telegramVerified` / `whatsappVerified` — **read-only**, and they mirror exactly whether a
-  connection exists here.
-- `telegramEnabled` / `whatsappEnabled` — the writable mute.
+- **`wa` is gone from the profile payloads.** `GET /api/agent/profile`, `/api/agency/profile` and
+  `/api/customer/profile` no longer carry `wa: { verified, name }`. Read connection state from
+  `GET /api/me/connections`, which is the one source now.
+- **Connections are no longer per-role.** The old WhatsApp status and unlink answered for
+  whichever role the token was scoped to, and `update_other_roles` existed to paper over it.
+  One person, one WhatsApp number, every role.
+- **The bot commands changed.** `/link:CODE` and the Telegram `/start <token>` deep link are
+  gone; both bots take `/connect`.
+- **The endpoints moved off `/api/webhooks`.** They now sit under `/api/me`, so they are
+  rate-limited like every other authenticated route.
 
-So the old single toggle is now: **link here, enable there.**
+## Related
 
-⚠ And read the constraint in
-[vendor/notifications.md § 0.2](../vendor/notifications.md#-2-you-cannot-disable-one-secondary-channel)
-before building it — enabling one secondary channel force-disables the other two, and a lone
-`false` writes nothing. It is a radio group, not three switches.
-
-Attempting to enable a channel that is not linked gives
-`400 VENDOR_NOTIFICATION_CHANNEL_NOT_VERIFIED` with `details.channel`. Gate the control on the
-`*Verified` flag and link here first.
-
----
-
-## 7 · Suggested screen
-
-One card per channel, driven entirely by `connected`:
-
-```
-┌────────────────────────────────────────────┐
-│ WhatsApp                       ● Connected │
-│ ••••1234                                   │
-│ Connected 20 Aug 2026                      │
-│                            [ Disconnect ]  │
-├────────────────────────────────────────────┤
-│ Telegram                    ○ Not connected│
-│                                            │
-│ 1. Send /connect to @jovimall_bot          │
-│    [ Open Telegram ]  ← deepLink           │
-│ 2. Enter the 6-character code you get back │
-│    [ ______ ]  [ Connect ]                 │
-└────────────────────────────────────────────┘
-```
-
-- Uppercase the field **visually** (CSS `text-transform`), but send the raw value.
-- Do not restrict input to the base32 alphabet — let `O`/`I`/`L` through so the server can map them.
-- After a successful connect, re-fetch preferences too: the matching `*Verified` flag has just
-  flipped and the enable control can now be offered.
+- Per-role notification preferences: [`../vendor/notifications.md`](../vendor/notifications.md),
+  `../agency/notifications.md`, `../agent/notifications.md`, `../customer/notifications.md`
+- Channel setup walkthrough: [`../vendor/notification-channels.md`](../vendor/notification-channels.md)
+- The bot webhooks themselves (not frontend endpoints):
+  [`../whatsapp/README.md`](../whatsapp/README.md), [`../telegram/README.md`](../telegram/README.md)

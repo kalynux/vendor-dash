@@ -1,234 +1,425 @@
-# Simple products
+# Simple Products — Vendor API Reference
 
-**Verified against source on 2026-09-08** — R7 read the whole page. The three routes (`catalog/routes/vendor-products.routes.ts:82,89,95`), the strict create schema field by field (`validators/simple-product.validator.ts:39-80` — `price` strictly positive, `stock` default 0, `bargain` sharing the layered `BargainRangeSchema`), the five `409 CATALOG_PRODUCT_SIMPLE_MODE_LOCKED` refusal sites (`vendor-option.controller.ts:51`, `vendor-product.controller.ts:348`, `vendor-variant.controller.ts:61,501,544`) and the `details` shape carrying `convertEndpoint` (`domain/services/simple/mode-guard.ts:17-31`). No defects found.
+**Verified against source on 2026-09-08** — R7 re-checked the three routes, the strict create/patch schemas (`validators/simple-product.validator.ts`) and the five simple-mode refusal sites (`domain/services/simple/mode-guard.ts:17-31` and its five callers). **One defect fixed:** this header sentence had been split in half by a later insertion.
 
-**Verified against backend source on 2026-08-24.**
-**Partially re-verified against source on 2026-09-08** — the `BILLING_LIMIT_EXCEEDED` `details` shape only, against `services/entitlement.service.ts:100-113`. The rest of the page still carries
-its 2026-08-24 verification and was not re-read.
+**Verified against source on 2026-09-06** — every claim on this page was checked against
+`jovi-mall/src/`, including the whole inherited defect list that `vendor-dash` carried for it
+(DOC-PROGRAM § 24–28). Corrections are marked inline with ⚠ and a source citation.
 
-**Routes: 3** — `POST /api/vendor/products/simple` · `PATCH /api/vendor/products/:id/simple` ·
-`POST /api/vendor/products/:id/convert-to-advanced`
+**Re-verified in part on 2026-09-08** — the `BILLING_LIMIT_EXCEEDED` `details` shape only (`services/entitlement.service.ts:100-113`).
 
-Simple mode is a **one-screen editor** for the common case: a physical product with one price and
-one stock number. The platform enforces the shape rather than trusting the client.
+> **Document Purpose**: Frontend-consumable reference for the one-shot product editor.
+>
+> **Intended Audience**: Frontend engineers building the "quick add" product flow.
+>
+> **See also**: [product-upload-flow.md](./product-upload-flow.md) for the full multi-step (advanced) flow.
+>
+> Bargainable pricing (`bargain` / `bargainable`) is new. Dashboard hand-off:
+> [Front-end changelog](../FRONTEND-CHANGELOG-bargainable-pricing.md).
 
 ---
 
-## 0 · What "simple" means
+## Why this exists
 
-`Product.mode` is `simple | advanced`. A simple product is, by construction:
+Listing one pair of shoes through the standard flow takes **six calls**: create draft → patch details → upload files → link files → create variant → publish. That sequence earns its keep for a vendor building a Size × Color matrix. For a shop with one product at one price it is pure overhead, and it forces the UI to ask for options, variants, SKUs and pickup policy before anything can be saved.
 
-- **physical** — the type is hardcoded, not chosen
-- **exactly one variant** — created for you, option-less
-- **zero options**
+Simple mode collapses that into **one call**, and marks the result `mode: "simple"` so both the UI and the backend know what shape it is.
 
-It is enforced by **refusing the operations that would break it**, not by counting at runtime.
+It adds no capability the advanced endpoints lack. It removes choices.
 
-### The five refusals
+---
 
-`409 CATALOG_PRODUCT_SIMPLE_MODE_LOCKED`, with
+## The `mode` field
 
-```jsonc
-"details": { "mode": "simple",
-             "convertEndpoint": "POST /api/vendor/products/<id>/convert-to-advanced" }
-```
+Every product now carries `mode`:
 
-| Operation | Blocked |
+| value | meaning |
 |---|---|
-| `POST /:id/variants` — add a second variant | ✅ |
-| `DELETE /:productId/variants/:variantId` | ✅ |
-| `PATCH …/variants/:variantId/status` → `archived` | ✅ (activation is not blocked) |
-| `PATCH /:id/default-variant` | ✅ |
-| `POST /:productId/options` — add options | ✅ |
+| `"simple"` | Physical · exactly **one** variant · **zero** options. Created by `POST /products/simple`. |
+| `"advanced"` | Everything else — the default, and what every pre-existing product reports. |
 
-**`details.convertEndpoint` is always present** — render one affordance straight off it.
+`mode` appears on the product detail response and on every row of `GET /api/vendor/products`, so the list view can route each row's Edit button to the right editor without a second fetch.
 
-**Everything else works normally on a simple product**: `PATCH /:id`, `PATCH /:id/status`,
-`DELETE /:id`, duplicate, both bulk routes, and `PATCH /:productId/variants/:variantId` (so the
-single variant *is* editable through the advanced route too).
+**The invariant is enforced, not advisory.** While a product is `simple`, these return **409 `CATALOG_PRODUCT_SIMPLE_MODE_LOCKED`**:
+
+- `POST /products/:id/variants` — adding a second variant
+- `POST /products/:productId/options` — adding options
+- `DELETE /products/:productId/variants/:variantId` — archiving its only variant
+- `PATCH /products/:productId/variants/:variantId/status` with `"archived"` — same
+- `PATCH /products/:id/default-variant` — meaningless with one variant
+
+Every one of those 409s carries the escape hatch in `details`:
+
+```json
+{
+  "success": false,
+  "requestId": "3f8a1c74-9b2e-4d10-8c55-6a0f2b7e19dd",
+  "error": {
+    "code": "CATALOG_PRODUCT_SIMPLE_MODE_LOCKED",
+    "statusCode": 409,
+    "message": "This product uses the simple editor, so adding another variant is not available. Convert it to the advanced editor first.",
+    "category": "conflict",
+    "details": {
+      "mode": "simple",
+      "convertEndpoint": "POST /api/vendor/products/507f.../convert-to-advanced"
+    }
+  }
+}
+```
+
+Render `details.convertEndpoint` as a one-click "Switch to the advanced editor" button.
+
+Still allowed on a simple product: `PATCH /products/:id` (the standard product update), `PATCH /products/:productId/variants/:variantId` (the granular variant editor, used by the inventory module), `PATCH /products/:id/status`, and the bulk endpoints. None of those can break the invariant.
 
 ---
 
-## 1 · `POST /api/vendor/products/simple`
+## `POST /api/vendor/products/simple`
 
-Creates the product **and** its variant **and** its delivery config, in one transaction, and then
-attempts to publish.
+Creates the product, its single variant and its delivery config in **one transaction**, then attempts to publish.
 
-### Body — the schema is **strict**
+**Auth**: vendor JWT (cookie or `Authorization: Bearer`).
 
-| Field | Type | Required | Default |
+### Request body
+
+| Field | Type | Required | Notes |
 |---|---|---|---|
-| `title` | string 3–200 | ✅ | |
-| `description` | string ≥ 1 | ✅ | |
-| `category` | string ≥ 1 | ✅ | |
-| **`price`** | number | ✅ | — **must be > 0; `0` is rejected** |
-| `descriptionRich` | RichDoc \| null | | |
-| `tags` · `fileIds` | string[] | | unique entries |
-| `seoTitle` · `seoDescription` | string | | ≤ 60 / ≤ 160 |
-| `compareAtPrice` | number ≥ 0 | | |
-| `bargain` | `{ minPrice?, maxPrice }` — ⚠ **send `maxPrice` only**, see below | | |
-| `stock` | integer ≥ 0 | | `0` |
-| `isInfiniteStock` | boolean | | `false` |
-| `sku` | string 1–100 | | auto-generated |
-| `weight` · `length` · `width` · `height` | number ≥ 0 | | |
-| `freeDelivery` | boolean | | `false` |
-| `pickupLocation` | object | | see below |
-| **`publish`** | boolean | | **`true`** |
+| `title` | string | ✅ | 3–200 chars |
+| `description` | string | ✅ | Non-empty. Required here (unlike the draft endpoint) because an empty description blocks publishing. Plain text — no markup. |
+| `descriptionRich` | object \| null | No | Structured description powering WhatsApp / Telegram formatting. `description` must be its plain-text projection — see [product-description-rich.md](./product-description-rich.md). |
+| `category` | string | ✅ | Non-empty |
+| `price` | number | ✅ | **> 0**. Zero is rejected outright — a zero-priced product can never be activated. |
+| `stock` | integer | | ≥ 0, default `0` |
+| `isInfiniteStock` | boolean | | default `false` |
+| `compareAtPrice` | number | | "was" price; show struck through when > `price` |
+| `bargain` | object | | `{ minPrice?, maxPrice }` — the haggling window. `minPrice` **defaults to `price`**, so `{ "maxPrice": 60000 }` is a complete configuration; sending one that differs from `price` is a `422`. `maxPrice` must be ≥ `price`. Never a "was" price — see [Bargainable pricing](./variants.md#bargainable-pricing). |
+| `sku` | string | | 1–100 chars. **Auto-generated when omitted** — see below. |
+| `tags` | string[] | | unique, non-empty |
+| `fileIds` | string[] | | Max 7. Upload first via `POST /api/files/upload`, send the returned ids. |
+| `seoTitle` / `seoDescription` | string | | Max 60 / 160 |
+| `weight` | number | | grams |
+| `length` / `width` / `height` | number | | cm |
+| `freeDelivery` | boolean | | default `false` |
+| `pickupLocation` | object | | `{ source, vendorAddressId?, agencyAddressId? }`. **Omit to auto-derive** — see below. |
+| `publish` | boolean | | default `true`. `false` saves a draft outright. |
 
-🔴 **The schema is `.strict()`** — `type`, `mode`, `status`, `deliveryAgencyId`, `optionValueIds`,
-`digitalConfig` and `serviceConfig` are **`400 VALIDATION_ERROR`**, not silently stripped. That is
-the opposite of the advanced create route, which strips them.
+**Not accepted** (400 if sent): `type` (simple is physical-only), `mode`, `status`, `deliveryAgencyId`, `optionValueIds`, `digitalConfig`, `serviceConfig`. Each belongs to a capability this editor does not expose; accepting them silently would make `mode: "simple"` a lie.
 
-Note **`price` must be positive here** while the advanced variant route allows `0`.
+### Example
 
-`pickupLocation`:
+```json
+POST /api/vendor/products/simple
+Content-Type: application/json
 
-```jsonc
-{ "source": "vendor_address" | "agency_storage",
-  "vendorAddressId": "…",     // required when source is vendor_address; clearable
-  "agencyAddressId": "…" }    // clearable; null = the agency's primary depot
+{
+  "title": "Nike Air Max 90",
+  "description": "Classic runner, everyday comfort.",
+  "category": "footwear",
+  "price": 45000,
+  "bargain": { "maxPrice": 60000 },
+  "stock": 12,
+  "fileIds": ["6f1a2b3c4d5e6f7a8b9c0d1e"]
+}
 ```
 
-### Response `201` — read `meta.activation`
+> [!NOTE]
+> The window above is **stored but inert**. Bargaining only takes effect once the product's
+> `vectorisationEnabled` flag is on (`PATCH /api/vendor/products/:id/vectorisation`), which a
+> brand-new product never is — the response's `defaultVariant.bargainable` will be `false`.
+> That is expected, not an error: configure the window whenever it suits, and it starts
+> applying the moment vectorisation is enabled.
 
-```jsonc
+### Response — `201 Created`
+
+**Always 201, even when it could not publish.** The product *was* created; publishing is a separate outcome reported in `meta.activation`.
+
+```json
 {
   "success": true,
-  "data": { /* the product, plus a `defaultVariant` */ },
+  "data": {
+    "id": "507f1f77bcf86cd799439011",
+    "mode": "simple",
+    "type": "physical",
+    "status": "active",
+    "title": "Nike Air Max 90",
+    "slug": "nike-air-max-90",
+    "hasVariants": true,
+    "defaultVariantId": "507f1f77bcf86cd799439020",
+    "files": [{ "id": "6f1a...", "url": "https://...", "mimeType": "image/jpeg", "size": 245678 }],
+    "delivery": {
+      "agencyId": null,
+      "freeDelivery": false,
+      "pickupLocation": { "source": "vendor_address", "vendorAddressId": "68b2..." }
+    },
+    "defaultVariant": {
+      "id": "507f1f77bcf86cd799439020",
+      "sku": "NIKE-AIR-MAX-90-507F1F77BCF86CD799439011",
+      "price": 45000,
+      "stock": 12,
+      "status": "active",
+      "displayName": "Nike Air Max 90"
+    }
+  },
+  "meta": {
+    "activation": {
+      "attempted": true,
+      "published": true,
+      "blockers": [],
+      "pickupReason": "derived_single_address"
+    }
+  },
+  "message": "Product created and published"
+}
+```
+
+The single variant is nested at `data.defaultVariant` — no second fetch needed.
+
+### When it cannot publish
+
+A first-time vendor usually has no delivery agency configured. That does **not** fail the call:
+
+```json
+{
+  "success": true,
+  "data": { "id": "...", "mode": "simple", "status": "draft", "...": "..." },
   "meta": {
     "activation": {
       "attempted": true,
       "published": false,
-      "blockers": [ { "code": "CATALOG_PRODUCT_NO_PICKUP_LOCATION", "message": "…", "details": {} } ],
-      "pickupReason": "derived_single_address"
+      "blockers": [
+        {
+          "code": "CATALOG_PRODUCT_NO_DELIVERY_AGENCY",
+          "message": "Set an active default delivery agency on your vendor profile to publish physical products"
+        },
+        {
+          "code": "CATALOG_PRODUCT_NO_PICKUP_LOCATION",
+          "message": "Choose where the delivery agency should collect this product from"
+        }
+      ],
+      "pickupReason": "no_agency"
     }
   },
-  "message": "Product saved as a draft. Resolve 1 issue(s) to publish."
+  "message": "Product saved as a draft. Resolve 2 issue(s) to publish."
 }
 ```
 
-🔴 **These are the only two endpoints that return the FULL activation checklist.** Everywhere else
-(`PATCH /:id/status`) you get one blocker at a time and have to loop. **If you are building a publish
-wizard, drive it from here.**
+**`blockers` is the complete checklist, not the first failure.** Render it as a to-do list. Each `message` is written for a vendor to read — display it directly.
 
-Every blocker: [products.md § 5.2](./products.md#52-the-activation-gate).
+> ⚠ **The messages in the example above are the REGISTRY DEFAULTS, and no call site sends them.**
+> Every blocker `ProductStatusValidationService` raises passes its own message, so what a vendor
+> actually reads is the override, not the default in `core/errors.ts`. **Do not key any logic on
+> the message text, and do not build a client-side copy table from this example** — branch on
+> `code` and render the `message` you were given.
+>
+> ⚠ **`CATALOG_PRODUCT_NO_DELIVERY_AGENCY` alone has FIVE distinct messages**, because one code
+> covers five different situations (`ProductStatusValidationService.ts:211, 219, 231, 247, 259`):
+>
+> | Situation | Message |
+> |---|---|
+> | No vendor default agency | *"Physical products require an active default delivery agency on your vendor profile."* |
+> | Vendor default is not `active` | *"Your default delivery agency is not currently active. …"* |
+> | Connection to the vendor default not approved | *"Your connection with this delivery agency needs to be approved (or reapproved) …"* |
+> | The **product's own** override agency is not `active` | *"This product's own delivery agency is not currently active."* |
+> | Connection to the **override** agency not approved | *"Your connection with this product's delivery agency needs to be approved (or reapproved) …"* |
+>
+> The last two are reachable only when the product carries its own `delivery.agencyId`, and they
+> are the pair a vendor finds most confusing — the code is identical to the profile-level one, so
+> a UI that maps code → its own sentence sends them to the wrong settings screen.
 
-⚠ Three blocker messages are developer placeholders that will reach the vendor verbatim. Map codes
-to your own copy.
-
-⚠ And several blocker messages differ from the registry default for their code —
-`CATALOG_PRODUCT_NO_DELIVERY_AGENCY` alone has **five** distinct ones depending on which link of
-the agency chain failed (`ProductStatusValidationService.ts:206-262`), plus a sixth at
-`ProductUpdateService.ts:184` and the registry default itself. **Render `message`; never map from
-the code.** *(This page said "four" until 2026-09-08 — the count was wrong and the backend's copy
-was the accurate one.)*
-
-### `pickupReason`
-
-Why the backend chose the pickup location it did — useful for explaining a blocker:
-
-```
-explicit · derived_single_address · derived_agency_storage
-vendor_not_found · no_agency · agency_inactive
-multiple_addresses · no_business_address · agency_offers_neither · resolution_failed
-```
-
-`multiple_addresses` and `no_business_address` are the two that mean "the vendor must choose" —
-route them to [profile.md](./profile.md).
-
-### Errors
-
-`403 BILLING_LIMIT_EXCEEDED` (`details: { limit, current, requested, available }`) · `400 CATALOG_IMAGE_LIMIT_EXCEEDED`
-(7 for physical) · `409 CATALOG_VARIANT_SKU_EXISTS` — **SKU uniqueness is platform-global** ·
-`422 CATALOG_VARIANT_BARGAIN_PRICE_MISMATCH` · `422 CATALOG_VARIANT_BARGAIN_RANGE_INVALID`.
-
-### 🔴 The bargain window, in one paragraph
-
-A simple product runs the **same** rule as a multi-variant one, so read
-[variants.md § 1.1](./variants.md#11--the-bargain-window--the-rules-you-must-build-against) before
-building the editor. The two things that catch people: **`bargain.minPrice` is not a second price —
-it must equal `price`**, so send `{ "bargain": { "maxPrice": … } }` and omit `minPrice`; and once
-the product is vectorised, **`maxPrice` is the price shoppers see on the storefront**, while `price`
-becomes an unpublished floor. A field labelled "maximum" invites a vendor to raise their own shelf
-price believing it is private headroom.
+Once the vendor fixes their setup, publish with either `PATCH /products/:id/status {"status":"active"}` or `PATCH /products/:id/simple {"publish": true}`.
 
 ---
 
-## 2 · `PATCH /api/vendor/products/:id/simple`
+## Auto-derived pickup location
 
-Every field optional; at least one required. Also `.strict()`.
+Omit `pickupLocation` and the backend works it out from the vendor's profile and their delivery agency's policy. `meta.activation.pickupReason` says what happened:
 
-Two fields available here that create does not accept: `lowStockThreshold` (integer ≥ 1, or `null`
-to disable alerts) and `allowOversell`.
+> ⚠ **`pickupReason` is a CREATE-only field — it is never present on `PATCH /products/:id/simple`.**
+> Only `SimpleProductCreateService` resolves and returns it (`:228`, surfaced at
+> `vendor-simple-product.controller.ts:143`); `SimpleProductUpdateService` never sets it. The
+> PATCH response is otherwise the same shape, which is exactly why this is easy to miss — a
+> client reading `meta.activation.pickupReason` after an edit gets `undefined`, not a stale
+> value, and must not treat that as "the pickup location was cleared".
 
-`bargain` and `pickupLocation` become nullable — `null` clears them.
-
-### `publish` semantics
-
-| Sent | Current status | Result |
+| `pickupReason` | Outcome | What the UI should do |
 |---|---|---|
-| `true` | `draft` | attempts to publish; `blockers` explains a failure |
-| `true` | `active` | `{ attempted: true, published: true, blockers: [] }` |
-| omitted | any | the activation check still runs; if it demoted the product you get `{ attempted: false, published: false, blockers: [...] }` |
+| `derived_single_address` | Vendor's one business address | nothing |
+| `derived_agency_storage` | Agency warehouses the stock, at its **primary** depot | nothing (see note below) |
+| `explicit` | Caller supplied it | nothing |
+| **`multiple_addresses`** | **Nothing persisted — draft** | **Show an address picker.** The vendor has several business addresses and none is flagged default; guessing could send a courier to the wrong city, so the backend declines. Re-send with an explicit `pickupLocation`. |
+| `no_agency` | Nothing persisted — draft | Send them to delivery settings |
+| `agency_inactive` | Nothing persisted — draft | Their agency is not active |
+| `no_business_address` | Nothing persisted — draft | Agency does pickup only; add a business address |
+| `agency_offers_neither` | Nothing persisted — draft | Agency supports neither model |
+| `resolution_failed` | Nothing persisted — draft | Transient; retry the publish |
 
-🔴 **Omitting `publish` does not mean "leave the status alone".** An `active` product that now fails
-the gate is demoted to `draft`, and `meta.activation.blockers` is your only notice.
+**A `pickupLocation` you send explicitly is validated and can 422** (`CATALOG_PRODUCT_INVALID_PICKUP_LOCATION`) — you asked for something specific and got it wrong. Auto-derivation never fails the call; it just declines.
 
-### 🔴 `meta.activation.pickupReason` is never present on PATCH
+> [!NOTE]
+> **Auto-derivation never picks a depot.** `derived_agency_storage` persists
+> `agencyAddressId: null`, which means "the agency's primary depot" and keeps tracking it if the
+> agency reorders its locations. Note the asymmetry with `derived_single_address`: a vendor address
+> *is* recorded, because there null is not a valid steady state and there was exactly one
+> unambiguous candidate. For a depot, null already is the answer, so stamping an id would freeze a
+> guess the vendor was never asked to make.
+>
+> There is deliberately no `multiple_agency_addresses` reason. An agency with several depots is not
+> a blocker the way several vendor addresses are — the product simply defaults to the primary and
+> stays publishable. If you want the vendor to choose, offer the picker
+> ([locations endpoint](./delivery-agencies.md#list-an-agencys-pickup-locations)) and send
+> `pickupLocation` explicitly.
 
-Only the create path sets it. Do not read it here.
+---
 
-### 🔴 The stock gate
+## Auto-generated SKU
 
-If the product is agency-warehoused, `stock` and `isInfiniteStock` are diverted into an approval
-request:
+Omit `sku` and you get `<TITLE-PREFIX>-<PRODUCT-ID>`, e.g. `NIKE-AIR-MAX-90-507F1F77BCF86CD799439011`.
 
-```jsonc
-"meta": { "stockAdjustment": { "status": "pending_agency_approval", "request": { /* … */ } } }
+SKUs are unique **across every vendor on the platform**, so embedding the product's own id is what makes generation collision-free without a retry. A vendor-supplied SKU that is already taken returns **409 `CATALOG_VARIANT_SKU_EXISTS`**.
+
+Do not regenerate an SKU — orders and the storefront reference it.
+
+---
+
+## `PATCH /api/vendor/products/:id/simple`
+
+One flat body edits both the product and its variant. Every field optional; at least one required.
+
+**409 `CATALOG_PRODUCT_NOT_SIMPLE_MODE`** on an advanced product — use `PATCH /products/:id` plus the variant endpoints for those.
+
+| → Product | → its single variant |
+|---|---|
+| `title`, `description`, `descriptionRich`, `category`, `tags`, `fileIds`, `seoTitle`, `seoDescription`, `freeDelivery`, `pickupLocation` | `price`, `compareAtPrice`, `bargain`, `stock`, `isInfiniteStock`, `lowStockThreshold`, `allowOversell`, `sku`, `weight`, `length`, `width`, `height` |
+
+> [!NOTE]
+> `descriptionRich` is three-valued on this endpoint: **absent** leaves the stored
+> document alone, an **object** replaces it, and **`null` clears it**. Send `null`
+> whenever the vendor emptied their description — omitting it would leave the old
+> formatting in place beside a replaced `description`.
+
+```json
+PATCH /api/vendor/products/507f1f77bcf86cd799439011/simple
+{ "price": 39000, "stock": 8 }
 ```
 
-**You still get `200`, and `data.defaultVariant.stock` is the OLD number.** Branch on
-`meta.stockAdjustment`. Full conditions: [variants.md § 3](./variants.md#-the-stock-gate).
+Response shape is identical to create (`data` + `meta.activation`), status `200`.
 
-### Errors
+> [!IMPORTANT]
+> **A bare `price` edit also moves `bargain.minPrice`.** On a product with a bargain window,
+> `{ "price": 39000 }` writes the price *and* re-points `minPrice` at it, so a client that
+> knows nothing about bargaining cannot break the invariant. If the new price would exceed
+> the stored `maxPrice`, the whole PATCH is refused with
+> `422 CATALOG_VARIANT_BARGAIN_RANGE_INVALID` — send `{ "price": …, "bargain": { "maxPrice": … } }`
+> together to raise both. `"bargain": null` clears the window. Full rules:
+> [Bargainable pricing](./variants.md#bargainable-pricing).
+>
+> Because this schema is **strict**, a mistyped `"bargin"` is a `400` here — unlike
+> `PATCH /:productId/variants/:variantId`, which silently ignores unknown keys.
 
-`409 CATALOG_PRODUCT_NOT_SIMPLE_MODE` (`details: { mode }`) — the mirror of the simple-mode lock,
-raised when this route is used on an advanced product · `400 CATALOG_PRODUCT_INVALID_TYPE` ·
-`422 CATALOG_PRODUCT_NO_DEFAULT_VARIANT` · `409 CATALOG_VARIANT_SKU_EXISTS` ·
-`422 CONNECTION_NOT_ACTIVE` · `422 CATALOG_PRODUCT_INVALID_PICKUP_LOCATION` ·
-`409 CATALOG_PRODUCT_VECTORISATION_PENDING`.
+> [!WARNING]
+> **`stock` is not written for an agency-warehoused product.** If this product's pickup
+> is `agency_storage`, an agency physically holds the goods and the quantity needs its
+> countersignature — see [Stock requests](./stock-requests.md). `stock` and
+> `isInfiniteStock` are dropped from the write and become a pending request; every other
+> field in the body applies as normal.
+>
+> Still `200`. `data` shows the **old** quantity, and `meta` gains a second key beside
+> `activation`:
+>
+> ```json
+> "meta": {
+>   "activation": { "attempted": false, "published": true, "blockers": [] },
+>   "stockAdjustment": {
+>     "status": "pending_agency_approval",
+>     "request": { "id": "665a…", "requestedQuantity": 90, "availableActions": ["withdraw"] }
+>   }
+> }
+> ```
+>
+> The gate runs **after** the product half of the update, so a body that switches pickup
+> *to* `agency_storage` and sets a quantity in one call is judged against the arrangement
+> it just created. A body switching storage *off* writes the quantity directly.
+>
+> `isInfiniteStock: true` on a warehoused product is refused outright with
+> `422 CATALOG_PRODUCT_AGENCY_STORAGE_INFINITE_STOCK`, and it is an activation blocker
+> too — see [products.md → Activation Requirements](./products.md#activation-requirements).
 
-⚠ **This route is not transactional.** The product half and the variant half are separate writes — a
-mid-way failure can leave the product updated and the variant not. Re-fetch after an error rather
-than assuming nothing changed.
+### `publish` semantics on edit
 
-Changing `sku` also rewrites the variant's `optionSignature`.
+| `publish` | Behaviour |
+|---|---|
+| **omitted** | Status untouched. If the edit broke the active-state invariant the product is demoted to `draft` **and `blockers` explains why**. |
+| `true` | If `draft`, attempt to publish; if already `active`, no-op. |
+| `false` | Never publishes. To unpublish, use `PATCH /products/:id/status {"status":"draft"}`. |
+
+Omitting it is deliberate: a vendor who unpublished on purpose should not be silently republished by a price correction.
+
+> `fileIds` is a **full replacement**, same as `PATCH /products/:id`. Read the current `files[]`, map to ids, append, send the whole array.
 
 ---
 
-## 3 · `POST /api/vendor/products/:id/convert-to-advanced`
+## `POST /api/vendor/products/:id/convert-to-advanced`
 
-No body. Flips `mode` and **nothing else** — no data migration, no variant changes.
+Unlocks the full variant/option API.
 
-- **Idempotent** — calling it on an already-advanced product returns `200` with
-  `"Product already uses the advanced editor"`.
-- 🔴 **One-way. There is no `convert-to-simple` anywhere.** Warn before converting: the vendor gets
-  the full editor and cannot go back.
+```json
+POST /api/vendor/products/507f1f77bcf86cd799439011/convert-to-advanced
+→ 200 { "success": true, "data": { "mode": "advanced", ... } }
+```
 
-⚠ **The response has no `defaultVariant`**, unlike create and update. Re-fetch if you need it.
+- **Flips `mode` and nothing else.** No data migration, no repair. The existing variant is already a valid advanced variant.
+- **Idempotent** — already-advanced returns `200` with `"Product already uses the advanced editor"`.
+- **One-way.** There is no `convert-to-simple`: a product with twelve variants cannot collapse into one, and choosing which survives is not the backend's call.
+
+After converting, `PATCH /:id/simple` returns `409 CATALOG_PRODUCT_NOT_SIMPLE_MODE`.
+
+---
+
+## Duplicating
+
+`POST /products/:id/duplicate` on a simple product produces another **simple** product, variant included, with a freshly generated SKU. (Advanced products still duplicate without variants — the vendor recreates them.)
+
+Any **bargain window is carried over** — the price is copied verbatim, so `minPrice` still
+matches it. The copy is born with vectorisation off, so it arrives `bargainable: false`
+until the vendor opts the new product in.
 
 ---
 
-## 4 · Duplicating a simple product
+## Error reference
 
-Worth knowing here because it is the one place the two modes behave differently in a way a vendor
-will notice:
-
-- **`mode` is copied** — a simple product duplicates as simple.
-- **Its single variant IS cloned** (advanced products copy no variants at all), so the copy comes
-  back with a real default variant and can be published straight away.
-- The variant's **images are not carried over**.
-
-See [products.md § 10](./products.md#10--post-apivendorproductsidduplicate).
+| Status | Code | Cause |
+|---|---|---|
+| 400 | `VALIDATION_ERROR` | Zod failure — see `details.fields[]` |
+| 400 | `CATALOG_IMAGE_LIMIT_EXCEEDED` | More than 7 `fileIds` |
+| 403 | `CATALOG_PRODUCT_ACCESS_DENIED` | A `fileId` belongs to another vendor. **Nothing is created** — the whole transaction rolls back. |
+| 403 | `BILLING_LIMIT_EXCEEDED` | Plan's active-product cap reached. `details: { limit, current, requested, available }` |
+| 404 | `CATALOG_PRODUCT_NOT_FOUND` | Not yours, or does not exist |
+| 409 | `CATALOG_VARIANT_SKU_EXISTS` | Supplied SKU already taken (globally) |
+| 409 | `CATALOG_PRODUCT_SIMPLE_MODE_LOCKED` | Advanced operation on a simple product |
+| 409 | `CATALOG_PRODUCT_NOT_SIMPLE_MODE` | Simple endpoint on an advanced product |
+| 409 | `CATALOG_PRODUCT_VECTORISATION_PENDING` | Product is mid-vectorisation |
+| 422 | `CATALOG_PRODUCT_INVALID_PICKUP_LOCATION` | Explicit pickup location incompatible with the agency |
+| 422 | `CATALOG_PRODUCT_NO_DEFAULT_VARIANT` | Simple product lost its variant (should be unreachable — the guards prevent it) |
+| 422 | `CATALOG_VARIANT_BARGAIN_PRICE_MISMATCH` | `bargain.minPrice` disagrees with the effective price |
+| 422 | `CATALOG_VARIANT_BARGAIN_RANGE_INVALID` | `bargain.maxPrice` is below the effective price — including a bare `price` edit rising above the stored ceiling |
 
 ---
+
+## Recommended UI
+
+```
+┌─ Quick add ───────────────────────────────┐
+│ Photos        [ drag & drop, max 7 ]      │
+│ Name          [___________________]        │
+│ Description   [___________________]        │
+│ Category      [ dropdown ▾ ]               │
+│ Price         [_______]  Stock [____]      │
+│                                            │
+│              [ Save draft ]  [ Publish ]   │
+└────────────────────────────────────────────┘
+```
+
+`Publish` → `publish: true`; `Save draft` → `publish: false`. On a `201` with `published: false`, show the `blockers` list inline with a link to delivery settings, and keep the product visible in the list as a draft — it exists and is not lost.
+
+---
+
+*Last updated: 2026-07-28*

@@ -1,59 +1,24 @@
 # Rate limits
 
-**Verified against source on 2026-09-08** — every ceiling, the `Retry-After`/CORS behaviour, the
-six exempt prefixes and the auth-pass multipliers below, against
-`jovi-mall/src/api/rate-limit/`, `src/app.ts` and `src/api/index.ts`. (First verified
-2026-08-24.) jovi-mall had **no rate limiting of any kind** before this.
+**Verified against source on 2026-09-08** — every ceiling, both `/auth` bucket lists and the
+six exempt prefixes, against `jovi-mall/src/api/rate-limit/` (`policy.ts`, `auth-paths.ts`,
+`exempt-paths.ts`, `rate-limit.middleware.ts`).
 
-**Ceilings are backstops, not budgets.** A well-behaved dashboard never sees one.
+**New in Phase 16.** This API had no rate limiting of any kind before it. If you have been
+building against it, nothing you were doing at a normal pace will start failing — the
+ceilings are set so that no realistic client reaches them.
 
----
+## What you get back
 
-## The layers
+```http
+HTTP/1.1 429 Too Many Requests
+RateLimit: limit=600, remaining=0, reset=42
+RateLimit-Policy: 600;w=60
+Retry-After: 42
+Content-Type: application/json
+```
 
-| Layer | Scope | When | Vendor ceiling |
-|---|---|---|---|
-| **A — global** | **IP** | before auth | **1200/min** |
-| **B — identity** | the signed-in user | at the tail of the auth middleware | **900/min** |
-| auth endpoints | IP | on `/api/auth/*` | **20/min** |
-| auth session ops | IP | on refresh / `auth-me` | **300/min** |
-| connection codes | IP | on `POST /api/me/connections` | **30/min** |
-
-### 🔴 The real vendor ceiling is lower than 900
-
-Several routers mount at the bare `/vendor` prefix, and Express falls through each one that does not
-match. **Every pass re-runs the auth stack, and the identity limiter sits at its tail** — so one
-request can decrement the bucket more than once.
-
-| Surface | Auth passes | Effective ceiling |
-|---|---|---|
-| `/api/vendor/profile*`, `/vendor/orders/*`, **`/vendor/analytics/*`**, `/vendor/notifications` | 1 | 900/min |
-| `/api/vendor/products/*`, `/api/vendor/bookings/*`, `/vendor/store/*`, `/vendor/inventory/*` | 2 | **~450/min** |
-| `/api/vendor/plan`, `/vendor/credits`, `/vendor/settings` | 2 | ~450/min |
-| `/api/vendor/earnings` | 3 | ~300/min |
-| `/api/vendor/transactions` | 4 | **~225/min** |
-
-**Count the passes yourself like this:** `src/api/index.ts` mounts **three** routers at the bare
-`/vendor` prefix — `vendorRoutes` (:143), `vendorBillingRoutes` (:190), `vendorEarningsRoutes`
-(:260) — and each begins with `router.use(requireAuth)`. A request pays one pass for every bare
-`/vendor` mount it falls *through* before something matches, plus one for the mount that matches.
-
-⚠ **Corrected 2026-09-08: `/api/vendor/analytics/*` is ONE pass, not two.** It is mounted
-*inside* `vendorRoutes` (`src/modules/vendor/routes.ts:415`), not beside it, so it matches on the
-first pass and never reaches the billing or earnings routers. The same is true of everything else
-served directly by that router — profile, orders, customers, notifications, devices.
-
-The `RateLimit-Remaining` header reflects the inflated count, so it is telling the truth about the
-bucket — just not about how many *requests* you have left.
-
-**Do not design polling loops near 900.** A dashboard refreshing several panels on a timer can reach
-225 on the transactions feed faster than it looks.
-
----
-
-## The 429
-
-```jsonc
+```json
 {
   "success": false,
   "requestId": "req_abc123",
@@ -67,160 +32,141 @@ bucket — just not about how many *requests* you have left.
 }
 ```
 
-### 🔴 Prefer the header — but you probably cannot read it
+The headers are IETF draft-7. **Prefer them** — `RateLimit: remaining=…` lets a client slow
+down *before* being refused, which the body cannot.
 
-| Source | Value |
+## The ceilings
+
+Per 60-second window. Every one of these is a **backstop, not a budget**: they exist to stop
+a runaway loop or a scraper, and they are set well above what any real user of that role
+generates.
+
+There are **two layers**, and both apply to a signed-in caller. Layer A is IP-scoped and runs
+before authentication; Layer B is identity-scoped and runs at the tail of `requireAuth`, so an
+anonymous caller is bounded by Layer A only.
+
+| Layer | Caller | Counted per | Limit | Env var |
+|---|---|---|---|---|
+| A — global | **every caller**, signed in or not | IP address | 1200 | `RATE_LIMIT_GLOBAL_PER_MIN` |
+| B — identity | Agent | user | 1200 | `RATE_LIMIT_AGENT_PER_MIN` |
+| B — identity | Platform admin | user | 1200 | `RATE_LIMIT_ADMIN_PER_MIN` |
+| B — identity | Vendor | user | 900 | `RATE_LIMIT_VENDOR_PER_MIN` |
+| B — identity | Agency | user | 900 | `RATE_LIMIT_AGENCY_PER_MIN` |
+| B — identity | Customer | user | 600 | `RATE_LIMIT_CUSTOMER_PER_MIN` |
+| credential | `/api/auth` paths that **present** a credential | IP address | **20** | `RATE_LIMIT_AUTH_PER_MIN` |
+| session | `/api/auth` paths that **extend** a session | IP address | 300 | `RATE_LIMIT_AUTH_SESSION_PER_MIN` |
+| C — connection code | `POST /api/me/connections` | IP address | **30** | `RATE_LIMIT_CONNECTION_CODE_PER_MIN` |
+
+Four things to read out of that table:
+
+- **Not signed in ⇒ 1200 per IP, and nothing else.** Layer B never sees an unauthenticated
+  request, so there is no separate anonymous identity ceiling in force.
+- **Authenticated callers are counted per user *as well as* per address.** An office, a school
+  or a mobile carrier's NAT puts many people behind one IP; once you are signed in, Layer B is
+  what actually bounds you, and their traffic is not yours.
+- **The credential bucket is the strict one, and it is strict on purpose.** It bounds one source
+  trying many passwords across many accounts. If you are legitimately hitting 20
+  sign-in attempts a minute from one address, you are doing something the API should be
+  told about rather than tuned around.
+- **The connection-code bucket is the second security control, and it stacks with a third.**
+  `POST /api/me/connections` takes a 6-character code, which is guessable in a way a password
+  is not. It is bounded per IP here (30/min, `RATE_LIMIT_EXCEEDED`) *and* per account by a
+  separate attempt counter — 5 tries per 10 minutes, answering
+  `CONNECTION_CODE_ATTEMPTS_EXCEEDED`. The two key on different axes on purpose: accounts are
+  free to create, so an account-scoped limit alone bounds nothing. Expect either code, and do
+  not retry in a loop on either.
+
+### The two `/api/auth` buckets
+
+They are split by **what the request does**, not by which router serves it. Exactly one applies
+per request, so `RateLimit: remaining=…` always describes the counter that is binding you.
+
+| Bucket | Paths |
 |---|---|
-| **`Retry-After` header** | the real seconds-to-reset — **authoritative** |
-| `details.retryAfterSeconds` | always the whole window, **60**, regardless of when you hit it |
+| **credential**, 20/min/IP | `login` · `register` · `forgot-password` · `reset-password` · `add-role` · `send-email-verification` · `verify-email` (both verbs) · `email-change/confirm` · `logout` · `browser/login` · `browser/logout` · `mobile/login` · `mobile/register` · `mobile/add-role` · **and all four magic-login routes** — `magic/link` · `magic/code` · `mobile/magic/link` · `mobile/magic/code` |
+| **session**, 300/min/IP | `me` · `auth-me/:role` · `mobile/auth-me/:role` · `browser/refresh` · `mobile/refresh` — the complete list (`auth-paths.ts:38-77`) |
 
-Your `http.ts` already prefers the header and falls back to the body, which is correct.
+> ⚠ **Corrected 2026-09-08.** The credential row listed `request-wa-verification`, which **no
+> longer exists** (it was replaced by `POST /api/me/connections`, which has its own bucket —
+> see Layer C above), and it omitted `email-change/confirm` and all four magic-login routes.
+> The magic routes *are* passwordless sign-in, which is exactly the surface the 20 exists to
+> bound: **a magic-link client gets 20/min/IP**, so budget for it.
 
-🔴 **But in a browser build the header is unreadable.** The backend's CORS configuration exposes
-**`X-Request-Id` only** — `Retry-After` and the `RateLimit-*` family are not in `exposedHeaders`, so
-`fetch` hides them cross-origin. In practice:
+> ⚠ **The credential bucket is the DEFAULT.** Anything added under `/api/auth` later lands in
+> it unless it is named on the session list — the safe direction, since the mistake it prevents
+> is a new credential endpoint silently inheriting 300/min.
 
-| Build | What `readRetryAfter` gets |
-|---|---|
-| **Browser (cross-origin)** | header invisible → falls through to the body's flat **60** |
-| **Capacitor / native HTTP** | the real header |
-| Same-origin (dev proxy) | the real header |
+This split exists because the two kinds of traffic were sharing one counter and the failure
+mode was bad: a user whose refresh was refused got signed out, tried to sign back in, and found
+the sign-in refused too — by their neighbours' traffic behind the same NAT. Renewing a session
+you already hold presents an unguessable signed token, never a password, so the
+password-spraying argument that justifies the 20 does not apply to it.
 
-So a browser build always backs off a full minute. That is safe but coarse. **If precise backoff
-matters, ask the backend to add `Retry-After` and `RateLimit` to `exposedHeaders`** — it is a
-one-line change and there is no reason those are not exposed.
+**Where 300 comes from.** Not from refresh — at roughly four renewals an hour per active user,
+300 covers about 1200 users behind one address. It is set from `/auth/me`, which a dashboard
+polls: at once a minute, a 120 ceiling would bind at 120 concurrent users on one office IP,
+which is reachable. Both `me` and `auth-me` sit behind authentication, so Layer B already bounds
+each *person* and Layer A still bounds the address; this counter's remaining job is only to stop
+one client looping on refresh.
 
-### The `RateLimit` headers
+**Internal service callers are exempt** from Layers A and B (resolved from the
+`INTERNAL_SERVICE_TOKEN` / `INTERNAL_ADMIN_SERVICE_TOKEN` shared secret, not from a JWT), but
+**not** from the credential bucket — nothing internal signs in, so an exemption there would only
+be usable by something that had already stolen the token.
 
-Draft-7 standard headers, set on every non-skipped request:
+Agents get the most generous ceiling because the agent app polls offers, shipment status and
+position, and is the client most likely to be on a bad connection retrying.
 
-```
-RateLimit-Policy: 900;w=60
-RateLimit: limit=900, remaining=871, reset=42
-```
+## Never limited
 
-**`X-RateLimit-*` are not set** — do not look for them.
+**Six** path prefixes, matched on a segment boundary (`/api/healthcheck-bypass` does **not**
+inherit `/api/health`'s exemption) and on `req.path` only — a query string can never talk its
+way in. The list is closed; see `src/api/rate-limit/exempt-paths.ts`.
 
-⚠ On an authenticated route both layers run and the second overwrites the first, so **the headers
-you see describe Layer B (identity)**, not the IP layer.
+> ⚠ **This said "three" and listed three until 2026-09-06.** `EXEMPT_PATHS`
+> (`exempt-paths.ts:21-76`) holds **six**, and the three that were missing are the entire
+> cross-service half — the reads and the push that carry the geo-tracker pipe. A reader
+> checking whether their new internal route needs an exemption would have concluded the
+> platform did not grant them to service callers, which is the opposite of the policy.
 
-### ⚠ Header absence means unlimited, not blocked
+- `/api/health` — and everything under it (`/live`, `/ready`), every method. geo-tracker
+  registers `GET /api/health` as a **readiness** checker and treats any status ≥ 300 as an
+  error, so a 429 there pulls geo-tracker out of rotation and kills every live WebSocket
+  tracking session.
+- `/metrics` — a throttled scrape is a monitoring gap that opens exactly when load is high. It
+  has its own token gate.
+- `/api/webhooks` — and everything under it (Stripe, NotchPay, MyCoolPay, WhatsApp, Telegram),
+  every method, including the authenticated WhatsApp/Telegram link-management routes that share
+  the prefix. A 429 to Stripe does not inconvenience a caller; it loses a payment notification.
+- `/api/internal/agents` — geo-tracker asking for a verdict, **as a service**. Every route under
+  it is behind `requireServiceToken`, so the caller is one authenticated peer, not a population.
+  A 429 breaks the tracking pipe **in both directions**: an unanswered eligibility or
+  tracking-policy read fails geo-tracker's authorization, and a refused tracking-state report is
+  dropped silently because that channel is best-effort. Same reasoning as the maintenance
+  exemption on this prefix — blocking it turns a jovi-mall load spike into a geo-tracker outage.
+- `/api/internal/shipments` — the same caller on the same token, pulling a shipment's geocoded
+  drop-off to route to it. Read-only, pulled **once per tracking session** and never on the
+  broadcast path. A 429 here is quieter than the prefix above — nobody is dropped, the session
+  simply opens with no ETA — which is exactly why it would be the one left un-exempt by mistake.
+- `/api/tracking/agent-state` — the reverse channel, also `requireServiceToken`: geo-tracker
+  pushing an agent's tracking state and last fix. ⚠ **Named precisely rather than exempting
+  `/api/tracking`**, because the other route under that mount — `GET /visible-agents` — runs
+  behind `requireAuth` and carries a real **user** identity forwarded by geo-tracker. Exempting
+  the whole mount would hand any authenticated caller an unlimited DB-touching endpoint.
 
-The limiter's store **fails open**. If it is degraded, every request is allowed and **no
-`RateLimit-*` headers are emitted at all**. Do not treat missing headers as "blocked" or as a signal
-to back off.
+## Behaviour worth relying on
 
-This is deliberate and load-bearing: the naive integration turns a store outage into a 500 on every
-request, putting a single point of failure in front of the whole API.
+**It fails open.** If the counter store is unavailable, requests are **allowed** rather than
+refused. A cache problem will never present as a platform-wide 429.
 
----
+**A 429 is always safe to retry**, after the window. It means the request was not processed —
+not that it half-was.
 
-## Auth endpoints are much tighter — 20/min
+**Do not retry-storm.** Respect `Retry-After`. A client that retries immediately on 429 is
+the reason the ceiling exists.
 
-`/api/auth/*` is an **allowlist**: anything not explicitly named gets the strict **20/min per IP**
-credential bucket.
+## If a limit is wrong
 
-Only these five get the looser 300/min session bucket:
-
-```
-/api/auth/mobile/refresh
-/api/auth/browser/refresh
-/api/auth/me
-/api/auth/auth-me           (and /auth-me/:role)
-/api/auth/mobile/auth-me    (and /:role)
-```
-
-**Everything else is 20/min** — `login`, `register`, `logout`, `add-role`,
-`send-email-verification`, `verify-email`, `forgot-password`, `reset-password`,
-`email-change/confirm`, and all four magic-login routes.
-
-Two practical consequences:
-
-- **`POST /api/auth/add-role` is on the 20/min bucket.** A role-switching UI that retries is cheap
-  to exhaust.
-- **The bucket is per IP, not per user.** On a shared network — an office, a market, mobile carrier
-  NAT — twenty sign-in attempts a minute is a *shared* budget. Expect support reports that look like
-  "login is broken" from a busy location. Handle 429 on the login form with a specific message.
-
-⚠ Also note **`TRUST_PROXY` defaults to `false`**. Behind an unconfigured ingress every caller shares
-one IP bucket, which makes the above much easier to hit. If a deployment reports mass 429s on login,
-that is the first thing to check — it is a backend configuration matter, not a client one.
-
----
-
-## Exempt paths
-
-Six prefixes are never limited:
-
-```
-/api/health   /metrics   /api/webhooks
-/api/internal/agents   /api/internal/shipments   /api/tracking/agent-state
-```
-
-**None of them is a vendor-dashboard route.** They are exempt because a 429 there would break a
-different service: geo-tracker treats a non-2xx on `/api/health` as a readiness failure and would
-pull itself out of rotation, killing every live tracking session — for load on a service that is
-itself healthy.
-
-The exemption is matched against the path only, so a query string cannot buy one.
-
----
-
-## What a client should do
-
-```ts
-// Already implemented correctly in src/services/http.ts — this is the reasoning.
-if (err.status === 429) {
-  const wait = err.retryAfterSeconds ?? 60;   // header first, body as fallback
-  // Back off. Do not retry immediately, and do not retry more than once automatically.
-}
-```
-
-- **Never retry a 429 in a tight loop.** The window is a full minute and a retry storm keeps you in
-  it.
-- **Debounce search inputs.** Two product-search endpoints feed a term straight into a database
-  regular expression; per-keystroke firing is both a limit problem and a load problem.
-- **Batch where the API allows it** — the bulk order and product routes take up to 50 ids, which is
-  one request instead of fifty. But note they are unusually expensive server-side, so prefer
-  batches of 10–20 over the 50 ceiling.
-- **Do not poll the connections endpoint.** There is nothing to wait for. See
-  [connections/README.md](./connections/README.md).
-
----
-
-## Maintenance mode — the neighbouring 503
-
-Not a rate limit, but it arrives at the same layer and needs the same handling.
-
-| Mode | Effect |
-|---|---|
-| `off` | normal |
-| `readonly` | **GET, HEAD and OPTIONS only.** Every other verb is refused |
-| `down` | everything refused except the exempt prefixes |
-
-```jsonc
-{ "success": false, "requestId": "…",
-  "error": { "code": "SYSTEM_MAINTENANCE_ACTIVE", "statusCode": 503,
-             "category": "business_rule",
-             "message": "<the operator's own reason>",
-             "details": { "mode": "readonly", "reason": "…",
-                          "startedAt": "…", "expiresAt": "…" } } }
-```
-
-**The message is the operator's actual reason and it does reach you** — the category is deliberately
-`business_rule` rather than `external_service` precisely so it is not masked. **Show it.**
-
-`Retry-After` is set **only when the window has a known end**. Handle its absence.
-
-**In `readonly`: keep every read working, disable every write.** Two exemptions matter to a
-Capacitor build:
-
-- 🔴 **`POST /api/auth/mobile/refresh` still works.** Without that exemption a read-only window would
-  sign out every native client fifteen minutes in, while browsers carried on.
-- `GET /api/digital/download/:token` still works.
-
-Everything else you call — all uploads, `/api/geo/*`, every `/api/me/*` write, and both
-`/api/me/connections` writes — is refused.
-
-⚠ Maintenance state is cached in-process for up to **5 seconds**, so it converges across instances
-with a small lag. A write that succeeds moments after a window opens is not a bug.
+It is a configuration value, not a deploy. Every ceiling is an environment variable
+(`RATE_LIMIT_*`), and the platform records `jovimall_rate_limited_total{caller_class,policy}`
+— so "this integration is being throttled" is a question with an answer. Raise it.

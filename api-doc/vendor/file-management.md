@@ -1,21 +1,22 @@
 # File Management Service API Documentation
 
-**Verified against source on 2026-09-08** — third pass (R7). Re-checked the nine audited deviations, the role size limits, the `storage` block and the `url`/`access` addition, against `jovi-mall/src/api/routes/file-upload.routes.ts`, `controllers/file-upload.controller.ts:45-57`, `controllers/file-management.controller.ts:159-281,325`, `validators/file-management.validator.ts:24-55` and `modules/catalog/read-models/file-detail.resolver.ts:67-120`. **Four defects fixed** — it is four routes not two and the change is committed (`141bc5c`), `agency` was missing from both size tables and from the `storage` block, and the `limitBytes`-is-null claim was false for agency and agent. **The long-form lifecycle, storage-provider and security sections below were not re-read** — the `usageCount` warning above still governs them.
+**Verified against source on 2026-09-08** — the file-listing query schema, the row shape, the
+`url`/`access` addition on both read paths and the reference/deletion contract, against
+`src/api/validators/file-management.validator.ts:24-55`,
+`src/modules/catalog/repositories/mappers/file.mapper.ts:41-59`,
+`src/api/controllers/file-management.controller.ts:185,325,340-385,599-600` and
+`src/modules/catalog/read-models/file-detail.resolver.ts:114-120`. **Two defects fixed:**
+`usageCount` is no longer on the wire (it still appears ~40 times below), and the quota-blocked box
+described a shape the source has since changed. The lifecycle, storage-provider and security
+sections were **not** re-read.
 
-**Version:** 1.2 · **Written:** 2026-06-11 · **Audited against backend source: 2026-08-24**
-**Partially re-verified against source on 2026-09-08 (second pass)** — the file-listing query
-schema (`file-management.validator.ts:24-55`), the row shape (`file.mapper.ts:41-59`), the
-`url`/`access` addition on both read paths (`file-management.controller.ts:185,325`,
-`file-detail.resolver.ts:114-120`) and the reference/deletion contract
-(`file-management.controller.ts:340-385,599-600`). **Two defects found:** `usageCount` is not on
-the wire at all, and the quota-blocked "two dialects" box was describing the committed shape rather
-than the current one. The lifecycle, storage-provider and security sections were **not** re-read.
-
-**Partially re-verified against source on 2026-09-08** — the nine audited deviations were each
-re-checked (`src/api/routes/file-upload.routes.ts`, `src/api/validators/file-management.validator.ts`,
-`src/api/controllers/file-management.controller.ts:108-198, 228-273`) and all nine still hold, and
-the quota-blocked note below was added from `modules/plan-quota/` and
-`repositories/mappers/file.mapper.ts:41-59`. The long-form body was not re-read.
+**Version:** 1.2 · **Written:** 2026-06-11
+**Verified against source on 2026-09-08** — the live route list, guards, query schema, list
+response shape and storage summary, against `jovi-mall/src/api/routes/file-upload.routes.ts`,
+`src/api/validators/file-management.validator.ts`,
+`src/api/controllers/file-management.controller.ts` and
+`src/modules/catalog/repositories/mappers/file.mapper.ts`.
+**Audience:** Frontend Developers, Backend Engineers, Platform Documentation
 
 ---
 
@@ -26,26 +27,25 @@ the quota-blocked note below was added from `modules/plan-quota/` and
 > **It is also the oldest page here, and parts of it describe a 2026-06 API.** It has not been
 > rewritten — it has been *audited*, and every deviation found is listed below.
 >
-> **The two pages that are current, and win wherever they disagree with this one:**
+> **The page that is current, and wins wherever it disagrees with this one:**
+> [`../uploads/README.md`](../uploads/README.md) — the seven live routes, the real query schema,
+> the real response shapes. For `FileDetail.url` / `access`, see
+> [`../FRONTEND-CHANGELOG-private-files.md`](../FRONTEND-CHANGELOG-private-files.md) and
+> [`../FRONTEND-CHANGELOG-plan-quota.md`](../FRONTEND-CHANGELOG-plan-quota.md).
 >
-> - [`../uploads/README.md`](../uploads/README.md) — the seven live routes, the real query
->   schema, the real response shapes
-> - [`../files/private-files.md`](../files/private-files.md) — 🔴 `FileDetail.url` is
->   `string | null` and there is a new `access` field
->
-> ### The audit result — nine deviations
+> ### Nine deviations, each checked against source on 2026-09-08
 >
 > | § of this page | Says | Source says |
 > |---|---|---|
-> | `DELETE /api/files/:id/permanent` | an admin route on this router | 🔴 **gone** — moved to `/api/internal/admin/files`, not browser-reachable |
+> | `DELETE /api/files/:id/permanent` | an admin route on this router | 🔴 **gone** — moved to `/api/internal/admin/files` behind `requireAdminCaller`, not browser-reachable (`file-upload.routes.ts:15-23`, `internal-admin.routes.ts:241`) |
 > | `GET /api/files/orphans` | an admin route on this router | 🔴 **gone** — same move |
-> | *(throughout)* | this router has admin-only routes | there is **no role guard anywhere** on `file-upload.routes.ts` |
-> | `GET /api/files` response | `data` array + `meta` | `data: { files, storage, pagination }`, **no `meta`** |
-> | `GET /api/files` `limit` | up to 100 | **50** |
-> | `GET /api/files` date filters | `startDate` / `endDate` | **`createdAfter` / `createdBefore`** |
-> | `GET /api/files` sorting | `sort` with a `-` prefix | **`sortBy` + `sortOrder`** |
-> | `GET /api/files/storage` | `usedBytes`, `limitBytes`, `fileCount`, `plan` | `limitBytes`, `usedBytes`, `remainingBytes`, `byCategory` |
-> | *(nothing about it)* | — | 🔴 **`GET /api/files` returns soft-deleted rows** — F-26 |
+> | *(throughout)* | this router has admin-only routes | there is **no role guard anywhere** on `file-upload.routes.ts` — `requireAuth` and nothing else. The seven live routes are `POST /upload`, `POST /upload/video`, `GET /storage`, `GET /`, `GET /:id`, `PATCH /:id`, `DELETE /:id` |
+> | `GET /api/files` response | `data` array + `meta` | `data: { files, storage, pagination }`, **no `meta`** (`file-management.controller.ts:186-198`) |
+> | `GET /api/files` `limit` | up to 100 | **50** (`file-management.validator.ts:26`) |
+> | `GET /api/files` date filters | `startDate` / `endDate` | **`createdAfter` / `createdBefore`** (`:38-39`) |
+> | `GET /api/files` sorting | `sort` with a `-` prefix | **`sortBy` + `sortOrder`**, `sortBy` allow-listed to `createdAt` · `updatedAt` · `size` · `originalName` (`:42`) |
+> | `GET /api/files/storage` | `usedBytes`, `limitBytes`, `fileCount`, `plan` | `limitBytes`, `usedBytes`, `remainingBytes`, `byCategory` — and `limitBytes`/`remainingBytes` are **`null` for customers**, who have no plan |
+> | *(nothing about it)* | — | 🔴 **`GET /api/files` returns soft-deleted rows.** The filter builder applies no `deletedAt` condition at all (`file-management.controller.ts:108-150`). Filter them client-side |
 >
 > **What is still accurate and worth reading here:** the upload policy pipeline and its eleven
 > violation codes, reference counting and the orphan sweep, the storage-provider abstraction,
@@ -57,22 +57,19 @@ the quota-blocked note below was added from `modules/plan-quota/` and
 > Measured 2026-09-08. `File.usageCount` was replaced by the **`file_references`** collection
 > (`file-reference.model.ts:17`, `FileAttachService.ts:110`, `FileDetachService.ts:86`), and
 > `FileMapper.toDomain` (`file.mapper.ts:41-59`) does not emit it. **A client reading
-> `file.usageCount` gets `undefined`** — so "used in 2 places" renders as "used in undefined
-> places", and a guard like `if (file.usageCount === 0) allowDelete()` never fires.
+> `file.usageCount` gets `undefined`**, so a guard like `if (file.usageCount === 0)` never fires.
 >
 > | You want | Read |
 > |---|---|
 > | how many entities use this file | `GET /api/files/:id` → **`usage.totalReferences`** |
 > | where exactly | `usage.references[]` (`{ entityType, entityId, field, label }`), plus the legacy `usage.products[]` / `usage.variants[]` / `usage.digitalAssets[]` |
-> | may I delete it | just call `DELETE /api/files/:id`; it answers `409 CATALOG_FILE_STILL_REFERENCED` while `totalReferences > 0` (`file-management.controller.ts:599-600`) |
+> | may I delete it | call `DELETE /api/files/:id`; it answers `409 CATALOG_FILE_STILL_REFERENCED` while `totalReferences > 0` (`file-management.controller.ts:599-600`) |
 >
-> ⚠ **`usageCount` still appears ~40 times below this box.** Those passages describe the
-> **retired counter** and its `$inc` mechanics; they are an accurate account of how reference
-> counting used to work and a wrong account of the current wire. Read them as background, and
-> take the field list from [File Model](#file-model) and the examples in this box — not from
-> them. The full row is `id · key · provider · mimeType · size · checksum · originalName ·
-> ownerType · ownerId · orphanedAt · quotaBlockedAt · createdAt · updatedAt · deletedAt ·
-> purgeAt`, plus `url` and `access`.
+> ⚠ **`usageCount` still appears ~40 times below this box**, describing the retired counter and
+> its `$inc` mechanics. That is an accurate account of how reference counting used to work and a
+> wrong account of the current wire. The full row is `id · key · provider · mimeType · size ·
+> checksum · originalName · ownerType · ownerId · orphanedAt · quotaBlockedAt · createdAt ·
+> updatedAt · deletedAt · purgeAt`, plus `url` and `access`.
 
 ---
 
@@ -84,38 +81,28 @@ the quota-blocked note below was added from `modules/plan-quota/` and
 > the same files. It is **not** a deletion and it is **not** the soft-delete this page
 > describes; nothing on the deletion-lifecycle sections below covers it.
 >
-> **These routes report it TWICE, and `access` is the one to read:**
+> **These two routes report it TWICE, and `access` is the one to read:**
 >
 > | Where | Field | Blocked value |
 > |---|---|---|
 > | any `FileDetail` (product media, branding, avatars) | `access` | `"quota_blocked"`, with **`url: null`** |
-> | all **four** `/api/files/*` routes (see the ✅ note below) | `access` **and** `quotaBlockedAt` | `"quota_blocked"` / `url: null`, **plus** an ISO timestamp on `quotaBlockedAt` |
+> | all **four** `/api/files/*` routes | `access` **and** `quotaBlockedAt` | `"quota_blocked"` / `url: null`, **plus** an ISO timestamp on `quotaBlockedAt` |
 >
 > ⚠ **This box said these routes carried `quotaBlockedAt` and "no `access` and no `url` key at
 > all". Re-measured 2026-09-08 and that is no longer true.** The handlers map each row through
-> `withUrlAndAccess` (`file-management.controller.ts:185` for the list, `:325` for the detail;
-> `file-upload.controller.ts:247` and `:362` for the two upload routes), which spreads the raw
-> `File` and **adds** `url` and `access` (`file-detail.resolver.ts:114-120`). So one check —
-> `access === "quota_blocked"` — works on every surface, and you do **not** need a second
-> branch for the library screen.
+> `withUrlAndAccess` (`file-management.controller.ts:185` list, `:325` detail;
+> `file-upload.controller.ts:247` and `:362` for the two upload routes), which spreads the
+> raw `File` from `file.mapper.ts:41-59` and **adds** `url` and `access`
+> (`file-detail.resolver.ts:114-120`). One check — `access === "quota_blocked"` — now works on
+> every surface.
 >
-> ✅ **Corrected 2026-09-08 (R7): it is FOUR routes, not two, and the change is COMMITTED.**
-> `POST /api/files/upload` and `POST /api/files/upload/video` return `url` and `access` on
-> every element of their `data` array as well — which is what lets an upload confirmation
-> render a thumbnail straight away, with no follow-up `GET`. And the caveat that used to sit
-> here — *"that change is uncommitted working-tree state"* — **is no longer true.** It landed
-> in `141bc5c` (*feat(files): return url and access on all four `/api/files/*` responses*,
-> 2026-09-08 02:44) and both source files are clean against `HEAD`. Rely on it.
->
+> ✅ **Corrected 2026-09-08 (R7): it is FOUR routes, not two, and it is COMMITTED.** The two
+> upload routes carry `url`/`access` on every element of their `data` array as well. The caveat
+> that stood here — *"that change is uncommitted working-tree state"* — **is no longer true**:
+> it landed in `141bc5c` and both source files are clean against `HEAD`.
 > Also: `quota_blocked` **outranks** `authorized`, so test it first; a blocked file's bytes
 > **still count** toward `usedBytes` (blocking frees no space); and a vendor's
 > **digital-product asset files are exempt** from the media cap and are never blocked.
->
-> ⚠ Code fences on this page that reference backend source files were previously **links**
-> into a sibling repository. They are now plain paths — the files are in `jovi-mall/`, not in
-> this repository.
-
----
 
 ## Table of Contents
 
@@ -163,7 +150,7 @@ The **File Management Service** is an enterprise-grade, multi-tenant file storag
 First-class database entity representing a stored file with provider-agnostic metadata.
 
 **Key Properties:**
-- `id`: Unique identifier
+- [id](../../src/core/storage/storage-provider.interface.ts): Unique identifier
 - `key`: Provider-specific storage key (path or object ID)
 - `provider`: Storage backend type
 - `usageCount`: Reference count for safe cleanup
@@ -246,17 +233,13 @@ Content-Type: multipart/form-data
 files: File[] (max 10 files)
 ```
 
-**Role-Based Size Limits** (`file-upload.controller.ts:48-53`)**:**
+**Role-Based Size Limits:**
 | Role     | Max File Size |
 |----------|---------------|
 | Vendor   | 500 MB        |
-| **Agency** | **200 MB**  |
 | Agent    | 1 GB          |
 | Admin    | 2 GB          |
 | Customer | 100 MB        |
-
-> ✅ **`agency` (200 MB) was missing from this table** — added 2026-09-08 (R7) from source. It is
-> the smallest non-customer limit, and the backend's own route docstring omits it too.
 
 **Where the file is stored:**
 
@@ -328,7 +311,6 @@ and it follows any conversion the pipeline applies — a `png` stored as `webp` 
     "message": "Upload policy violations found",
     "statusCode": 400,
     "category": "validation",
-    "category": "validation",
     "details": { "violations": [
       { "code": "NO_FILES_UPLOADED", "message": "At least one file is required" }
     ] }
@@ -345,7 +327,6 @@ and it follows any conversion the pipeline applies — a `png` stored as `webp` 
     "code": "UPLOAD_POLICY_VIOLATION",
     "message": "Upload policy violations found",
     "statusCode": 400,
-    "category": "validation",
     "category": "validation",
     "details": { "violations": [
       { "code": "TOO_MANY_FILES", "message": "Maximum 10 files per request" }
@@ -385,8 +366,8 @@ and that a pipeline refusal can report **several files at once**, each keyed by 
   "error": {
     "code": "UPLOAD_POLICY_VIOLATION",
     "message": "Upload policy violations found",
-    "statusCode": 400,
     "category": "validation",
+    "statusCode": 400,
     "details": {
       "violations": [
         {
@@ -540,7 +521,6 @@ It carries `metadata: { claimedMimeType, originalName }`.
     "message": "Upload policy violations found",
     "statusCode": 400,
     "category": "validation",
-    "category": "validation",
     "details": { "violations": [
       { "code": "MIME_NOT_ALLOWED",
         "message": "File \"notes.pdf\" (application/pdf) is not a supported video. Allowed: mp4, mov, webm",
@@ -672,15 +652,12 @@ GET /api/files?ownerType=vendor&provider=cloudinary
 }
 ```
 
-**`storage` block:** owner-scoped media usage analytics, returned for **vendor / agency / agent / customer** callers (and **omitted — `null` — for admins**, whose listing is global). See the **[Vendor Media Storage guide](./storage.md)** for the full storage feature (limits, alerts, quota errors, lifecycle). `usedBytes` is the total of `byCategory` bytes. For the three **plan-metered** owner types — **vendor, agency and agent** — `limitBytes` is the active plan's media storage limit (`max_storage_bytes`) and `remainingBytes = max(0, limitBytes − usedBytes)`. **Customers** have no plan, so both are `null` (= unlimited). **A vendor's digital-product asset files are excluded** from these figures (they have their own per-asset cap, `MAX_DIGITAL_ASSET_SIZE`, default 500 MB, independent of plan). Categories follow the same `category` mapping used for filtering.
+**`storage` block:** owner-scoped media usage analytics, returned for **vendor / agency / agent / customer** callers (and **omitted — `null` — for admins**, whose listing is global). See the **[Vendor Media Storage guide](./storage.md)** for the full storage feature (limits, alerts, quota errors, lifecycle). `usedBytes` is the total of `byCategory` bytes. For the three **plan-metered** owner types — **vendor, agency and agent** — `limitBytes` is the active plan's media storage limit (`max_storage_bytes`) and `remainingBytes = max(0, limitBytes − usedBytes)`. **Customers** have no plan, so both are `null` (= unlimited). **A vendor's digital-product asset files are excluded** from these figures (their own per-asset cap is `MAX_DIGITAL_ASSET_SIZE`, default 500 MB, independent of plan). Categories follow the same `category` mapping used for filtering.
 
 > ✅ **Corrected 2026-09-08 (R7), three ways**, against `file-management.controller.ts:238-281`.
 > This paragraph named only *vendor / customer / agent* — **`agency` was missing**; it said
-> `limitBytes` is `null` "for other roles", which is **false for agency and agent** (all three
-> plan-metered types get a real cap, and only a customer gets `null`); and the digital-asset
-> exclusion is **vendor-only** (`MediaStorageService.getUsageBreakdown:45-52` subtracts them for
-> vendors and for nobody else). None of the three changes what a *vendor* screen should render —
-> they matter if you reuse this block's shape for another role.
+> `limitBytes` is `null` "for other roles", which is **false for agency and agent**; and the
+> digital-asset exclusion is **vendor-only** (`MediaStorageService.getUsageBreakdown:45-52`).
 
 **Authorization Rules:**
 - **Vendors**: See only files where `ownerType === 'vendor'` and `ownerId === vendorId`
@@ -730,7 +707,7 @@ Retrieve metadata for a single file by ID.
 **Authentication:** Required
 
 **Path Parameters:**
-- `id`: File ID (MongoDB ObjectId)
+- [id](../../src/core/storage/storage-provider.interface.ts): File ID (MongoDB ObjectId)
 
 **Success Response (200):**
 ```json
@@ -825,7 +802,7 @@ Update file metadata (only `originalName` is editable).
 **Authorization:** Owner or admin only
 
 **Path Parameters:**
-- `id`: File ID
+- [id](../../src/core/storage/storage-provider.interface.ts): File ID
 
 **Request Body:**
 ```json
@@ -872,7 +849,7 @@ Soft delete a file (mark for garbage collection).
 **Authorization:** Owner or admin only
 
 **Path Parameters:**
-- `id`: File ID
+- [id](../../src/core/storage/storage-provider.interface.ts): File ID
 
 **Success Response (200):**
 ```json
@@ -941,19 +918,13 @@ Soft delete a file (mark for garbage collection).
 
 #### DELETE /api/files/:id/permanent
 
-> 🔴 **REMOVED FROM THIS ROUTER — this section describes a route that 404s.**
-> It moved to `/api/internal/admin/files` behind `INTERNAL_SERVICE_TOKEN` and is reachable
-> only by wi-admin, server to server (`src/api/routes/file-upload.routes.ts:16-23`). **No
-> browser session of any role can call it.** A vendor dashboard's only delete is the
-> soft-delete `DELETE /api/files/:id` above. Kept for the lifecycle explanation below it.
-
 Permanently delete a file (admin only).
 
 **Authentication:** Required  
 **Authorization:** Admin only
 
 **Path Parameters:**
-- `id`: File ID
+- [id](../../src/core/storage/storage-provider.interface.ts): File ID
 
 **Success Response (200):**
 ```json
@@ -984,12 +955,6 @@ Permanently delete a file (admin only).
 ### Admin Endpoints
 
 #### GET /api/files/orphans
-
-> 🔴 **REMOVED FROM THIS ROUTER — this section describes a route that 404s.**
-> Same move as `DELETE /:id/permanent` above. `file-upload.routes.ts` states the rule that
-> produced it: *"Do not re-add an admin-only route here: this surface is the one a vendor,
-> agency, agent or customer session reaches, and an `admin` role can no longer arrive on it
-> at all."*
 
 List orphaned files for garbage collection (admin only).
 
@@ -1101,7 +1066,7 @@ List orphaned files for garbage collection (admin only).
 ### 3. Linking File to Domain Entities
 
 **Domain Services:**
-- `FileAttachService`: Attach file to product or variant
+- [FileAttachService](../../src/modules/catalog/domain/services/media/FileAttachService.ts): Attach file to product or variant
 - `FileDetachService`: Detach file from product or variant (not shown in docs, but inferred)
 
 #### Attach Flow
@@ -1415,7 +1380,7 @@ interface Variant {
 ```
 
 **Linking Process:**
-1. Vendor uploads file → `File` created with `ownerType: 'vendor'`, `usageCount: 0`
+1. Vendor uploads file → [File](../../src/modules/catalog/models/file.model.ts) created with `ownerType: 'vendor'`, `usageCount: 0`
 2. Vendor attaches file to product → `product.fileIds.push(fileId)`, `file.usageCount++`
 3. Vendor detaches file → `product.fileIds.remove(fileId)`, `file.usageCount--`
 
@@ -1530,7 +1495,7 @@ STORAGE_PROVIDER=local  # local, s3, gcs, r2, firebase, cloudinary
 
 ### Provider Switching
 
-**Zero Code Changes:** Business logic uses `IStorageProvider` interface.
+**Zero Code Changes:** Business logic uses [IStorageProvider](../../src/core/storage/storage-provider.interface.ts) interface.
 
 **Steps to Switch:**
 1. Update environment variable: `STORAGE_PROVIDER=s3`
@@ -1705,12 +1670,11 @@ async function reconcileStorage() {
 | Role     | Max File Size | Use Case                          |
 |----------|---------------|-----------------------------------|
 | Vendor   | 500 MB        | Product images, digital downloads |
-| **Agency** | **200 MB**  | Magazin branding, storage-invoice documents |
 | Agent    | 1 GB          | Support attachments               |
 | Admin    | 2 GB          | System assets, bulk imports       |
 | Customer | 100 MB        | Profile pictures, ticket attachments |
 
-**Enforcement:** Pre-upload validation in `FileUploadController`
+**Enforcement:** Pre-upload validation in [FileUploadController](../../src/api/controllers/file-upload.controller.ts)
 
 ### Who Can Read Files
 
@@ -1885,8 +1849,8 @@ const signedUrl = await api.getSignedUrl(fileId); // Short-lived
 **Scenario:** S3 is down, upload requested.
 
 **Behavior:**
-- Storage provider throws error during `put()`
-- Error caught in `UploadIntakeService`
+- Storage provider throws error during [put()](../../src/core/storage/storage-provider.interface.ts)
+- Error caught in [UploadIntakeService](../../src/core/uploads/upload-intake.service.ts)
 - No database record created
 - 500 response to client
 
@@ -2351,7 +2315,10 @@ async function detachFileFromProduct(productId: string, fileId: string) {
 <div className="file-preview">
   {uploadedFiles.map(file => (
     <div key={file.id}>
-      <img src={`/api/files/${file.id}/url`} alt={file.originalName} />
+      {/* ⚠ There is NO `/api/files/:id/url` route — that path 404s. `GET /api/files/:id`
+          matches one segment only. Render `file.url` from the FileDetail you already hold;
+          it is `null` for a file in a private tree, which is the case to branch on. */}
+      <img src={file.url ?? undefined} alt={file.originalName} />
       <span>{file.originalName}</span>
       <button onClick={() => removeFile(file.id)}>Remove</button>
     </div>

@@ -1,20 +1,8 @@
 # API Error Handling Guide
 
-**Verified against source on 2026-09-08** — the envelope, the nine categories, the exposure and
-allowlist rules and the registry size, against `src/core/error-category.ts`,
-`src/core/error-detail-policy.ts`, `src/api/middlewares/error-handler.middleware.ts` and
-`src/core/error-codes.ts`. (First verified 2026-08-24.)
-The code registry itself is [`../error-codes.ts`](../error-codes.ts) (**640 codes**, re-synced 2026-09-08).
-
-> ### Scope note for this repository
->
-> This is the **platform-wide** error reference, so it names code families a vendor dashboard
-> can never trigger. Four sections are here for completeness only and are marked where they
-> start: **COD** (§ 10), **agent ↔ agency contracts**, the *agency* half of **agency storage**,
-> and **blog / editorial**. Everything else applies to you.
->
-> Cross-role pages are referenced by filename rather than linked when they live only in the
-> backend repository's `api-doc/` — this repo mirrors the vendor surface, not all six.
+**Verified against source on 2026-09-08** — the envelope, the nine categories, the exposure
+rule and the registry size, against `jovi-mall/src/api/middlewares/error-handler.middleware.ts`,
+`src/core/error-category.ts`, `src/core/error-detail-policy.ts` and `src/core/error-codes.ts`.
 
 This guide explains how frontend applications should handle and parse error responses from the Jovi Mall API. By standardizing our error formats, the frontend can reliably display appropriate feedback to users and trigger specific client-side UI flows based on explicit error codes.
 
@@ -46,16 +34,6 @@ Whenever an API request fails (e.g., due to validation, business logic violation
 It exists so a client can behave sensibly about an error it has **no specific handling
 for** — which is most of them, since the registry has 640 codes. Branch on `code` when you
 have something particular to do; fall back to `category` for everything else.
-
-> ⚠ **`../error-codes.ts` is a COPY of the backend registry, and it has silently drifted
-> before.** It sat **20 codes behind** until 2026-09-06 — 603 against the backend's 623,
-> missing the 16 `BOT_*` plus `PAYMENT_LINK_NOT_APPLICABLE`, `PAYMENT_LINK_NOT_FOUND`,
-> `PAYMENT_LINK_NOT_PAYABLE` and `STORAGE_DOWNLOAD_NOT_SUPPORTED`. It was re-synced then, and
-> re-synced **again on 2026-09-08**, when the backend registry reached **640**. Both sides were
-> re-measured on 2026-09-08 and the key sets are **identical**. **Nothing re-checks this
-> automatically**, and the backend registry grows — so measure both sides rather than trusting
-> this note:
-> `grep -cE "^\s+[A-Z0-9_]+:\s*'" ../error-codes.ts`   → **640** on 2026-09-08
 
 | `category` | Means | What a client should generally do |
 |---|---|---|
@@ -92,6 +70,10 @@ specific handling remains possible.
 > **Do not render `message` verbatim on a 5xx** — map `code` to your own copy and fall back to
 > your generic "something went wrong", with the `requestId`.
 
+> **This is what makes `requestId` matter.** On a 5xx it is the only handle anyone has.
+> Show it. A user who can quote `req_abc123` turns an unactionable "something went wrong"
+> into a support conversation that resolves.
+
 ### Two MORE categories are allowlisted
 
 **New to this page 2026-09-08 — it was undocumented, and pages across the platform promised
@@ -108,22 +90,19 @@ Two consequences a client must plan for:
 
 - **If nothing survives, `details` is omitted from the response entirely** — not `{}`, not
   `null`. `403 AUTH_ROLE_NOT_FOUND` is raised internally with `{ role }` and reaches you with no
-  `details` at all. Same for `403 USER_INVALID_PASSWORD` on a password change.
+  `details` at all.
 - **Key names are matched loosely but exactly enough to catch you out.** Comparison lower-cases
   and strips separators, so `retry_after_seconds` and `retryAfterSeconds` both survive — but
-  `retryInSeconds` is a *different word* and is dropped.
+  `retryInSeconds` is a *different word* and is dropped. That is why
+  `COD_CODE_RESEND_TOO_SOON` sends no `details`, despite raising one.
 
 **Every other category** — `authentication`, `validation`, `not_found`, `conflict`,
 `business_rule` — passes `details` through in full, minus a small denylist of internal-narrative
 keys (`cause`, `stack`, `originalError`, `query`, `hostname`, … ) that is applied everywhere.
 
-> 🔴 **This is what strips `details.actual` from `AUTH_ROLE_NOT_FOUND`** (see
-> [auth/README.md](../auth/README.md)). It is not a special case for that code — it is the
-> `authorization` category, and it applies to every 403 on the platform.
-
-> **This is what makes `requestId` matter.** On a 5xx it is the only handle anyone has.
-> Show it. A user who can quote `req_abc123` turns an unactionable "something went wrong"
-> into a support conversation that resolves.
+> A 403 in this documentation showing `{ transition, party, proposer, hint }` therefore means
+> *"the server raises these"*, and you will receive `{ hint }`. Where that is true the tables
+> below now say so; if you find one that does not, the allowlist above is the authority.
 
 ### Field Descriptions
 
@@ -221,7 +200,7 @@ Occurs when attempting to create a record that conflicts with an existing unique
 ```
 
 ### 3. Catalog Bulk Update Validation
-**Code:** ~~`CATALOG_BULK_VALIDATION_FAILED`~~ — ⚠ **UNREACHABLE; raised by nothing** (source scan, 2026-09-08). The bulk paths answer `400 CATALOG_INVALID_CSV` (bad columns or unparseable CSV) and `422 CATALOG_BULK_LIMIT_EXCEEDED` (over 1 000 rows), and per-row failures come back **inside a `200`** rather than as an error — see [`vendor/inventory.md`](../vendor/inventory.md). The `details.rowErrors` shape below is illustrative only.
+**Code:** ~~`CATALOG_BULK_VALIDATION_FAILED`~~ — **UNREACHABLE; raised by nothing.** The bulk paths answer `400 CATALOG_INVALID_CSV` (bad columns or unparseable CSV) and `422 CATALOG_BULK_LIMIT_EXCEEDED` (over 1 000 rows), and per-row failures come back **inside a `200`** rather than as an error — see [`vendor/inventory.md`](../vendor/inventory.md). The `details.rowErrors` shape below is illustrative only.
 Occurs when uploading bulk inventory/catalog data (like CSVs) and specific rows fail validation.
 
 ```json
@@ -332,27 +311,26 @@ Returned by the [Agency Connections](../vendor/agency-connections.md) API when a
 }
 ```
 
-Other codes in this family — see [Agency Connections](../vendor/agency-connections.md) for full context (the agency's
-mirror of that page, `agency/vendor-connections.md`, is not mirrored in this repository), no `details` payload:
+Other codes in this family — see [Agency Connections](../vendor/agency-connections.md) and
+[Vendor Connections](../agency/vendor-connections.md) for full context, no `details` payload:
 `CONNECTION_NOT_FOUND` (404), `CONNECTION_VENDOR_NOT_FOUND` (404), `CONNECTION_ALREADY_EXISTS`
 (409), `CONNECTION_NOT_PENDING` / `CONNECTION_NOT_ACTIVE` (422) — ⚠ **the third member of that trio, ~~`CONNECTION_NOT_PAUSED`~~, is registered and raised by nothing**; do not branch on it,
 `CONNECTION_NOT_REQUESTER` / `CONNECTION_NOT_APPROVER` / `CONNECTION_WRONG_REAPPROVAL_PARTY` (403).
 
 ### 10. Cash on Delivery (COD) Errors
 
-> 🔵 **Not reachable by a vendor dashboard.** Cash handling is the agent's and the agency's;
-> a vendor sees that an order *is* COD and never touches the cash flow. Listed for reference.
-
 The `COD_` family covers checkout eligibility, delivery-code verification, agent cash exposure,
 deposits, remittances and discrepancies. Role-specific context:
-`customer/orders.md` · `agent/cod-cash.md` · `agency/cod-cash-management.md` ·
-`admin/cod.md` — **all in the backend repository's own `api-doc/`, none mirrored here.**
+[customer/orders.md](../customer/orders.md#cod), [agent/cod-cash.md](../agent/cod-cash.md),
+[agency/cod-cash-management.md](../agency/cod-cash-management.md), [admin/cod.md](../admin/cod.md).
 
 | Code | Status | When | `details` |
 |---|---|---|---|
 | `COD_NOT_AVAILABLE_FOR_DIGITAL` | 422 | COD checkout on a digital cart | — |
 | `COD_AGENCY_NOT_SUPPORTED` | 422 | A delivery agency on the order doesn't handle COD | `{ agencyId, agencyName }` |
 | `COD_ORDER_AMOUNT_EXCEEDS_LIMIT` | 422 | Order total above an agency's COD cap | `{ agencyName, maxOrderAmount, orderTotal }` |
+| `COD_VENDOR_NOT_ACCEPTED` | 422 | **(2026-10-02)** Checkout (web or Mini App): a vendor on the order set `codEnabled: false` in their COD terms. Checked before any agency rule | `{ vendorId }` |
+| `COD_AGENCY_LIMIT_EXCEEDED` | 422 | **(2026-10-02)** Vendor dispatch (single/bulk) or change-agency-per-item: handing this COD shipment over would push the agency past its own cash limit (`kind: 'agency_limit'`) or past the vendor's `maxCashPerAgency` (`kind: 'vendor_terms'`). Retry with `force: true` to proceed — recorded on the shipment. In a bulk dispatch it lands in `data.failed[]` with the same `details` | `{ kind, currentExposure, additionalAmount, limit, agencyId, shipmentId, hint }` |
 | `COD_COLLECTION_NOT_FOUND` | 404 | No cash collection for the shipment (not COD / not picked up) | — |
 | `COD_COLLECTION_ALREADY_COLLECTED` | 409 | Cash already recorded for this shipment | — |
 | `COD_COLLECTION_NOT_COLLECTIBLE` | 422 | Shipment/collection state doesn't allow collection | `{ shipmentStatus }` or `{ collectionStatus }` |
@@ -362,12 +340,16 @@ deposits, remittances and discrepancies. Role-specific context:
 | `COD_AGENT_NOT_ASSIGNED` | 422 | COD shipment pickup attempted without an assigned agent | — |
 | `COD_AGENT_EXPOSURE_EXCEEDED` | 422 | Assignment would exceed the agent's cash exposure limit | `{ currentExposure, additionalAmount, effectiveLimit }` |
 | `COD_AGENT_TRUST_TOO_LOW` | 422 | Trust below COD threshold, or open cash-shortfall flag | `{ trustScore, minimum }` or `{ reason }` |
-| ~~`COD_AGENT_HAS_OUTSTANDING_CASH`~~ | ~~422~~ | ⚠ **UNREACHABLE — raised by nothing.** Ending a contract while the agent still holds cash is `422 CONTRACT_HAS_OUTSTANDING_COD` | `{ outstandingCod }` |
+
+> Since 2026-09-27 the same gate refuses an **unverified** agent first, with
+> `AGENT_KYC_NOT_VERIFIED` (see the contract table below) — KYC gates COD only.
+| ~~`COD_AGENT_HAS_OUTSTANDING_CASH`~~ | ~~422~~ | **UNREACHABLE** — raised by nothing. Ending a contract while the agent still holds cash is `422 CONTRACT_HAS_OUTSTANDING_COD` (`agent-contract.service.ts:738-741`) | `{ outstandingCod }` |
 | `COD_DEPOSIT_INVALID_AMOUNT` | 422 | Deposit amount not a positive integer | `{ amount }` |
 | `COD_DEPOSIT_EXCEEDS_BALANCE` | 422 | Deposit larger than the agent's held cash | `{ amount, outstanding }` |
 | `COD_DEPOSIT_NOT_FOUND` | 404 | Unknown deposit, or not this agency's | — |
 | `COD_DEPOSIT_ALREADY_RESOLVED` | 409 | Deposit already confirmed or rejected | `{ status }` |
-| `COD_DEPOSIT_REFERENCE_REQUIRED` | 422 | Direct-to-platform deposit with no transfer reference | — |
+| `COD_PROOF_FILE_REQUIRED` | 400 | A deposit or remittance declaration with no proof image in multipart field `file` | — |
+| `COD_PROOF_NOT_FOUND` | 404 | The deposit or remittance has no proof image | — |
 | `COD_DEPOSIT_AGENCY_ALREADY_SETTLED` | 422 | Direct payment for cash the agency already remitted — pay the agency instead | `{ amount, agencyOwesPlatform, hint }` |
 | `COD_DEPOSIT_WRONG_RECIPIENT` | 403 | Only the party the cash was handed to may confirm/reject it | `{ hint }` — `recipient` is dropped by the `authorization` allowlist |
 | `DELIVERY_AGENT_NOTIFICATION_NOT_FOUND` | 404 | Notification not found, or not this agent's | — |
@@ -383,12 +365,8 @@ deposits, remittances and discrepancies. Role-specific context:
 
 ### Agent ↔ agency contracts
 
-> 🔵 **Not reachable by a vendor dashboard.** A vendor contracts with an *agency*
-> ([`vendor/agency-connections.md`](../vendor/agency-connections.md)); the agency's contracts
-> with its *agents* are a separate two-party surface a vendor has no route into.
-
-Full documentation: `agency/agent-roster.md` (canonical) and `agent/agency-membership.md`,
-both in the backend repository's own `api-doc/`. Neither is mirrored here.
+Full documentation: [agency/agent-roster.md](../agency/agent-roster.md) (canonical) and
+[agent/agency-membership.md](../agent/agency-membership.md).
 
 **The handshake** — request, approve, reject, withdraw:
 
@@ -399,7 +377,7 @@ both in the backend repository's own `api-doc/`. Neither is mirrored here.
 | `CONTRACT_TRANSITION_NOT_PERMITTED` | 403 | Wrong party for this verb. **Keyed on whose TERMS are standing, not on who opened the contract**: the proposer may only `withdraw`, the counterparty may only `approve`/`reject`/`counter`. Also `suspend` raised by an agent | `{ hint }` — `transition`, `party` and `proposer` are dropped by the `authorization` allowlist |
 | `CONTRACT_INVALID_TRANSITION` | 409 | The contract is not in a status this transition can leave | `{ transition, from, allowedFrom }` |
 | `AGENT_MEMBERSHIP_LIMIT_REACHED` | 422 | The agent is at their agency cap. Checked at **approval**, not at request | `{ current, max }` |
-| `AGENT_KYC_NOT_VERIFIED` | 422 | Re-checked at approval, not trusted from request time | `{ kycStatus, hint }` |
+| `AGENT_KYC_NOT_VERIFIED` | 422 | ⚠ **No longer raised by any contract endpoint since 2026-09-27** — an unverified agent may request, approve and be transferred. It is now raised only by the **COD exposure gate**: offering, accepting or reassigning a **cash-on-delivery** shipment to an agent whose KYC is not `verified` (prepaid shipments are unaffected; auto-assign silently skips them for COD). Checked before trust and exposure | `{ kycStatus, hint }` |
 | `AGENT_PLATFORM_BANNED` | 403 | A platform ban overrides every contract | `{ hint }` |
 | `AGENT_NOT_FOUND` | 404 | `agentId` does not resolve | — |
 
@@ -422,11 +400,11 @@ both in the backend repository's own `api-doc/`. Neither is mirrored here.
 | `CONTRACT_TERMS_NOT_PROPOSED` | 422 | **Approving terms nobody proposed.** `termsProposedBy` is `null` — a bare agent join request, or a legacy contract whose split was never configured. The agency must propose first | `{ contractId, hint }` |
 | `CONTRACT_TERMS_NOT_NEGOTIABLE` | 403 | A party wrote a term group that is not theirs. Agents may write `fee_split` and `coverage` only; `employment` and the COD threshold are nobody's to negotiate | `{ hint }` — `party`, `offending` and `negotiable` are dropped by the `authorization` allowlist |
 | `CONTRACT_TERMS_LIVE_EDIT_NOT_ALLOWED` | 409 | `PATCH …/terms` on a live contract. Its agreed split is pricing deliveries right now — raise a proposal instead | `{ status, hint }` |
-| `CONTRACT_FEE_SPLIT_INVALID` | 422 | A `percentage` split with no share, or a `flat` one with no fee. Checked on the patch **merged over the stored split**, so a partial update is not rejected for a field it does not touch | `{ model, hint }` |
+| `CONTRACT_FEE_SPLIT_INVALID` | 422 | A `percentage` split with no share, a `flat` one with no fee, or a `monthly_salary` one with no `agent_monthly_salary`. Checked on the patch **merged over the stored split**, so a partial update is not rejected for a field it does not touch | `{ model, hint }` |
 | `CONTRACT_COD_THRESHOLD_OUT_OF_BOUNDS` | 422 | Outside the absolute per-contract bounds | `{ requested, min, max }` |
 | `CONTRACT_COD_THRESHOLD_EXCEEDS_HEADROOM` | 422 | The agent's shared pool has no room — another agency's slice may be the cause | `{ requested, headroom, shortfall, hint }` |
 | `CONTRACT_COD_THRESHOLD_BELOW_OUTSTANDING` | 422 | Cannot set a threshold beneath cash already held under the contract | `{ requested, outstandingBalance, hint }` |
-| ~~`CONTRACT_COVERAGE_OUTSIDE_AGENT_RADIUS`~~ | ~~422~~ | 🔴 **NEVER SENT — the rule is not enforced** (no raise site in `src/`, verified 2026-09-08). An agent's `serviceRadiusKm` is advisory information for a human reading the directory; it does not constrain what an agency may propose | — |
+| ~~`CONTRACT_COVERAGE_OUTSIDE_AGENT_RADIUS`~~ | ~~422~~ | 🔴 **NEVER SENT — the rule is not enforced.** See the note below | — |
 | `CONTRACT_COVERAGE_REGION_NOT_COVERED` | 422 | **Assignment gate.** The delivery region is outside the regions this contract covers | `{ deliveryRegion, coveredRegions, hint }` |
 | `CONTRACT_COVERAGE_REGION_INVALID` | 400 | **Terms-write gate.** A proposed `coverage.regions` entry is not a region of the agency's country — a city, or a typo. Region keys come from `locations.json`, the same catalogue the agency's own coverage areas use; a localized name (`"Extrême-Nord"`) is accepted and canonicalised. `allowedRegions` is the full catalogue, so a picker can be repaired from the error | `{ invalid, requiredCountry, allowedRegions }` |
 | `CONTRACT_SHIPMENT_VALUE_EXCEEDED` | 422 | **Assignment gate.** The shipment is worth more than this contract's per-shipment ceiling | `{ shipmentValue, ceiling, hint }` |
@@ -445,27 +423,49 @@ both in the backend repository's own `api-doc/`. Neither is mirrored here.
 > `CONTRACT_TERMS_NOT_PROPOSED` means exactly what it says — nobody has made an offer — and not that
 > something is wrong with the agent's account. Render it as "waiting on terms", not as an error.
 
-Legacy roster codes. ⚠ **Only two of these are live** (source scan, 2026-09-08), and both are
-raised by the contract service: `AGENT_MEMBERSHIP_NOT_FOUND` (404) and
-`AGENT_MEMBERSHIP_NOT_APPROVED` (409/422 — despite the name it means "not **active**"; the code
-predates the status rename).
+> 🔴 **~~`CONTRACT_COVERAGE_OUTSIDE_AGENT_RADIUS`~~ is never sent, and the rule behind it is enforced
+> by nothing** (DOC-PROGRAM F-17 class 7, 2026-09-06). The row above promised that *"an agency
+> cannot grant coverage the agent never agreed to work"*. That sentence is real — it is the
+> docstring of `IAgentHomeBase` (`agents/models/agent.model.ts:371-374`), which carries
+> `service_radius_km` for exactly this purpose. But **the field is read by one thing in the whole
+> service, `agent-directory.dto.ts:108`, which only projects it into a response**; no write path
+> consults it, `contract-coverage.service.ts` does not mention `home_base` at all, and the code is
+> raised at zero sites.
+>
+> **What IS enforced on a coverage write is `CONTRACT_COVERAGE_REGION_INVALID`** (400, the row
+> above): a proposed region must be a region of the **agency's country**. That is a catalogue
+> check, not an agent-consent check — an agency may still grant an agent a region on the far side
+> of a country they never agreed to serve, and the platform will accept it.
+>
+> Documented rather than fixed, per this program's scope (a missing guard is application
+> behaviour). Two consequences for a client: do not write a branch for this code, and do not
+> present the agent's `serviceRadiusKm` as though it constrains what an agency may propose — it
+> is advisory information for a human reading the directory.
 
-> 🔴 **Corrected 2026-09-08.** This said *"Legacy roster codes, **still live**"* and listed
-> **seven**. Five of them are in the registry and raised **nowhere in `src/`** — a client
-> branching on any of them branches on a string the platform has never sent, so the branch is
-> dead and the user gets the fallback message. What the roster actually answers today:
+Legacy roster codes. **Only two of these are live**, and both are raised by the contract service:
+`AGENT_MEMBERSHIP_NOT_FOUND` (404 — `agent-deposit.service.ts:385`) and
+`AGENT_MEMBERSHIP_NOT_APPROVED` (409/422 — `agent-contract.service.ts:1026,1043,1051`; despite the
+name it means "not **active**", the code predates the status rename).
+
+> 🔴 **Corrected 2026-09-06** (DOC-PROGRAM F-17 class 7). This paragraph said *"Legacy roster
+> codes, **still live**"* and listed **seven**. Five of them are in the registry and raised
+> **nowhere in `src/`** — a client branching on any of them branches on a string this platform
+> has never sent, so the branch is dead and the user gets the fallback message. What the roster
+> actually answers today:
 >
 > | Was documented as | Situation | What is really raised |
 > |---|---|---|
-> | ~~`DELIVERY_AGENT_ALREADY_IN_AGENCY`~~ (409) | a contract with this agency already exists | `AGENT_MEMBERSHIP_ALREADY_EXISTS` (409) |
+> | ~~`DELIVERY_AGENT_ALREADY_IN_AGENCY`~~ (409) | a contract with this agency already exists | [`AGENT_MEMBERSHIP_ALREADY_EXISTS`](#agent--agency-contracts) (409) |
 > | ~~`DELIVERY_AGENT_NOT_IN_AGENCY`~~ (404) | no contract between the two | `CONTRACT_NOT_FOUND` / `AGENT_MEMBERSHIP_NOT_FOUND` (404) |
 > | ~~`DELIVERY_AGENT_HAS_ACTIVE_SHIPMENTS`~~ (422) | the relationship cannot be ended yet | `CONTRACT_HAS_OUTSTANDING_COD` / `CONTRACT_HAS_UNPAID_EARNINGS` (422) |
 > | ~~`AGENT_MEMBERSHIP_NOT_PENDING`~~ (409) | answering a contract that is not pending | `CONTRACT_STATUS_REQUEST_NOT_PENDING` / `CONTRACT_INVALID_TRANSITION` (409) |
 > | ~~`AGENT_MEMBERSHIP_NOT_SUSPENDED`~~ (409) | reinstating a contract that is not suspended | `CONTRACT_INVALID_TRANSITION` (409) |
 >
-> They are **kept struck through rather than deleted**: a dashboard shipped against this page may
-> still hold a branch for each, and a reader who finds one in their own code needs to be able to
-> look it up here and learn it is dead.
+> Every replacement is documented above and was already correct — the defect was this one
+> sentence asserting five dead codes were live, in the page a client generates its error registry
+> from. They are **kept struck through rather than deleted**: a dashboard shipped against this
+> page may still hold a branch for each, and a reader who finds one in their own code needs to be
+> able to look it up here and learn it is dead.
 
 > `DELIVERY_INVITE_NOT_FOUND` and `DELIVERY_INVITE_ALREADY_PENDING` were **removed** with the
 > email-invite endpoints. An agency now reaches an agent through the directory
@@ -475,8 +475,9 @@ predates the status rename).
 
 ## Agency storage: warehoused products and their stock
 
-The agency-facing product actions (`agency/inventory.md`, backend repo only) and the
-two-sided stock flow ([Agency](../agency/stock-requests.md) · [Vendor](../vendor/stock-requests.md)).
+The agency-facing product actions
+([Agency → Inventory](../agency/inventory.md)) and the two-sided stock flow
+([Agency](../agency/stock-requests.md) · [Vendor](../vendor/stock-requests.md)).
 
 | Code | HTTP | Meaning | `details` |
 |---|---|---|---|
@@ -511,14 +512,46 @@ two-sided stock flow ([Agency](../agency/stock-requests.md) · [Vendor](../vendo
 
 ---
 
+## Delivery-fee proposals (agency/agent → vendor, per shipment) — 2026-10-02
+
+Contracts: [agency/shipments.md](../agency/shipments.md#delivery-fee-proposals),
+[agent/shipments.md](../agent/shipments.md#delivery-fee-proposals),
+[vendor/delivery-fee-proposals.md](../vendor/delivery-fee-proposals.md).
+
+| Code | Status | Meaning | `details` |
+|---|---|---|---|
+| `DELIVERY_FEE_PROPOSAL_NOT_FOUND` | 404 | Unknown proposal, or not on this shipment / order | — |
+| `DELIVERY_FEE_PROPOSAL_ALREADY_PENDING` | 409 | One pending proposal per shipment | `{ proposalId }` |
+| `DELIVERY_FEE_PROPOSAL_NOT_PENDING` | 409 | Already answered or withdrawn — **reload, don't retry** | `{ status }` (when known) |
+| `DELIVERY_FEE_PROPOSAL_WINDOW_CLOSED` | 422 | Only before pickup: shipment `assigned` / `handing_over` | `{ status, allowed }` |
+| `DELIVERY_FEE_PROPOSAL_AGENTS_NOT_ALLOWED` | 403 | The agent's agency has not enabled `agentsCanProposeDeliveryFee` | — |
+| `DELIVERY_FEE_PROPOSAL_LIMIT_REACHED` | 422 | Two non-withdrawn proposals already on the shipment | `{ used, max }` |
+| `DELIVERY_FEE_PROPOSAL_NO_CHANGE` | 422 | The proposed fee is the current fee | `{ currentFee }` |
+| `DELIVERY_FEE_PROPOSAL_VENDOR_NET_NOT_POSITIVE` | 422 | The fee would leave the vendor earning ≤ 0 (the 30% cap does NOT apply) | — (deliberately no numbers) |
+| `DELIVERY_FEE_PROPOSAL_NOT_YOURS` | 403 | Withdrawing a proposal you did not raise (an agent, the agency's) | — |
+| `DELIVERY_FEE_PROPOSAL_STALE` | 409 | At approval: the shipment left the window, or the proposing agent is no longer on it | `{ shipmentStatus }` |
+| `DELIVERY_FEE_PROPOSAL_SETTLEMENT_CONFLICT` | 409 | At approval: the vendor's order earnings were released/reversed or changed concurrently; nothing applied | `{ allocationStatus }` |
+| `SHIPMENT_DELIVERY_FEE_PENDING` | 409 | Pickup (`→ picked_up`) refused while a proposal awaits the vendor — agency and agent status endpoints alike | `{ proposalId }` |
+| `DELIVERY_FEE_PROPOSAL_VERSION_MISMATCH` | 409 | The proposal was edited since the caller loaded it — an edit with a stale `version`, or a vendor approve/reject of a figure that has since changed. Reload, never retry blind | `{ currentVersion }` |
+
+---
+
+## Delivery regions and forced pushes — 2026-10-02
+
+| `error.code` | Status | Meaning | `details` |
+|---|---|---|---|
+| `ADDRESS_REGION_INVALID` | 400 | A customer address (saved, edited, or inline at checkout) names no region of its country — not by its region text, not by its city. Show a picker from `allowedRegions` and resend with `geo.components.region` = the picked `key`. See `customer/profile.md` → Region | `{ region, city, countryCode, addressId?, allowedRegions: [{ key, name: { en, fr } }] }` |
+| `DELIVERY_AGENCY_NOT_ACTIVE` | 422 | Internal admin only: a shipment was moved to an agency that is not `active`, without `force: true` | `{ agencyId, status }` |
+
+`CONTRACT_COVERAGE_REGION_NOT_COVERED` (above, under contracts) is now **forceable by the agency**:
+resend the assign/reassign with `force: true`. See `agency/assignment.md`.
+
 ## Blog / editorial
 
-> 🔵 **Not reachable by a vendor dashboard.** No vendor route reads or writes articles.
-
-The public reader (`public/articles.md`, backend repo only). The editor moved to wi-admin at
-Phase 5 Part A (`admin/docs/api/content.md`) and raises these **same codes** from its own
-registry — deliberately, so a client sees one vocabulary across the cutover. The three below
-that a logged-out visitor can reach are still raised by jovi-mall's public reader.
+The public reader ([public/articles.md](../public/articles.md)). The editor moved to wi-admin at
+Phase 5 Part A (`admin/api-doc/api/content.md`), and it raises these **same codes** from its own
+registry — deliberately, so a client sees one vocabulary across the cutover. The three below that
+a logged-out visitor can reach are still raised here, by the public reader.
 
 The first three are reachable by a **logged-out visitor**, so their `message` is written to be shown.
 

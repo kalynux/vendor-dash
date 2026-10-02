@@ -1,6 +1,9 @@
 # Front-end changelog — agency storage management
 
-**Verified against source on 2026-09-08** — R7 re-checked the two ⚠️ BREAKING items on the vendor half: the `meta.stockAdjustment` block returned instead of a stock write (`catalog/controllers/vendor-simple-product.controller.ts:224-228`, `vendor-variant.controller.ts:448`), and the infinite-stock refusal — a `422` on the write paths (`domain/services/agency-storage-stock.rule.ts:72`, `stock-requests/services/stock-request.service.ts:125`) **and** an activation blocker (`ProductStatusValidationService.ts:319`). No defects found; the historical-record framing and the "those win" pointer to `vendor/stock-requests.md` are both still correct.
+**Verified against source on 2026-09-08** — every route named here is served (whole-tree phantom
+scan, 0 suspect) and **all twelve** error codes on this page exist in `src/core/error-codes.ts`:
+the six `INVENTORY_*` / `CATALOG_PRODUCT_AGENCY_STORAGE_INFINITE_STOCK` and the six
+`STOCK_REQUEST_*`. No corrections were needed.
 
 **Audience:** whoever builds the **agency dashboard** and the **vendor dashboard**.
 **Status:** backend shipped. Nothing here is behind a flag.
@@ -9,16 +12,10 @@ Four changes to how a product warehoused by a delivery agency behaves. Read §0,
 your role's section. Everything is additive except the two behaviour changes flagged
 **⚠️ BREAKING FOR CLIENTS** — those will make an existing screen lie if you ignore them.
 
-**Re-verified against backend source on 2026-08-24.** 🔵 **Historical changelog — kept as the
-narrative record of the agency-warehousing feature.** The current contract for the vendor half
-is [`vendor/stock-requests.md`](./vendor/stock-requests.md) and
-[`vendor/storage-invoices.md`](./vendor/storage-invoices.md); where this page and those
-disagree, **those win**. The `agency/*` pages it names live in the backend repo only.
-
-> Reference docs: `Agency → Inventory` ·
+> Reference docs: [Agency → Inventory](./agency/inventory.md) ·
 > [Agency → Stock requests](./agency/stock-requests.md) ·
 > [Vendor → Stock requests](./vendor/stock-requests.md) ·
-> `Agency → Magazin` · [Errors](./errors/README.md)
+> [Agency → Magazin](./agency/magazin.md) · [Errors](./errors/README.md)
 
 ---
 

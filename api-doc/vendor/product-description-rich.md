@@ -1,29 +1,8 @@
 # Rich Product Descriptions (`descriptionRich`)
 
-**Verified against source on 2026-09-08** — R7 re-checked the gate (`vendor-dash/src/lib/richtext/wire.ts:36` — `RICH_DESCRIPTION_WIRE_ENABLED = true`) and the "all four write schemas" claim, which holds exactly: `descriptionRichSchema` is used at `catalog/validators/product.validator.ts:54,90` and `simple-product.validator.ts:51,97`, from the one shared fragment at `rich-description.validator.ts:39`. No defects found.
+**Verified against source on 2026-09-08** — R7 re-checked the four write schemas against the one shared `descriptionRichSchema` (`catalog/validators/rich-description.validator.ts:39`, used at `product.validator.ts:54,90` and `simple-product.validator.ts:51,97`) and the dashboard gate (`vendor-dash/src/lib/richtext/wire.ts:36`). No defects found.
 
-**Verified against backend source on 2026-08-24** — `src/core/richtext/{types,schema,limits,doc}.ts`,
-`src/modules/catalog/validators/rich-description.validator.ts`,
-`src/modules/catalog/models/product.model.ts:242,408`.
-**Partially re-verified against source on 2026-09-08** — the rollout status only:
-`RICH_DESCRIPTION_WIRE_ENABLED` is now `true` (`vendor-dash/src/lib/richtext/wire.ts:36`), which
-reverses this page's former call to action. The document model and validator claims still carry
-their 2026-08-24 verification.
-
-> ## ✅ CLOSED — the gate is on and nothing is outstanding
->
-> `RICH_DESCRIPTION_WIRE_ENABLED` in [`src/lib/richtext/wire.ts`](../../src/lib/richtext/wire.ts)
-> is **`true`** (verified 2026-09-08, line 36). Rich descriptions are being sent.
->
-> ⚠ **This box read "ACTION: your gate is still off" until 2026-09-08, and it had been wrong for
-> some time** — the flag was flipped after the 2026-08-24 audit and nobody came back to the page.
-> A loud call-to-action for work already done is worse than no box at all: it invites a second
-> developer to "fix" something that is not broken.
->
-> For the record, the reason it was flipped: `descriptionRich` is a known key on **all four**
-> product write schemas — including the two `.strict()` quick-add ones — through one shared
-> fragment (`rich-description.validator.ts:39`), so the `.strict()` asymmetry the constant existed
-> to guard against no longer exists.
+**Re-verified in part on 2026-09-08** — the rollout status only: the vendor dashboard's `RICH_DESCRIPTION_WIRE_ENABLED` is `true` (`vendor-dash/src/lib/richtext/wire.ts:36`), reversing what this page said.
 
 The structured description a vendor writes in the dashboard's formatting editor, and the source of truth for how a product reads when it is shared into **WhatsApp** or **Telegram**.
 
@@ -39,9 +18,9 @@ The structured description a vendor writes in the dashboard's formatting editor,
 > [!NOTE]
 > **Implementation status: shipped, both sides.** The field is accepted on all four product
 > write endpoints — including the two `.strict()` quick-add ones — persisted,
-> and returned on every vendor-facing product read. The frontend gate
-> (`RICH_DESCRIPTION_WIRE_ENABLED`) **is `true`**. See
-> [Rollout](#rollout).
+> and returned on every vendor-facing product read. The vendor dashboard's gate
+> (`RICH_DESCRIPTION_WIRE_ENABLED`) **is `true`** — checked in that repository on 2026-09-08.
+> See [Rollout](#rollout).
 
 ## Table of contents
 
@@ -70,23 +49,6 @@ type Block =
 type RichDoc = { version: 1; blocks: Block[] };
 ```
 
-### The vocabulary is exactly two block types and two inline types
-
-Confirmed in `src/core/richtext/types.ts`. **There is no third of either**, and no heading,
-image, quote, table, colour or font-size node — the union in `schema.ts` is a
-`discriminatedUnion` over precisely these:
-
-| | Types |
-|---|---|
-| **Block** | `paragraph` · `list` |
-| **Inline** | `text` · `link` |
-| **Marks** (booleans on either inline type) | `bold` · `italic` · `strike` |
-
-Marks are **flat, not nested** — one span carries `bold: true, italic: true` rather than
-sitting inside two wrappers. Formatters emit a flat marker pair per span anyway, so a tree
-would be flattened again immediately. The nesting order when they *are* rendered is
-`strike` → `bold` → `italic`, outermost first (`INLINE_MARKS`).
-
 | Rule | Why |
 |---|---|
 | `version` must be `1` | A reader that does not recognise it falls back to `description` rather than rendering blocks it cannot interpret |
@@ -94,17 +56,6 @@ would be flattened again immediately. The nesting order when they *are* rendered
 | Lists never nest | Neither platform has list markup — both render a literal `• ` / `1. ` prefix |
 | `link.text` is stored apart from `href` | Telegram keeps the label, WhatsApp can only show a bare URL. The channels disagree, so the label stays data |
 | `href` must be `https:`, `http:`, `mailto:` or `tel:` | Enforced at parse time, never at render time |
-| **A relative `href` is REJECTED** | `new URL(href)` with no base throws, and `isAllowedHref` returns `false` (`schema.ts:30-37`). A description is read inside WhatsApp, where there is no origin to resolve against. `/products/x` is a `400`, not a link |
-| At most **200** blocks | `MAX_RICH_DOC_BLOCKS` (`types.ts`). Over that is a `400 VALIDATION_ERROR` |
-
-> **Two length budgets you should enforce in the editor, because the server does not.**
-> `CHAT_LIMITS.MAX` is **4096** characters — WhatsApp's `text.body` and Telegram's
-> `sendMessage.text` both cap there — and `CHAT_LIMITS.CAPTION` is **1024**, the ceiling
-> below which a description can also ride along as an image caption, which is how most
-> product shares actually go out. Neither is a validation rule on the write path: a longer
-> document saves fine and is trimmed **at share time**, by trimming the *document* rather
-> than cutting the rendered string (a severed `*` is a broken send, not a shorter one).
-> Show the vendor a counter against 1024.
 
 ### Example
 
@@ -256,9 +207,11 @@ Full algorithms, including truncation rules and test vectors, are in
 
 ## Rollout
 
-**Both halves are live.** The frontend gate `RICH_DESCRIPTION_WIRE_ENABLED`
-(`src/lib/richtext/wire.ts:36`) is **`true`** — verified 2026-09-08 — so the field is being
-sent. Nothing here is outstanding.
+**Both halves are live.** The vendor dashboard gates the field behind a single constant
+(`RICH_DESCRIPTION_WIRE_ENABLED`, its `src/lib/richtext/wire.ts:36`) and that constant is
+**`true`** — checked in that repository on 2026-09-08. ⚠ This paragraph said the gate was still
+off until then; it had been flipped some time after the field shipped and nobody came back to
+either copy of this page.
 
 The constant is kept as a kill switch rather than deleted. If it is ever set back to `false`:
 
@@ -285,18 +238,6 @@ badly-rendered customer message.
 Exported from `core/richtext`: `toPlainText`, `toWhatsApp`, `toTelegramHtml`,
 `toTelegramPlain`, `escapeTelegramHtml`, `truncateDoc`, `richDocSchema`,
 `parseRichDoc`.
-
----
-
-## ⚠ You send the pair — the server derives neither half
-
-**The server never derives `description` from `descriptionRich`** (`doc.ts:138`), and must not
-start. Your client sends both. If you send a `description` that is not the plain-text projection
-of your `descriptionRich`, the platform stores the inconsistency and the storefront shows your
-version while WhatsApp shows the other.
-
-This is not doc drift and it is not resolved by anything — it is a standing property of the
-contract, kept here when this page's drift section was closed on 2026-09-07.
 
 ---
 

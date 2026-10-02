@@ -1,25 +1,6 @@
 # Ticket entity pickers — `reference/*`
 
-**Verified against source on 2026-09-08** — the two open-defect claims in the banner below, against
-`jovi-mall/src/modules/tickets/services/ticket.service.ts`, `ticket-note.service.ts`,
-`ticket-attachment.service.ts` and `ticket-enrichment.service.ts`; both had gone stale.
-
-**Verified against backend source on 2026-08-24** —
-`src/modules/tickets/services/ticket-reference.service.ts`, and the live route dump.
-
-> **This is the UI companion to [`tickets.md`](./tickets.md).** That page is the endpoint
-> reference (14 vendor routes); this one is the record of *why* the two `reference/*`
-> endpoints carry the fields they do.
->
-> ⚠ Before building any ticket screen, read [`tickets.md` § 11](./tickets.md#11--two-backend-defects-on-this-surface--still-open).
-> **Re-measured 2026-09-08 and mostly closed:** of the five vendor ticket routes that once had no
-> follower check, **three remain** — `GET /:ticketId/notes` and `GET`/`POST /:ticketId/attachments`
-> — and the administrator `tier` **no longer leaks**; `admin_assignment` is deleted from the
-> enriched payload (`ticket-enrichment.service.ts:189`). This box claimed both in full until
-> today.
->
-> ⚠ Ticket lists use **`pagination`, not `meta`** — `GET /api/vendor/tickets` and **both**
-> `reference/*` lookups.
+**Verified against source on 2026-09-08** — R7 confirmed the two reference routes are mounted on every role namespace with the same handlers, the `{ success, data, pagination }` envelope — `pagination`, not `meta` (`modules/tickets/services/ticket-reference.service.ts:35,173`) — the 50-row limit cap, and that the `q` term **is** escaped before it becomes a `$regex` (`:39,87`), unlike the product-list `q`. No defects found.
 
 > **Status: DONE.** Every field and query parameter requested below has been implemented in
 > `src/modules/tickets/services/ticket-reference.service.ts`. The frontend can drive both
@@ -70,8 +51,7 @@ caller's role:
       "fulfillmentStatus": "processing",
       "createdAt": "2026-08-02T09:11:00.000Z",
       "customerName": "Jane Doe",
-      "customerAvatar": { "id": "…", "key": "…", "url": "https://…", "mimeType": "image/png",
-                          "access": "public",
+      "customerAvatar": { "id": "…", "key": "images/2026/07/customer.png", "url": "https://…/images/2026/07/customer.png", "access": "public", "mimeType": "image/png",
                           "size": 24576, "originalName": "avatar.png" },
       "shipments": [
         { "shipmentId": "664shp...", "agencyId": "664agy...", "agencyName": "FastTrack Logistics",

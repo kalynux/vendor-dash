@@ -1,34 +1,18 @@
 # Vendor Media Storage
 
-**Verified against backend source on 2026-08-24** —
-`src/api/controllers/file-management.controller.ts:183-220` (the `storage` object),
-`src/core/uploads/upload-config.ts:136-190` (the per-type caps),
-`src/api/validators/file-management.validator.ts:14` (the six category keys),
-`scripts/seed/seed-pricing-plans.ts:47-51` (the plan limits).
-**Verified against source on 2026-09-08** — the whole page this time, not just the plan-quota half:
-the `storage` object and its six singular category keys, the per-type upload caps, the video
-route's 70 MB × 3, the 80/90/100 alert thresholds and their per-month dedup, and the blocking
-behaviour, against `src/api/controllers/file-management.controller.ts:183-225`,
-`src/api/validators/file-management.validator.ts:14`,
-`src/core/uploads/upload-config.ts:130-195,329-338`, `src/api/routes/file-upload.routes.ts:29-47`,
-`src/config/file-cleanup.config.ts:124`, `src/modules/file-cleanup/services/StorageAlertService.ts`,
-`modules/plan-quota/`, `read-models/file-detail.resolver.ts:67-77` and
-`repositories/mappers/file.mapper.ts:41-59`. One defect fixed: the error line named `UNAUTHORIZED`
-and `FORBIDDEN`, neither of which is in the registry.
+**Verified against source on 2026-09-08** — the `storage` object and its six category keys, the
+per-type upload caps, the video route's limits, the alert thresholds and the plan-quota blocking,
+against `src/api/controllers/file-management.controller.ts:183-225`,
+`src/api/validators/file-management.validator.ts:14`, `src/core/uploads/upload-config.ts:130-195,329-338`,
+`src/api/routes/file-upload.routes.ts:29-47`, `src/config/file-cleanup.config.ts:124`,
+`src/modules/file-cleanup/services/StorageAlertService.ts` and `src/modules/plan-quota/`.
+**§ 3.1 is new** — the downgrade-blocking behaviour was documented in the `vendor-dash` copy on
+2026-09-08 and was missing from this page entirely.
 
-> **The `GET /api/files/storage` shape on this page is correct** — `limitBytes`, `usedBytes`,
-> `remainingBytes`, `byCategory`, and nothing else. It is the page that gets it right; the
-> older [`file-management.md`](./file-management.md) does not. Where the two disagree, this
-> one wins.
->
-> ⚠ The `byCategory` keys are **singular** — `image`, `video`, `audio`, `document`,
-> `archive`, `other` — while the *storage folders* a file lands in are **plural**
-> (`images/`, `videos/`, …). They are two vocabularies for the same six groups. Do not key
-> one off the other.
->
-> **The `starter` plan limit is 1 GB**, not the 10 GB in the example body below (which is a
-> `growth`-sized number). Verified in `seed-pricing-plans.ts:47`. Never hardcode either —
-> read `limitBytes`.
+> ⚠ The `byCategory` keys are **singular** — `image`, `video`, `audio`, `document`, `archive`,
+> `other` (`file-management.validator.ts:14`) — while the *storage folders* a file lands in are
+> **plural** (`images/`, `videos/`, …). Two vocabularies for the same six groups; do not key one
+> off the other.
 
 How product-media storage works for vendors: the per-plan limit, how to read
 usage/analytics, how uploads are gated, the storage-alert notifications, and the
@@ -131,13 +115,10 @@ breakdown, limit and remaining — without listing files.
 | `remainingBytes` | number\|null | `max(0, limitBytes − usedBytes)`. `null` when there is no limit. |
 | `byCategory` | object | Per-category `bytes` + file `count`. Categories: `image, video, document, audio, archive, other`. |
 
-**Errors**: `401` — `AUTH_MISSING_TOKEN` · `AUTH_TOKEN_EXPIRED` · `AUTH_TOKEN_INVALID`
+**Errors**: `401` — `AUTH_MISSING_TOKEN` / `AUTH_TOKEN_EXPIRED` / `AUTH_TOKEN_INVALID`
 (`auth.middleware.ts:126`) · `403 AUTH_FORBIDDEN` for an admin or unsupported role
-(`file-management.controller.ts:216-221`).
-
-🔴 **There is no `UNAUTHORIZED` and no `FORBIDDEN` in the registry** — both were named here until
-2026-09-08, and a client branching on either branches on a string the backend never sends, so the
-user gets the generic fallback message.
+(`file-management.controller.ts:216-221`). ⚠ **Neither `UNAUTHORIZED` nor `FORBIDDEN` is in the
+registry** — this line named both until 2026-09-08.
 
 **Frontend tips:**
 - Render a usage bar from `usedBytes / limitBytes`; show the per-category split from `byCategory`.
@@ -224,10 +205,10 @@ has no live references — detach it from products/variants first; see
 
 ## 3.1 🔴 Going over the cap by DOWNGRADING — files are blocked, not refused
 
-**New since 2026-08-24** (`src/modules/plan-quota/`). The section above is the *upload* gate: it
-refuses new bytes at the door. It has never been able to do anything about a vendor who is
-already over the limit, and until this landed, a vendor who downgraded from 100 GB to 1 GB kept
-every byte served forever because nothing ever recounted.
+`src/modules/plan-quota/`. Section 3 above is the *upload* gate: it refuses new bytes at the door,
+and it can do nothing about a vendor who is **already** over the limit. Until plan-quota landed, a
+vendor who downgraded from 100 GB to 1 GB kept every byte served forever, because nothing ever
+recounted.
 
 Now, on **every** plan change, the backend refills the allowance **from the oldest file** and
 **blocks** whatever no longer fits, newest first. Blocking is not deletion:
@@ -240,40 +221,39 @@ Now, on **every** plan change, the backend refills the allowance **from the olde
 | what a client gets | `url: null` |
 | reversible? | yes — an upgrade restores exactly the same files, oldest first |
 
-⚠ **Never present this to the vendor as "your files were deleted."** The word to use is
-*hidden* or *locked*, and the fix is *upgrade* or *delete something older*.
+⚠ **Never present this to the vendor as "your files were deleted."** The word is *hidden* or
+*locked*, and the fix is *upgrade* or *delete something older*.
 
-### The two dialects — the part that will catch you out
-
-The same condition is reported **two different ways** depending on which endpoint you asked:
+### The same condition is reported two different ways
 
 | Where | Field | Value when blocked |
 |---|---|---|
-| Any `FileDetail` — product media, variant media, branding, avatars | **`access`** | `"quota_blocked"`, and **`url: null`** |
-| `GET /api/files` and `GET /api/files/:id` (the media library) | **`access` and `quotaBlockedAt`** | `"quota_blocked"` with `url: null`, **plus** an ISO timestamp on `quotaBlockedAt` |
+| Any `FileDetail` — product media, variant media, branding, avatars | **`access`** | `"quota_blocked"`, and **`url: null`** (`read-models/file-detail.resolver.ts:67-77`) |
+| all **four** `/api/files/*` routes (the media library, and both uploads) | **`access` and `quotaBlockedAt`** | `"quota_blocked"` with `url: null`, **plus** an ISO timestamp on `quotaBlockedAt` (`repositories/mappers/file.mapper.ts:41-59`) |
 
-⚠ **Re-measured 2026-09-08: the library is no longer a different dialect.** This section said it
-returned the raw `File` with "no `access` key and no `url` key at all", and that the product-editor
-check did not work there. Both handlers now map through `withUrlAndAccess`
-(`file-management.controller.ts:185` for the list, `:325` for the detail), which spreads the raw
-`File` and **adds** `url` and `access` (`file-detail.resolver.ts:114-120`). **One check —
-`access === "quota_blocked"` — works everywhere.**
+All four handlers map the row through `withUrlAndAccess` (`file-management.controller.ts:185` for
+the list, `:325` for the detail; `file-upload.controller.ts:247` and `:362` for the two upload
+routes), which spreads the raw `File` and **adds** `url` and `access`
+(`file-detail.resolver.ts:114-120`). **One check — `access === "quota_blocked"` — works on every
+surface.**
 
-✅ **The caveat that used to sit here — *"that source change is uncommitted working-tree state"* —
-is no longer true.** It landed in `141bc5c` (*feat(files): return url and access on all four
-`/api/files/*` responses*, 2026-09-08 02:44) and the controller is clean against `HEAD`. **Rely on
-`access`**; you do not need to keep `quotaBlockedAt` as a fallback.
+✅ **Corrected 2026-09-08 (R7): it is FOUR routes, not two, and it is COMMITTED.** This section
+previously carried a caveat that the change was *"uncommitted working-tree state"*. It landed in
+`141bc5c` (*feat(files): return url and access on all four `/api/files/*` responses*, 2026-09-08
+02:44) and `file-management.controller.ts`, `file-upload.controller.ts` and
+`file-detail.resolver.ts` are all clean against `HEAD`. Rely on `access`; `quotaBlockedAt` is
+belt-and-braces, not a required fallback.
 
-⚠ **`quota_blocked` outranks `authorized`.** A blocked file inside a private tree reports
-`quota_blocked`, not `authorized` (`file-detail.resolver.ts:67-77`) — so test for it **first**,
-or a private blocked file reads as a permissions problem when it is a billing one.
+⚠ **`quota_blocked` outranks `authorized`.** It is tested first, so a blocked file inside a private
+tree reports `quota_blocked` rather than `authorized` — a two-value `switch` falls through and
+tells the vendor it is a permissions problem when it is a billing one.
 
 ### Digital-product assets are exempt
 
-Files backing a digital product's downloadable asset are **outside** the media cap — they are
-metered under their own per-asset cap — so they are never blocked, and a customer's paid download
-never breaks because their vendor downgraded. They are also excluded from `usedBytes` on this
-page's `GET /api/files/storage` for the same reason.
+Files backing a digital product's downloadable asset sit **outside** the media cap — metered under
+their own per-asset cap — so they are never blocked, and a customer's paid download does not break
+because their vendor downgraded. They are excluded from `usedBytes` here for the same reason
+(`plan-quota-enforcement.service.ts:263-285`, mirroring `MediaStorageService.getUsageBreakdown:45-52`).
 
 ### Timing
 
@@ -347,9 +327,20 @@ Per-file `violations[].code` values (inside `UPLOAD_POLICY_VIOLATION`): `NO_FILE
 `MIME_TYPE_MISMATCH`, `POLYGLOT_DETECTED`, `UNDETECTABLE_TYPE`, `DUPLICATE_FILE`,
 `VIRUS_DETECTED`, `PERMISSION_DENIED`.
 
-All errors use the standard envelope:
+All errors use the standard envelope. `category` is one of the nine values listed in
+[`errors/README.md`](../errors/README.md) and is **always present**; `details` is omitted
+entirely when absent.
+
 ```json
-{ "success": false, "requestId": "3f8a1c74-…",
-  "error": { "code": "ERROR_CODE", "message": "…", "statusCode": 400, "category": "validation",
-             "details": { } } }
+{
+  "success": false,
+  "requestId": "3f8a1c74-9b2e-4d10-8c55-6a0f2b7e19dd",
+  "error": {
+    "code": "UPLOAD_POLICY_VIOLATION",
+    "message": "Upload policy violations found",
+    "statusCode": 400,
+    "category": "validation",
+    "details": { "violations": [ { "code": "FILE_TOO_LARGE", "message": "…" } ] }
+  }
+}
 ```

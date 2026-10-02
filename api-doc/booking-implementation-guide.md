@@ -1,28 +1,10 @@
 # Service Booking — Frontend Implementation Guide
 
-**Verified against source on 2026-09-08** — R7 re-checked the four public booking routes (`catalog/routes/product-booking.routes.ts:24,49,83,119`), the vendor setup order and the service-variant config rules. ✅ **F-23 is CONFIRMED STILL LIVE**: the slot lock is written under the authenticated **user** id (`product-booking.routes.ts:51,58`) while `rescheduleBooking` asserts it under the **vendor role-entity** id (`controllers/vendor-booking.controller.ts:331,341-343`), so a vendor who locks a slot cannot then reschedule into it. The warning at the top of this guide is correct and should stay. No doc defects found.
-
-**Verified against the live route dump on 2026-08-24.**
-
-> ### Scope for this repository — **roughly half of this guide is not yours**
->
-> This is a **two-app** reading order. Steps 5–7, and the customer half of step 10, belong to
-> the **storefront**, not to the vendor dashboard, and the `customer/*` pages they point at
-> are **not mirrored in this repository** — they live in the backend repo. Those references
-> are printed as plain paths rather than links for that reason.
->
-> **The vendor dashboard share is steps 1–4, 8, 9 and 11**, and each has a full page here:
->
-> | Step | Page |
-> |---|---|
-> | 1 · connect calendar | [`vendor/calendar.md`](./vendor/calendar.md) |
-> | 2 · create the service product | [`vendor/products.md`](./vendor/products.md) |
-> | 3 · availability | [`vendor/availability-rules.md`](./vendor/availability-rules.md) |
-> | 4 · activate | [`vendor/products.md`](./vendor/products.md) |
-> | 8–11 · manage bookings | [`vendor/bookings.md`](./vendor/bookings.md) |
->
-> 🔴 [`vendor/bookings.md`](./vendor/bookings.md) records **F-23** — the vendor booking
-> **reschedule** path is unusable as wired. Read that before building step 10.
+**Verified against source on 2026-09-08** — every endpoint named in the seventeen steps is
+served (checked against the live route table; the abbreviated forms in Steps 10–12b resolve to
+`PATCH /api/vendor/bookings/:id/{reschedule,payment-status}` and
+`POST /api/vendor/bookings/:id/cancel`). No corrections were needed. This page is a **reading
+order**, not a route census — the full contract is in the pages it links.
 
 This is the **reading order** for implementing the full service-product booking feature. Each step names the doc to open and the endpoints to wire, in the order a frontend should build them. Two audiences are involved: the **vendor** app (set up + manage) and the **customer** app (discover + book + pay).
 
@@ -48,14 +30,14 @@ Build these in order; each depends on the previous.
 - When the OAuth flow finishes, the backend redirects the browser back to your configured route (`GOOGLE_OAUTH_FRONTEND_REDIRECT_URL`, e.g. `/dashboard/services`) with `?calendar=connected` or `?calendar=error&reason=...`. Read those params on the landing route, then re-fetch `GET /api/vendor/calendar/status` and show `email` + `permissions` + `requiresReauth`.
 - **Gate the rest of setup (and customer booking) on `connected: true`.** Booking creation requires a connected calendar; availability does not (it just won't subtract Google busy times).
 
-### Step 2 — Create the service product  → [vendor/products.md](./vendor/products.md#2--post-apivendorproducts)
+### Step 2 — Create the service product  → [vendor/products.md](./vendor/products.md#service-products)
 
 - `POST /api/vendor/products` with `type: "service"`. Do **not** send `serviceConfig` here.
 
 ### Step 3 — Create the service variant (price + `serviceConfig`)  → [vendor/variants.md](./vendor/variants.md)
 
 - `POST /api/vendor/products/:id/variants` with `price` + `serviceConfig`. A service product has **exactly one** variant carrying its config + price.
-- `serviceConfig` requires `durationMinutes` and `bookingMode`; optionally `bufferBeforeMinutes`, `bufferAfterMinutes`, and a `peakHours` surcharge. For `bookingMode: "capacity"` (multi-seat slots, e.g. a class), also send `maxBookings` (≥ 1) — see [serviceConfig.bookingMode](./vendor/variants.md#serviceconfig).
+- `serviceConfig` requires `durationMinutes` and `bookingMode`; optionally `bufferBeforeMinutes`, `bufferAfterMinutes`, and a `peakHours` surcharge. For `bookingMode: "capacity"` (multi-seat slots, e.g. a class), also send `maxBookings` (≥ 1) — see [serviceConfig.bookingMode](./vendor/variants.md#service-bookingmode).
 - `price` is the **base price per `durationMinutes`** (e.g. `5000` for a 60-min unit). The booking price is prorated by the actual elapsed duration; peak surcharge applies only to the minutes overlapping the peak window.
 - Update the scheduling/peak config later via `PATCH /api/vendor/products/:productId/variants/:variantId/service/config`.
 
@@ -63,11 +45,11 @@ Build these in order; each depends on the previous.
 
 - Create rules (`POST /api/vendor/products/:id/availability-rules`) — they start as drafts (`isActive: false`). Send an **array** of rules to define the whole week in one request.
 - Publish each via `PATCH .../availability-rules/:ruleId/toggle` with `{ "isActive": true }`.
-- Activate the product — it needs one active default variant with `serviceConfig.durationMinutes` and `price > 0`. See [Change Product Status](./vendor/products.md#5--status).
+- Activate the product — it needs one active default variant with `serviceConfig.durationMinutes` and `price > 0`. See [Change Product Status](./vendor/products.md#change-product-status).
 
 ---
 
-## Phase 2 — Customer booking (customer app)  → `customer/bookings.md`
+## Phase 2 — Customer booking (customer app)  → [customer/bookings.md](./customer/bookings.md)
 
 Build the checkout as a short-lived, ordered flow.
 
@@ -78,14 +60,14 @@ Build the checkout as a short-lived, ordered flow.
 ### Step 6 — Lock, then book
 
 - On slot select: `POST /api/products/:productId/slots/:slotId/lock` → start a 15-min countdown from `expiresAt`.
-- On confirm: `POST /api/products/:productId/book` with `{ slotId, metadata }` → returns the `booking` and `price`. The booking's `status` is `confirmed` (`calendar`/`capacity`) or `pending` (`manual`, awaiting vendor acceptance) — see [serviceConfig.bookingMode](./vendor/variants.md#serviceconfig); `paymentStatus` is `unpaid`.
+- On confirm: `POST /api/products/:productId/book` with `{ slotId, metadata }` → returns the `booking` and `price`. The booking's `status` is `confirmed` (`calendar`/`capacity`) or `pending` (`manual`, awaiting vendor acceptance) — see [serviceConfig.bookingMode](./vendor/variants.md#service-bookingmode); `paymentStatus` is `unpaid`.
 - **Capacity mode**: a slot accepts multiple seats. Availability slots carry `maxBookings`/`spotsRemaining` (render "N spots left"); a full slot returns `available:false`, and booking a full slot returns `409 BOOKING_SLOT_FULL`.
 - On abandon: `POST /api/products/:productId/slots/:slotId/unlock` (or let the lock expire).
 - Handle `409 BOOKING_SLOT_LOCKED` (someone else holds it) and `409 BOOKING_SLOT_NOT_LOCKED` (lock expired → re-lock).
 
 ### Step 7 — Pay and confirm
 
-- `POST /api/bookings/:id/pay` with `{ gateway, channel }`.
+- `GET /api/payments/options` for the providers on offer, then `POST /api/bookings/:id/pay` with `{ provider, channel }` (never `gateway`: see [payments/README.md](./payments/README.md#get-paymentsoptions--what-the-customer-can-pay-with)).
 - Poll `GET /api/bookings/:id/payment-status` (or rely on payment webhooks) until `paymentStatus: paid`.
 
 ---
@@ -95,7 +77,7 @@ Build the checkout as a short-lived, ordered flow.
 These are independent of each other; build as needed.
 
 - **Step 8** — List + calendar: `GET /api/vendor/bookings`, `GET /api/vendor/bookings/calendar`, `GET /api/vendor/bookings/:id`.
-- **Step 9** — Status transitions: `PATCH /api/vendor/bookings/:id/status` (enforces the [state machine](./vendor/bookings.md#patch-apivendorbookingsidstatus)).
+- **Step 9** — Status transitions: `PATCH /api/vendor/bookings/:id/status` (enforces the [state machine](./vendor/bookings.md#booking-status-state-machine)).
 - **Step 10** — Reschedule (lock the new slot first) / cancel: `PATCH .../reschedule`, `POST .../cancel`.
 - **Step 11** — Mark a cash booking paid: `PATCH .../payment-status`.
 - **Step 12** — Complete + settle final price: `POST /api/vendor/bookings/:id/complete` — recomputes the price from the actual elapsed duration (or a flat `fixedPrice`) and returns `finalPrice`, `additionalAmountDue` and `creditDue`. A shortfall is **requested, not charged**: the customer gets a `booking.balance.due` notification and pays it themselves, or you record it as cash.
@@ -103,15 +85,15 @@ These are independent of each other; build as needed.
 
 ---
 
-## Phase 4 — Customer booking management (storefront)  → `customer/bookings.md`
+## Phase 4 — Customer booking management (storefront)  → [customer/bookings.md](./customer/bookings.md#managing-your-bookings)
 
 Everything after the purchase. All under `/api/customer/bookings`, customer role, scoped to the caller.
 
 - **Step 13** — "My bookings": `GET /api/customer/bookings` (paged, filterable) and `GET /api/customer/bookings/:id`.
 - **Step 14** — Cancel: `POST /api/customer/bookings/:id/cancel`. Gated by the vendor's cancellation policy — handle `422 CANCELLATION_NOT_ALLOWED` and show `error.details.deadline`. A paid booking is refunded, or flagged `refund_pending` with a ticket raised.
 - **Step 15** — Reschedule: lock the new slot (Step 6), then `PATCH /api/customer/bookings/:id/reschedule` with `{ newSlotId }`.
-- **Step 16** — Pay an outstanding balance: `GET /api/customer/bookings/:id/balance`, then `POST /api/customer/bookings/:id/pay-balance` with `{ gateway, channel }`.
-- **Step 17** — The notification inbox: `GET /api/customer/notifications` (+ `/unread-count`, `/preferences`). See `customer/notifications.md`.
+- **Step 16** — Pay an outstanding balance: `GET /api/customer/bookings/:id/balance`, then `POST /api/customer/bookings/:id/pay-balance` with `{ provider, channel }`.
+- **Step 17** — The notification inbox: `GET /api/customer/notifications` (+ `/unread-count`, `/preferences`). See [customer/notifications.md](./customer/notifications.md).
 
 > **Customers are now notified.** Booking placed, confirmed, moved, cancelled, completed, paid, refunded, balance due — plus a reminder ~24h before the appointment. Money and cancellations cannot be switched off; progress updates and reminders can.
 
@@ -131,9 +113,9 @@ Everything after the purchase. All under `/api/customer/bookings`, customer role
 | Need | Doc |
 |------|-----|
 | Connect/inspect Google Calendar | [vendor/calendar.md](./vendor/calendar.md) |
-| Create service product | [vendor/products.md](./vendor/products.md#2--post-apivendorproducts) |
+| Create service product | [vendor/products.md](./vendor/products.md#service-products) |
 | Create the service variant (`serviceConfig` + price) | [vendor/variants.md](./vendor/variants.md) |
 | Weekly availability rules | [vendor/availability-rules.md](./vendor/availability-rules.md) |
-| Customer slot → lock → book → pay | `customer/bookings.md` |
-| Customer lists / cancels / reschedules | `customer/bookings.md` |
+| Customer slot → lock → book → pay | [customer/bookings.md](./customer/bookings.md) |
+| Customer lists / cancels / reschedules | [customer/bookings.md](./customer/bookings.md#managing-your-bookings) |
 | Vendor manages bookings | [vendor/bookings.md](./vendor/bookings.md) |

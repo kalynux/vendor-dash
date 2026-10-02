@@ -1,332 +1,1628 @@
-# Authentication
+# Auth API
 
-**Verified against source on 2026-09-08** — the route count, the lifetimes, the 90-day cap, every
-error row and the `details` claim below, against `jovi-mall/src/modules/auth/`,
-`src/api/middlewares/auth.middleware.ts`, `src/core/auth/` and `src/core/error-detail-policy.ts`.
-(First verified 2026-08-24, when this page was 592 lines behind its backend counterpart and was
-rewritten from source.)
+**Verified against source on 2026-09-08** — the 24-row route table, both refresh error tables,
+the two `/auth` rate-limit buckets, the token TTLs and the 90-day cap were re-checked against
+`jovi-mall/src/modules/auth/`, `src/api/middlewares/auth.middleware.ts`, `src/core/auth/` and
+`src/api/rate-limit/`. First verified 2026-09-06 (DOC-PROGRAM § 24–27). Corrections are marked
+inline with ⚠ and a source citation.
 
-**Base paths:** `/api/auth`, `/api/auth/browser`, `/api/auth/mobile`, `/api/auth/magic`,
-`/api/auth/mobile/magic` · **Routes: 24**
+## Base URL
 
----
-
-## 0 · One session model, two transports
-
-This dashboard ships as a browser app **and** as a Capacitor build, so it uses both.
-
-| | Browser | Capacitor / WebView |
-|---|---|---|
-| Namespace | `/api/auth/browser/*` | `/api/auth/mobile/*` |
-| Credential | HttpOnly cookies | `data.tokens` in the response body |
-| Every request | `credentials: 'include'` | `Authorization: Bearer <accessToken>` |
-| Expired access token | **silently refreshed** server-side | **`401 AUTH_TOKEN_EXPIRED` — never silent** |
-| Renewal | none needed | `POST /api/auth/mobile/refresh` |
-
-**The transport is chosen by the route namespace, never by a header.** The frontend once asked for
-an `X-Client-Type: mobile` header branching the existing routes; it was declined, and the reason
-crosses a service boundary — geo-tracker's CORS allows a **closed** header list
-(`Authorization`, `Content-Type`, `X-Request-Id`), so a new request header would have forced a
-change in two repositories.
-
-`src/platform/auth/strategy.ts` already implements this split correctly.
-
-### 🔴 Bearer wins when both are present
-
-The token extractor reads `Authorization` **first** and only falls back to the cookie. So a stale
-cookie sitting in a native HTTP layer's OS jar can never beat a freshly-refreshed bearer.
-
-⚠ An **empty** `Authorization: Bearer ` header reports *no token at all* rather than an empty one —
-it falls through to the cookie.
-
-### 🔴 A bearer client is never silently refreshed
-
-Even if a `refresh_token` cookie happens to be attached, an expired **bearer** access token returns
-`401 AUTH_TOKEN_EXPIRED`. The WebView must call `/api/auth/mobile/refresh` itself.
-
-That matters for Capacitor builds routed through a native HTTP plugin that inherits the OS cookie
-jar: the cookie is there, and it will not be used.
-
----
-
-## 1 · Lifetimes
-
-| | Value | Env |
-|---|---|---|
-| Access token | **15 minutes** | `AUTH_ACCESS_TOKEN_TTL` |
-| Refresh token | **30 days** | `AUTH_REFRESH_TOKEN_TTL` |
-| 🔴 **Absolute session cap** | **90 days** | `AUTH_ABSOLUTE_SESSION_CAP` |
-
-Cookies: `access_token` and `refresh_token`, both `httpOnly`, `sameSite: lax`, `path: /`, `secure`
-in production.
-
-The mobile envelope:
-
-```jsonc
-{ "accessToken": "…", "refreshToken": "…",
-  "accessExpiresIn": 900, "refreshExpiresIn": 2592000 }   // SECONDS
+```
+http://localhost:8022/api
 ```
 
-**`*ExpiresIn` are seconds, not milliseconds, and not timestamps.**
+> All paths below are relative to `/api`.
 
 ---
 
-## 2 · 🔴 The 90-day cap — `AUTH_SESSION_CAP_REACHED`
+## Overview
 
-**Before this, the 30-day refresh window slid forever.** Every credential path minted a fresh pair at
-full lifetime, and this dashboard calls `auth-me` on every launch — so a session in daily use never
-lapsed, and a stolen refresh token kept in use never expired either.
+The auth system handles user registration, login, token management, and account verification. Authentication is **role-based** — every user has one or more roles, and all JWTs are scoped to a **single active role** at a time.
 
-| | |
-|---|---|
-| Code | **`AUTH_SESSION_CAP_REACHED`** |
-| Status | **401** |
-| Message | *"It's been a while — please sign in again"* |
-| Category | `authentication` |
+> ### 👤 Customers do not use this page
+>
+> A customer registers **in the WhatsApp / Telegram bot** and signs in **without a password**.
+> Their whole flow — what the storefront must build, and the three things it must *not* — is
+> **[customer-auth.md](./customer-auth.md)**. Everything on this page describes `vendor`,
+> `agency` and `agent` unless it says otherwise.
 
-🔴 **Terminal. The refresh token is refused too.** It is enforced at two places — the refresh
-rotation *and* the auth middleware — precisely so the two token-reissuing routes (`auth-me`,
-`add-role`) cannot be used to walk past it.
+### Session Strategy: two delivery modes, one session model
 
-**A client that treats every 401 as "refresh and retry" will loop.**
+The tokens are the same everywhere — same claims, same lifetimes, same secrets, same
+revocation. Only **delivery** differs, and it is chosen by the route namespace, never by a
+header:
 
-### What does and does not reset the 90 days
-
-| Resets it | Does **not** reset it |
-|---|---|
-| a real sign-in | `GET /api/auth/auth-me/:role` |
-| registration | `POST /api/auth/add-role` |
-| `PATCH /api/me/password` | any refresh, on either transport |
-| magic-link redemption | |
-
-The clock is carried inside the token as `auth_time` and is **copied, not re-stamped**, by all three
-non-credential paths.
-
-### ✅ Handled in this repository — no action
-
-**This section read "Action required" until 2026-09-09, and it was already stale when written.**
-There is no symbol named `TERMINAL_AUTH_CODES`; it was split into two sets keyed by status, and
-both codes are present and correctly placed:
-
-| Set | Where | Contains |
+| Namespace | Delivery | For |
 |---|---|---|
-| `TERMINAL_401_CODES` | [`src/services/api.ts:62`](../../src/services/api.ts) | **`AUTH_SESSION_CAP_REACHED`**, plus the eight other terminal 401s |
-| `TERMINAL_403_CODES` | [`src/services/api.ts:104`](../../src/services/api.ts) | **`AUTH_ACCOUNT_CLOSED`**, `AUTH_ACCOUNT_SUSPENDED`, `AUTH_VENDOR_SUSPENDED` |
+| `/auth/*` | two **HttpOnly cookies** | browsers |
+| `/auth/browser/*` | the same two cookies | OAuth redirect flows needing a stable login URL |
+| `/auth/mobile/*` | a **`tokens` object in the response body** | native / WebView clients that cannot use a cookie |
 
-`classifyAuthError` picks the set by status, so a 403 is never treated as refreshable and
-`AUTH_TOKEN_EXPIRED` — the one recoverable case — is deliberately in neither. Both locale catalogs
-carry copy for the two codes.
+See [Mobile namespace](#mobile-namespace--bearer-clients) below.
 
-⚠ If you are re-checking this, grep for `TERMINAL_401_CODES`, not the old name.
+On every successful login or registration **through the cookie namespaces**, the server sets
+**two HttpOnly cookies**:
+
+| Cookie | TTL | Purpose |
+|--------|-----|---------|
+| `access_token` | 15 min | Authenticates requests |
+| `refresh_token` | 30 days | Issues new access tokens without re-login |
+
+Both cookies are `HttpOnly`, `SameSite=Lax`, and `Secure` in production. **On `/auth/*` and
+`/auth/browser/*`, tokens are never returned in the response body** — only `/auth/mobile/*`
+returns them, and it sets no cookie at all.
+
+The cookie `max-age` and the token's own `exp` are derived from the *same* two constants
+(`core/auth/token.issuer.ts`), so a cookie can never outlive or predecease the token inside it.
 
 ---
 
-## 3 · Every auth error code
+## Response Envelope
 
-Branch on `error.code`. **Never on the status** — 401 covers both the one recoverable case and eight
-terminal ones.
+> **⚠️ Breaking change (2026-07-17):** auth responses are now wrapped in the platform-standard
+> success envelope. Payloads that were previously returned at the top level (`{ user, role, role_entity }`)
+> are now nested under `data`.
 
-### Recoverable — exactly one
+Every **success** response on this service uses:
 
-| Code | Status | Do |
-|---|---|---|
-| **`AUTH_TOKEN_EXPIRED`** | 401 | refresh, then repeat the request |
+```json
+{ "success": true, "data": <payload>, "meta": { "...": "pagination or summary" }, "message": "optional note" }
+```
 
-### Terminal — sign the user out
+- `data` always holds the payload (object, array, or `null`).
+- `meta` appears only on paginated/list responses (`{ total, page, limit, pages }`).
+- `message` is an optional human-readable note.
 
-| Code | Status | Meaning |
-|---|---|---|
-| `AUTH_MISSING_TOKEN` | 401 | no credential at all |
-| `AUTH_SESSION_EXPIRED` | 401 | refresh unavailable or already failed |
-| `AUTH_TOKEN_INVALID` | 401 | tampered or wrongly signed |
-| `AUTH_REFRESH_TOKEN_INVALID` | 401 | the refresh token was rejected. **In development this usually means the *access* token was posted to the refresh endpoint** |
-| `AUTH_PASSWORD_CHANGED` | 401 | **worth surfacing verbatim** — to someone who did not change their own password, this is the first sign somebody else did |
-| **`AUTH_SESSION_CAP_REACHED`** | 401 | § 2 |
-| `AUTH_USER_NOT_FOUND` | 401 | |
-| `AUTH_ACCOUNT_NOT_FOUND` | 401 / **404** | note: 404 on `add-role`, 401 elsewhere |
-| `AUTH_ROLE_PROFILE_NOT_FOUND` | 401 | the token names a role with no profile behind it |
-| **`AUTH_ACCOUNT_CLOSED`** | **403** | irreversible |
-| `AUTH_ACCOUNT_SUSPENDED` | **403** | |
-| **`AUTH_VENDOR_SUSPENDED`** | **403** | the *vendor role* is suspended. **The same account's other roles still work** — offer a role switch, not a sign-out |
-| `AUTH_ROLE_NOT_FOUND` | **403** | wrong role for this endpoint, or a role the account does not hold |
+Every **error** response uses the mirror shape:
 
-### Recoverable with different input
+```json
+{ "success": false, "requestId": "req_abc", "error": { "code": "AUTH_INVALID_CREDENTIALS", "message": "Invalid credentials", "statusCode": 401, "category": "authentication", "details": {} } }
+```
 
-| Code | Status | Meaning |
-|---|---|---|
-| `AUTH_INVALID_CREDENTIALS` | 401 | **unknown identifier and wrong password give the same code** — deliberately |
-| `AUTH_ROLE_REQUIRED` | **400** | no `role` sent and the account has more than one. Re-send with a role |
-| `AUTH_ROLE_ALREADY_EXISTS` | 409 | `add-role` for a role already held |
-| `AUTH_PHONE_TAKEN` · `AUTH_EMAIL_TAKEN` | 409 | |
-| `USER_INVALID_PASSWORD` | **403** | wrong `oldPassword` on a password change. Note **403, not 401** |
-| `VALIDATION_ERROR` | 400 | `details.fields[]` with `path` |
+`error.category` is always present — one of nine values. See [errors/README.md](../errors/README.md).
 
-⚠ **`AUTH_ROLE_NOT_FOUND` gives you almost nothing in `details`, and which "almost" depends on
-where it was raised.** A 403 is `category: "authorization"`, and that category's `details` is cut
-down at the response boundary to a four-key allowlist — `required`, `requiredAny`, `resource`,
-`hint` (`src/core/error-detail-policy.ts:29-33`). So:
-
-- from a **role guard** on a route (`requireRole`), which raises `{ required, actual }`, you get
-  `{ required }` — `actual` is stripped, and you cannot see which role the token actually had;
-- from **`/auth/login`, `/auth/auth-me/:role` or a refresh**, which raise `{ role }`, you get
-  **no `details` at all** — the projected object is empty, so the key is omitted entirely.
-
-⚠ **Corrected 2026-09-08:** this note previously said only the first half, which read as though
-`details.required` were always present. Echo back the role *you* sent rather than reading one off
-the error. The same filter applies to **every** 403 on the platform, not just this code — see
-[errors/README.md](../errors/README.md#two-more-categories-are-allowlisted).
+Read `data` for the body, `error.code` for programmatic handling. All examples below show the full envelope.
 
 ---
 
-## 4 · The routes
+## Frontend Integration
 
-### Browser
+All fetch/axios calls **must** include credentials to send cookies:
 
-| Route | Body | Sets | Returns |
-|---|---|---|---|
-| `POST /api/auth/browser/login` | `{ identifier, password, role? }` | both cookies | `{ user: { id, email, role } }` |
-| `POST /api/auth/browser/refresh` | none — reads the cookie | **access cookie only** | `{ user: { id, role } }` |
-| `POST /api/auth/browser/logout` | none | clears both | `{ data: null, message }` |
+```js
+// fetch
+fetch('/api/auth/me', { credentials: 'include' });
 
-🔴 **All three require `Content-Type: application/json`** — a CSRF mitigation. Without the header
-you get `400 VALIDATION_ERROR` and **every refresh fails**. There is no body on refresh or logout;
-the header is still required. `src/platform/auth/strategy.ts` already notes this.
+// axios (set globally once)
+axios.defaults.withCredentials = true;
+```
 
-⚠ The browser login's `user` is a deliberately **thinner** shape than `/api/auth/login` returns —
-`{ id, email, role }` only.
-
-**There is no `/api/auth/browser/register`.**
-
-### Mobile
-
-| Route | Guard | Status | `data` |
-|---|---|---|---|
-| `POST /api/auth/mobile/login` | public | 200 | `{ user, role, role_entity, tokens }` |
-| `POST /api/auth/mobile/register` | public | **201** | `{ user, role, role_entity, tokens }` |
-| `POST /api/auth/mobile/refresh` | public | 200 | **`{ tokens }` only** — no user, no role |
-| `GET /api/auth/mobile/auth-me/:role` | `requireAuth` | 200 | `{ user, role, role_entity, tokens }` |
-| `POST /api/auth/mobile/add-role` | `requireAuth` | **201** | `{ user, role, role_entity, tokens }` |
-
-**No cookie is ever set on this namespace**, and there is **no `/api/auth/mobile/logout`** — use
-`POST /api/auth/logout`, which is a harmless no-op for a bearer client, or just discard the pair.
-
-⚠ A missing or blank `refreshToken` on the refresh route is `401 AUTH_MISSING_TOKEN`, **not** a 400.
-
-**`GET /api/auth/mobile/auth-me/:role` is what a Capacitor client should call on launch** — it
-re-issues both tokens at full lifetime, which keeps the 30-day window alive, while copying
-`auth_time` so it does not reset the 90-day cap.
-
-### Shared
-
-| Route | Notes |
-|---|---|
-| `POST /api/auth/login` · `/register` · `/logout` | cookie-setting |
-| `GET /api/auth/me` | the current session |
-| `GET /api/auth/auth-me/:role` | **role switch, no password** |
-| `POST /api/auth/add-role` | adds a role to the account |
-| `POST /api/auth/send-email-verification` | authenticated |
-| `POST /api/auth/verify-email` | public; `{ token }` in the body — **this is what new verification mail points at** |
-| `GET /api/auth/verify-email?token=` | public; **legacy**, still answered. A `GET` that mutates, so the token is spent by anything that prefetches the URL. Token TTL 24 h on both |
-| `POST /api/auth/forgot-password` | **always 200**, even for an unknown account |
-| `POST /api/auth/reset-password` | token TTL 30 min; **does not sign the user in** |
-| `POST /api/auth/email-change/confirm` | public — see [me/contact-change.md](../me/contact-change.md) |
+All POST endpoints require `Content-Type: application/json`.
 
 ---
 
-## 5 · Roles
+## Roles
 
-`customer` · `vendor` · `agency` · `agent`. **A token is scoped to exactly one active role.**
+**Exactly four roles can be authenticated as on this service**: `customer`, `vendor`, `agency`,
+`agent`. All four schemas derive from one list (`AUTHENTICATABLE_ROLES` in `auth.schemas.ts`),
+so the same four are accepted by register, login, `auth-me` and `add-role`.
 
-🔴 **`admin` is not a role you can authenticate as in jovi-mall.** It is not registerable, not
-loggable-in-as, not addable and not switchable-to. Administrators are a separate identity system in
-a different service.
+| Role | Has Onboarding? | Signs in with | Notes |
+|------|----------------|---------------|-------|
+| `customer` | ❌ No | **a bot-issued link or code** — see [customer-auth.md](./customer-auth.md) | `onboarding_step` is always `0` |
+| `vendor` | ✅ Yes — 4 steps (`PUT` per step) | a password | Must complete before accessing dashboard |
+| `agency` | ✅ Yes — init + 4 steps (`PUT` per step) | a password | Must complete before accessing dashboard |
+| `agent` | ✅ Yes — 2 steps (one `PATCH …/step`) | a password | Must complete before accessing dashboard |
 
-### Switching vs adding
+A user can hold **multiple roles** and log in under any of them independently.
 
-| | `GET /api/auth/auth-me/:role` | `POST /api/auth/add-role` |
+> ### ⚠ `admin` is NOT a role on this service
+>
+> It is refused by register, login, `auth-me` **and** `add-role`, all four. Administrator
+> identity lives in the separate `wi-admin` database — an administrator holds no `users` row
+> here at all and reaches this service through a service token (`requireAdminCaller`), never
+> through a session. A legacy `roles: ["admin"]` row may still exist; it cannot be
+> authenticated as, and auto-role-resolution filters it out rather than picking it.
+>
+> The platform-wide permission matrix in [../README.md](../README.md#permission-matrix) still
+> lists an Admin column — that is the wi-admin operator, reaching these routes over the
+> internal service surface. It is not a session you can mint here.
+
+---
+
+## Endpoints
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `POST` | `/auth/register` | Public | Register a new account |
+| `POST` | `/auth/login` | Public | Log in and set auth cookies |
+| `POST` | `/auth/logout` | Public | Clear both auth cookies |
+| `GET` | `/auth/me` | Required | Get current user (lightweight) |
+| `GET` | `/auth/auth-me/:role` | Required | Restore session **and switch role** + re-issue cookies |
+| `POST` | `/auth/add-role` | Required | Add a second role to an existing account |
+| `POST` | `/auth/send-email-verification` | Required | Send email verification link |
+| `POST` | `/auth/verify-email` | Public | Confirm email — **what the emailed page calls** |
+| `GET` | `/auth/verify-email` | Public | Legacy link. Still answered; no longer emailed |
+| `POST` | `/auth/forgot-password` | Public | Start a password reset. **Always answers 200** |
+| `POST` | `/auth/reset-password` | Public | Redeem a reset token and set a new password |
+| `POST` | `/auth/browser/login` | Public | Browser-namespace login (JSON only) — see below |
+| `POST` | `/auth/browser/refresh` | Public (cookie) | Explicitly issue a new access token from the refresh cookie |
+| `POST` | `/auth/browser/logout` | Public | Browser-namespace logout (JSON only) |
+| `POST` | `/auth/mobile/login` | Public | Log in, **tokens in the body**, no cookies |
+| `POST` | `/auth/mobile/register` | Public | Register, tokens in the body |
+| `POST` | `/auth/mobile/refresh` | Public (body) | Exchange a refresh token for a **fresh pair** |
+| `GET` | `/auth/mobile/auth-me/:role` | Required | Restore session + a fresh pair |
+| `POST` | `/auth/mobile/add-role` | Required | Add a role + a pair scoped to it |
+| `POST` | `/auth/magic/link` | Public | Redeem a magic link — **passwordless customer sign-in** |
+| `POST` | `/auth/magic/code` | Public | Redeem an 8-character sign-in code with a phone or email |
+| `POST` | `/auth/mobile/magic/link` | Public | The **bearer twin** of `/auth/magic/link` — tokens in the body, no cookie. See [magic-login.md](./magic-login.md#bearer-clients--apiauthmobilemagic) |
+| `POST` | `/auth/mobile/magic/code` | Public | The bearer twin of `/auth/magic/code` |
+| `POST` | `/auth/email-change/confirm` | Public | Redeem an email-change token. **Public on purpose** — the link is tapped from a mail client. Requested by `PATCH /api/me/email`; see [../me/contact-change.md](../me/contact-change.md#post-apiauthemail-changeconfirm) |
+
+There is **no** `POST /auth/refresh` or `/auth/verify-code` on this service, and no
+`/auth/mobile/logout`; the table above is the complete auth surface — **24 routes**, from
+`src/modules/auth/auth.routes.ts` + `routes/browser-auth.routes.ts` +
+`routes/mobile-auth.routes.ts` + `modules/messaging-login/messaging-login.routes.ts`
++ `modules/messaging-login/mobile-messaging-login.routes.ts`.
+
+```bash
+# the table above, re-measured — run from jovi-mall/
+npm run dev  # then read the printed route table, or:
+grep -cE '^(GET|POST|PUT|PATCH|DELETE) /api/auth/' ../DOC-PROGRAM/evidence/jovi-routes.txt   # → 24
+```
+
+> ⚠ **Corrected 2026-09-06** (DOC-PROGRAM F-17 class 6). This table listed **21** rows and
+> claimed to be complete, from a list of **four** source files. The fifth,
+> `mobile-messaging-login.routes.ts`, is mounted at `/auth/mobile/magic` in
+> `src/api/index.ts` and holds the two bearer magic routes — so the provenance list being
+> short by one file is exactly why the table was short by two rows. `email-change/confirm`
+> was the third omission, and it lives in `auth.routes.ts`, which the list *did* name.
+> **A completeness claim is only as good as the file list under it, and a reader cannot
+> check a list they are not given.**
+
+> ### ⚠ Customers register in the bot and sign in without a password
+>
+> **Registration.** A customer account is created when the person first interacts with the
+> WhatsApp or Telegram bot. **There is no registration endpoint for a storefront to call** —
+> it deep-links the user into the bot and calls nothing. `POST /auth/register` still accepts
+> `role: "customer"` and is still what the bot side ultimately drives, but it is not the
+> storefront's path.
+>
+> **Sign-in.** `/auth/magic/*` redeems the two credentials a customer gets by sending
+> **`/login`** to the bot. It is not a convenience — it is the **primary customer sign-in
+> path**, because customers hold a system-generated password that is disclosed to nobody.
+> So `POST /auth/login` will **always fail for a customer who has never run a password
+> reset**, and `POST /auth/register` **strips `password`** for `role: "customer"`. Every
+> other role is unchanged.
+>
+> **The whole customer flow, and what the storefront must not build:**
+> **[customer-auth.md](./customer-auth.md)**. The endpoint-level contract for the two magic
+> routes — errors, the Telegram contact-share step, rate limits:
+> **[magic-login.md](./magic-login.md)**.
+
+> ### Password reset has a bot entrance too, for EVERY role
+>
+> Sending **`/reset-password`** to the WhatsApp or Telegram bot replies with the same link
+> `POST /auth/forgot-password` sends by email and WhatsApp — same token, same 30 minutes, same
+> single use, redeemed by the same `POST /auth/reset-password`. It is a new *entrance*, not a
+> second mechanism.
+>
+> Unlike `/login`, it serves **vendors, agencies and agents as well as customers**: a password
+> belongs to the account, not to a role. It is therefore the only self-service recovery a vendor
+> or agency has from a chat, and the way a passwordless customer acquires a real password.
+> See [magic-login.md](./magic-login.md#reset-password--a-reset-link-from-a-chat-any-role).
+
+> **`POST /auth/request-wa-verification` was removed.** It minted a code the user carried to
+> the WhatsApp bot. Connecting a messaging account is no longer an auth concern at all — it is
+> `POST /api/me/connections`, the bot mints the code, and it covers Telegram too. See
+> [../connections/README.md](../connections/README.md).
+
+---
+
+## Password reset
+
+Added 2026-08-14. Before it there was no recovery path at all: `PATCH /api/me/password`
+requires the **old** password, and the only other way to change a login identifier is an
+admin-only route on the internal service surface — so a forgotten password was a permanent
+lockout.
+
+### POST `/auth/forgot-password`
+
+```json
+{ "identifier": "jane@example.com" }
+```
+
+`identifier` is an email address or an E.164 phone number, normalised exactly as `/auth/login`
+normalises it.
+
+**Always answers `200` with the same body**, whether or not the account exists:
+
+```json
+{ "success": true, "data": null, "message": "If that account exists, a password reset link has been sent." }
+```
+
+> **⚠️ Do not treat any part of this response as a signal about whether an account exists.**
+> The uniformity is deliberate: any observable difference — a 404, a different message, a
+> suspended-account error — turns this endpoint into an account-enumeration oracle. Feed it a
+> list of phone numbers and learn which ones bank here. A suspended account is also answered
+> with the same 200 and no email.
+>
+> A malformed identifier *is* still a `400`. That leaks nothing: it says the **input** is not
+> a well-formed address or number, which the caller can see for themselves.
+
+**Delivery is over email *and* WhatsApp** when both identifiers are on file. WhatsApp matters
+here: `phone` is the required registration field and `email` is optional, so an email-only
+reset would be undeliverable for a large share of this audience.
+
+The link points at `STOREFRONT_URL/reset-password?token=…` — the **storefront**, not this API,
+because a reset needs a form for the new password and only the frontend has one. Email
+verification now works the same way — see `POST /auth/verify-email`.
+
+The token lives **30 minutes** and is single-use.
+
+### POST `/auth/reset-password`
+
+```json
+{ "token": "…64 hex…", "newPassword": "Str0ng!Pass" }
+```
+
+`newPassword` must satisfy the shared strength rule: **8+ characters with an uppercase, a
+lowercase, a digit and a symbol** — the same `PasswordStrengthSchema`
+`PATCH /api/me/password` uses.
+
+> ⚠️ That is deliberately **stricter than `POST /auth/register`**, which still accepts 6
+> characters with no complexity rule. The two disagree, and this is the right side of the
+> disagreement: raising registration is a breaking change for existing clients and is out of
+> scope, but a new password set through a new endpoint has no back-compat debt.
+
+**Success `200`** — `{ "success": true, "data": null, "message": "Your password has been reset…" }`
+
+> **It does not sign you in.** The link arrives by email or WhatsApp, either of which may be
+> read on a device that is not the one asking — issuing a session on redemption would hand it
+> to whoever opened the message. Sign in with the new password through `/auth/login`.
+
+> **It revokes every other session.** The write stamps `password_changed_at`, and any token
+> issued before that instant is refused with `401 AUTH_PASSWORD_CHANGED` on both the access
+> and refresh paths. That is the point of a reset after a compromise.
+
+| `error.code` | Status | When |
 |---|---|---|
-| Password | none | none |
-| Requires | the role is **already** on the account | the role is **not** on the account |
-| Failure | `403 AUTH_ROLE_NOT_FOUND` | `409 AUTH_ROLE_ALREADY_EXISTS` |
-| Status | 200 | **201** |
+| `AUTH_RESET_TOKEN_INVALID` | 400 | Token absent, expired, malformed **or already spent** — deliberately one code for all four, so the response cannot confirm whether a token was ever real |
+| `AUTH_ACCOUNT_SUSPENDED` | 403 | The account was suspended between the request and the redemption |
+| `VALIDATION_ERROR` | 400 | `newPassword` fails the strength rule |
 
-`add-role` body: `{ role, name?, business_name?, agency_name? }`. For a vendor, `business_name`
-falls back to `name` and is written to the **Store**, not the vendor profile — see
-[vendor/store.md](../vendor/store.md).
+Both endpoints inherit the credential bucket below (20/min/IP).
 
-### 🔴 A successful role switch can still be broken
+> **The `/auth/browser/*` trio is a parallel namespace, not a different session model.** It
+> exists so OAuth redirect flows have a stable browser login URL; it issues the *same* two JWT
+> cookies as `/auth/login`. All three require `Content-Type: application/json`
+> (`requireJsonContent`, a CSRF mitigation) and answer `400 VALIDATION_ERROR —
+> "Bad Request: Only JSON content is accepted"` otherwise. `POST /auth/browser/login` takes the
+> same body as `/auth/login` and returns a **smaller** payload —
+> `{ user: { id, email, role } }` only, with no `role_entity`. Use `/auth/login` unless you are
+> specifically in an OAuth redirect flow.
 
-`auth-me` **does not throw when the target role's profile is missing.** It returns
-`role_entity: null` and still mints a token for that role. The *next* request then dies with
-`401 AUTH_ROLE_PROFILE_NOT_FOUND`.
+### Rate limiting
 
-```ts
-const res = await authMe('vendor');
-if (!res.data.role_entity) {
-  // The switch did not really work. Do not store this token.
+The `/auth` prefix — **all five routers** — sits behind **two** IP-scoped buckets, chosen per path
+and applied before authentication:
+
+| Bucket | Limit | Paths |
+|---|---|---|
+| **credential** | **20/min/IP** | everything that presents a credential: `login`, `register`, `forgot-password`, `reset-password`, `add-role`, the verification routes, the `browser`/`mobile` login + register twins, **`/auth/email-change/confirm`, and all four magic routes** — `/auth/magic/link`, `/auth/magic/code`, `/auth/mobile/magic/link`, `/auth/mobile/magic/code`. **The default** — anything not in the session row is here, and a route added later inherits it |
+| **session** | **300/min/IP** | everything that merely extends a session you already hold. A closed, five-entry **allowlist** (`auth-paths.ts:38-77`): `/auth/me`, `/auth/auth-me` (prefix, covers `/:role`), `/auth/mobile/auth-me`, `/auth/browser/refresh`, `/auth/mobile/refresh` |
+
+> ⚠ **Two corrections here, 2026-09-06.** This said "all **three** routers" — there are **five**
+> mounted under `/auth` (`api/index.ts:96, 97, 98, 107, 122`), the two extra being the magic-login
+> pair. ✅ **The source comment that said the same thing has since been fixed** — `api/index.ts:73`
+> now reads "ALL FIVE" and names all five routers (corrected 2026-09-07). An earlier revision of
+> this note called it "the stale half"; that is no longer true.
+>
+> And the credential list omitted `email-change/confirm` and all four magic routes. The
+> **direction** of the split is what makes that safe rather than dangerous: the session list is
+> an allowlist, so anything unnamed stays **strict**. But it left the magic routes — which *are*
+> passwordless sign-in, exactly the surface the 20 exists to bound — looking undocumented rather
+> than deliberately strict. **A magic-link client gets 20/min/IP**; budget for it.
+
+Exactly one of the two applies per request. The credential number is the strictest in the
+service and is a security control, not a backstop; the session number is a backstop, and
+Layer A (1200/IP) plus Layer B (600–1200/user) still apply on top of both.
+
+> ⚠ **On an *authenticated* route, `RateLimit: remaining=…` describes Layer B, not the bucket
+> above.** Layer B is attached at the tail of `requireAuth`, so it writes its headers last and
+> overwrites whatever ran before it. On `GET /auth/me` as a customer you will therefore read
+> `RateLimit-Policy: 600;w=60` — the per-*user* ceiling — even though the 300/IP session bucket
+> also counted the request. This is not new to the split (Layer A has always been overwritten
+> the same way); it is worth knowing because the header you can read is the per-user one, and it
+> is usually the one you would want. On an unauthenticated route (`login`, `mobile/refresh`) the
+> header is the IP bucket, because Layer B never runs.
+
+See [rate-limits.md](../rate-limits.md).
+
+---
+
+## POST `/auth/register`
+
+Creates a new user and a role profile in one step. Sets both auth cookies on success.
+
+**Auth**: Public
+
+### Request Body
+
+```json
+{
+  "phone": "+2348012345678",
+  "password": "secret123",
+  "name": "John Doe",
+  "role": "vendor",
+  "email": "john@example.com",
+  "business_name": "John's Shop",
+  "agency_name": "Fast Riders",
+  "terms_accepted": true
 }
 ```
 
-### Registering a vendor directly
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `phone` | string | ✅ | **E.164, with the `+` and country code** (`+2348012345678`). Used as login identifier. Must be unique. Stored canonicalised — formatting you send (spaces, dashes, parentheses) is stripped. See [Contact formats](../README.md#contact-formats-phone--email). |
+| `password` | string | **conditionally** | Min 6 characters. **Required for every role EXCEPT `customer`** — see the note below. |
+| `name` | string | ✅ | Min 2 characters. Used for all roles. |
+| `role` | string | ❌ | One of: `customer`, `vendor`, `agency`, `agent`. **Defaults to `vendor`** — a body that omits it registers a vendor, so send it explicitly. `admin` is refused. |
+| `email` | string | ❌ | Optional for **every** role, including vendor. Must be unique. Validated and **lowercased** — see [Contact formats](../README.md#contact-formats-phone--email). |
+| `business_name` | string | ❌ | For `vendor`. Falls back to `name`. Stored on the vendor's **Store**, not on the vendor profile — see [`role_entity` Shapes](#role_entity-shapes). |
+| `agency_name` | string | ❌ | For `agency`. Falls back to `name`. Stored on the agency's **Magazin**, not on the agency profile. |
+| `terms_accepted` | boolean | **conditionally** | **Must be `true` for `vendor`, `agency` and `agent`** (vendor/agency since 2026-09-28, agent from agent app 0.1.3 the same day): the person ticked "I agree to the Terms of Service and Privacy Policy". Missing or `false` → `400 VALIDATION_ERROR` with `details.fields[].path = "terms_accepted"`. Not required for `customer` — a bot customer accepts with one button on the last onboarding step, which writes the same record (`role: "customer"`); accepted and recorded here if sent. Stored as `user.terms_acceptances[] = { role, accepted_at }`. |
 
-`POST /api/auth/register` accepts `role`, and **`vendor` is the default** when it is omitted.
+> **Customer registration**: only `phone`, `name`, and `role: "customer"` are needed — but a
+> storefront should not call this. Customers register in the bot; see
+> [customer-auth.md](./customer-auth.md).
 
-| Field | Required |
+> ### ⚠ A customer's `password` is not required, and is IGNORED if sent
+>
+> Customers are passwordless in practice — they sign in through **`/login`** on WhatsApp or
+> Telegram ([customer-auth.md](./customer-auth.md)). The account is created with a
+> system-generated password that is hashed and disclosed to nobody, so `User.password_hash`
+> stays satisfied and the reset flow has something to replace.
+>
+> The field is **stripped**, not merely optional: honouring a caller-supplied password would
+> create accounts whose password somebody else chose and knows. A client that still sends one
+> gets a normal `201` — it simply will not work at `POST /auth/login`.
+>
+> **Nothing changed for `vendor`, `agency` or `agent`**: a body omitting `password` for any of
+> them is still a `400`, and `role` still defaults to `vendor`, so an old body with no `role`
+> and no `password` is refused exactly as before.
+>
+> A customer who wants a real password uses `POST /auth/forgot-password`, which delivers over
+> email **and** WhatsApp.
+
+### Response `201`
+
+Sets cookies `access_token` and `refresh_token`.
+
+```json
+{
+  "success": true,
+  "data": {
+    "user": {
+      "_id": "664abc...",
+      "login_phone": "+2348012345678",
+      "login_email": "john@example.com",
+      "roles": ["vendor"],
+      "status": "active"
+    },
+    "role": "vendor",
+    "role_entity": {
+      "_id": "664def...",
+      "user_id": "664abc...",
+      "display_name": "John Doe",
+      "email": "john@example.com",
+      "phone": "+2348012345678",
+      "email_verified": false,
+      "phone_verified": false,
+      "onboarding_step": 1,
+      "status": "pending_verification"
+    }
+  }
+}
+```
+
+> `data.role_entity.onboarding_step` tells you where to redirect. See [Onboarding Flow](#onboarding-flow) below.
+>
+> No tokens in response body.
+>
+> ⚠️ **`business_name` is not on the vendor profile.** The `business_name` you sent provisions
+> the vendor's **Store**, which is the source of truth for it; `role_entity` carries
+> `display_name` (the person) and never the business name. Same for `agency_name` → Magazin.
+> See [`role_entity` Shapes](#role_entity-shapes).
+
+### Errors
+
+| `error.code` | Status | Cause |
+|---|---|---|
+| `AUTH_PHONE_TAKEN` | `409` | `phone` already registered |
+| `AUTH_EMAIL_TAKEN` | `409` | `email` already registered |
+| `AUTH_UNSUPPORTED_ROLE` | `400` | A role the service cannot provision |
+| `VALIDATION_ERROR` | `400` | Missing/invalid fields, including a missing `password` on a non-customer role, or `terms_accepted` not `true` for a vendor, agency or agent. `details.fields[]` names them |
+
+---
+
+## POST `/auth/login`
+
+Authenticates and sets role-scoped JWT cookies.
+
+**Auth**: Public
+
+### Request Body
+
+```json
+{
+  "identifier": "+2348012345678",
+  "password": "secret123",
+  "role": "vendor"
+}
+```
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `identifier` | string | ✅ | Phone number **in E.164** (`+2348012345678`) or email address. Whichever it is, it must be valid — see [Contact formats](../README.md#contact-formats-phone--email). |
+| `password` | string | ✅ | Account password |
+| `role` | string | ❌ | Required if the user has multiple roles. |
+
+> If the user only has one role, `role` can be omitted — it will be resolved automatically.
+
+> **Note:** the identifier is normalised before lookup (emails lowercased, phone formatting
+> stripped), so `Ada@Example.COM` and `+234 801 234 5678` both resolve. A phone identifier that is
+> not E.164 is rejected with `VALIDATION_ERROR` rather than failing as bad credentials.
+
+### Response `200`
+
+Sets cookies `access_token` and `refresh_token`.
+
+```json
+{
+  "success": true,
+  "data": {
+    "user": {
+      "_id": "664abc...",
+      "login_phone": "+2348012345678",
+      "roles": ["vendor", "customer"],
+      "status": "active"
+    },
+    "role": "vendor",
+    "role_entity": {
+      "_id": "664def...",
+      "display_name": "John Doe",
+      "onboarding_step": 1,
+      "status": "pending_verification"
+    }
+  }
+}
+```
+
+> Check `data.role_entity.onboarding_step` to determine where to redirect the user. See [Post-Login Routing](#post-login--registration-routing).
+
+### Errors
+
+| `error.code` | Status | Cause |
+|---|---|---|
+| `AUTH_INVALID_CREDENTIALS` | `401` | Unknown identifier, or the wrong password |
+| `AUTH_ROLE_REQUIRED` | `400` | The account holds several roles and `role` was not specified |
+| `AUTH_ROLE_NOT_FOUND` | `403` | The requested `role` is not on the account. ⚠ **No `details`** — see the note under this table |
+| `AUTH_ACCOUNT_SUSPENDED` | `403` | `User.status` is not `active`. Raised **after** the password is verified, so it is never an oracle for which accounts exist |
+| `AUTH_VENDOR_SUSPENDED` | `403` | The vendor **profile** is `inactive` — a different axis from the account above, and its own code because the remedy differs |
+| `VALIDATION_ERROR` | `400` | `identifier` is not a well-formed E.164 phone or email address, or `password` is empty |
+
+> **A customer who has never run a password reset always gets `AUTH_INVALID_CREDENTIALS`
+> here**, correctly — they hold a system-generated password nobody knows. Send them to
+> [the bot flow](./customer-auth.md) instead of showing them a password field.
+
+> ### ⚠ `AUTH_ROLE_NOT_FOUND` carries no `details` — corrected 2026-09-08
+>
+> Both this table and [`GET /auth/auth-me/:role`](#get-authauth-merole) said *"`details.role`
+> echoes it"*, and **it never arrives.** The service does raise the code with `{ role }`
+> (`auth.service.ts:364` and `:431`), but a 403 puts it in the **`authorization`** category, and
+> that category's `details` is cut down at the response boundary to a four-key allowlist —
+> `required`, `requiredAny`, `resource`, `hint` and nothing else
+> (`core/error-detail-policy.ts:29-33`). `role` is not on the list, so the projected object is
+> empty and, per ADR-005 D-9, **`details` is omitted from the response entirely.**
+>
+> Echo back the `role` you sent; do not try to read it off the error. This is a property of the
+> **category**, not of this code: the same filter applies to every `authorization` error on the
+> platform. See [../errors/README.md](../errors/README.md#two-more-categories-are-allowlisted).
+>
+> The `409 AUTH_ROLE_ALREADY_EXISTS` and `404 AUTH_PROFILE_NOT_FOUND` rows further down **are**
+> unaffected and do carry `details.role` — `conflict` and `not_found` are not allowlisted.
+
+---
+
+## POST `/auth/logout`
+
+Clears both auth cookies. Always succeeds — safe to call even when not logged in.
+
+**Auth**: Public
+
+### Request Body
+
+None.
+
+### Response `200`
+
+```json
+{
+  "success": true,
+  "data": null,
+  "message": "Logged out successfully"
+}
+```
+
+---
+
+## POST `/auth/browser/refresh`
+
+Issues a new `access_token` cookie using the `refresh_token` cookie.
+
+> **Note:** There is **no** `POST /auth/refresh` on the main auth router. Three refresh paths exist:
+> 1. **Automatic (recommended for cookie clients):** `requireAuth` performs a *silent refresh*
+>    from the `refresh_token` **cookie** whenever the access token is missing or expired,
+>    transparently re-issuing the access cookie — so browser clients rarely refresh explicitly.
+>    It fires on a **cookie** or on no credential at all; it deliberately will **not** fire for a
+>    caller who presented an expired `Authorization: Bearer` (see below).
+> 2. **Explicit, cookie:** `POST /auth/browser/refresh` (this endpoint), for clients that want to
+>    refresh proactively. Re-issues the **access cookie only**.
+> 3. **Explicit, bearer:** [`POST /auth/mobile/refresh`](#post-authmobilerefresh), which takes the
+>    refresh token in the body and returns a **fresh pair**.
+
+> ⚠️ **A bearer caller with an expired access token gets `401 AUTH_TOKEN_EXPIRED`, never a
+> silent refresh** — even if a `refresh_token` cookie happens to be attached. Refreshing from an
+> ambient cookie would authenticate the request as whoever that cookie belongs to while the
+> client kept sending its own expired token, which is a bug that is close to undiagnosable from
+> the client side. Bearer clients refresh explicitly, through path 3. (Earlier revisions of this
+> page said bearer callers "must re-login on expiry"; that stopped being true when
+> `/auth/mobile/refresh` shipped.)
+
+**Auth**: Public (uses `refresh_token` cookie automatically)
+
+### Request Body
+
+None.
+
+### Response `200`
+
+Sets a new `access_token` cookie.
+
+```json
+{
+  "success": true,
+  "data": { "user": { "id": "664abc...", "role": "vendor" } },
+  "message": "Access token refreshed"
+}
+```
+
+### Errors
+
+Identical to [`POST /auth/mobile/refresh`](#errors--the-client-behaves-differently-for-each) —
+both go through the same `rotateRefreshToken`, so the two cannot drift on what counts as a
+valid session.
+
+| `error.code` | Status | Cause |
+|---|---|---|
+| `AUTH_MISSING_TOKEN` | `401` | No `refresh_token` cookie on the request |
+| `AUTH_REFRESH_TOKEN_INVALID` | `401` | Malformed, wrong signature, **or an *access* token presented** — the `type: "refresh"` claim is checked |
+| `AUTH_SESSION_EXPIRED` | `401` | The refresh token's own 30 days elapsed |
+| `AUTH_PASSWORD_CHANGED` | `401` | The password changed after this token was minted. **Terminal — do not retry** |
+| `AUTH_SESSION_CAP_REACHED` | `401` | The sign-in is older than 90 days. **Terminal — do not retry** |
+| `AUTH_ACCOUNT_SUSPENDED` | `403` | `User.status` is no longer `active` |
+| `AUTH_ACCOUNT_CLOSED` | `403` | The account was **closed by its owner**. Checked *before* suspension and with its own code, because the 30-day refresh cookie otherwise outlives a closure by a month (`auth.service.ts:134-136`). **Terminal — sign out; there is no path back** |
+| `AUTH_ROLE_NOT_FOUND` | `403` | The refresh token names a role that cannot be signed in as (`isAuthenticatableRole`, `auth.service.ts:204-206`). **Terminal — it is deliberately NOT `AUTH_SESSION_EXPIRED`**, because a client that cannot tell the two apart retries forever |
+| `AUTH_USER_NOT_FOUND` | `401` | The account no longer exists |
+
+> ⚠ **This table omitted BOTH 403s until 2026-09-06, and `AUTH_ACCOUNT_CLOSED` appeared nowhere
+> in this entire `auth/` directory** despite being raised at four sites — the rotation above
+> (`auth.service.ts:134-136`), `login` (`:337`), `requireAuth` (`auth.middleware.ts:205`) and
+> the password reset (`password-reset.service.ts:245`). A client branching this table's seven
+> codes fell through to a generic handler on the two that are **terminal**, and retried a
+> session that can never come back.
+>
+> ⚠ **Both 403s are terminal; four of the five 401s are not.** Status alone does not separate
+> them here — branch on the code.
+
+---
+
+## Mobile namespace — bearer clients
+
+`/auth/mobile/*` exists for clients that **cannot hold a cookie**. Two things are true of a
+Capacitor / React Native WebView at once, and neither is fixable client-side:
+
+1. Its origin is `capacitor://localhost` (iOS) or `https://localhost` (Android), so a cookie
+   for the API host is a **third-party cookie** and is blocked by default.
+2. `Set-Cookie` is a **forbidden response-header name** in the Fetch standard — stripped from
+   every `Response.headers` object in every engine — so it cannot scrape the token out of the
+   response the way a native HTTP client (the agent app's Dio stack) can.
+
+**There is no client-type header.** The namespace *is* the switch. Nothing about your request
+selects a mode, so a browser's behaviour cannot change by accident and there is no extra header
+to add to a CORS allow-list.
+
+### What is the same
+
+Everything except delivery. Same `AuthService`, same claims, same secrets, same 15-minute /
+30-day lifetimes, same error codes, same password-epoch revocation, same suspension checks. A
+rule added to login or role resolution applies to both namespaces without anyone remembering to.
+
+### What is different
+
+- The pair comes back as `data.tokens`.
+- **No cookie is set.** Not a smaller one, not a redundant one — none.
+- `Content-Type: application/json` is **not** required (the browser namespace's
+  `requireJsonContent` is a CSRF mitigation, and there is no ambient credential here to forge
+  with). Send JSON anyway; the body parser expects it.
+- There is **no `/auth/mobile/logout`**. Discard the tokens locally. `POST /auth/logout` also
+  works and is a harmless no-op for you.
+
+### The `tokens` object
+
+```jsonc
+{
+  "success": true,
+  "data": {
+    "user":        { "...": "identical to the cookie endpoint" },
+    "role":        "agency",
+    "role_entity": { "...": "identical to the cookie endpoint" },
+    "tokens": {
+      "accessToken":      "eyJhbGciOi...",
+      "refreshToken":     "eyJhbGciOi...",
+      "accessExpiresIn":  900,
+      "refreshExpiresIn": 2592000
+    }
+  }
+}
+```
+
+`accessExpiresIn` / `refreshExpiresIn` are **seconds**, and they are the exact values passed to
+`jwt.sign` as `expiresIn` — not a second reading of the same configuration. Refresh
+**proactively** off them (≈60s before `accessExpiresIn` elapses) rather than waiting for a 401;
+it costs fewer requests against the rate limiter and avoids a user-visible stall.
+
+### Storage
+
+Store both in the **iOS Keychain / Android Keystore**, never plain preferences. Refresh tokens
+are stateless JWTs with no revocation store, so a stolen one stays valid until it expires or
+the account's password changes. See [Known limitation](#known-limitation) below.
+
+---
+
+### POST `/auth/mobile/login`
+
+Same body as [`POST /auth/login`](#post-authlogin). **`200`** with `tokens` added, no cookies.
+
+### POST `/auth/mobile/register`
+
+Same body as [`POST /auth/register`](#post-authregister). **`201`** with `tokens` added.
+
+### GET `/auth/mobile/auth-me/:role`
+
+**Auth**: Required (bearer). Same payload as [`GET /auth/auth-me/:role`](#get-authauth-merole),
+plus `tokens`.
+
+> **Do not skip this one.** It is the only endpoint that re-issues **both** tokens for an
+> already-signed-in caller, which is what restarts the 30-day window on app launch. Without it,
+> `refreshExpiresIn` counts down from the last password entry regardless of how much the app is
+> used. `POST /auth/mobile/refresh` also slides the window, so calling either is enough — but
+> `auth-me` is the one that also returns fresh profile state.
+
+### POST `/auth/mobile/add-role`
+
+**Auth**: Required (bearer). Same body as [`POST /auth/add-role`](#post-authadd-role).
+**`201`**, and the returned pair is scoped to the **newly added** role — replace your stored
+tokens with it or the next request is still scoped to the old role.
+
+### POST `/auth/mobile/refresh`
+
+**Auth**: Public — the refresh token *is* the credential.
+
+```jsonc
+{ "refreshToken": "eyJhbGciOi..." }
+```
+
+**Response `200`**
+
+```jsonc
+{ "success": true, "data": { "tokens": { "accessToken": "...", "refreshToken": "...",
+                                         "accessExpiresIn": 900, "refreshExpiresIn": 2592000 } } }
+```
+
+**It returns a fresh pair, not just an access token** — unlike `/auth/browser/refresh`. Because
+refresh tokens are stateless with no server-side store, minting a new one does not invalidate
+the old one, so there is no rotation window to get wrong. Every refresh therefore **slides the
+30-day window**, and an actively-used session never hard-expires.
+
+**Replace both stored tokens on every refresh.** Keeping the old refresh token still works
+(the old one is not invalidated), but you lose the sliding window, which is the point.
+
+> ⚠ **A JWT's `iat` is in whole seconds**, so two mints in the same second for the same
+> `{userId, role}` are **byte-identical**. Log in and immediately refresh, and the "new" access
+> token can equal the old string. It is a correct, valid token either way — but never use "did
+> the token string change?" as the signal that a refresh succeeded. Use the HTTP status.
+
+#### Errors — the client behaves differently for each
+
+| `error.code` | Status | What it means | Do |
+|---|---|---|---|
+| `AUTH_MISSING_TOKEN` | 401 | No `refreshToken` in the body | Sign out |
+| `AUTH_REFRESH_TOKEN_INVALID` | 401 | Malformed, wrong signature, **or an *access* token posted here** (the `type: "refresh"` claim is checked) | Sign out. If you see this in development, check you are not sending the wrong half of the pair |
+| `AUTH_SESSION_EXPIRED` | 401 | The refresh token's own 30 days elapsed | Sign out, prompt login |
+| `AUTH_PASSWORD_CHANGED` | 401 | The account's password changed after this token was minted | Sign out **immediately, and do not retry** — every token you hold is refused by the same rule. Worth surfacing verbatim: for someone who did not change their password, it is the first sign that somebody else did |
+| `AUTH_SESSION_CAP_REACHED` | 401 | The sign-in itself is older than 90 days | Sign out, prompt login. **Terminal — do not retry** |
+| `AUTH_ACCOUNT_SUSPENDED` | 403 | The account was suspended | Sign out, show the reason |
+| `AUTH_ACCOUNT_CLOSED` | 403 | The account was **closed by its owner**. Checked before suspension and with its own code, because a 30-day refresh token otherwise outlives a closure by a month (`auth.service.ts:134-136`) | Sign out. **Terminal — there is no path back**, so do not offer a retry |
+| `AUTH_ROLE_NOT_FOUND` | 403 | The refresh token names a role that cannot be signed in as (`auth.service.ts:204-206`) | Sign out. **Terminal**, and deliberately not `AUTH_SESSION_EXPIRED` — a client that cannot tell the two apart retries forever |
+| `AUTH_USER_NOT_FOUND` | 401 | The account no longer exists | Sign out |
+
+> ⚠ **This table was missing three codes until 2026-09-06** — both 403s above and
+> `AUTH_SESSION_CAP_REACHED`. All three come out of the same `rotateRefreshToken` the section
+> above says the two routes share, so the cookie table and this one were short by the same rows.
+> **Status does not separate terminal from retryable here**: both 403s are terminal, and so are
+> two of the six 401s. Branch on the code.
+
+#### Maintenance windows
+
+This route is **exempt from `readonly` maintenance** and blocked in `down`. It mints a token
+and writes nothing, and it is a bearer client's only renewal path — a cookie client renews
+inside an ordinary GET, so without the exemption a read-only window would sign out every native
+client fifteen minutes in while browsers carried on.
+
+---
+
+## GET `/auth/me`
+
+Returns the current user with the active role and its role entity.
+
+**Auth**: Required
+
+> **It re-issues nothing.** `data` is read straight off the verified token's resolved identity;
+> no new cookie is minted and no `tokens` object exists. (A cookie client may still get a fresh
+> `access_token` cookie on this call — that is `requireAuth`'s silent refresh firing because the
+> access cookie had expired, not this endpoint doing it.) To deliberately re-issue, use
+> [`GET /auth/auth-me/:role`](#get-authauth-merole).
+
+### Response `200`
+
+```json
+{
+  "success": true,
+  "data": {
+    "user": {
+      "_id": "664abc...",
+      "login_phone": "+2348012345678",
+      "roles": ["vendor"],
+      "status": "active"
+    },
+    "role": "vendor",
+    "role_entity": { "_id": "664def...", "display_name": "John Doe", "onboarding_step": 0 }
+  }
+}
+```
+
+---
+
+## GET `/auth/auth-me/:role`
+
+Re-authenticates and returns full user + role entity + fresh cookies. **Use on app launch to restore session state.**
+
+**Auth**: Required
+
+**URL Params**: `:role` — **required**, and one of the four authenticatable roles. It is a path
+segment, so there is no "resolve it for me" form of this route; pass the role you want the
+session scoped to.
+
+### Response `200`
+
+Sets fresh `access_token` and `refresh_token` cookies.
+
+```json
+{
+  "success": true,
+  "data": {
+    "user": { "_id": "...", "roles": ["vendor", "customer"], "..." : "..." },
+    "role": "vendor",
+    "role_entity": {
+      "_id": "...",
+      "display_name": "John Doe",
+      "onboarding_step": 1,
+      "status": "pending_verification",
+      "..." : "..."
+    }
+  }
+}
+```
+
+> Check `data.role_entity.onboarding_step` to route to onboarding or dashboard.
+
+### Errors
+
+| `error.code` | Status | Cause |
+|---|---|---|
+| `AUTH_MISSING_TOKEN` | `401` | No valid token reached the handler |
+| `AUTH_ACCOUNT_NOT_FOUND` | `401` | The `userId` in the token no longer exists |
+| `AUTH_ROLE_NOT_FOUND` | `403` | The account does not hold `:role`. ⚠ **No `details`** — see [the note on `/auth/login`](#post-authlogin) |
+| `VALIDATION_ERROR` | `400` | `:role` is not one of the four authenticatable roles |
+| `AUTH_SESSION_CAP_REACHED` | `401` | The sign-in is older than 90 days. **Terminal** |
+
+---
+
+## POST `/auth/add-role`
+
+Adds a second role to an **already authenticated** user. Sets cookies scoped to the newly added role.
+
+**Auth**: Required
+
+### Request Body
+
+```json
+{
+  "role": "customer",
+  "name": "John Doe"
+}
+```
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `role` | string | ✅ | The new role to add — `customer`, `vendor`, `agency` or `agent`. **`admin` is refused**; see [Roles](#roles) |
+| `name` | string | ❌ | For `customer` and `agent` |
+| `business_name` | string | ❌ | For `vendor`. Provisions the Store |
+| `agency_name` | string | ❌ | For `agency`. Provisions the Magazin |
+| `terms_accepted` | boolean | **conditionally** | **Must be `true` when adding `vendor`, `agency` or `agent`**, same rule and same `VALIDATION_ERROR` as [register](#post-authregister). Appends `{ role, accepted_at }` to `user.terms_acceptances` in the same update that adds the role |
+
+> **The new pair does not restart the 90-day clock.** This route sits behind `requireAuth`, so
+> the caller presented a token rather than a credential; `auth_time` is copied from the token
+> they came in with. Same for `auth-me`. See [The 90-day absolute cap](#the-90-day-absolute-cap).
+
+> **An account with no email can add any role, `vendor` included.** The new role profile copies
+> the account's email and phone as they are, and no role profile requires an email — so an
+> agent, agency or customer who signed up by phone gets a profile with no email. **Until
+> 2026-09-21 `vendor` was the exception**: its profile alone required one, and the request
+> failed with an undocumented `500`. To add an email afterwards, use
+> [`PATCH /api/me/email`](../me/contact-change.md); once confirmed it is written onto every
+> role profile, the vendor's included. Until then `POST /auth/send-email-verification` answers
+> `422 AUTH_EMAIL_MISSING` for that role.
+
+### Response `201`
+
+Sets fresh cookies scoped to the **newly added role**.
+
+```json
+{
+  "success": true,
+  "data": {
+    "user": { "_id": "...", "roles": ["vendor", "customer"], "..." : "..." },
+    "role": "customer",
+    "role_entity": { "_id": "...", "name": "John Doe", "onboarding_step": 0, "..." : "..." }
+  }
+}
+```
+
+### Errors
+
+| `error.code` | Status | Cause |
+|---|---|---|
+| `AUTH_ROLE_ALREADY_EXISTS` | `409` | The account already holds that role. `details.role` echoes it |
+| `AUTH_ACCOUNT_NOT_FOUND` | `404` | The `userId` in the token no longer exists |
+| `AUTH_UNSUPPORTED_ROLE` | `400` | A role the service cannot provision |
+| `VALIDATION_ERROR` | `400` | `role` is not one of the four authenticatable roles, or `name` is under 2 characters |
+| `AUTH_MISSING_TOKEN` | `401` | No valid token |
+
+---
+
+## POST `/auth/send-email-verification`
+
+Sends a verification link to the email on the user's **current role entity**. Valid for **24 hours**.
+
+**Auth**: Required
+
+### Where the link points
+
+```
+{STOREFRONT_URL}/verify-email?token=<64 hex>&app=<customer|vendor|agency|agent>
+```
+
+A **page**, not this API. It used to be `{API_PUBLIC_URL}/api/auth/verify-email?token=…`, so a
+person who clicked it got a raw JSON envelope with no branding and no way onward, and — worse —
+a `GET` that mutates is spent by whatever prefetches the mail (link scanners, corporate relays,
+the mail client's own preview) before the person ever taps it. The page holds the token and
+POSTs it when a human acts.
+
+`app` is the role that requested verification, taken from the JWT. **One page serves all four
+apps**, because confirming an email is role-free; the only thing it cannot work out for itself
+is where to send the person afterwards, so the origin travels in the link. It is a **role key,
+never a URL** — the page maps it through a compile-time table and ignores anything else.
+
+`STOREFRONT_URL` falls back to `API_PUBLIC_URL` when unset, which keeps a local box working —
+the same precedence the password-reset and email-change links use.
+
+### Request Body
+
+None. The `userId` and `role` are read from the JWT.
+
+### Response `200`
+
+```json
+{ "success": true, "data": { "message": "Verification email sent" } }
+```
+
+### Errors
+
+| `error.code` | Status | Cause |
+|---|---|---|
+| `AUTH_EMAIL_ALREADY_VERIFIED` | `409` | Already verified |
+| `AUTH_EMAIL_MISSING` | `422` | The role entity has no email address to send to |
+| `AUTH_PROFILE_NOT_FOUND` | `404` | No role entity for the token's active role. `details.role` echoes it |
+
+---
+
+## POST `/auth/verify-email`
+
+> Frontend hand-off for this change:
+> [FRONTEND-CHANGELOG-email-verification.md](../FRONTEND-CHANGELOG-email-verification.md).
+
+Confirms the email address. **This is what the emailed page calls.**
+
+**Auth**: Public — the token arrives in a mail client, routinely a different browser and often a
+different device, so requiring a session would fail the flow for exactly the people it is for.
+The token is the credential and it names the account.
+
+### Request Body
+
+```json
+{ "token": "abc123def456..." }
+```
+
+`.strict()` — an unknown key is a `400` on the whole request. Bounded at 512 characters, which
+is generous on purpose: the token is 64 hex characters, and a mail client that wraps a URL is a
+real thing, so a near-miss should be told the token is *invalid*, not that it is *malformed*.
+
+### Response `200`
+
+```json
+{ "success": true, "data": { "message": "Email verified successfully" } }
+```
+
+The token is valid for **24 hours** and is single-use. It marks `email_verified` on the role
+entity the verification was requested for, and **signs nobody in**.
+
+⚠ **It no longer ACTIVATES a vendor, and that changed on 2026-09-15.** Verifying an email used to
+promote a vendor from `pending_verification` to `active` — for the vendor role only, which is how
+the three business roles ended up with three different answers to "when is an account active?".
+Activation is now one rule for all three; see [Account activation](#account-activation) below.
+Clicking the link still verifies the address and nothing else. **No vendor was demoted** — those
+already `active` from an email verification stay active.
+
+### Errors
+
+| `error.code` | Status | Cause |
+|---|---|---|
+| `AUTH_VERIFY_TOKEN_INVALID` | `400` | Unknown, expired **or already spent** — one code for all three |
+
+---
+
+## GET `/auth/verify-email` — legacy
+
+Identical behaviour, different verb. **No new mail points here.**
+
+It survives only because tokens live 24 hours, so links minted before the cutover stay valid for
+a day after it. Prefer the `POST` in every new client: this is a `GET` that mutates, so the token
+is spent by whatever prefetches the URL.
+
+**Auth**: Public
+
+### Query Parameters
+
+| Param | Type | Required |
+|-------|------|----------|
+| `token` | string | ✅ |
+
+**Example**: `GET /api/auth/verify-email?token=abc123def456...`
+
+### Errors
+
+| `error.code` | Status | Cause |
+|---|---|---|
+| `AUTH_VERIFY_TOKEN_INVALID` | `400` | `token` missing from the query string, unknown, expired **or already spent** — one code for all four |
+
+---
+
+## ~~POST `/auth/request-wa-verification`~~ — removed
+
+This endpoint no longer exists. It minted a code the user carried to the WhatsApp bot as
+`/link:CODE`.
+
+Connecting a messaging account is no longer an auth concern at all. The direction is inverted —
+**the bot mints the code and the user redeems it** — and the surface is
+`POST /api/me/connections`, which is role-agnostic, covers Telegram as well as WhatsApp, and
+does not bind to a single role. See [../connections/README.md](../connections/README.md).
+
+---
+
+## Account activation
+
+**Owner decision, 2026-09-15.** Two questions used to be answered by one field, and they are now
+answered by two:
+
+| | Question | Who answers it | Where it lives |
+|---|---|---|---|
+| **`status`** | May this account operate? | the account holder | `role_entity.status` |
+| **KYC** | Has a human vetted this business? | an administrator | `kyc_details.status` / `kyc.status` |
+
+**An account activates itself.** A vendor, agency or agent moves from `pending_verification` to
+`active` as soon as it has **a verified phone number and a name** — nothing else, and nobody else.
+Registration creates every role entity at `pending_verification`; the promotion happens on the call
+that proves the phone (`POST /api/me/phone/verify/confirm`, or a confirmed contact change).
+
+⚠ **`status: "active"` therefore no longer means "an administrator approved this business".**
+Anything you were deriving from that — a trust badge, a warning banner, a gate — must read the KYC
+verdict instead. Vendor and agency expose `kyc_details.status`; an agent exposes `kyc.status`.
+
+⚠ **This is a real behaviour change for each role, in a different direction:**
+
+- **Vendor** — *lost* a path. Email verification used to activate; it no longer does. A vendor who
+  verifies their email and stops stays `pending_verification`.
+- **Agency** — *gained* one. Administrative approval used to be the only way to become `active`;
+  now the agency activates itself, and approval writes only the verdict.
+- **Agent** — *gained* one. Nothing promoted an agent at all: every agent sat at
+  `pending_verification` until an administrator moved them by hand.
+
+⚠ **Only `pending_verification` is ever promoted.** An `inactive` or `suspended` account that
+proves a phone stays exactly where an administrator put it — proving a number cannot lift a
+suspension.
+
+⚠ **Activating an agent does not make them dispatchable.** `status` is only one of the ordered
+eligibility rules: a platform ban refuses them before it is consulted, and an active contract plus
+Tracking Allow are required after it. Holding COD cash is gated on KYC, never on `status`. (Until
+2026-09-27 unverified KYC was also an eligibility rule; it now refuses **COD shipments only**.)
+
+**What being unverified actually costs**: **COD cash**. An agency that no administrator has
+verified cannot carry cash-on-delivery orders, and (since 2026-09-27) an unverified agent cannot be
+dispatched a COD shipment. An unverified owner's payout is **not** limited — the allowance that
+could cap it (2026-09-15) was deleted 2026-09-27 (see
+[admin/payout-requests.md](../admin/payout-requests.md)). Everything else is
+open by design — the platform's position is that working with an unverified counterparty is a
+business judgement for the vendor or agency to make, not a refusal for the platform to issue.
+
+---
+
+## Post-Login / Registration Routing
+
+After a successful login, registration, or `auth-me`, read `role_entity.onboarding_step` from the response:
+
+```
+onboarding_step === 0  →  Route to role dashboard
+onboarding_step  > 0  →  Route to onboarding screen for that step
+```
+
+> **Customers** always return `onboarding_step: 0` — the schema caps it there. Route them
+> directly to the dashboard. Vendor, agency and agent are the three roles with onboarding.
+
+---
+
+## Onboarding Flow
+
+Onboarding is **field-presence driven**: every profile write recalculates `onboarding_step` from scratch. The server always reports the next incomplete step.
+
+> **The three roles do NOT share one shape.** Vendor and agency use a **`PUT` per step**; only
+> the agent has a single `PATCH …/onboarding/step` endpoint. The old
+> `PATCH /api/vendor/onboarding/step` and `PATCH /api/agency/onboarding/step` were removed and
+> no longer exist. This page is a summary — the field-by-field contracts are in
+> [vendor/onboarding.md](../vendor/onboarding.md), [agency/onboarding.md](../agency/onboarding.md)
+> and [agent/onboarding.md](../agent/onboarding.md).
+
+### Vendor Onboarding — four `PUT` steps
+
+**Auth**: Required (`vendor` role). Full contract: [vendor/onboarding.md](../vendor/onboarding.md).
+
+| Step | Value | Label | Endpoint | Required? |
+|------|-------|-------|----------|-----------|
+| `BASIC_SETUP` | `1` | Basic Setup | `PUT /api/vendor/onboarding/basic-setup` | ✅ |
+| `DELIVERY_LINKING` | `2` | Delivery Linking | `PUT /api/vendor/onboarding/delivery-linking` | skippable |
+| `BRANDING` | `3` | Branding | `PUT /api/vendor/onboarding/branding` | skippable |
+| `POLICY_SETUP` | `4` | Policy Setup | `PUT /api/vendor/onboarding/policy-setup` | skippable |
+| `COMPLETED` | `0` | Done | — | — |
+
+Reads: `GET /api/vendor/onboarding/status` (rich: `steps[]`, `progressPercent`, `completedFields`,
+`warnings`) and `GET /api/vendor/profile/completion-status` (step + missing fields only).
+
+> **Step 2 no longer selects an agency.** It is a plain step-advance. A default delivery agency
+> requires the agency's consent and is set automatically when the first connection request is
+> approved — see [vendor/agency-connections.md](../vendor/agency-connections.md). To browse
+> agencies, use `GET /api/vendor/delivery-agencies` or
+> `GET /api/vendor/agency-connections/browse`; there is no `GET /api/agency` listing endpoint.
+
+Every `PUT` step accepts an optional `version` integer for optimistic concurrency
+(`409 VENDOR_ONBOARDING_CONCURRENT_MODIFICATION` on a mismatch), and every one returns
+`{ success, data: { profile, completionStatus } }`. Once `onboarding_step === 0`, all four
+answer `409 VENDOR_ONBOARDING_ALREADY_COMPLETED` — edit via `PATCH /api/vendor/profile` instead.
+
+---
+
+### Customer Onboarding
+
+**No onboarding flow.** `onboarding_step` is always `0`.
+
+Route customers directly to the customer dashboard after login or registration.
+
+Profile updates (name, avatar, bio, preferences, addresses, etc.) are handled through:
+
+```
+GET   /api/customer/profile
+PATCH /api/customer/profile
+```
+
+---
+
+### Agency Onboarding — an init call, then four `PUT` steps
+
+**Auth**: Required (`agency` role). Full contract: [agency/onboarding.md](../agency/onboarding.md).
+
+| Step | Value | Label | Endpoint | Required? |
+|------|-------|-------|----------|-----------|
+| Init | — | Agency Initialization | `POST /api/agency` | ✅ |
+| `LOGISTICS_SETUP` | `1` | Logistics Setup | `PUT /api/agency/onboarding/logistics` | ✅ |
+| `PAYOUT_SETUP` | `2` | Payout Setup | `PUT /api/agency/onboarding/payout` | ✅ |
+| `BRANDING` | `3` | Branding | `PUT /api/agency/onboarding/branding` | skippable |
+| `POLICY_SETUP` | `4` | Policy Setup | `PUT /api/agency/onboarding/policies` | ✅ |
+| `COMPLETED` | `0` | Done | — | — |
+
+Read: `GET /api/agency/onboarding/status`. Same `version` concurrency field, raising
+`409 DELIVERY_ONBOARDING_CONCURRENT_MODIFICATION`.
+
+---
+
+### Agent Onboarding — one `PATCH`, two steps
+
+**Base**: `PATCH /api/agent/onboarding/step` — the one role that still uses the single-endpoint
+shape. **Auth**: Required (`agent` role). Full contract: [agent/onboarding.md](../agent/onboarding.md).
+
+| Step | Value | Label | Body |
+|------|-------|-------|------|
+| `VEHICLE_SETUP` | `1` | Vehicle Setup | `{ step: 1, vehicle_info: { vehicle_type, color, plate_number?, photo_file_id? } }` |
+| `IDENTITY_SETUP` | `2` | Identity (Optional) | `{ step: 2, skip?: true, avatar_url?, timezone? }` |
+| `COMPLETED` | `0` | Done | — |
+
+Read: `GET /api/agent/profile/completion-status`.
+
+---
+
+## `role_entity` Shapes
+
+Below are the key fields returned in `role_entity` for each role. Some fields are omitted for brevity.
+
+> ### ⚠ `role_entity` is the RAW profile document, not the profile read-model
+>
+> Every auth route resolves it with a plain `findByUserId`, so what you get is the stored
+> document — **not** the shape `GET /api/{role}/profile` returns. Two differences bite:
+>
+> - **Avatars come back as `avatar_file_id` (an id or `null`)**, not as the
+>   `{ id, key, url, access, mimeType, size, originalName }` object the profile endpoints resolve.
+>   To render an avatar, read the profile endpoint; do not try to build a URL from this id.
+> - **The business name is absent**, for vendor and agency alike — see below.
+>
+> Use `role_entity` for **routing** (`onboarding_step`, `status`) and identity, and the role's
+> own profile endpoint for display.
+
+### Customer
+
+```json
+{
+  "_id": "...",
+  "user_id": "...",
+  "name": "Jane Doe",
+  "email": "jane@example.com",
+  "phone": "+2348098765432",
+  "email_verified": false,
+  "phone_verified": false,
+  "avatar_file_id": null,
+  "avatar_url": null,
+  "bio": null,
+  "date_of_birth": null,
+  "saved_addresses": [],
+  "saved_payment_methods": [],
+  "preferences": {
+    "language": "en",
+    "currency": "XAF",
+    "marketing_opt_in": false,
+    "ai_tone": [],
+    "ads_compact_mode": false,
+    "compact_mode": false
+  },
+  "timezone": "Africa/Douala",
+  "onboarding_step": 0,
+  "status": "pending_verification"
+}
+```
+
+> `avatar_url` is **deprecated** — a read-fallback for legacy/OAuth string avatars only.
+> `onboarding_step` is fixed at `0` (the schema caps it at `max: 0`).
+
+### Vendor
+
+```json
+{
+  "_id": "...",
+  "user_id": "...",
+  "display_name": "John Doe",
+  "email": "john@example.com",
+  "phone": "+2348012345678",
+  "email_verified": false,
+  "phone_verified": false,
+  "country": null,
+  "timezone": "Africa/Douala",
+  "preferred_language": "en",
+  "avatar_file_id": null,
+  "business_addresses": [],
+  "operating_hours": [],
+  "payout_details": null,
+  "kyc_details": {
+    "national_id_number": null,
+    "legit_verified": false,
+    "status": "pending",
+    "verified_at": null,
+    "rejection_reason": null
+  },
+  "social_links": { "instagram": null, "facebook": null, "twitter": null },
+  "policies": null,
+  "policy_version": 0,
+  "default_delivery_agency_id": null,
+  "notification_preferences": { "email": true, "whatsapp": true, "phone": true },
+  "two_factor_enabled": false,
+  "onboarding_step": 1,
+  "status": "pending_verification"
+}
+```
+
+> ### ⚠ There is no `business_name` on the vendor profile
+>
+> The public **business** name, description, logo and banner all live on the vendor's
+> **Store**, which is the single source of truth for them; the profile carries only
+> `display_name` (the person) and `avatar_file_id`. The `business_name` you send to
+> `/auth/register` provisions the Store and is then read from there —
+> `GET /api/vendor/store`.
+>
+> The same split holds for an agency: the business identity lives on its **Magazin**, and
+> `agency_name` at registration provisions that. Earlier revisions of this page showed
+> `business_name`, `business_description` and a `branding` block on `role_entity`; none of
+> the three exist on the document.
+
+> `onboarding_step: 1` on fresh registration — vendor must complete Basic Setup before accessing the dashboard.
+
+---
+
+## Token Details
+
+### Access Token Payload
+
+```json
+{
+  "userId": "664abc...",
+  "role": "vendor",
+  "auth_time": 1708000000,
+  "iat": 1708000000,
+  "exp": 1708000900
+}
+```
+
+- Expiry: **15 minutes** (env: `AUTH_ACCESS_TOKEN_TTL`, in seconds)
+- Signing: `HS256` with `JWT_SECRET`
+
+### Refresh Token Payload
+
+```json
+{
+  "userId": "664abc...",
+  "role": "vendor",
+  "type": "refresh",
+  "auth_time": 1708000000,
+  "iat": 1708000000,
+  "exp": 1710592000
+}
+```
+
+- Expiry: **30 days** (env: `AUTH_REFRESH_TOKEN_TTL`, in seconds)
+- Signing: `HS256` with `JWT_REFRESH_SECRET` (falls back to `JWT_SECRET`)
+- `type: "refresh"` is **checked** on both refresh paths, so posting an access token to a
+  refresh endpoint is refused rather than quietly accepted
+
+> **`auth_time` is on both halves, and it is not `iat`.** It is the second at which the account
+> holder last *proved* a credential — stamped fresh at login, registration, a bot-issued
+> sign-in and a password change, and **copied unchanged** through every refresh and every
+> `auth-me`. `iat` moves on every re-issue; `auth_time` does not. That is what makes the
+> [90-day cap](#the-90-day-absolute-cap) measure the sign-in rather than the token.
+>
+> A token minted before this claim existed carries none, and is dated from its own `iat`
+> instead. Neither claim is a client concern — do not parse or branch on them; read the
+> published `accessExpiresIn` / `refreshExpiresIn` instead.
+
+### Revocation — `iat` is load-bearing
+
+Both tokens are **stateless**: the server keeps no list of issued tokens, so there is nothing
+to delete when a session must end. Changing the account password is what revokes them. The
+change stamps a per-account instant, and **both** credential paths refuse any token whose
+`iat` predates it:
+
+| Path | Refuses with |
 |---|---|
-| `phone` | **yes** — strict E.164 |
-| `name` | **yes** — min 2 |
-| `password` | **yes for every non-customer role** — min 6 |
-| `email` | no |
-| `role` | no — defaults to `vendor` |
-| `business_name` | no — provisions the Store |
+| every authenticated request (`requireAuth`, access token) | `401 AUTH_PASSWORD_CHANGED` |
+| silent refresh, `POST /auth/browser/refresh` **and `POST /auth/mobile/refresh`** (refresh token) | `401 AUTH_PASSWORD_CHANGED` |
 
-⚠ **Customers are bot-first and passwordless.** They are created on first bot contact and sign in
-with a magic link or code. The `/api/auth/magic/*` routes **always mint a `customer` session** — the
-role is hardcoded (`messaging-login.service.ts:221`). They are not a vendor sign-in path.
+Practical consequences for a client:
 
-There are **four** of them, and they complete the 24: `POST /api/auth/magic/link` and
-`/api/auth/magic/code` set cookies; `POST /api/auth/mobile/magic/link` and
-`/api/auth/mobile/magic/code` are their bearer twins, returning `data.tokens` and setting no
-cookie. All four sit in the **20/min credential bucket** — see § 6.
+- **Treat `AUTH_PASSWORD_CHANGED` as terminal.** Do not retry and do not attempt a refresh —
+  the refresh cookie is refused by the same rule. Clear local state and send the user to
+  sign-in. The message is worth surfacing verbatim: for someone who did *not* change their
+  password, it is the first sign that somebody else did.
+- The caller who performs the change **keeps their session** — `PATCH /api/me/password`
+  returns a fresh cookie pair in the same response. See [me/password.md](../me/password.md).
+- Everything else signs out on its next request: other browsers, other devices, and any
+  bearer token that was minted earlier.
 
 ---
 
-## 6 · Rate limits on this surface
-
-🔴 **`/api/auth/*` is an allowlist. Anything not named gets 20/min per IP.**
-
-Only these get the looser 300/min bucket:
+## Environment Variables
 
 ```
-/api/auth/mobile/refresh   /api/auth/browser/refresh
-/api/auth/me   /api/auth/auth-me/:role   /api/auth/mobile/auth-me/:role
+JWT_SECRET=your-secret-key               # Required. Boot FAILS if unset; in production it
+                                         #   also refuses a short or placeholder value.
+                                         #   ⚠ SHARED with geo-tracker under the same name
+JWT_REFRESH_SECRET=your-refresh-secret   # Optional, falls back to JWT_SECRET
+
+AUTH_COOKIE_DOMAIN=.example.com          # Leave blank for localhost
+AUTH_ACCESS_TOKEN_TTL=900                # 15 minutes in seconds
+AUTH_REFRESH_TOKEN_TTL=2592000           # 30 days in seconds
+AUTH_ABSOLUTE_SESSION_CAP=7776000        # 90 days in seconds — the sign-in ceiling
+
+API_PUBLIC_URL=https://api.example.com   # FALLBACK ONLY for the three links below, so a local
+                                         #   box works with no STOREFRONT_URL set
+STOREFRONT_URL=https://shop.example.com  # Builds the password-reset link, the magic sign-in
+                                         #   link, the email-CHANGE confirmation link AND the
+                                         #   registration-verification link. All four point at
+                                         #   a PAGE, never here. Unset ⇒ the bot reply falls
+                                         #   back to the code alone
+
+WA_BOT_NUMBER=237600000000               # Bot deep links. Unset ⇒ the deep link is null;
+TELEGRAM_BOT_NAME=WiMallBot              #   the flow still works for anyone who knows the bot
 ```
-
-**Everything else — including `login`, `register`, `add-role` and `reset-password` — is 20/min.**
-
-And the bucket is **per IP, not per user**. On a shared network twenty sign-in attempts a minute is a
-*shared* budget, so expect "login is broken" reports from busy locations. Handle 429 on the login
-form with its own message. See [rate-limits.md](../rate-limits.md).
 
 ---
 
-## 7 · Password change signs out other devices
+## Complete Auth Flows
 
-`PATCH /api/me/password` — `{ oldPassword, newPassword }`.
+### Flow A — New Registration + Onboarding (Vendor)
 
-New password rules: **min 8, at least one uppercase, one lowercase, one digit and one
-non-alphanumeric**. (Note `reset-password` uses the same rules, while `register` requires only
-min 6 — the three are not interchangeable.)
+```
+1. POST /api/auth/register   { phone, password, name, role: "vendor", email, business_name }
+      → Sets access_token + refresh_token cookies
+      → Returns { user, role_entity }
+      → role_entity.onboarding_step === 1 → route to onboarding
 
-Success is `{ success: true, message: "…" }` with **no `data` key**.
+2. PUT /api/vendor/onboarding/basic-setup       { country, timezone, payout_details }
+      → Returns { profile, completionStatus }
+      → completionStatus.onboardingStep → 2
 
-**It stamps the password epoch**, so every token minted before it — on every device — is refused
-with `AUTH_PASSWORD_CHANGED`. It also resets the 90-day cap.
+3. PUT /api/vendor/onboarding/delivery-linking  { }        (a plain step-advance)
+      → completionStatus.onboardingStep → 3
 
-🔴 **The caller gets replacement credentials as cookies only.** The response body carries no tokens.
-So a **Capacitor client that changes its password is signed out on its next request** and must
-re-authenticate. Warn before the form, or sign them back in yourself afterwards.
+4. PUT /api/vendor/onboarding/branding          { skip: true }  OR provide branding
+      → completionStatus.onboardingStep → 4
 
-There is also a deprecated alias, `PATCH /api/vendor/profile/password`, which is the same handler
-behind the vendor role guard. Prefer `/api/me/password`.
+5. PUT /api/vendor/onboarding/policy-setup      { skip: true }  OR provide policies
+      → completionStatus.isComplete === true → route to vendor dashboard
+```
 
+### Flow B — Customer registration + sign-in (no password, no form)
+
+The storefront calls **nothing** to register a customer. Full contract:
+[customer-auth.md](./customer-auth.md).
+
+```
+1. Storefront "Create account"
+      → deep-link the user into the WhatsApp or Telegram bot
+      → the account is created on their first interaction with it
+        (bot-side; nothing for the frontend to call)
+
+2. The user sends  /login  to the bot
+      → the bot replies with a magic LINK and an 8-character CODE
+      → both live 10 minutes, single use, spending either kills the other
+
+3a. LINK  → it lands on YOUR page, STOREFRONT_URL/login/magic?t=<token>
+       → that page POSTs it:  POST /api/auth/magic/link  { token }
+
+3b. CODE  → the user types it on your sign-in form beside their phone or email
+       → POST /api/auth/magic/code  { identifier, code }
+
+4. Either one sets access_token + refresh_token cookies
+      → { role: "customer", user }
+      → role_entity is NOT returned here; onboarding_step is always 0 for a
+        customer, so route straight to the customer dashboard
+```
+
+> `POST /auth/register` with `role: "customer"` still works and still returns a session — it is
+> simply not the storefront's path, and the password it accepts is stripped and replaced.
+
+### Flow C — Login (vendor · agency · agent)
+
+```
+1. POST /api/auth/login   { identifier, password, role }
+      → Sets access_token + refresh_token cookies
+      → Returns { user, role, role_entity }
+      → Check role_entity.onboarding_step for routing
+
+A customer reaching this flow gets 401 AUTH_INVALID_CREDENTIALS unless they have
+run a password reset — see Flow B.
+```
+
+### Flow D — Restoring Session on App Launch
+
+```
+1. GET /api/auth/auth-me/:role   (using existing access_token cookie)
+      → Refreshes both cookies
+      → Returns { user, role, role_entity }
+      → Check role_entity.onboarding_step for routing
+```
+
+### Flow E — Expired Access Token
+
+```
+Cookie clients (browsers, and any native client sending a refresh COOKIE):
+  Refresh is AUTOMATIC — requireAuth silently refreshes from the refresh_token
+  cookie and re-issues the access cookie. No explicit call needed.
+  (To refresh proactively: POST /api/auth/browser/refresh — access token only)
+
+Bearer clients (/auth/mobile/*):
+  NO silent refresh — an expired bearer is answered 401 AUTH_TOKEN_EXPIRED even
+  if a refresh cookie happens to be attached. Refresh explicitly:
+
+    POST /api/auth/mobile/refresh   { refreshToken }
+      → { tokens: { accessToken, refreshToken, accessExpiresIn, refreshExpiresIn } }
+      → replace BOTH stored tokens; the 30-day window slides
+      → 401 AUTH_SESSION_EXPIRED | AUTH_REFRESH_TOKEN_INVALID | AUTH_PASSWORD_CHANGED
+        or 403 AUTH_ACCOUNT_SUSPENDED  → sign out
+
+  Better: refresh PROACTIVELY, ~60s before accessExpiresIn elapses, and never
+  see this flow at all.
+```
+
+### Flow E′ — Mobile app lifecycle, end to end
+
+```
+1. POST /api/auth/mobile/login  { identifier, password, role }
+      → { user, role, role_entity, tokens }
+      → store tokens in Keychain / Keystore
+
+2. every request:  Authorization: Bearer <accessToken>
+      (a stale cookie can no longer beat it — the bearer is read first)
+
+3. ~60s before accessExpiresIn:  POST /api/auth/mobile/refresh { refreshToken }
+      → replace both tokens
+
+4. on app launch:  GET /api/auth/mobile/auth-me/:role
+      → fresh profile state AND a fresh pair (restarts the 30-day window)
+
+5. logout: discard the tokens. No server call is required.
+```
+
+### Flow F — Multi-Role Login / Role Switch
+
+```
+1. POST /api/auth/login   { identifier, password, role: "vendor" }
+      → Sets cookies scoped to "vendor"
+      → `role` is REQUIRED whenever the account holds more than one role;
+        omitting it is 400 AUTH_ROLE_REQUIRED
+
+(to switch to another role the account already holds — no password:)
+2. GET /api/auth/auth-me/agency          (…/mobile/auth-me/agency for bearer)
+      → Re-issues the pair scoped to "agency" and returns that role_entity
+      → 403 AUTH_ROLE_NOT_FOUND if the account does not hold it
+
+Re-posting /auth/login with a different `role` also works and is what a client
+does when it has no live session. Prefer auth-me when it does: it needs no
+password, and it does NOT restart the 90-day cap (auth_time is copied).
+```
+
+### Flow G — Adding a Second Role
+
+```
+1. POST /api/auth/add-role   { role: "customer", name: "John Doe" }
+      → Creates customer profile for the logged-in user
+      → Sets cookies scoped to "customer"
+      → Returns { user, role: "customer", role_entity }
+```
+
+### Flow H — Logout
+
+```
+1. POST /api/auth/logout
+      → Clears both cookies
+      → Returns { success: true, data: null, message: "Logged out successfully" }
+      → Redirect to login page
+
+   Bearer clients: discard the tokens locally. Calling this is harmless but does
+   nothing for you — there are no cookies to clear, and see below for why there
+   is no server-side revocation to invoke.
+```
+
+---
+
+## Known limitation
+
+Tokens here are **stateless JWTs with no revocation store**, so there is nothing to delete when
+a session must end. Consequences, stated plainly rather than left to be discovered:
+
+- **A stolen refresh token stays valid until it expires.** Logging out does not revoke it —
+  logging out only discards your own copy.
+- **A password change is the only thing that kills one *on demand*,** via the `iat` epoch
+  above. It is the correct remedy after a compromise, and it evicts every session on every
+  device except the one performing the change.
+- **The 30-day window slides, but the SIGN-IN is capped at 90 days.** Each refresh and each
+  `auth-me` still re-issues both tokens at full lifetime, so an actively-used session never
+  hard-expires on inactivity — but it does end on the calendar. See below.
+
+### The 90-day absolute cap
+
+Every token carries an **`auth_time`** claim: the second at which the account holder last
+*proved* a credential. It is set at login, at registration, at a bot-issued sign-in and at a
+password change — and **copied unchanged** through every refresh and every `auth-me`. It is not
+`iat`, which moves on every re-issue.
+
+Once `now − auth_time` exceeds **90 days**, every credential path refuses:
+
+```
+401  { "success": false,
+"requestId": "3f8a1c74-9b2e-4d10-8c55-6a0f2b7e19dd",
+       "error": { "code": "AUTH_SESSION_CAP_REACHED",
+                  "statusCode": 401,
+                  "category": "authentication",
+                  "message": "It's been a while — please sign in again" } }
+```
+
+**What a client must do: route to the login screen. Never retry, and never treat it as a
+transient failure.** This is the one 401 on this API that no credential you hold can fix —
+refreshing produces the same answer, because the claim that failed is copied into whatever the
+refresh would mint. A client that retries will loop until it is killed.
+
+Tell it apart from its neighbours, all of which are also 401:
+
+| Code | Meaning | What the client does |
+|---|---|---|
+| `AUTH_TOKEN_EXPIRED` | the 15-minute access token lapsed | refresh, then replay the request |
+| `AUTH_SESSION_EXPIRED` | the refresh token itself lapsed or was rejected | sign in again |
+| `AUTH_SESSION_CAP_REACHED` | **the sign-in is 90 days old** | sign in again — **do not retry** |
+| `AUTH_PASSWORD_CHANGED` | the password changed since this token was minted | sign in again, and consider warning the user |
+
+Cookie clients meet this as an ordinary redirect to a login page. **Bearer clients meet it as a
+visible sign-out**, because there is no silent renewal inside an ordinary request the way a
+browser has — so it is worth handling deliberately rather than as a generic 401.
+
+The window is configurable per deployment (`AUTH_ABSOLUTE_SESSION_CAP`, seconds); 90 days is the
+default and the documented policy. Design record: `docs/ADR-A03-SESSION-CAP.md`.
+
+A session that predates this feature is capped from the moment its current token was minted
+(at most 30 days ago) and gains a real `auth_time` on its first refresh — **nobody was signed
+out when this shipped.**
+
+The mitigation that is in force is client-side: **store tokens in the iOS Keychain / Android
+Keystore, never plain preferences.** If a server-side revocation store is wanted later, the
+cheapest hook is `AuthService.rotateRefreshToken`, which already loads the user row on every
+refresh — a `token_version` compared there would cost no extra query.
+
+---
+
+## Related
+
+- **[customer-auth.md](./customer-auth.md)** — the customer's whole flow: registration in the
+  bot, passwordless sign-in, and the three things a storefront must **not** build
+- [magic-login.md](./magic-login.md) — the `/login` and `/reset-password` bot commands, the
+  two `/auth/magic/*` endpoints, the Telegram contact step, and the n8n mapping
+- [onboarding.md](./onboarding.md) — the vendor / agency / agent step contracts
+- [../connections/README.md](../connections/README.md) — `POST /api/me/connections`, which
+  replaced the removed `request-wa-verification`
+- [../me/password.md](../me/password.md) — `PATCH /api/me/password`, the authenticated change
+- [../errors/README.md](../errors/README.md) — the full error catalog
+- [../rate-limits.md](../rate-limits.md) — the layers behind the two `/auth` buckets

@@ -1,175 +1,301 @@
-# Reviews & ratings — the cross-role model
+# Reviews & ratings
 
-**Verified against source on 2026-09-08** — re-checked the subject/author matrix, the aggregate
-matrix, the moderation rule and the trust weights, and **added the eligibility endpoint's `404`
-branch** (§ 4), against `src/modules/reviews/domain/review-targets.ts`,
-`src/modules/reviews/domain/services/review-eligibility.service.ts`,
-`src/modules/reviews/validators/review.validator.ts`, `src/modules/reviews/routes/*.ts` and
-`src/modules/agents/config/agent.config.ts`.
-*(First written against source 2026-08-24.)*
+**Verified against source on 2026-09-07** — every claim on this page was checked against
+`jovi-mall/src/`, including the whole inherited defect list that `vendor-dash` carried for it
+(DOC-PROGRAM § 24–28). Corrections are marked inline with ⚠ and a source citation.
 
-> **This is the concept page.** The three routes a vendor calls are documented in full at
-> [`vendor/reviews.md`](./vendor/reviews.md). Read this one to understand *what a review is
-> for* and why the vendor's version of it looks the way it does; read that one to build the
-> screen.
+**Verified against source on 2026-09-08** (a re-check of the 2026-09-07 pass above) — the ten-route census (three authoring routes each
+on `/customer`, `/vendor`, `/agency`, the one public read, four moderation routes), the
+prose-holds-it moderation rule (`domain/review-targets.ts` `initialStatusOf`, called at
+`services/review.service.ts:121`), the `.strict()` bodies and the `rating` integer 1–5 with
+`title` ≤ 120 / `body` ≤ 2000 (`validators/review.validator.ts:23-27`), and the public
+`meta.rating`-or-`null` shape (`controllers/public-review.controller.ts:44-62`). No corrections
+were needed.
+
+> **Cross-role.** One module, two subjects, three author roles, four HTTP surfaces.
+> Built 2026-08-21 (Phase 6 · 6.E.4). Moderation lives in wi-admin —
+> [admin/reviews.md](./admin/reviews.md).
+
+This document is at the `api-doc/` root rather than in a role folder because a review is
+the same object whoever writes it, and splitting it four ways would be four copies of one
+eligibility table. Each role's endpoints are listed under [Endpoints](#4--endpoints).
 
 ---
 
-## 1 · Two subjects, and only one of them is a product
+## 1 · What a review is
 
-A review has a **`subjectType`**, and there are exactly two:
+A **rating (1–5)**, optionally some **prose**, by one identified person, about one
+identified thing, moderated once.
 
-| `subjectType` | What is being reviewed | Who may author it |
+There are two kinds of thing, told apart by `subjectType`:
+
+| `subjectType` | `subjectId` is | Who may write one | What it is |
+|---|---|---|---|
+| `product` | a product id | the **customer** who bought it | the storefront review a shopper reads |
+| `delivery` | a **shipment** id | the **customer**, the **vendor** and the **agency** | a rating of one delivery run |
+
+### The part that is easy to get wrong
+
+**A product review and a delivery review are not the same feature wearing two hats.** A
+product review is public and is what the storefront's `aggregateRating` is built from. A
+delivery review is **internal**: it is attributed server-side to the agent who carried the
+parcel, and it feeds that agent's trust score. There is **no public endpoint that returns a
+delivery review**, and there will not be one — only its aggregate leaves the platform, as
+an agency's service rating.
+
+### The three delivery authors rate the same shipment
+
+All three post `subjectType: 'delivery'` against the same `subjectId`, and each lands in a
+different aggregate:
+
+| Author | What they are attesting to | Feeds |
 |---|---|---|
-| `product` | a product | **the customer, and nobody else** |
-| `delivery` | **one shipment** | customer · **vendor** · agency |
+| `customer` | the recipient's experience — did it arrive, and well? | the agent's **customer** rating |
+| `vendor` | the seller's — was my consignment collected and carried well? | the agent's **vendor** rating |
+| `agency` | the employer's — did my agent run this well? | the agent's **agency** rating |
 
-`roleMayReview()` (`review-targets.ts:83-86`) is two lines and it is the whole rule: a product
-review requires `authorRole === 'customer'`; a delivery review is open to all three.
+⚠ **The customer never CHOOSES which agent their review lands on** — they rate the *delivery*
+and the platform performs the attribution server-side. Nothing here takes an agent id.
 
-> ### 🔴 What this means for a vendor dashboard
+That is the part that matters for reviews, and it is unchanged. What *did* change, on
+2026-08-23, is a sentence this paragraph used to lead with: `GET
+/api/customer/orders/:orderId/shipments` no longer withholds the agent outright. It publishes
+a **partial name and photo, never a phone number**, and only while that agent is physically
+carrying the parcel — see
+[ADR-A06](../docs/ADR-A06-AGENT-IDENTITY-DISCLOSURE.md) and
+[customer/orders.md](./customer/orders.md#who-is-carrying-it--agent). A reviewer may now
+recognise who delivered to them; they still cannot aim a review at anybody.
+
+⚠ **An agency's review moves the agent's aggregate and never its own.** An agency rating
+itself is not evidence of anything, and its own directory score would then be
+self-reported. An agency's public rating comes from its **customers'** delivery reviews.
+
+---
+
+## 2 · Eligibility
+
+Verified purchase / verified delivery, always. There is no path to reviewing something you
+were not party to.
+
+| Subject | Rule |
+|---|---|
+| `product` | the author has a **completed** order (`completion.confirmed_at` set) containing that product |
+| `delivery` · customer | the author is the order's customer, and the shipment is `delivered` |
+| `delivery` · vendor | the author is the order's vendor, and the shipment is `delivered` |
+| `delivery` · agency | the shipment is the author's own, and it is `delivered` |
+
+"Completed" is `Order.completion.confirmed_at`, not `fulfillment_status`. It is set when the
+customer confirms, when COD cash changes hands, or by the auto-confirm sweep — so every
+route to "this person actually received what they bought" converges on it, including the
+partially-returned order that never reaches `fulfillment_status: 'delivered'`.
+
+A **delivered shipment with no agent bound** is refused (`REVIEW_SUBJECT_NOT_REVIEWABLE`).
+Every attribution needs the agent, and a real delivery always has one.
+
+### Check before you show the form
+
+```http
+GET /api/customer/reviews/eligibility?subjectType=product&subjectId=<id>
+```
+
+```json
+{ "success": true, "data": { "eligible": false, "reason": "REVIEW_ALREADY_EXISTS", "existingReviewId": "507f…" } }
+```
+
+**200 with `eligible: false`** — this is a question, and "no, and here is why" is a
+successful answer to it. `reason` is the same error code the write path would have raised,
+so one copy table serves both. Present on `/customer`, `/vendor` and `/agency`.
+
+> ⚠ **It does NOT always answer `200` — and the exception is the case a client hits most.**
+> `REVIEW_SUBJECT_NOT_FOUND` **throws a `404`** rather than answering `eligible: false`, at four
+> sites: an unknown product (`review-eligibility.service.ts:93`), an unknown shipment (`:145`),
+> its missing order (`:148`), and a subject the caller does not own (`:158`). The service's own
+> header states the split — a subject that does not exist **and** one you may not see are the
+> same answer, deliberately, so the endpoint cannot be used to probe which ids are real.
 >
-> **A vendor reviews deliveries. A vendor never reviews a product, and never reviews a
-> customer.** The product review is the buyer's — a vendor has no purchase to verify, so
-> there is nothing for the eligibility gate to check. Do not build either screen; neither
-> route exists.
+> So a client must handle **both** shapes: `200 { eligible: false, reason }` for every
+> *business* refusal, and `404 REVIEW_SUBJECT_NOT_FOUND` for "no such subject, or not yours".
+> This page implied the first was the only outcome until 2026-09-07.
+>
+> ⚠ **Both query schemas are `.strict()`** (`reviews/validators`, six schemas, all strict), so an
+> **unknown query parameter is a `400 VALIDATION_ERROR`** — not ignored. A client appending its
+> own cache-buster or analytics parameter to these URLs breaks them. `VALIDATION_ERROR` was
+> absent from this page's error list.
 
 ---
 
-## 2 · Three roles rate the same shipment, and they are rating different things
+## 3 · Moderation, and where a review lands
 
-All three delivery authors pass **the same shipment id**. They are not duplicates of each
-other — the source states what each one is measuring:
+`pending` → `published` → (or) `rejected`.
 
-| Author | What they are actually rating |
+**A review carrying free text is held for a moderator. A bare star rating publishes
+immediately.**
+
+That is the rule, and both halves are deliberate. A number cannot be abusive, defamatory or
+a link to somewhere else, and the eligibility gate has already established that the author
+bought the item or received the parcel — so there is nothing for a human to decide. Prose is
+where the risk is, and it gets one. Holding everything would put the moderation queue in
+front of a signal that moves an agent's cash limit.
+
+The response to `POST` says which happened, in `status`. Clients should render "published"
+and "submitted for review" differently.
+
+**A rejected review counts for nothing — its star included.** Aggregates are recomputed over
+published rows only, so exclusion is a property of the query rather than of a subtraction
+somebody has to remember. The rejection reason is the moderator's record and is **never**
+shown to the author or the public.
+
+There is no edit verb and no delete verb. One review per author per subject, enforced by a
+unique index; a second attempt is `409 REVIEW_ALREADY_EXISTS`.
+
+---
+
+## 4 · Endpoints
+
+### Authoring — `/api/{customer,vendor,agency}/reviews`
+
+The three are an endpoint-for-endpoint mirror. **The author's role comes from the mount**,
+never from the body — there is no `authorRole` field to send.
+
+| | |
 |---|---|
-| **customer** | the recipient's experience |
-| **vendor** | the seller's handover |
-| **agency** | the employer's supervision |
+| `POST /` | submit. `201`. |
+| `GET /eligibility?subjectType=&subjectId=` | may I write one? |
+| `GET /?page=&limit=&status=` | my own reviews, **every status** — you can see your held row |
 
-Nobody names an agent or an agency. **You name a shipment**, and the backend resolves who
-carried it and snapshots that at write time — so a later reassignment cannot move somebody
-else's reputation onto them.
+`POST` body:
 
-### Which aggregates one review moves
-
-From `targetsOf()` (`review-targets.ts:60-74`) — this is the complete matrix:
-
-```
-product  + customer  →  the product
-delivery + customer  →  the agent AND the agency
-delivery + vendor    →  the agent AND the agency
-delivery + agency    →  the agent ALONE
+```json
+{
+  "subjectType": "delivery",
+  "subjectId": "507f1f77bcf86cd799439077",
+  "rating": 5,
+  "title": "Right on time",          // optional, ≤120 — presence holds it for moderation
+  "body": "Called ahead, very careful with the box."  // optional, ≤2000
+}
 ```
 
-Two absences are decisions, not gaps:
+`.strict()` — an unknown key is a `400`. `rating` is an **integer 1–5**; there is no
+half-star.
 
-- **An agency reviewing a delivery moves no *agency* aggregate.** An agency rating itself is
-  not evidence of anything, and publishing it as their public score would make the delivery
-  directory's rating self-reported.
-- **A product review moves no *vendor* aggregate.** `target_vendor_id` is recorded so the
-  history is attributable, but **no surface reads a vendor's rating today**. If you are
-  planning a "your store rating" widget: there is no number behind it yet.
+`/vendor/reviews` and `/agency/reviews` accept `subjectType: 'delivery'` only; a product
+review from either is `400 REVIEW_ROLE_NOT_ALLOWED`. The product review is the buyer's.
 
-Aggregates are keyed on **`(target, author_role)`**, so the three delivery reviews land in
-three separate rows rather than blending into one average.
+Author response shape:
 
----
-
-## 3 · Free text is moderated. A bare star is not.
-
-`initialStatusOf()` (`review-targets.ts:110-113`) is the entire rule:
-
-| What was submitted | Lands as |
-|---|---|
-| a rating **and** a title or body | **`pending`** — a human reads it |
-| a rating **alone** | **`published`** — immediately |
-
-The reasoning, from source, is worth knowing because it changes what you show the vendor
-after they submit:
-
-> *"A number cannot be abusive, defamatory, or a link to somewhere else… Prose is where the
-> risk actually is, and it gets a human."*
-
-**So your success message must depend on what they typed.** A vendor who rated a delivery
-four stars and wrote nothing should be told it is live. A vendor who wrote a sentence should
-be told it is awaiting review — otherwise they will come back tomorrow, not see it, and
-report a bug.
-
-⚠ Moderation is **not** a trust judgement about the author and does **not** vary by role. A
-rejected review counts for nothing — star included.
-
----
-
-## 4 · Eligibility is a per-subject yes/no
-
-Every authoring tree has the same three routes:
-
-```
-GET  /api/{customer,vendor,agency}/reviews/eligibility
-GET  /api/{customer,vendor,agency}/reviews
-POST /api/{customer,vendor,agency}/reviews
+```json
+{
+  "success": true,
+  "data": {
+    "id": "507f…",
+    "subjectType": "delivery",
+    "subjectId": "507f…",
+    "rating": 5,
+    "title": "Right on time",
+    "body": "Called ahead…",
+    "status": "pending",
+    "publishedAt": null,
+    "createdAt": "2026-08-21T09:00:00.000Z"
+  }
+}
 ```
 
-🔴 **`/eligibility` is not a worklist.** It answers "may I review *this* subject?" for one
-`(subjectType, subjectId)` pair you already hold. It does not return the set of things you
-are allowed to review, and there is no endpoint that does — so a "deliveries awaiting your
-review" screen has to be assembled from your own shipment list, not from this route.
+### Public — `GET /api/public/products/:productId/reviews`
 
-Both query parameters are required and the schema is **strict**: an extra parameter is a
-`400`. Same for the body — **the author's role comes from the route, never from the body**,
-so sending `authorRole` is a `400`. (All six schemas in `review.validator.ts` are `.strict()`,
-so a cache-buster or analytics parameter appended to any of these URLs breaks the request.)
+Unauthenticated. Published **product** reviews, newest first, `Cache-Control: public,
+max-age=300` like the rest of `/api/public`.
 
-🔴 **`/eligibility` does not always answer `200`, and the exception is the case you will hit
-first.** A *business* refusal is `200 { eligible: false, reason }`. But **`REVIEW_SUBJECT_NOT_FOUND`
-is thrown as a `404`** at four sites in `review-eligibility.service.ts` — an unknown product
-(`:93`), an unknown shipment (`:145`), its missing order (`:148`), and **a subject the caller does
-not own (`:158`)**. That last one is the trap: a vendor asking about somebody else's shipment gets
-a 404, not `eligible: false`.
+```json
+{
+  "success": true,
+  "data": [
+    { "id": "507f…", "rating": 5, "title": "Beautiful fabric", "body": "…", "publishedAt": "2026-08-20T…" }
+  ],
+  "meta": {
+    "total": 12, "page": 1, "limit": 10, "totalPages": 2,
+    "rating": { "average": 4.25, "count": 12, "distribution": { "1": 0, "2": 1, "3": 1, "4": 4, "5": 6 } }
+  }
+}
+```
 
-That conflation is deliberate — "does not exist" and "you may not see it" must be the same answer,
-or the endpoint becomes a way to probe which ids are real. **Handle both shapes**, and do not let
-a 404 here render as "something went wrong".
+- **`meta.rating` is `null` when nothing is published.** Never a zero-count object — see
+  [§6](#6--ratings-on-other-surfaces).
+- **No author identity is published.** No name, no id, no initial. This platform's customers
+  are largely passwordless accounts created from a phone number, so the only available
+  display name is frequently derived from it, and publishing a shopper's name beside their
+  purchase history is a decision nobody has taken. A "verified purchase" badge is implicit:
+  eligibility means every published review is one.
+- An unknown or unpublished product answers an **empty page**, not a 404 — "nothing has been
+  said about this id" is a truthful answer, and a 404 would make the route an existence
+  oracle for draft products.
 
-Check eligibility before you render the form. The alternative is showing a vendor a review
-box that 422s on submit.
+### Moderation — `/api/internal/admin/reviews`
 
----
-
-## 5 · Where a rating is read back
-
-| Surface | Reads |
-|---|---|
-| `GET /api/public/products/:productId/reviews` | the product's published reviews — **public, no session** |
-| the delivery-agency directory | the agency's aggregate — see [`vendor/delivery-agencies.md`](./vendor/delivery-agencies.md) |
-| the agent's trust composite | the agent aggregates, weighted by author role |
-| **a vendor's own rating** | **nothing — the aggregate is not written** (§ 2) |
-
-⚠ **`rating` and `ratingCount` are `null` / `0` on the delivery-agency directory** — filed as
-**F-27**. The aggregate exists; the directory projection does not read it. Do not build a
-"sort agencies by rating" control on it yet.
-
-`averageOf()` rounds to **two** decimals, not one, because the value feeds the agent trust
-composite as well as a star widget. `0` with a count of `0` is the "no evidence" shape:
-render nothing, not a zero-star rating.
+wi-admin only, behind the service token. See [admin/reviews.md](./admin/reviews.md).
 
 ---
 
-## 6 · The one thing a vendor review actually does
+## 5 · Errors
 
-An agent's **COD cash exposure limit** is driven by their trust composite, and the delivery
-reviews are three of its factors — weighted customer 30, agency 10, **vendor 10**.
+| Code | Status | When |
+|---|---|---|
+| `REVIEW_ALREADY_EXISTS` | 409 | you have already reviewed this subject. Terminal — there is no edit |
+| `REVIEW_NOT_ELIGIBLE` | 422 | you are party to it, but it has not reached a reviewable state |
+| `REVIEW_SUBJECT_NOT_FOUND` | 404 | no such product/shipment — **or** it is not yours. Deliberately the same answer |
+| `REVIEW_SUBJECT_NOT_REVIEWABLE` | 422 | a delivered shipment with no agent bound to it |
+| `REVIEW_ROLE_NOT_ALLOWED` | 400 | e.g. a vendor posting a product review |
+| `REVIEW_NOT_FOUND` | 404 | moderation only |
+| `REVIEW_NOT_PENDING` | 409 | moderation only — another moderator decided first |
 
-So a vendor's delivery review is not decoration: it moves how much cash the platform will
-let that agent carry. That is a good reason to make the form easy to reach and a bad reason
-to prompt for it aggressively.
+The 404-vs-422 split is load-bearing: 404 hides whether an id exists, 422 is only ever
+returned to somebody who already knows it does.
 
 ---
 
-## 7 · Related
+## 6 · Ratings on other surfaces
 
-- [`vendor/reviews.md`](./vendor/reviews.md) — **the three vendor routes, in full**
-- [`vendor/delivery-agencies.md`](./vendor/delivery-agencies.md) — where agency ratings surface
-- [`errors/README.md`](./errors/README.md) — the `REVIEW_*` codes
-- Moderation (`/api/internal/admin/reviews`) is **wi-admin's**, not browser-reachable.
+The same aggregate reaches three other places. All three follow **one rule: `null`, never a
+zero-count.**
+
+| Surface | Field | Source |
+|---|---|---|
+| `GET /api/public/products` (row) | `rating: { average, count } \| null` | customers' **product** reviews |
+| `GET /api/public/products/:id` (detail) | `rating: { average, count, distribution } \| null` | as above, plus the histogram |
+| `GET /api/vendor/agency-connections/browse`, `GET /api/agent/agencies/browse` | `rating: number \| null` + `ratingCount: number` | customers' **delivery** reviews of that agency |
+
+The agency card keeps `rating` as a bare number and gains `ratingCount` beside it — a
+purely **additive** change, so a client that never read a count still works. Render both: 5.0
+from one delivery and 4.6 from two hundred are not the same claim.
+
+### `aggregateRating` in JSON-LD
+
+Emit it **if and only if** `rating` is non-null. The backend never sends a zero-count
+summary, so there is no branch to remember and no way to publish an invented review count —
+which is a Google review-snippet spam-policy violation that earns a manual action. Do not
+synthesise `ratingValue: 0` from a null.
+
+---
+
+## 7 · Why a delivery review matters more than it looks
+
+`DeliveryAgent.trust_signals` carries three rating factors worth **50 of the trust
+composite's 100 weight**, and until this shipped nothing wrote any of them — every agent's
+rating factors blended to the seed, so the composite could only ever *raise* a score.
+
+The chain is one path with one writer at each hop:
+
+```
+delivery review published
+  → ReviewService.refreshTargets recomputes review_aggregates (agent, author_role)
+  → AgentTrustService.collectSignals reads it
+  → AgentTrustRecomputeWorker writes trust_signals
+```
+
+Nothing in the reviews module touches `delivery_agents`, and the trust collector never reads
+`reviews` directly.
+
+⚠ **As of this document the composite is still a SHADOW** (Phase 6 D-2): it writes
+`trust_signals.composite_score` while `cod.trust_score` — the number that sets an agent's
+COD cash limit — is still owned by `CodTrustService.applyEvent`. **Phase 6 Step 11 flips
+that**, and after the flip a customer's delivery rating influences how much cash an agent
+may carry. That is a product fact, not an implementation detail.

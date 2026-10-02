@@ -1,600 +1,1212 @@
-# Orders
+# Vendor Orders
 
-**Verified against source on 2026-09-08** — R7 re-checked the fourteen routes against the live route dump, and every enum on the page against `modules/orders/order.model.ts`: `AWAITING_PAYMENT` really is the only uppercase member of `PaymentStatus` in both the type (`:38`) and the Mongoose enum (`:401`); the nine `FulfillmentStatus` values (`:44`); the eleven `deliveryStatus` values including `handing_over` and `pending_agency_reassignment` (`:102,292`). ✅ **Both "cannot be filtered for" claims hold**: the list filter enums omit `disputed` and `returned` while the stored enums carry them (`modules/vendor/validators/vendor-order.validator.ts:14-15`). No defects found.
+**Verified against source on 2026-09-08** — R7 re-checked the fourteen routes against the live route dump and every enum against `modules/orders/order.model.ts:38,44,102,292,401`, plus the two list-filter omissions (`disputed`, `returned`) at `modules/vendor/validators/vendor-order.validator.ts:14-15`. No defects found.
 
-**Verified against backend source on 2026-08-24.** Read out of `jovi-mall/src/modules/vendor/` and
-`src/modules/orders/`. The backend's own `api-doc/vendor/orders.md` disagreed with source in
-**thirty** places and omitted two routes entirely; **all thirty were fixed at source on
-2026-09-06** (DOC-PROGRAM § 24) and that page now carries a *Verified against source* stamp. The
-worklist section that tracked them has been deleted.
+**Verified against source on 2026-09-06** — every claim on this page was checked against
+`jovi-mall/src/`, including the whole inherited defect list that `vendor-dash` carried for it
+(DOC-PROGRAM § 24–26). Corrections are marked inline with ⚠ and a source citation.
 
-**Base path:** `/api/vendor/orders` · **Auth:** vendor session · **Routes: 14** — 13 are
-specified here; the fourteenth, `GET /:id/entitlements`, is on
-[digital-products.md](./digital-products.md#get-apivendorordersidentitlements).
+## Base Path
 
-Digital entitlements on an order are documented in
-[digital-products.md](./digital-products.md).
+All endpoints in this document share this base path:
+
+```
+/api/vendor/orders
+```
+
+## Authentication
+
+**Authorization**: Vendor access required.
+
+All requests must include a valid Bearer token with vendor role:
+
+```
+Authorization: Bearer <access_token>
+```
 
 ---
 
-## 0 · The enums, first
+## Actions Overview
 
-Everything else on this page depends on getting these exactly right.
+| Action | Method | Endpoint | Physical | Digital |
+|--------|--------|----------|----------|---------|
+| List orders | `GET` | `/api/vendor/orders` | ✅ | ✅ |
+| Get order details | `GET` | `/api/vendor/orders/:id` | ✅ | ✅ |
+| Update fulfillment status | `PATCH` | `/api/vendor/orders/:id/status` | ✅ | ✅ |
+| Bulk update fulfillment status | `POST` | `/api/vendor/orders/bulk/status` | ✅ | ✅ |
+| Bulk dispatch to agency | `POST` | `/api/vendor/orders/bulk/dispatch` | ✅ | ❌ |
+| Add internal note | `POST` | `/api/vendor/orders/:id/notes` | ✅ | ✅ |
+| Get internal notes | `GET` | `/api/vendor/orders/:id/notes` | ✅ | ✅ |
+| Get single note | `GET` | `/api/vendor/orders/:id/notes/:noteId` | ✅ | ✅ |
+| View timeline / audit trail | `GET` | `/api/vendor/orders/:id/timeline` | ✅ | ✅ |
+| Assign delivery agency | `PATCH` | `/api/vendor/orders/:id/delivery-agency` | ✅ | ❌ |
+| View digital entitlements | `GET` | `/api/vendor/orders/:id/entitlements` | ❌ | ✅ |
+| Revoke digital entitlement | `POST` | `/api/vendor/entitlements/:id/revoke` | ❌ | ✅ |
+| Restore digital entitlement | `POST` | `/api/vendor/entitlements/:id/restore` | ❌ | ✅ |
+| Check refundability | `GET` | `/api/vendor/orders/:id/refund-eligibility` | ✅ | ✅ |
+| Action a refund | `POST` | `/api/vendor/orders/:id/refund` | ✅ | ✅ |
 
-### 🔴 `paymentStatus` — one value is SCREAMING_SNAKE
+> Notes are also embedded inside `GET /orders/:id` response — the dedicated notes endpoint is useful when polling for note updates without re-fetching the full order.
 
-```
-pending · AWAITING_PAYMENT · partially_paid · paid · disputed · failed · refunded
-```
-
-**`AWAITING_PAYMENT` is the only uppercase member.** Confirmed verbatim in both the TypeScript type
-and the Mongoose enum. A client that lowercases before matching, or builds a
-status→label map with a case-insensitive key, **silently misses it** and renders an unpaid order as
-"unknown".
-
-```ts
-// WRONG — misses AWAITING_PAYMENT
-const label = LABELS[order.paymentStatus.toLowerCase()];
-
-// RIGHT — the value is a wire literal, not a normalisable token
-const label = LABELS[order.paymentStatus] ?? LABELS.unknown;
-```
-
-It is not being fixed: changing it is a data migration across live orders, and the workspace
-decision is "no data migrations pre-production".
-
-Two more facts from source:
-
-- **`partially_paid` is COD-only** — at least one shipment's cash collected while others are
-  outstanding or returned.
-- **`disputed` is written by the Stripe dispute webhook**, alongside a `dispute_hold` on the order.
-
-🔴 **And `disputed` cannot be filtered for.** The list endpoint's `paymentStatus` filter enum omits
-it, so `?paymentStatus=disputed` is a `400 VALIDATION_ERROR` even though the value is a legal
-stored state. There is no way to list disputed orders. Filter client-side.
-
-### `paymentMethod`
-
-`online` · `cash_on_delivery` — default `online`.
-
-### `fulfillmentStatus` — 9 values, lowercase
-
-```
-pending · processing · partially_shipped · shipped · partially_delivered ·
-delivered · fulfilled · cancelled · returned
-```
-
-🔴 **`returned` cannot be filtered for either** — the list filter enum omits it, same as `disputed`.
-
-### `deliveryStatus` (on each item) — 11 values
-
-```
-pending · assigned · handing_over · picked_up · in_transit · agent_delivered ·
-delivered · failed · returned · rejected · pending_agency_reassignment
-```
-
-`handing_over` is the reassignment status introduced with agent-to-agent handover. `agent_delivered`
-means the agent says it arrived; **`delivered` means the customer confirmed it.** They are not the
-same event and the distinction drives fulfillment aggregation.
-
-### `rejection.reason` — 6 values
-
-`out_of_coverage_area` · `capacity_exceeded` · `invalid_address` · `vendor_item_not_ready` ·
-`platform_intervention` · `other`
+> **The two refund endpoints are specified on
+> [customer-management.md](./customer-management.md#get-apivendorordersidrefund-eligibility)**,
+> beside the return-policy rules that decide what may be refunded — not here. They are listed
+> above because this is the page a reader looks an order action up on, and they were reachable
+> from it by no link at all until 2026-09-06 (DOC-PROGRAM F-17 class 6). The COD note under
+> [Cash-on-delivery orders](#cash-on-delivery-orders-paymentmethod-cash_on_delivery) referred to
+> *"the refund endpoints"* without ever naming them.
 
 ---
 
-## 1 · `GET /api/vendor/orders`
+## Endpoints
 
-### Query parameters
+### GET /api/vendor/orders
 
-| Param | Type | Default | Values |
-|---|---|---|---|
-| `status` | enum | — | `pending` `processing` `partially_shipped` `shipped` `partially_delivered` `delivered` `fulfilled` `cancelled` — **no `returned`** |
-| `paymentStatus` | enum | — | `pending` `AWAITING_PAYMENT` `partially_paid` `paid` `failed` `refunded` — **no `disputed`** |
-| `paymentMethod` | enum | — | `online` · `cash_on_delivery` |
-| `orderType` | enum | — | `physical` · `digital` |
-| **`customerId`** | 24-hex | — | **exists and works** — the backend's doc omits it |
-| `dateFrom` / `dateTo` | ISO-8601 datetime | — | must be full datetimes, not dates |
-| `q` | string ≤ 100 | — | **searches `order_number` only** |
-| `page` | integer | `1` | ≥ 1 |
-| `limit` | integer | `20` | 1–100 |
-| `sortBy` | enum | `created_at` | `created_at` · `updated_at` · `total_amount` |
-| `sortOrder` | enum | `desc` | `asc` · `desc` |
+**Description**: List vendor orders with filters, search, sorting, and pagination.
 
-> **`q` does NOT search customer name or email.** It is a case-insensitive match on the order
-> number alone. A search box labelled "search orders" that a vendor types a customer name into will
-> return nothing. Label it "order number", or search customers via
-> [customer-management.md](./customer-management.md) and then filter with `customerId`.
+**Authorization**: Vendor access required.
 
-> ⚠ `q` is interpolated into a MongoDB `$regex` unescaped. It is capped at 100 characters, which
-> bounds the exposure, but do not fire it per keystroke.
+**Request Headers**:
+- `Authorization: Bearer <token>`
 
-**Note `sortBy` takes snake_case values** (`created_at`), unlike the products list which takes
-camelCase (`createdAt`). That is real.
+**Path Parameters**: None
 
-### Response `200`
+**Query Parameters**:
+- `status` (string, optional) - Filter by order status. Enum: `pending`, `processing`, `partially_shipped`, `shipped`, `partially_delivered`, `delivered`, `fulfilled`, `cancelled`. ⚠ **`returned` is NOT in the filter enum** (`vendor-order.validator.ts:14`) even though it is a real order status — asking for it is a `400 VALIDATION_ERROR`, not an empty page. Returned orders can only be found by paging the unfiltered list
+- `paymentStatus` (string, optional) - Filter by payment status. Enum: `pending`, `AWAITING_PAYMENT`, `partially_paid`, `paid`, `failed`, `refunded`. ⚠ **`disputed` is NOT in this enum** (`vendor-order.validator.ts:15`) — a `400`. A disputed order is found through `dispute_hold.active` on the row, not by filtering. Note `AWAITING_PAYMENT` really is the odd UPPERCASE one
+- `paymentMethod` (string, optional) - Filter by payment method. Enum: `online`, `cash_on_delivery`
+- `orderType` (string, optional) - Filter by order type. Enum: `physical`, `digital`
+- `customerId` (string, optional) - Scope the list to one customer. Must be a 24-character ObjectId. **This filter exists and works** (`vendor-order.validator.ts:18`); this page used not to list it
+- `dateFrom` (string, optional) - Filter orders from date (ISO 8601 format)
+- `dateTo` (string, optional) - Filter orders to date (ISO 8601 format)
+- `q` (string, optional, max 100 chars) - Search. ⚠ **`order_number` ONLY** — a case-insensitive substring match on that one field (`vendor-order.repository.ts:79-82`). It does **not** search the customer name, the customer email, or item titles, so typing a customer’s name returns nothing rather than their orders. (The customer-facing list is different: it searches order number *and* item titles.)
+- `page` (integer, optional, default: 1) - Page number (1-indexed)
+- `limit` (integer, optional, default: 20, max: 100) - Items per page
+- `sortBy` (string, optional, default: `created_at`) - Sort field. Enum: `created_at`, `updated_at`, `total_amount`
+- `sortOrder` (string, optional, default: `desc`) - Sort order. Enum: `asc`, `desc`
 
-```jsonc
+**Request Body**: None
+
+**Success Response**:
+
+Status: `200 OK`
+
+Body:
+```json
 {
   "success": true,
-  "data": [{
-    "id": "66b1…",
-    "orderNumber": "JVM-4821",
-    "orderType": "physical",
-    "createdAt": "2026-08-20T10:12:00.000Z",
-    "customer": { "id": "…", "name": "…|null", "email": "…|null", "avatar": FileDetail|null },
-    "subtotal": 45000, "tax": 0, "shipping": 0, "total": 45000, "currency": "XAF",
-    "fulfillmentStatus": "processing",
-    "paymentMethod": "online",
-    "paymentStatus": "paid",
-    "itemCount": 3
-  }],
-  "meta": { "total": 84, "page": 1, "limit": 20, "pages": 5 }
-}
-```
-
-**Pagination is `meta` here** (unlike tickets), and the field is **`pages`**, not `totalPages`.
-
-⚠ **`shipping` is hardcoded `0`** on both list and detail. It is not a computed value — do not
-render it as a delivery fee.
-
-The list carries **no `discount`**. Only the detail's `priceBreakdown` has it.
-
----
-
-## 2 · `GET /api/vendor/orders/:id`
-
-```jsonc
-{
-  "id": "…", "orderNumber": "…", "orderType": "physical",
-  "createdAt": "…", "updatedAt": "…",
-  "customer": {
-    "id": "…", "name": "…|null", "email": "…|null", "phone": "…|null",
-    "avatar": FileDetail|null,
-    "orderCount": 12,        // falls back to 0, never null
-    "totalSpent": 340000     // falls back to 0, never null
-  },
-  "shippingAddress": { /* see below */ },
-  "items": [{
-    "id": "…", "productId": "…", "variantId": "…",
-    "title": "…", "variantTitle": "…", "sku": "…", "optionsSnapshot": { },
-    "quantity": 2, "price": 22500, "subtotal": 45000, "currency": "XAF",
-    "delivery": { /* ItemDelivery */ }
-  }],
-  "priceBreakdown": { "base": 45000, "tax": 0, "discount": 0, "shipping": 0, "total": 45000 },
-  "totalAmount": 45000, "currency": "XAF",
-  "fulfillmentStatus": "processing",
-  "paymentMethod": "online", "paymentStatus": "paid", "paymentIntentId": "…",
-  "deliveries": [ /* ItemDelivery[] deduped by shipmentId — null for digital */ ],
-  "deliveryTimeline": [ /* [] for digital */ ],
-  "notes": [ { "id": "…", "message": "…", "authorId": "…", "createdAt": "…" } ]
-}
-```
-
-### `ItemDelivery`
-
-```jsonc
-{
-  "agencyId": "…|null", "agencyName": "…|null", "agencyPhone": "…|null",
-  "deliveryStatus": "in_transit",
-  "shipmentId": "…|null", "trackingNumber": "…|null",
-  "agent": { "id": "…", "name": "…", "phone": "…|null", "avatar": FileDetail|null } | null,
-  "rejection": { "reason": "…", "note": "…|null", "rejectedAt": "…|null" } | null,
-  "freeDelivery": false
-}
-```
-
-`deliveries[]` holds the **same objects** as `items[].delivery`, deduped by `shipmentId`, with
-entries lacking a shipment id dropped. So `deliveries` entries also carry `rejection`,
-`trackingNumber` and `freeDelivery` — the backend's doc omits `rejection` there.
-
-`trackingNumber` is `null` on legacy shipments **and** whenever the item has no shipment yet, or
-the shipment could not be loaded.
-
-### `shippingAddress` and the `geo` snake_case island
-
-The address is the **checkout snapshot on the order** (`delivery_address`), a `GeoAddress`. It
-falls back to the customer's saved default only on legacy orders — where the `geo` key is
-**absent entirely**.
-
-```jsonc
-"shippingAddress": {
-  "street": "…", "city": "…", "state": "…|null", "country": "…",
-  "geo": {
-    "formatted_address": "…",
-    "coordinates": { "type": "Point", "coordinates": [9.7, 4.05] },   // [lng, lat]
-    "provider": "geoapify",
-    "provider_place_id": "…|null",
-    "components": {
-      "street": null, "neighbourhood": null, "city": null, "region": null,
-      "country": null, "country_code": null, "postal_code": null
-    },
-    "raw_input": "…|null",
-    "resolved_at": "2026-08-20T10:11:58.000Z"
+  "data": [
+    {
+      "id": "string",
+      "orderNumber": "string",
+      "orderType": "physical",
+      "fulfillmentStatus": "pending",
+      "paymentMethod": "online",
+      "paymentStatus": "paid",
+      "customer": {
+        "id": "string",
+        "name": "Jane Doe",
+        "email": "jane@example.com",
+        "avatar": { "id": "507f1f77bcf86cd7994390c1", "key": "images/2026/07/jane-avatar.png", "url": "https://cdn.example.com/jane-avatar.png", "access": "public", "mimeType": "image/png", "size": 15360, "originalName": "avatar.png" }
+      },
+      "subtotal": 100.00,
+      "tax": 10.00,
+      "shipping": 0,
+      "total": 110.00,
+      "currency": "XAF",
+      "itemCount": 3,
+      "createdAt": "2026-02-09T23:54:00.000Z"
+    }
+  ],
+  "meta": {
+    "total": 50,
+    "page": 1,
+    "limit": 20,
+    "pages": 3
   }
 }
 ```
 
-🔴 **`geo` is snake_case inside an otherwise camelCase response.** It is the only such island on
-the vendor surface. And `coordinates` is `[longitude, latitude]` — GeoJSON order, the reverse of
-what most map libraries take.
-
-Handle `geo` being absent: `shippingAddress.geo?.coordinates?.coordinates ?? null`.
-
-### Fields on detail but not on the list
-
-`updatedAt` · `customer.phone` · `customer.orderCount` · `customer.totalSpent` ·
-`shippingAddress` · `items[]` · `priceBreakdown` (with `discount`) · `totalAmount` ·
-`paymentIntentId` · `deliveries` · `deliveryTimeline` · `notes`
-
-And on the list but not on detail: `itemCount`, plus the flat `subtotal`/`tax`/`shipping`/`total`.
-
-### 📌 A vendor never sees a delivery-proof photo
-
-Grepped and confirmed: **no vendor route and no vendor DTO touches delivery proof.** The private
-`shipments/` storage tree is reachable only from the agent and agency surfaces. So on this page,
-every `FileDetail` you receive (`customer.avatar`, `agent.avatar`) is `access: "public"` with a
-real `url`. The `FileDetail` break documented in
-[files/private-files.md](../files/private-files.md) does **not** affect orders.
-
-### Errors
-
-`404 ORDER_NOT_FOUND` — returned for both "does not exist" and "belongs to another vendor".
+**Error Responses**:
+- `400` – `VALIDATION_ERROR` – Invalid query parameters (e.g., invalid date format, invalid enum value)
 
 ---
 
-## 3 · `PATCH /api/vendor/orders/:id/status`
+### GET /api/vendor/orders/:id
 
-Body: `{ "status": "pending" | "processing" | "cancelled" }`. **Those are the only three values a
-vendor may set.** The other six are computed by the platform from shipment progress.
+**Description**: Get detailed information for a single order.
 
-### The vendor-triggerable transition map
+**Authorization**: Vendor access required.
 
-| From | May become |
-|---|---|
-| `pending` | `processing`, `cancelled` |
-| `processing` | `cancelled` |
-| **`fulfilled`** | **`cancelled`** |
-| `partially_shipped`, `shipped`, `partially_delivered`, `delivered`, `cancelled`, `returned` | — nothing |
+**Request Headers**:
+- `Authorization: Bearer <token>`
 
-🔴 **`fulfilled → cancelled` is legal**, and `partially_shipped` / `shipped` /
-`partially_delivered` are **terminal** from the vendor's side. Both contradict the backend's doc,
-which says the opposite in each case.
+**Path Parameters**:
+- `id` (string, required) - Order ID
 
-**The terminal check runs before the transition check.** So `delivered → processing` answers
-`422 ORDER_TERMINAL_STATE`, never `400 ORDER_INVALID_TRANSITION`. Branch on the code, not on your
-own model of which error "should" apply.
+**Query Parameters**: None
 
-### Errors, in the order they are evaluated
+**Request Body**: None
 
-| Status | Code | When | `details` |
-|---|---|---|---|
-| 404 | `ORDER_NOT_FOUND` | | |
-| **422** | **`ORDER_TERMINAL_STATE`** | the current status has no outbound transitions | `{ status }` |
-| 400 | `ORDER_INVALID_TRANSITION` | illegal move | `{ from, to, allowed }` |
-| **422** | `ORDER_PAYMENT_REQUIRED` | moving to `processing` while unpaid — **COD orders are exempt** | `{ paymentStatus }` |
-| 422 | `ORDER_PAYMENT_FAILED_STATE` | payment is `failed` or `refunded` | `{ paymentStatus }` |
-| **423** | **`ORDER_DISPUTE_HOLD`** | a payment dispute has frozen the order | `{ disputeId, reason }` |
+**Success Response**:
 
-**`423` is a status you will not have handled.** Its category is `business_rule`. It means a
-chargeback is open and the platform has frozen the order — the vendor can do nothing until it
-resolves. Give it its own message.
+Status: `200 OK`
 
-`details.allowed` on `ORDER_INVALID_TRANSITION` is the legal target list — render the buttons from
-it rather than hard-coding the map.
-
-⚠ **There is no compare-and-set on this write.** Two vendor sessions acting at once can both pass
-the guards; the loser's timeline entry and events still fire. Refetch after a write rather than
-trusting local state.
-
-### Response
-
-`200` with the **full order detail payload** and
-`message: "Order status updated to '<status>'"`.
-
----
-
-## 4 · `POST /api/vendor/orders/:id/dispatch`
-
-No body. This is the vendor's manual review gate: it advances **every shipment of this order that
-is at `pending`** to `assigned`. Nothing else moves.
-
-That transition is what makes the shipment appear on the agency's dashboard — the agency's list
-hard-excludes `pending`. **Until a vendor dispatches, no agency can see the work.**
-
-### Refusals
-
-| Status | Code | When |
-|---|---|---|
-| 404 | `ORDER_NOT_FOUND` | |
-| 400 | `ORDER_WRONG_TYPE` | the order is not `physical` |
-| 422 | `ORDER_PAYMENT_REQUIRED` | unpaid — **unless COD at `AWAITING_PAYMENT` or `partially_paid`** |
-| 423 | `ORDER_DISPUTE_HOLD` | |
-
-**Zero pending shipments is not an error.** You get `200` with `dispatchedShipments: 0` and the
-message "Nothing to dispatch — order already dispatched or has no pending shipments". Treat that
-as informational, not as a failure.
-
-### Response
-
-`200`, the full order detail **plus `dispatchedShipments: <number>`**.
-
-### Its relationship with auto-redirect
-
-There is an automatic twin that fires on payment success, controlled from
-[profile.md](./profile.md) (`GET|PUT /api/vendor/profile/auto-redirect-orders`):
-
-| | Auto | Manual (this route) |
-|---|---|---|
-| Runs when | payment succeeds, **if the setting is on** (default **off**) | the vendor clicks |
-| Threshold cap | **respected** — an order above `autoRedirectThresholdAmount` is left pending | **ignored** — a vendor may always dispatch above their own cap |
-| Timeline actor | `system`, `metadata.auto: true` | `vendor`, `metadata.auto: false` |
-
-They are idempotent by exclusion: whichever runs first moves the shipments off `pending`, and the
-other then finds nothing. **So the manual button is the escape hatch for capped orders** — that is
-its main job when auto-redirect is on, and worth saying in the UI.
-
----
-
-## 5 · `PATCH /api/vendor/orders/:id/delivery-agency`
-
-Body: `{ "itemId": "<24-hex>", "deliveryAgencyId": "<24-hex>" }`.
-
-🔴 **This is item-scoped, not order-scoped.** One call moves one line item to a different agency.
-Moving a whole multi-item order means one call per item.
-
-### Refusals
-
-| Status | Code | When |
-|---|---|---|
-| 404 | `ORDER_NOT_FOUND` | |
-| 400 | `ORDER_WRONG_TYPE` | not physical |
-| 422 | `ORDER_TERMINAL_STATE` | the order is `delivered` or `cancelled`. `details: { status }` |
-| 404 | `ORDER_ITEM_NOT_FOUND` | `details: { itemId }` |
-| **422** | **`ORDER_ITEM_NOT_REASSIGNABLE`** | `details: { itemId, status }` |
-| 404 | `ORDER_DELIVERY_AGENCY_NOT_FOUND` | |
-
-**Only three item statuses may be reassigned:** `pending`, `assigned`,
-`pending_agency_reassignment`. Everything else — including `handing_over`, `failed`, `rejected`
-and `agent_delivered` — is refused. Gate the control on that three-value allowlist; the backend's
-doc names a different, shorter set.
-
-**Reassigning to the agency it already has is a silent no-op** — `200`, no timeline entry, no
-shipment write. Harmless, but do not read it as a successful move.
-
-⚠ The destination agency is only checked for **existence** — there is no verification that the
-vendor has an active connection with it. Populate the picker from
-[delivery-agencies.md](./delivery-agencies.md) rather than accepting an arbitrary id.
-
-The item **inherits the destination shipment's status**, which may differ from what it had.
-
----
-
-## 6 · `GET /api/vendor/orders/:id/timeline`
-
-Query: `page` (default 1), `limit` (default 20, max 100). Always newest-first; sort is not
-configurable.
-
-```jsonc
-{
-  "success": true,
-  "data": [{
-    "_id": "…",                     // note: _id, not id
-    "orderId": "…",
-    "eventType": "fulfillment.updated",
-    "oldValue": "pending", "newValue": "processing",
-    "noteId": null,
-    "description": "…",
-    "actor": { "type": "vendor", "id": "…|null", "name": "…|null" },
-    "created_at": "…"               // note: snake_case
-  }],
-  "meta": { "total": 40, "page": 1, "limit": 20, "pages": 2 }
-}
-```
-
-⚠ **Mixed casing in one object** — `orderId`, `eventType`, `oldValue`, `newValue`, `noteId` are
-camelCase; `_id` and `created_at` are not.
-
-### `eventType` — 9 values
-
-`order.created` · `payment.updated` · `fulfillment.updated` · `delivery.agency_updated` ·
-**`order.completed`** · `note.added` · `entitlement.revoked` · `entitlement.restored` ·
-`system.action`
-
-`actor.type`: `vendor` · `customer` · `system` · `admin`. A vendor actor's `name` resolves from the
-**Store**, not the profile — see [store.md](./store.md).
-
-`oldValue` / `newValue` are read generically, so **any** event type that recorded a status change
-populates them — not only `fulfillment.updated`.
-
-`noteId` is populated on `note.added` rows and is exactly what
-`GET /:id/notes/:noteId` consumes. `description` on those rows is a 100-character preview.
-
-The timeline is append-only. ⚠ Entries are written **outside** the transaction that caused them, so
-a crash between the status write and the timeline write loses the audit row. Do not treat the
-timeline as a complete ledger.
-
----
-
-## 7 · Notes
-
-Three routes, and notes are **vendor-internal only** — verified structurally, not just by
-documentation: no customer, agency, agent, admin or public route reads the collection, and every
-query is vendor-scoped.
-
-| Route | Shape |
-|---|---|
-| `GET /:id/notes` | `{ success, data: [ { id, message, authorId, createdAt } ] }` — **unpaginated**, oldest first |
-| `POST /:id/notes` | body `{ "message": string }`, **1–2000 chars**. Returns **`200`, not 201** |
-| `GET /:id/notes/:noteId` | adds an **`orderId`** field the other two do not have |
-
-`authorId` is the **user** id, not the vendor id — so on a multi-user vendor account it identifies
-the person.
-
-Notes are **append-only**: no edit route, no delete route, and the model actively refuses updates.
-Say "this cannot be edited" before the vendor writes 2 000 characters.
-
-⚠ On `GET /:id/notes/:noteId` the `:id` segment is **accepted and never used** — the lookup is by
-note id and vendor. Any order id in the path works. Pass the correct one anyway; do not build on
-the quirk. A missing note returns `404 ORDER_NOT_FOUND` — the *order* code — so you cannot
-distinguish "wrong order" from "wrong note".
-
----
-
-## 8 · Refunds
-
-This section was written from source. The backend's own `vendor/orders.md` now lists both routes
-in its Actions Overview and specifies them on
-[customer-management.md](./customer-management.md), beside the return-policy rules that decide
-what may be refunded.
-
-### `GET /api/vendor/orders/:id/refund-eligibility`
-
-**Never throws on ineligibility** — it answers `200` with `eligible: false` and a `reasonCode`.
-Its only error is `404 ORDER_NOT_FOUND`.
-
-```jsonc
+Body:
+```json
 {
   "success": true,
   "data": {
-    "eligible": true,
-    "maxRefundable": 45000,
-    "remaining": 45000,
+    "id": "string",
+    "orderNumber": "string",
+    "orderType": "physical",
+    "fulfillmentStatus": "processing",
+    "paymentMethod": "online",
+    "paymentStatus": "paid",
+    "paymentIntentId": "string",
+    "customer": {
+      "id": "string",
+      "name": "Jane Doe",
+      "email": "jane@example.com",
+      "phone": "+237600000000",
+      "avatar": { "id": "507f1f77bcf86cd7994390c1", "key": "images/2026/07/jane-avatar.png", "url": "https://cdn.example.com/jane-avatar.png", "access": "public", "mimeType": "image/png", "size": 15360, "originalName": "avatar.png" },
+      "orderCount": 5,
+      "totalSpent": 75000
+    },
+    "shippingAddress": {
+      "street": "123 Main Street",
+      "city": "Douala",
+      "state": "Littoral",
+      "country": "CM",
+      "geo": {
+        "formatted_address": "123 Main Street, Douala, Littoral, Cameroon",
+        "coordinates": { "type": "Point", "coordinates": [9.7679, 4.0511] },
+        "provider": "geoapify",
+        "provider_place_id": "51f0…",
+        "components": {
+          "street": "123 Main Street",
+          "neighbourhood": null,
+          "city": "Douala",
+          "region": "Littoral",
+          "country": "Cameroon",
+          "country_code": "CM",
+          "postal_code": null
+        },
+        "raw_input": "123 Main Street Douala",
+        "resolved_at": "2026-02-09T23:54:00.000Z"
+      }
+    },
+    "items": [
+      {
+        "id": "string",
+        "productId": "string",
+        "variantId": "string",
+        "title": "string",
+        "variantTitle": "string",
+        "sku": "string",
+        "optionsSnapshot": "Color:Red;Size:M",
+        "quantity": 2,
+        "price": 50.00,
+        "subtotal": 100.00,
+        "currency": "XAF",
+        "delivery": {
+          "agencyId": "507f1f77bcf86cd799439099",
+          "agencyName": "FastShip Logistics",
+          "agencyVerified": true,
+          "agencyPhone": "+237600000000",
+          "deliveryStatus": "assigned",
+          "shipmentId": "507f1f77bcf86cd799439100",
+          "trackingNumber": "FDO-260730-142309-K7Q2M",
+          "freeDelivery": false,
+          "rejection": null,
+          "agent": {
+            "id": "507f1f77bcf86cd799439101",
+            "name": "John Doe",
+            "phone": "+237600000001",
+            "verified": true,
+            "avatar": { "id": "507f1f77bcf86cd7994390a1", "key": "images/2026/07/agent-avatar.png", "url": "https://cdn.example.com/agent-avatar.png", "access": "public", "mimeType": "image/png", "size": 15360, "originalName": "avatar.png" }
+          }
+        }
+      }
+    ],
+    "priceBreakdown": {
+      "base": 100.00,
+      "tax": 10.00,
+      "discount": 0.00,
+      "shipping": 0,
+      "total": 110.00
+    },
+    "totalAmount": 110.00,
     "currency": "XAF",
-    "reasonCode": "…",              // present ONLY when eligible === false
-    "refundProcessingDays": 5,
-    "returnShippingPayer": "vendor" // vendor | customer | customer_reimbursed_if_defect | null
+    "deliveries": [
+      {
+        "agencyId": "507f1f77bcf86cd799439099",
+        "agencyName": "FastShip Logistics",
+        "agencyVerified": true,
+        "agencyPhone": "+237600000000",
+        "deliveryStatus": "assigned",
+        "shipmentId": "507f1f77bcf86cd799439100",
+        "trackingNumber": "FDO-260730-142309-K7Q2M",
+        "freeDelivery": false,
+        "agent": {
+          "id": "507f1f77bcf86cd799439101",
+          "name": "John Doe",
+          "phone": "+237600000001",
+          "verified": true,
+          "avatar": { "id": "507f1f77bcf86cd7994390a1", "key": "images/2026/07/agent-avatar.png", "url": "https://cdn.example.com/agent-avatar.png", "access": "public", "mimeType": "image/png", "size": 15360, "originalName": "avatar.png" }
+        }
+      }
+    ],
+    "deliveryTimeline": [
+      { "shipmentId": "507f1f77bcf86cd799439100", "agencyId": "507f1f77bcf86cd799439099", "agencyName": "FastShip Logistics", "agencyVerified": true, "status": "assigned", "changedAt": "2026-07-05T09:00:00.000Z", "changedByRole": "system" },
+      { "shipmentId": "507f1f77bcf86cd799439100", "agencyId": "507f1f77bcf86cd799439099", "agencyName": "FastShip Logistics", "agencyVerified": true, "status": "picked_up", "changedAt": "2026-07-05T14:00:00.000Z", "changedByRole": "agency" }
+    ],
+    "notes": [
+      {
+        "id": "string",
+        "message": "Customer requested gift wrapping",
+        "authorId": "string",
+        "createdAt": "2026-02-09T23:54:00.000Z"
+      }
+    ],
+    "createdAt": "2026-02-09T23:54:00.000Z",
+    "updatedAt": "2026-02-09T23:54:00.000Z"
   }
 }
 ```
 
-**`reasonCode` values**, first match wins:
+> **Notes:**
+> - `customer.orderCount` and `customer.totalSpent` reflect only orders with **this vendor** (not lifetime totals across all vendors).
+> - `customer.*` fields are `null` if the customer profile cannot be resolved.
+> - `shippingAddress` is the **order's own checkout snapshot**, not the customer's saved address. `_resolveShippingAddress` (`vendor-order.service.ts:370-382`) reads `order.delivery_address` — the geocoded drop-off frozen onto the order at checkout — and flattens it to `street`/`city`/`state`/`country` **while also returning the whole `geo` object alongside them**. The customer's default saved address is only the **fallback**, used when the order carries no `delivery_address`; `null` only when both are absent. ⚠ **This line said the opposite until 2026-09-06** — it named the saved address as the source and never mentioned `geo` at all. The distinction matters: a customer who edits their profile does **not** change where a past order was shipped.
+>   - ⚠ **`geo.coordinates` is GeoJSON: `{ "type": "Point", "coordinates": [longitude, latitude] }` — LONGITUDE FIRST** (`IGeoPoint`, `core/types/geo.types.ts:88`). It is not `{ lat, lng }`. Reading it positionally in the wrong order puts Douala in the Gulf of Guinea.
+>   - `geo.provider` is one of `nominatim`, `google`, `mapbox`, `here`, `geoapify`, `locationiq` (`GEO_PROVIDERS`). ⚠ **Never `chain`** — a deployment may run the chained provider, but a stored row records the *service* that actually resolved it, because that is what makes `provider_place_id` resolvable later.
+>   - `geo.components` carries **seven** keys — `street`, `neighbourhood`, `city`, `region`, `country`, `country_code`, `postal_code` — each independently nullable. The flattened `state` above is `components.region`, and `country` is `components.country_code` falling back to `components.country`, so the flat pair and the `geo` block can legitimately disagree in spelling.
+> - `items[].delivery` is the authoritative per-item delivery info — an order can be split across several agencies (one per item). It is `null` for digital items, and `delivery.agent` is `null` until an agent is assigned to the item's shipment.
+> - `deliveries` is an order-level overview with one entry per agency/shipment handling the order (de-duplicated by `shipmentId`). It is `null` for digital orders. Use `items[].delivery` when you need to know which agency carries a specific item.
+> - **Verified badges (added 2026-09-27).** `agencyVerified` (on `items[].delivery`, `deliveries[]` and `deliveryTimeline[]`) is `true` when admin has verified the agency's business documents — `kyc_details.legit_verified`, never the deprecated top-level mirror. `agent.verified` is `true` when the agent's identity check passed — `kyc.status === 'verified'`, the same test `AgentGateService` applies; only that status is read, never the rest of `kyc`. Both are always booleans (`false` when unknown), so a client can render the badge on `=== true` without a null check.
+> - **`deliveryFeeProposals` (added 2026-10-02)** — every delivery-fee proposal an agency (or its agent) made on this order's shipments, newest first; `[]` for digital orders. A `pending` one carries `availableActions: ["approve","reject"]` and **blocks that shipment's pickup until you answer**. Shape, rules and the approve/reject endpoints: [delivery-fee-proposals.md](./delivery-fee-proposals.md).
+> - `deliveryTimeline` merges every shipment's status history for this order, labeled by agency and sorted chronologically (see the example above). Each entry is `{ shipmentId, agencyId, agencyName, agencyVerified, status, changedAt, changedByRole }` — the **same shape** as `orderTimeline` on [`GET /api/agency/shipments/:id`](../agency/shipments.md#detail). It is unrelated to the generic audit trail returned by `GET /api/vendor/orders/:id/timeline` below — that endpoint returns `eventType`/`oldValue`/`newValue` events, not shipment status history. Empty for digital orders.
+> - `deliveryStatus` reflects the per-item delivery status: `pending`, `assigned`, **`handing_over`**, `picked_up`, `in_transit`, `agent_delivered`, `delivered`, `failed`, `returned`, `rejected`, or `pending_agency_reassignment` — **eleven values**, the schema enum at `order.model.ts:253`. ⚠ **`handing_over` was missing from this list until 2026-09-06.** It is the post-pickup reassignment state: the shipment has left one agent and no replacement has accepted it yet, so an item can sit here with nobody carrying it. Treat it as in-flight-but-unassigned rather than as a delivery step.
+> - `delivery.rejection` is `null` unless this item's shipment was **declined**. When set it is `{ reason, note, rejectedAt }` — `reason` is one of `out_of_coverage_area`, `capacity_exceeded`, `invalid_address`, `vendor_item_not_ready`, **`platform_intervention`** or `other` (**six**, `SHIPMENT_REJECTION_REASONS` in `shipment.model.ts:67`); `note` is the free-text explanation (always present when `reason` is `other`, otherwise may be `null`). Use it to decide how to reroute; a `shipment.rejected` notification also fires (see [Notifications](./notifications.md)).
+>   ⚠ **`platform_intervention` is NOT an agency decision and this line used to imply it was** — it is the *administrator's* reason, deliberately kept disjoint from every agency-driven one so a later reader can tell *"the agency could not carry this"* from *"the platform pulled it"* (`shipment.model.ts:61-65`, the same argument ADR-008 makes for `platform_oversight`). Do not show it to a vendor as the agency's doing, and do not fold it into `other`.
+> - `trackingNumber` is that item's shipment's tracking number — `ACR-YYMMDD-HHMMSS-XXXXX`, where `ACR` is the delivery agency's acronym and the two number groups are the UTC date and time the shipment was created. It is **generated by the platform** when the shipment is created (nobody types it, nobody can change it), so it is present from the moment the order exists — including before dispatch. It may be `null` only on shipments created before generation existed.
+> - `freeDelivery` is a snapshot of the product's `delivery.freeDelivery` flag at checkout time — it does not change agency resolution, shipment routing, or fee calculation.
+> - `priceBreakdown.shipping` is always `0` — shipping cost tracking is not yet implemented in the order schema.
+
+**Error Responses**:
+- `404` – `ORDER_NOT_FOUND` – Order not found or does not belong to vendor
+
+---
+
+### PATCH /api/vendor/orders/:id/status
+
+**Description**: Update the fulfillment status of an order. Enforces state machine transitions.
+
+> **`shipped` / `partially_shipped` / `partially_delivered` / `delivered` are no longer
+> vendor-settable.** They are computed automatically from the order's shipments (one per delivery
+> agency) as agencies report pickup/transit/delivery and customers confirm each shipment — see
+> "Fulfillment lifecycle" below. The complete vendor-triggerable map is **three rows** —
+> `pending → {processing, cancelled}`, `processing → {cancelled}` and **`fulfilled → {cancelled}`**
+> (`FULFILLMENT_STATE_MACHINE`, `vendor-order.service.ts:45-55`). ⚠ **This page said the map was
+> `pending → processing → cancelled`, which omits the third row**: a `fulfilled` order — a
+> completed service or a delivered digital product — *can* still be cancelled by its vendor.
+
+**Authorization**: Vendor access required.
+
+**Request Headers**:
+- `Authorization: Bearer <token>`
+- `Content-Type: application/json`
+
+**Path Parameters**:
+- `id` (string, required) - Order ID
+
+**Query Parameters**: None
+
+**Request Body**:
+```json
+{
+  "status": "string (required) - New status. Enum: pending, processing, cancelled"
+}
+```
+
+**Success Response**:
+
+Status: `200 OK`
+
+Body:
+
+The response is the full updated order details object (same shape as `GET /api/vendor/orders/:id`).
+
+```json
+{
+  "success": true,
+  "data": { "...same as GET /api/vendor/orders/:id data..." },
+  "message": "Order status updated to 'processing'"
+}
+```
+
+**Error Responses**:
+- `404` – `ORDER_NOT_FOUND` – Order not found or does not belong to vendor
+- `400` – `VALIDATION_ERROR` – Invalid status value
+- `400` – `ORDER_INVALID_TRANSITION` – The current status has legal next states, but the one you asked for is not among them (e.g. `pending → delivered`). `details` carries `{ from, to, allowed }` — the legal next states, so a client can re-render the picker rather than guess
+- `422` – `ORDER_TERMINAL_STATE` – The current status has **no** legal next state. `details` carries `{ status }`. ⚠ **This check runs FIRST**, so `delivered → processing` is this `422` and never the `400` above — the example this page used to give for `ORDER_INVALID_TRANSITION` was the one case that cannot produce it. The six terminal statuses are `partially_shipped`, `shipped`, `partially_delivered`, `delivered`, `cancelled`, `returned`
+- `422` – `ORDER_PAYMENT_REQUIRED` – `→ processing` on a prepaid order that is not `paid`. `details` carries `{ paymentStatus }`. COD is exempt (cash is collected at handoff)
+- `422` – `ORDER_PAYMENT_FAILED_STATE` – the payment is `failed` or `refunded`. `details` carries `{ paymentStatus }`
+- ~~`403` – `FORBIDDEN` – Cannot update status (e.g., payment not confirmed)~~ — **this endpoint answers no `403`, and `FORBIDDEN` is not a code in the registry.** An unpaid order is the `422 ORDER_PAYMENT_REQUIRED` above; ownership failure is the `404`
+- `423` – `ORDER_DISPUTE_HOLD` – **The order is frozen by an open payment dispute and cannot be advanced until it settles.** `details` includes `{ disputeId, reason }`. See "Payment disputes" below.
+
+---
+
+<a name="bulk-status"></a>
+### POST /api/vendor/orders/bulk/status
+
+**Description**: Update the fulfillment status of **many orders in one call** (e.g. "cancel selected", "mark selected as processing" from a bulk-select UI). Each order is validated against its own current state **independently** — one ineligible order does not block the rest of the batch. This is the batched counterpart of `PATCH /api/vendor/orders/:id/status` above and enforces the exact same rules per order (state machine, payment coupling, dispute hold).
+
+**Authorization**: Vendor access required.
+
+**Request Headers**:
+- `Authorization: Bearer <token>`
+- `Content-Type: application/json`
+
+**Path Parameters**: None
+
+**Request Body**:
+```json
+{
+  "orderIds": ["507f1f77bcf86cd799439011", "507f1f77bcf86cd799439012"],
+  "status": "processing"
+}
+```
+- `orderIds` (string[], required, 1–50 items) — order IDs to update. A repeated ID is processed once per occurrence, independently — if the first occurrence changes the order's state, the second occurrence will evaluate against that new state (typically ending up in `failed` with `ORDER_TERMINAL_STATE` or `ORDER_INVALID_TRANSITION`).
+- `status` (string, required) — New status. Enum: `pending`, `processing`, `cancelled` (same vendor-settable subset as the single-order endpoint).
+
+**Success Response**:
+
+Status: `200 OK` — **always 200 for a well-formed request.** Per-order failures are reported in the response body, not as an HTTP error; only a malformed request (empty/oversized `orderIds`, invalid `status`) returns `400 VALIDATION_ERROR`.
+
+Body:
+```json
+{
+  "success": true,
+  "data": {
+    "total": 5,
+    "succeeded": ["507f1f77bcf86cd799439011", "507f1f77bcf86cd799439012", "507f1f77bcf86cd799439013"],
+    "failed": [
+      { "orderId": "507f1f77bcf86cd799439014", "code": "ORDER_PAYMENT_REQUIRED", "reason": "order payment required" },
+      { "orderId": "507f1f77bcf86cd799439015", "code": "ORDER_TERMINAL_STATE", "reason": "order terminal state" }
+    ]
+  },
+  "message": "3 of 5 order(s) updated to 'processing', 2 failed"
+}
+```
+
+- `succeeded` — order IDs whose status was actually changed.
+- `failed` — one entry per order that was rejected, with `code` (a stable machine-readable error code — use this for logic/mapping) and `reason` (a human-readable string; may be generic for some codes, prefer `code` for display logic).
+
+**Possible `failed[].code` values** (identical to the single-order endpoint's error responses):
 
 | Code | Meaning |
-|---|---|
-| `REFUND_POLICY_DISABLED` | the vendor's own return policy forbids it |
-| `REFUND_ORDER_NOT_PAID` | `paymentStatus !== "paid"` — **this is what a COD order hits** |
-| `REFUND_PAYMENT_NOT_FOUND` | no successful payment record |
-| `REFUND_ALREADY_FULLY_REFUNDED` | nothing left |
-| `REFUND_WINDOW_EXPIRED` | past `return_window_days` |
-| `REFUND_NOT_ELIGIBLE` | the computed maximum came out ≤ 0 |
+|------|---------|
+| `ORDER_NOT_FOUND` | Order doesn't exist or isn't owned by this vendor |
+| `ORDER_TERMINAL_STATE` | Order is `partially_shipped`, `shipped`, `partially_delivered`, `delivered`, `cancelled` or `returned` — the six statuses with no vendor-triggerable next state. Not `fulfilled` |
+| `ORDER_INVALID_TRANSITION` | Requested status isn't reachable from the order's current status |
+| `ORDER_PAYMENT_REQUIRED` | Order isn't `paid` yet (blocks moving to `processing`) |
+| `ORDER_PAYMENT_FAILED_STATE` | Order's payment is `failed`/`refunded` |
+| `ORDER_DISPUTE_HOLD` | Order is frozen by an open payment dispute |
 
-⚠ **The return window is measured from `order.created_at`, not from delivery.** A slow delivery
-eats the customer's refund window. Worth surfacing.
+**Error Responses** (request-level, before any order is touched):
+- `400` – `VALIDATION_ERROR` – `orderIds` empty/exceeds 50 items, contains an invalid ID, or `status` isn't one of the allowed values
 
-⚠ **There is no COD branch.** A cash-on-delivery order simply fails the "not paid" gate and reports
-`REFUND_ORDER_NOT_PAID`. Do not present that as a policy problem — it is a payment-rail one.
+---
 
-**How `maxRefundable` is computed:** `remaining` is the payment's un-refunded balance. If the
-policy's `refund_type` is `full`, the max is all of it; if `partial`, it is
-`refund_percentage` **of the remaining balance**, rounded to 2 decimals — not of the order total.
+<a name="dispatch"></a>
+### POST /api/vendor/orders/:id/dispatch
 
-### `POST /api/vendor/orders/:id/refund`
+**Description**: The vendor's explicit review/approval step before an order reaches its delivery
+agency. A physical order's `Shipment`(s) are created at checkout in status `pending` — they stay
+invisible to the agency (`GET /agency/shipments` excludes `pending`) until either:
+- the vendor calls **this endpoint** after reviewing the paid order, or
+- the vendor has `auto_redirect_orders_to_agency` enabled (see `GET/PUT
+  /api/vendor/profile/auto-redirect-orders` in [vendor/profile.md](../vendor/profile.md)), in
+  which case dispatch happens automatically on payment success and this endpoint is unnecessary
+  (calling it afterward is a harmless no-op).
 
-Body: `{ "amount"?: number, "reason"?: string }`. Both optional — `{}` is valid and refunds
-`maxRefundable`.
+Advances every `pending` shipment of the order to `assigned` and mirrors that onto the matching
+order items. Requires the order to be `paid` and not on dispute hold — **except cash-on-delivery
+orders** (`paymentMethod: "cash_on_delivery"`), which are dispatchable while still unpaid
+(`AWAITING_PAYMENT`/`partially_paid`): COD fulfils before payment by design. For COD, auto-redirect
+fires at **checkout** instead of payment success.
 
-**`amount` may only be overridden downward.** Above the maximum →
-`400 REFUND_AMOUNT_EXCEEDS_MAX`, `details: { requested, maxRefundable }`.
+**Authorization**: Vendor access required.
 
-Ineligibility becomes a throw here, with the `reasonCode` as the error code:
+**Path Parameters**:
+- `id` (string, required) — Order ID
 
-| `reasonCode` | Status |
-|---|---|
-| `REFUND_PAYMENT_NOT_FOUND` | 404 |
-| `REFUND_ORDER_NOT_PAID` | 409 |
-| `REFUND_ALREADY_FULLY_REFUNDED` | 409 |
-| everything else | 422 |
-
-### 🔴 Which gateways can actually refund — right now
-
-| Gateway | Refundable today? |
-|---|---|
-| **Stripe** | ✅ yes |
-| **NotchPay** | ❌ **no** — the API exists but this merchant account is refused refunds; disabled by configuration |
-| **My-CoolPay** | ❌ **never** — the provider has no refund endpoint at all |
-
-So **on a mobile-money order the vendor gets a hard `400 REFUND_GATEWAY_NOT_SUPPORTED`**
-(`details: { gateway }`), with no fallback. Unlike bookings, the order refund path does **not**
-route to a `refund_pending` state and a manual-payout ticket. There is no partial recovery — the
-vendor must settle with the customer out of band.
-
-**Build for this.** Check the gateway before offering a refund button, and when the 400 arrives,
-say what actually happened rather than "refund failed".
-
-A gateway that fails at runtime gives `502 REFUND_GATEWAY_FAILED`, category `external_service` —
-which means **the message is replaced and `details` dropped at the boundary in every environment**.
-`requestId` is all you get. Quote it.
-
-### Response
-
-```jsonc
-{ "success": true,
-  "data": { "refundId": "…", "status": "completed", "amount": 45000, "currency": "XAF",
-            "totalRefunded": 45000, "fullyRefunded": true,
-            "refundProcessingDays": 5, "returnShippingPayer": "vendor" },
-  "message": "Order fully refunded" }
+**Success Response** (`200 OK`):
+```json
+{
+  "success": true,
+  "data": {
+    "...same as GET /api/vendor/orders/:id data...",
+    "dispatchedShipments": 2
+  },
+  "message": "Order dispatched to 2 shipment(s)' delivery agency"
+}
 ```
 
-⚠ `status` is the hardcoded literal `"completed"` — it is never `"failed"`. A failure is an error
-response, not a `status` value. Do not branch on it.
+`dispatchedShipments` is `0` if there was nothing pending (already dispatched, or auto-redirect
+already handled it) — the response still succeeds, just with an informational message.
 
-⚠ On a **cart checkout**, one payment can cover several orders. The eligibility endpoint's
-`remaining` is the whole payment's balance, while the refund call narrows the ceiling to *this
-order's* share — so an amount that passed eligibility can still be refused. Trust the refund call's
-`details.maxRefundable` over the eligibility reading.
+**Error Responses**:
+- `404` – `ORDER_NOT_FOUND` – Order not found or does not belong to vendor.
+- `400` – `ORDER_WRONG_TYPE` – Order is digital (nothing to dispatch to an agency).
+- `422` – `ORDER_PAYMENT_REQUIRED` – Order is not yet paid (online orders only — COD orders dispatch unpaid).
+- `423` – `ORDER_DISPUTE_HOLD` – Order is frozen by an open payment dispute.
 
 ---
 
-## 9 · Bulk operations
+<a name="bulk-dispatch"></a>
+### POST /api/vendor/orders/bulk/dispatch
 
-Both cap at **50 ids** and both **always return `200`** for a well-formed request.
+**Description**: Dispatch **many** reviewed, paid physical orders to their delivery agency/agencies in one call (e.g. "dispatch selected" from a bulk-select UI). Each order goes through the exact same checks as the single-order [`POST /api/vendor/orders/:id/dispatch`](#dispatch) above — orders that aren't dispatchable (unpaid, digital, disputed, not found) are reported as failures without blocking the rest of the batch.
 
-```jsonc
-// POST /api/vendor/orders/bulk/status   { orderIds: [...], status: "pending"|"processing"|"cancelled" }
-{ "success": true,
-  "data": { "total": 10, "succeeded": ["66b1…"],
-            "failed": [ { "orderId": "…", "code": "ORDER_TERMINAL_STATE", "reason": "…" } ] },
-  "message": "9 of 10 order(s) updated to 'processing', 1 failed" }
+**Authorization**: Vendor access required.
 
-// POST /api/vendor/orders/bulk/dispatch  { orderIds: [...] }
-{ "success": true,
-  "data": { "total": 10,
-            "succeeded": [ { "orderId": "…", "dispatchedShipments": 2 } ],
-            "failed":    [ { "orderId": "…", "code": "ORDER_WRONG_TYPE", "reason": "…" } ] },
-  "message": "9 of 10 order(s) dispatched" }
+**Request Headers**:
+- `Authorization: Bearer <token>`
+- `Content-Type: application/json`
+
+**Request Body**:
+```json
+{
+  "orderIds": ["507f1f77bcf86cd799439011", "507f1f77bcf86cd799439012"]
+}
+```
+- `orderIds` (string[], required, 1–50 items) — order IDs to dispatch.
+
+**Success Response**:
+
+Status: `200 OK` — **always 200 for a well-formed request.** Per-order failures are reported in the response body, not as an HTTP error.
+
+Body:
+```json
+{
+  "success": true,
+  "data": {
+    "total": 4,
+    "succeeded": [
+      { "orderId": "507f1f77bcf86cd799439011", "dispatchedShipments": 1 },
+      { "orderId": "507f1f77bcf86cd799439012", "dispatchedShipments": 0 }
+    ],
+    "failed": [
+      { "orderId": "507f1f77bcf86cd799439013", "code": "ORDER_PAYMENT_REQUIRED", "reason": "order payment required" },
+      { "orderId": "507f1f77bcf86cd799439014", "code": "ORDER_WRONG_TYPE", "reason": "order wrong type" }
+    ]
+  },
+  "message": "2 of 4 order(s) dispatched, 2 failed"
+}
 ```
 
-- **Nothing rolls back.** Each order is processed independently in sequence; earlier successes
-  stand when a later row fails, and each has already fired its own timeline entry and events.
-- **`failed[]` carries `code` and `reason` but no `details`** — the `{from, to, allowed}` a
-  single-order call would give you is lost. If you need it, retry that one order singly.
-- `dispatchedShipments: 0` on a **succeeded** row means "nothing was pending". Not a failure.
-- These are unusually expensive server-side (each row builds a full order detail internally and
-  discards it). Against a 900/min vendor budget, prefer smaller batches over the 50 ceiling.
+- `succeeded` — one entry per order that was **not rejected**, with `dispatchedShipments` (the number of `pending` shipments moved to `assigned`). `dispatchedShipments: 0` is a legitimate no-op — the order was already dispatched or had nothing pending — and is still reported as a success, matching the single-order endpoint's behavior.
+- `failed` — one entry per order that was rejected, with `code` (stable, prefer this for logic/mapping) and `reason` (human-readable, may be generic for some codes).
+
+**Possible `failed[].code` values**:
+
+| Code | Meaning |
+|------|---------|
+| `ORDER_NOT_FOUND` | Order doesn't exist or isn't owned by this vendor |
+| `ORDER_WRONG_TYPE` | Order is digital — nothing to dispatch to an agency |
+| `ORDER_PAYMENT_REQUIRED` | Order is not yet `paid` — **this is the "unpaid order can't be dispatched" case** |
+| `ORDER_DISPUTE_HOLD` | Order is frozen by an open payment dispute |
+
+**Error Responses** (request-level, before any order is touched):
+- `400` – `VALIDATION_ERROR` – `orderIds` empty, exceeds 50 items, or contains an invalid ID
 
 ---
 
-## 10 · Errors shared with the rest of the vendor surface
+### COD limits on dispatch (2026-10-02)
 
-See [products.md § 7](./products.md#7--errors-every-route-on-this-page-can-raise) for the full auth,
-rate-limit and maintenance table — it is identical here. The order-specific additions are in each
-section above.
+Handing a **COD** shipment to an agency is now checked against two caps on the cash that agency
+holds un-remitted (in-flight COD + collected-not-remitted):
 
-**One reminder:** the validation `details` shape is
-`{ fields: [{ path, message, code }] }` — an **object wrapping an array**, keyed **`path`**. The
-backend's doc shows a bare array keyed `field`. Your `http.ts` already normalises both, which is
-correct.
+1. **The agency's own limit** — 1 000 000 by default, or an administrator's pin (`kind: "agency_limit"`).
+2. **Your COD terms' `maxCashPerAgency`** — measured on *your* orders' cash at that agency
+   (`kind: "vendor_terms"`). See `GET/PUT /api/vendor/profile/cod-terms` in [profile.md](./profile.md).
+
+| Path | When a cap would be exceeded |
+|---|---|
+| **Auto-redirect** (your setting) | The order still goes through; that shipment is **not dispatched**, stays `pending`, and gets a `codLimitHold`. The rest of the order dispatches. A timeline entry says so. |
+| `POST /orders/:id/dispatch` | `422 COD_AGENCY_LIMIT_EXCEEDED`, nothing of the order dispatched — **unless** the body is `{ "force": true }` |
+| `POST /orders/bulk/dispatch` | that order lands in `data.failed[]` with `code: "COD_AGENCY_LIMIT_EXCEEDED"` and `details`; body `force: true` applies to every order in the batch |
+| `PATCH /orders/:id/delivery-agency` | `422 COD_AGENCY_LIMIT_EXCEEDED` unless `"force": true` |
+
+`details`: `{ kind, currentExposure, additionalAmount, limit, agencyId, shipmentId, hint }`.
+A forced shipment records `codLimitForce`; a successful dispatch clears any `codLimitHold`.
+
+Response additions:
+
+- `GET /orders` rows: `codLimitHeld: boolean` — a shipment of this order is held.
+- `GET /orders/:id` → `items[].delivery` (and `deliveries[]`):
+  - `codLimitHold: { kind, currentExposure, additionalAmount, limit, evaluatedAt } | null`
+  - `codLimitForce: { kind, forcedByUserId, forcedByRole, forcedAt, currentExposure, additionalAmount, limit } | null`
+
+Prepaid orders are never affected. A held shipment is not re-tried automatically — dispatch it
+(with `force` if still over) once the agency has remitted cash. You are told about each held
+shipment by the `shipment.cod_limit_held` notification (preference `codLimitUpdates`, link
+`orders/{orderId}`). ⚠ The timeline entry's description always reads "…the delivery agency is at
+its cash-on-delivery limit", **even when the hold was your own `maxCashPerAgency`** — read `kind`
+in `metadata.codLimitHeld[]` / `codLimitHold`, not the sentence (`OrderService.maybeDispatchToAgencies`).
+
+### GET /api/vendor/orders/:id/timeline
+
+**Description**: Get the audit trail (timeline) for an order showing all status changes and events.
+
+**Authorization**: Vendor access required.
+
+**Request Headers**:
+- `Authorization: Bearer <token>`
+
+**Path Parameters**:
+- `id` (string, required) - Order ID
+
+**Query Parameters**:
+- `page` (integer, optional, default: 1) - Page number (1-indexed)
+- `limit` (integer, optional, default: 20, max: 100) - Items per page
+
+**Request Body**: None
+
+**Success Response**:
+
+Status: `200 OK`
+
+Body:
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "_id": "string",
+      "orderId": "string",
+      "eventType": "fulfillment.updated",
+      "oldValue": "pending",
+      "newValue": "processing",
+      "noteId": null,
+      "description": "Fulfillment status changed",
+      "actor": {
+        "type": "vendor",
+        "id": "string",
+        "name": "Vendor Business Name"
+      },
+      "created_at": "2026-02-09T23:54:00.000Z"
+    }
+  ],
+  "meta": {
+    "total": 15,
+    "page": 1,
+    "limit": 20,
+    "pages": 1
+  }
+}
+```
+
+> [!WARNING]
+> **`_id` here is correct and is NOT a typo — do not "fix" it to `id`.** A timeline entry is the
+> one shape on this page that keeps the Mongo key: `VendorOrderService.getTimeline` builds its DTO
+> with `_id: entry._id.toString()`, while every other DTO in that same file — the order itself, the
+> customer, a vendor note — maps to **`id`**. Both keys are hand-written, so neither follows from
+> the model, and the two really do differ on one endpoint's response. `created_at` is snake_case
+> here for the same reason, against `createdAt` everywhere else on this page.
+
+**`eventType` values**:
+
+| Value | Produces `oldValue`/`newValue` | Description |
+|-------|-------------------------------|-------------|
+| `order.created` | — | Order was placed |
+| `payment.updated` | — | Payment status changed |
+| `fulfillment.updated` | ✅ Previous/new fulfillment status | Fulfillment status changed |
+| `delivery.agency_updated` | — | Delivery agency assigned or changed |
+| `note.added` | `noteId` populated | Vendor internal note added |
+| `entitlement.revoked` | — | Digital entitlement revoked |
+| `entitlement.restored` | — | Digital entitlement restored |
+| `order.completed` | — | Customer confirmed delivery, or it was auto-confirmed |
+| `system.action` | — | Automated system event |
+
+> **Nine values, and this table is the whole set** — it is `TimelineEventType` in
+> `order-timeline.model.ts:22`, mirrored by the schema's own `enum`, so anything else is
+> rejected at write time. ⚠ **`order.completed` was missing from this table until 2026-09-06.**
+> Note also that `order.cancelled` is **not** one of them: a cancellation writes a
+> `fulfillment.updated` row with `metadata.newStatus = 'cancelled'` and publishes
+> `order.cancelled` on the **event bus**, which is a different channel this endpoint never
+> returns.
+
+> ⚠ **`oldValue`, `newValue`, `noteId` and `description` are NOT gated on `eventType`.** All
+> four are read straight off the event's `metadata` — `previousStatus`, `newStatus`, `noteId`,
+> and `reason ?? messagePreview ?? description` respectively (`vendor-order.service.ts:740-743`)
+> — so which of them is populated is a property of **whatever wrote the row**, not of the event
+> type. The ✅ column above says where they are populated *today*; it is not a guarantee, and it
+> is not enforced anywhere. **Test the field for `null`; do not infer it from `eventType`.**
+> (This block previously asserted the opposite — that `oldValue`/`newValue` appear *only* on
+> `fulfillment.updated` and `noteId` *only* on `note.added`. Corrected from source 2026-09-06.)
+> `actor.id` and `actor.name` are `null` for `system` events.
+
+**Error Responses**:
+- `404` – `ORDER_NOT_FOUND` – Order not found or does not belong to vendor
+- `400` – `VALIDATION_ERROR` – Invalid query parameters
 
 ---
 
-## 11 · Do not use `vendor-order.dto.ts` as the contract
+### POST /api/vendor/orders/:id/notes
 
-If anyone points you at the backend's `src/modules/vendor/dto/vendor-order.dto.ts` as the response
-type: **it is stale and nothing type-checks against it.** Every handler returns `any`.
+**Description**: Add a vendor-internal note to an order. Notes are visible only to the vendor.
 
-It declares `delivery` singular where the wire has `deliveries` plural; it omits `paymentMethod`,
-`deliveryTimeline`, per-item `delivery`, `trackingNumber`, `rejection` and `freeDelivery`; and its
-timeline type bears no resemblance to what ships. The shapes in this document were read from the
-service that actually builds the response.
+**Authorization**: Vendor access required.
+
+**Request Headers**:
+- `Authorization: Bearer <token>`
+- `Content-Type: application/json`
+
+**Path Parameters**:
+- `id` (string, required) - Order ID
+
+**Query Parameters**: None
+
+**Request Body**:
+```json
+{
+  "message": "string (required, min 1, max 2000 chars) - Note content"
+}
+```
+
+**Success Response**:
+
+Status: `200 OK`
+
+Body:
+```json
+{
+  "success": true,
+  "data": {
+    "id": "string",
+    "message": "Customer requested gift wrapping",
+    "authorId": "string",
+    "createdAt": "2026-02-09T23:54:00.000Z"
+  },
+  "message": "Note added successfully"
+}
+```
+
+**Error Responses**:
+- `404` – `ORDER_NOT_FOUND` – Order not found or does not belong to vendor
+- `400` – `VALIDATION_ERROR` – Invalid message (empty or exceeds 2000 characters)
+
+---
+
+### GET /api/vendor/orders/:id/notes
+
+**Description**: Get all vendor-internal notes for an order.
+
+**Authorization**: Vendor access required.
+
+**Request Headers**:
+- `Authorization: Bearer <token>`
+
+**Path Parameters**:
+- `id` (string, required) - Order ID
+
+**Query Parameters**: None
+
+**Request Body**: None
+
+**Success Response**:
+
+Status: `200 OK`
+
+Body:
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "string",
+      "message": "Customer requested gift wrapping",
+      "authorId": "string",
+      "createdAt": "2026-02-09T23:54:00.000Z"
+    }
+  ]
+}
+```
+
+**Error Responses**:
+- `404` – `ORDER_NOT_FOUND` – Order not found or does not belong to vendor
+
+---
+
+### GET /api/vendor/orders/:id/notes/:noteId
+
+**Description**: Get a single vendor-internal note by its ID. Intended for use when the frontend reads a `note.added` timeline event and wants to display the full note content without re-fetching all notes.
+
+**Authorization**: Vendor access required.
+
+**Request Headers**:
+- `Authorization: Bearer <token>`
+
+**Path Parameters**:
+- `id` (string, required) - Order ID. ⚠ **Never read.** `getNoteById(noteId, vendorId)` resolves the note by its own id and the vendor scope alone (`vendor-order.service.ts:866-871`), so any syntactically valid value here returns the note — including another order’s id. Send the real one anyway; do not rely on the mismatch being caught.
+- `noteId` (string, required) - Note ID (found in `noteId` field of `note.added` timeline events)
+
+**Query Parameters**: None
+
+**Request Body**: None
+
+**Success Response**:
+
+Status: `200 OK`
+
+Body:
+```json
+{
+  "success": true,
+  "data": {
+    "id": "string",
+    "orderId": "string",
+    "message": "Customer requested gift wrapping",
+    "authorId": "string",
+    "createdAt": "2026-02-09T23:54:00.000Z"
+  }
+}
+```
+
+**Error Responses**:
+- `404` – `ORDER_NOT_FOUND` – Note not found or does not belong to this vendor. ⚠ The code really is `ORDER_NOT_FOUND` even though the missing thing is a *note* (`vendor-order.service.ts:870`); there is no `ORDER_NOTE_NOT_FOUND` in the registry
+
+---
+
+### PATCH /api/vendor/orders/:id/delivery-agency
+
+**Description**: Reassign the delivery agency for a **single item** of a physical order.
+
+A physical order can be split across several delivery agencies (one per item),
+so reassignment is item-scoped — it moves only the specified item to the new
+agency and leaves every other item untouched. Behind the scenes the item is
+moved between agency shipments: it joins the destination agency's open shipment
+for this order (or a new one is created), and is removed from its previous
+shipment (which is deleted if it becomes empty).
+
+**Authorization**: Vendor access required.
+
+**Request Headers**:
+- `Authorization: Bearer <token>`
+- `Content-Type: application/json`
+
+**Path Parameters**:
+- `id` (string, required) - Order ID
+
+**Request Body**:
+```json
+{
+  "itemId": "507f1f77bcf86cd799439012",
+  "deliveryAgencyId": "507f1f77bcf86cd799439099"
+}
+```
+
+- `itemId` (string, required) — the order item (`items[].id`) to reassign.
+- `deliveryAgencyId` (string, required) — the destination agency.
+
+**Success Response**:
+
+Status: `200 OK`
+
+Body:
+
+The response is the full updated order details object (same shape as `GET /api/vendor/orders/:id`). The reassigned item's `items[].delivery` now points at the new agency, and the order-level `deliveries[]` overview reflects the new shipment split.
+
+```json
+{
+  "success": true,
+  "data": { "...same as GET /api/vendor/orders/:id data..." },
+  "message": "Delivery agency updated successfully"
+}
+```
+
+> **Note:** Requesting the agency the item is already assigned to is a no-op and returns the order unchanged.
+
+**Error Responses**:
+- `404` – `ORDER_NOT_FOUND` – Order not found or does not belong to vendor
+- `404` – `ORDER_ITEM_NOT_FOUND` – No item with that `itemId` exists on the order
+- `404` – `ORDER_DELIVERY_AGENCY_NOT_FOUND` – Destination agency does not exist
+- `400` – `ORDER_WRONG_TYPE` – Order is not a physical order
+- `422` – `ORDER_TERMINAL_STATE` – Order is already delivered or cancelled
+- `422` – `ORDER_ITEM_NOT_REASSIGNABLE` – Item has already been dispatched (picked up / in transit / delivered / returned)
+
+---
+
+### GET /api/vendor/orders/:id/entitlements
+
+**Description**: View digital entitlements for an order. Returns download statistics and customer access information for digital products.
+
+> [!NOTE]
+> ⚠ **A non-digital order is a `400`, NOT an empty array.** `getOrderEntitlements` throws
+> `400 ORDER_WRONG_TYPE` — *"Entitlements are only available for digital orders"* —
+> when `order.order_type !== 'digital'` (`vendor-order.service.ts:1178-1180`). This page said it
+> returned `[]`, so a client rendering "no entitlements" for a physical order gets an error
+> instead. Branch on `order_type` before calling.
+
+**Authorization**: Vendor access required.
+
+**Request Headers**:
+- `Authorization: Bearer <token>`
+
+**Path Parameters**:
+- `id` (string, required) - Order ID
+
+**Success Response**:
+
+Status: `200 OK`
+
+Body:
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "507f1f77bcf86cd799439050",
+      "orderItemId": "string",
+      "productId": "string",
+      "productTitle": "E-book: Advanced TypeScript",
+      "variantId": "string",
+      "variantName": "PDF Edition",
+      "assetId": "string",
+      "assetName": "advanced-typescript.pdf",
+      "customerId": "string",
+      "downloadsUsed": 2,
+      "maxDownloads": 5,
+      "downloadsRemaining": 3,
+      "grantedAt": "2026-02-09T23:54:00.000Z",
+      "expiresAt": "2027-02-09T23:54:00.000Z",
+      "revokedAt": null,
+      "lastDownloadAt": "2026-03-01T10:00:00.000Z",
+      "isActive": true,
+      "isRevoked": false,
+      "isExpired": false
+    }
+  ],
+  "meta": {
+    "count": 1,
+    "activeCount": 1,
+    "revokedCount": 0,
+    "expiredCount": 0
+  }
+}
+```
+
+> `downloadsRemaining` is the string `"unlimited"` when `maxDownloads` is `null`.
+> `variantId`/`variantName` identify which **format** of the digital product was purchased (e.g. "PDF Edition" vs "Source Code (ZIP)"). Each entitlement maps to exactly one variant's asset, with `maxDownloads`/`expiresAt` snapshotted from that variant at purchase time. See the [Digital Products Guide](./digital-products.md).
+
+**Error Responses**:
+- `404` – `ORDER_NOT_FOUND` – Order not found or does not belong to vendor
+- `400` – `ORDER_WRONG_TYPE` – Order is not a digital order. ⚠ There is no `INVALID_PRODUCT_TYPE` in the registry
+
+---
+
+### POST /api/vendor/entitlements/:id/revoke
+
+> [!NOTE]
+> Note the base path: `/api/vendor/entitlements/:id/revoke` — the **entitlement ID**, not order ID.
+
+**Description**: Revoke a customer's access to a digital entitlement. Requires a reason for audit purposes.
+
+**Authorization**: Vendor access required.
+
+**Request Headers**:
+- `Authorization: Bearer <token>`
+- `Content-Type: application/json`
+
+**Path Parameters**:
+- `id` (string, required) - Entitlement ID
+
+**Request Body**:
+```json
+{
+  "reason": "Customer requested refund"
+}
+```
+
+- `reason` (**required**, string, **min 10 / max 500 characters**) - Reason for revocation (logged in the order timeline as `entitlement.revoked`). ⚠ A short reason is a `400 VALIDATION_ERROR` — *"Reason must be at least 10 characters"* (`vendor-order.validator.ts:80-84`), so `"refund"` is refused.
+
+**Success Response**:
+
+Status: `200 OK`
+
+Body:
+```json
+{
+  "success": true,
+  "data": {
+    "id": "507f1f77bcf86cd799439050",
+    "revokedAt": "2026-02-09T23:54:00.000Z",
+    "reason": "Customer requested refund",
+    "message": "Entitlement revoked successfully"
+  },
+  "message": "Entitlement revoked successfully"
+}
+```
+
+**Error Responses**:
+- `404` – `DIGITAL_ENTITLEMENT_NOT_FOUND` – Entitlement not found or does not belong to this vendor. ⚠ Not `NOT_FOUND`, which is reserved for unmatched routes
+- `422` – `DIGITAL_ENTITLEMENT_ALREADY_REVOKED` – Entitlement is already revoked
+- `400` – `VALIDATION_ERROR` – `reason` missing, shorter than 10 characters, or longer than 500
+
+---
+
+### POST /api/vendor/entitlements/:id/restore
+
+> [!NOTE]
+> Note the base path: `/api/vendor/entitlements/:id/restore` — the **entitlement ID**, not order ID.
+
+**Description**: Restore a previously revoked digital entitlement. Only works if the entitlement has not expired.
+
+**Authorization**: Vendor access required.
+
+**Request Headers**:
+- `Authorization: Bearer <token>`
+
+**Path Parameters**:
+- `id` (string, required) - Entitlement ID
+
+**Request Headers**:
+- `Authorization: Bearer <token>`
+- `Content-Type: application/json`
+
+**Request Body**:
+```json
+{
+  "reason": "Customer issue resolved"
+}
+```
+
+- `reason` (**required**, string, **min 10 / max 500 characters**) - Reason for restoration (logged in the order timeline as `entitlement.restored`). ⚠ Same 10-character floor as revoke.
+
+**Success Response**:
+
+Status: `200 OK`
+
+Body:
+```json
+{
+  "success": true,
+  "data": {
+    "id": "507f1f77bcf86cd799439050",
+    "restoredAt": "2026-02-09T23:54:00.000Z",
+    "reason": "Customer issue resolved",
+    "message": "Entitlement restored successfully"
+  },
+  "message": "Entitlement restored successfully"
+}
+```
+
+**Error Responses**:
+- `404` – `DIGITAL_ENTITLEMENT_NOT_FOUND` – Entitlement not found or does not belong to this vendor. ⚠ Not `NOT_FOUND`, which is reserved for unmatched routes
+- `422` – `DIGITAL_ENTITLEMENT_NOT_REVOKED` – Entitlement is not currently revoked
+- `422` – `DIGITAL_ENTITLEMENT_EXPIRED` – Entitlement has expired and cannot be restored
+- `400` – `VALIDATION_ERROR` – `reason` missing, shorter than 10 characters, or longer than 500
+
+---
+
+## Error Responses
+
+All error responses follow this format. `category` is one of the nine values listed in
+[`errors/README.md`](../errors/README.md) and is **always present**; `details` is omitted
+entirely when absent.
+
+```json
+{
+  "success": false,
+  "requestId": "3f8a1c74-9b2e-4d10-8c55-6a0f2b7e19dd",
+  "error": {
+    "code": "ORDER_NOT_FOUND",
+    "message": "Human-readable error description",
+    "statusCode": 404,
+    "category": "not_found"
+  }
+}
+```
+
+For validation errors:
+
+```json
+{
+  "success": false,
+  "requestId": "3f8a1c74-9b2e-4d10-8c55-6a0f2b7e19dd",
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Request validation failed",
+    "statusCode": 400,
+    "category": "validation",
+    "details": {
+      "fields": [
+        {
+          "path": "status",
+          "message": "Invalid fulfillment status",
+          "code": "invalid_enum_value"
+        }
+      ]
+    }
+  }
+}
+```
+
+## Notes & Constraints
+
+### Order Status Values
+
+Valid status values and typical flow:
+
+```
+pending → processing → partially_shipped → shipped → partially_delivered → delivered
+                              ↘ fulfilled
+                              ↘ cancelled (vendor: only from pending/processing)
+```
+
+| Status | Description | Who sets it |
+|--------|-------------|-------------|
+| `pending` | Order received, awaiting vendor action | Vendor |
+| `processing` | Vendor is preparing the order | Vendor (also set automatically on payment success) |
+| `partially_shipped` | **Physical, multi-agency orders only.** At least one shipment has been picked up by its agency, but not all. | **System** — derived from shipment statuses, see [Fulfillment lifecycle](#fulfillment-lifecycle) |
+| `shipped` | Every shipment of the order has been picked up by its agency. | **System** |
+| `partially_delivered` | **Physical, multi-agency orders only.** At least one shipment has been customer-confirmed as delivered, but not all. | **System** |
+| `delivered` | Every shipment of the order has been customer-confirmed as delivered. Triggers order `completion` (escrow release) automatically. | **System** |
+| `fulfilled` | Service completed or digital product delivered | System |
+| `cancelled` | Order cancelled by vendor or customer | Vendor/customer — only while `pending`/`processing` |
+| `returned` | **Terminal.** Set automatically when a **paid dispute is lost** on an order that had already (partially) shipped/delivered (goods must come back). Vendors cannot set this. |
+
+<a name="fulfillment-lifecycle"></a>
+> **Fulfillment lifecycle (physical orders).** An order can be split across several delivery
+> agencies — one `Shipment` per agency. `partially_shipped`/`shipped`/`partially_delivered`/
+> `delivered` are computed by `OrderFulfillmentAggregationService` after every shipment status
+> change and are **never** vendor-settable:
+> - `shipped` = every shipment's status is `picked_up` or beyond (`in_transit`, `agent_delivered`,
+>   `delivered`). `partially_shipped` = some but not all.
+> - `delivered` = every shipment's status is `delivered`, i.e. **customer-confirmed** — an agency
+>   marking a shipment `agent_delivered` is not enough on its own; see
+>   [agency/shipments.md](../agency/shipments.md) and
+>   [customer/orders.md](../customer/orders.md#confirm-shipment).
+>   `partially_delivered` = some but not all shipments delivered.
+> - See `deliveryTimeline` on `GET /api/vendor/orders/:id` for the merged, per-agency status
+>   history behind these aggregates.
+
+### Payment Status Values
+
+| Status | Description |
+|--------|-------------|
+| `pending` | Payment not yet initiated |
+| `AWAITING_PAYMENT` | Awaiting payment confirmation (for COD: awaiting cash handoffs) |
+| `partially_paid` | **COD only.** Some of the order's shipments have had their cash collected, others are outstanding (or came back `returned`). |
+| `paid` | Payment completed successfully (COD: every shipment's cash collected) |
+| `disputed` | **A card payment is under dispute (chargeback). The order is frozen — see "Payment disputes" below.** |
+| `failed` | Payment attempt failed (COD: every shipment returned with no cash ever collected) |
+| `refunded` | Payment has been refunded (incl. a lost dispute) |
+
+### Cash-on-delivery orders (`paymentMethod: "cash_on_delivery"`)
+
+Every order now carries a `paymentMethod` (`"online"` — the default, prepaid via gateway — or
+`"cash_on_delivery"`). COD orders **invert the payment/fulfilment sequence**: they are unpaid at
+creation, fulfil first, and get paid per shipment when the delivery agent collects cash against
+the customer's delivery code. What changes for the vendor dashboard:
+
+- **Dispatch before payment.** COD orders can be moved to `processing` and dispatched while
+  `AWAITING_PAYMENT`. Auto-redirect (if enabled) fires at checkout.
+- **Payment progresses with delivery**: `AWAITING_PAYMENT` → `partially_paid` → `paid` as each
+  shipment's cash is collected. `payment.received.partial` / `payment.received.full`
+  notifications fire on each collection, like online payments.
+- **No unpaid auto-cancel.** The daily unpaid-order sweep skips COD orders.
+- **Earnings timing differs**: your net for each COD shipment is computed at its cash collection
+  (minus platform commission, the agency's delivery fee AND its COD handling fee) and held in
+  escrow. Release requires the usual hold window **plus** the physical cash reaching the platform
+  through the agency's remittance — COD earnings can therefore stay `pending` longer than online
+  ones. See [transactions.md](./transactions.md).
+- **Refunds:** there is no gateway to refund against. Post-collection COD refunds are handled
+  off-platform in this phase — the refund endpoints report COD orders as ineligible
+  (`REFUND_PAYMENT_NOT_FOUND`: no gateway payment transaction exists for them).
+
+### State Transition Rules
+
+The system enforces valid state transitions:
+- Cannot transition out of a terminal state — and the terminal set is **not** the intuitive one. `FULFILLMENT_STATE_MACHINE` calls a status terminal when its allowed-transitions array is empty, which is `partially_shipped`, `shipped`, `partially_delivered`, `delivered`, `cancelled` and `returned`. ⚠ **`fulfilled` is NOT terminal** (`fulfilled → cancelled` is legal), and the three system-derived shipping statuses **are** — terminal *from the vendor’s perspective*, since only the shipment pipeline advances them
+- Cannot mark order as `shipped`/`processing` if payment status is not `paid` — **except COD orders**, which fulfil before payment
+- **An order on dispute hold cannot advance at all (see below) — returns `423`.**
+- State machine validation is enforced in the service layer
+
+### Payment disputes & order freeze (dashboard changes)
+
+Card payments (Stripe) can be **disputed** by the customer (a chargeback). The
+backend now reacts to disputes automatically, and the vendor dashboard must
+reflect the frozen state.
+
+**The order object carries a `dispute_hold` field:**
+```jsonc
+"dispute_hold": {
+  "active": true,                 // order is frozen
+  "disputed_at": "2026-06-24T10:00:00.000Z",
+  "resolved_at": null,            // set when won/lost
+  "gateway_dispute_id": "dp_123",
+  "reason": "stripe_dispute"
+}
+```
+
+**Lifecycle the dashboard should render:**
+1. **Dispute opened** → `payment_status` becomes `disputed` and `dispute_hold.active = true`.
+   The order is **frozen**: any call to `PATCH /api/vendor/orders/:id/status` returns
+   **`423 ORDER_DISPUTE_HOLD`**. Disable the status-advance buttons and show a clear
+   "Payment under dispute — frozen" banner.
+2. **Dispute won** → `payment_status` returns to `paid`, `dispute_hold.active = false`.
+   Re-enable the normal fulfilment controls.
+3. **Dispute lost** (or full refund) → `payment_status` becomes `refunded`,
+   `dispute_hold.active = false`, and `fulfillment_status` becomes `returned`
+   (if it had shipped/delivered) or `cancelled` (if not). Vendor earnings for the
+   order are reversed. The order is terminal — show it as closed/returned.
+
+**What to change on the dashboard:**
+- Handle the new `payment_status: "disputed"` and `fulfillment_status: "returned"` values
+  (badges, filters, list columns).
+- When `dispute_hold.active` is true, **disable all fulfilment actions** and don't even
+  attempt the status PATCH; if you do, handle the `423` gracefully (show the banner, not a generic error).
+- Surface the dispute on the order detail view (a "Payment disputed" notice with the date).
+- Resolution is automatic from Stripe webhooks; the vendor cannot act on a frozen order.
+  (Admins can manually resolve via the admin tools if a Stripe event is missed.)
+
+### Date Filters
+
+Date filters (`dateFrom`, `dateTo`) must use ISO 8601 format:
+```
+2026-02-09T00:00:00.000Z
+```
+
+### Search Query
+
+⚠ **`q` searches the order number and NOTHING ELSE.** The repository builds exactly one
+condition — `query.order_number = { $regex: filters.q, $options: 'i' }`
+(`vendor-order.repository.ts:79-82`) — a case-insensitive substring match on that single field.
+Typing a customer's name or email returns **no rows**, not their orders.
+
+> **This section said "Order number · Customer name · Customer email" until 2026-09-06**, while
+> the parameter's own entry under *Query Parameters* above had already been corrected to say
+> order-number-only. **The page contradicted itself, and the wrong half was the one a reader
+> scrolling to "Search Query" would find.** A correction applied at one site is not a
+> correction to the page — grep the whole file for the claim.
+
+### Immutable Fields
+
+The following fields cannot be modified via API:
+- `orderNumber`
+- `totalAmount`
+- `customer` details
+- `items` array
+- `created_at`
+
+### Vendor-Internal Notes
+
+Notes added via `POST /orders/:id/notes`:
+- Are visible only to the vendor (not customer)
+- Cannot be edited or deleted after creation
+- Are included in administrative order views but not customer views
