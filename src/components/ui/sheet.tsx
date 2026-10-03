@@ -33,8 +33,14 @@ function SheetOverlay({
   return (
     <SheetPrimitive.Overlay
       data-slot="sheet-overlay"
+      // `cursor-pointer` is what makes a tap on the dim close the sheet on
+      // iOS WebKit. Radix dismisses a touch on the `click` that follows it, and
+      // WebKit only sends that click for an element it considers clickable — a
+      // bare div portalled under <body> isn't, so the tap went nowhere. The
+      // cursor is the documented switch; it keeps Radix's own dismissal (and
+      // every `onInteractOutside` guard) in charge rather than adding a handler.
       className={cn(
-        "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-50 bg-black/50",
+        "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-50 cursor-pointer bg-black/50",
         className
       )}
       {...props}

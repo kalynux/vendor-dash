@@ -1,13 +1,7 @@
 import type { ReactNode } from 'react';
-import {
-    AlertCircle, Building2, RotateCcw, Shield, Truck, Warehouse,
-} from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
+import { Building2, FileText } from 'lucide-react';
 import { VerifiedBadge } from '@/components/common/VerifiedBadge';
-import { Separator } from '@/components/ui/separator';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { cn } from '@/lib/utils';
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { formatAgencyAddressDetail, formatAgencyLocality } from '@/lib/agencyAddress';
 import { fileRefUrl } from '@/services/files.service';
 import { useTranslation, useFormatters, type TranslationKey } from '@/i18n';
@@ -19,13 +13,34 @@ const RETURNS_PAYER_KEYS: Record<string, TranslationKey> = {
     customer: 'agency.returnsPayer.customer',
 };
 
-function PolicyRow({ label, value }: { label: string; value: ReactNode }) {
+const INSPECTOR_KEYS: Record<string, TranslationKey> = {
+    agency: 'agency.detail.inspector.agency',
+    vendor: 'agency.detail.inspector.vendor',
+    admin: 'agency.detail.inspector.admin',
+};
+
+/** One flat block of the terms. Hairlines between blocks come from the parent's `divide-y`. */
+function Section({ title, children }: { title: string; children: ReactNode }) {
     return (
-        <div className="flex items-start justify-between gap-3 py-2">
-            <span className="text-xs text-muted-foreground shrink-0">{label}</span>
-            <span className="text-xs font-medium text-right">{value}</span>
+        <section className="py-4">
+            <h3 className="mb-1 text-sm font-semibold">{title}</h3>
+            {children}
+        </section>
+    );
+}
+
+function Row({ label, value }: { label: string; value: ReactNode }) {
+    return (
+        <div className="flex items-baseline justify-between gap-4 py-1.5 text-sm">
+            <span className="text-muted-foreground">{label}</span>
+            <span className="text-right font-medium tabular-nums">{value}</span>
         </div>
     );
+}
+
+/** The agency's own words for a section. Shown as written, under the figures it qualifies. */
+function Note({ children }: { children: ReactNode }) {
+    return <p className="mt-1.5 whitespace-pre-line text-sm text-muted-foreground">{children}</p>;
 }
 
 export interface AgencyDetailSheetProps {
@@ -36,6 +51,12 @@ export interface AgencyDetailSheetProps {
     footerSlot?: ReactNode;
 }
 
+/**
+ * Everything an agency will hold a vendor to, read before the vendor asks to
+ * connect — the request IS the vendor accepting these terms, so nothing the
+ * agency charges or limits is left off. Fields that arrived on 2026-10-03 are
+ * optional on the type and their rows simply drop out against an older server.
+ */
 export function AgencyDetailSheet({ agency, open, onOpenChange, footerSlot }: AgencyDetailSheetProps) {
     const { t } = useTranslation();
     const fmt = useFormatters();
@@ -44,185 +65,193 @@ export function AgencyDetailSheet({ agency, open, onOpenChange, footerSlot }: Ag
     const hq = agency.headquartersAddress;
     const p = agency.policies;
     const logoUrl = fileRefUrl(agency.logo);
+    const hqDetail = hq ? formatAgencyAddressDetail(hq) : null;
+    /** A zero fee is a real answer, and "Free" says it better than "FCFA 0". */
+    const money = (amount: number) => (amount === 0 ? t('agency.detail.free') : fmt.currency(amount));
+
+    const pickup = p?.pricing.pickup_based;
+    const storage = p?.pricing.storage_based;
+    const fees = p?.pricing.additional_fees;
+    const documents = p?.documents ?? [];
 
     return (
         <Sheet open={open} onOpenChange={onOpenChange}>
             <SheetContent
                 side="bottom"
-                className="max-h-[85dvh] flex flex-col rounded-t-2xl px-0 pb-[env(safe-area-inset-bottom)]"
+                // Centred and narrower from `md`: a full-width strip of label/value
+                // rows on a 1280px screen puts each label a screen away from its figure.
+                className="h-[85dvh] gap-0 rounded-t-2xl p-0 pb-[env(safe-area-inset-bottom)] md:mx-auto md:max-w-xl"
             >
-                <div className="mx-auto w-10 h-1 bg-muted rounded-full mt-2 mb-1 flex-shrink-0" />
+                <div className="mx-auto mb-1 mt-2 h-1 w-10 flex-shrink-0 rounded-full bg-muted" />
 
-                <SheetHeader className="px-5 pb-2 flex-shrink-0">
-                    <div className="flex items-start gap-3">
-                        <div className="w-14 h-14 rounded-xl bg-muted flex items-center justify-center flex-shrink-0 overflow-hidden border border-border">
-                            {logoUrl ? (
-                                <img
-                                    src={logoUrl}
-                                    alt={agency.agencyName}
-                                    className="w-full h-full object-cover"
-                                />
-                            ) : (
-                                <Building2 className="w-7 h-7 text-muted-foreground" />
-                            )}
-                        </div>
-                        <div className="flex-1 min-w-0 pt-0.5">
-                            <SheetTitle className="text-base leading-tight">
-                                {agency.agencyName}
-                                {agency.kycVerified && <VerifiedBadge kind="agency" className="ml-1" />}
-                            </SheetTitle>
-                            <div className="flex flex-wrap gap-1.5 mt-1.5">
-                                {/* Verified shows as the check beside the name; only the
-                                    missing check is worth a word of its own. */}
-                                {!agency.kycVerified && (
-                                    <Badge variant="secondary" className="gap-1 text-xs font-medium text-amber-700 bg-amber-50 border-amber-200 dark:text-amber-400 dark:bg-amber-950 dark:border-amber-800">
-                                        <Shield className="w-3 h-3" />
-                                        {t('agency.detail.unverified')}
-                                    </Badge>
-                                )}
-                            </div>
-                        </div>
+                <SheetHeader className="flex-shrink-0 flex-row items-center gap-3 border-b px-4 pb-4 pt-2 pr-12 text-left">
+                    <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted">
+                        {logoUrl ? (
+                            <img src={logoUrl} alt="" className="h-full w-full object-cover" />
+                        ) : (
+                            <Building2 className="h-6 w-6 text-muted-foreground" />
+                        )}
+                    </div>
+                    <div className="min-w-0">
+                        <SheetTitle className="flex items-center gap-1 text-base leading-tight">
+                            <span className="truncate">{agency.agencyName}</span>
+                            {agency.kycVerified && <VerifiedBadge kind="agency" />}
+                        </SheetTitle>
+                        <SheetDescription className="mt-0.5 truncate text-sm">
+                            {/* Verified shows as the check beside the name; only the
+                                missing check is worth a word of its own. */}
+                            {[hq ? formatAgencyLocality(hq) : null, agency.kycVerified ? null : t('agency.detail.unverified')]
+                                .filter(Boolean)
+                                .join(' · ')}
+                        </SheetDescription>
                     </div>
                 </SheetHeader>
 
-                <Separator className="flex-shrink-0" />
-
-                <ScrollArea className="flex-1 overflow-hidden">
-                    <div className="px-5 py-4 space-y-5">
-                        {hq && (
-                            <section>
-                                <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-                                    {t('agency.detail.headquarters')}
-                                </h3>
-                                <div className="rounded-lg bg-muted/50 p-3 space-y-1">
-                                    <p className="text-sm font-medium">{formatAgencyLocality(hq)}</p>
-                                    {formatAgencyAddressDetail(hq) && (
-                                        <p className="text-xs text-muted-foreground">{formatAgencyAddressDetail(hq)}</p>
-                                    )}
-                                </div>
-                            </section>
-                        )}
-
-                        {agency.coverageAreas.length > 0 && (
-                            <section>
-                                <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-                                    {t('agency.detail.coverageAreas')}
-                                </h3>
-                                <div className="flex flex-wrap gap-1.5">
-                                    {agency.coverageAreas.map((area) => (
-                                        <Badge key={area} variant="secondary" className="text-xs capitalize">
-                                            {area}
-                                        </Badge>
-                                    ))}
-                                </div>
-                            </section>
+                {/* Native scrolling, not Radix's ScrollArea: that one keeps its
+                    viewport at `overflow: hidden` until a scrollbar mounts, which
+                    never happens on a touch screen — the lower sections could not
+                    be reached on a phone at all. */}
+                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4">
+                    <div className="divide-y">
+                        {(hq || agency.coverageAreas.length > 0) && (
+                            <Section title={t('agency.detail.deliversTo')}>
+                                {agency.coverageAreas.length > 0 && (
+                                    <p className="text-sm capitalize">{agency.coverageAreas.join(', ')}</p>
+                                )}
+                                {hq && (
+                                    <p className="mt-1.5 text-sm text-muted-foreground">
+                                        {t('agency.detail.headquarters')}: {formatAgencyLocality(hq)}
+                                        {hqDetail && <> — {hqDetail}</>}
+                                    </p>
+                                )}
+                            </Section>
                         )}
 
                         {p && (
                             <>
-                                <section>
-                                    <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">
-                                        {t('agency.detail.pricing')}
-                                    </h3>
-                                    <div className="rounded-lg border divide-y">
-                                        <PolicyRow
-                                            label={t('agency.detail.storageBased')}
-                                            value={
-                                                <span className={cn('flex items-center gap-1', p.pricing.storage_based_enabled ? 'text-emerald-600' : 'text-muted-foreground')}>
-                                                    <Warehouse className="w-3 h-3" />
-                                                    {p.pricing.storage_based_enabled
-                                                        ? t('agency.detail.available')
-                                                        : t('agency.detail.notAvailable')}
-                                                </span>
-                                            }
-                                        />
-                                        <PolicyRow
-                                            label={t('agency.detail.pickupBased')}
-                                            value={
-                                                <span className={cn('flex items-center gap-1', p.pricing.pickup_based_enabled ? 'text-emerald-600' : 'text-muted-foreground')}>
-                                                    <Truck className="w-3 h-3" />
-                                                    {p.pricing.pickup_based_enabled
-                                                        ? t('agency.detail.available')
-                                                        : t('agency.detail.notAvailable')}
-                                                </span>
-                                            }
-                                        />
-                                        {p.pricing.notes && (
-                                            <div className="px-3 py-2">
-                                                <p className="text-xs text-muted-foreground">{p.pricing.notes}</p>
-                                            </div>
-                                        )}
-                                    </div>
-                                </section>
+                                <Section title={t('agency.detail.pickupTitle')}>
+                                    {!p.pricing.pickup_based_enabled ? (
+                                        <p className="text-sm text-muted-foreground">{t('agency.detail.notOffered')}</p>
+                                    ) : pickup ? (
+                                        <>
+                                            <Row label={t('agency.detail.firstKg')} value={money(pickup.base_rate_first_kg)} />
+                                            <Row label={t('agency.detail.extraKg')} value={money(pickup.additional_per_kg)} />
+                                            <Row label={t('agency.detail.outOfRegionSurcharge')} value={money(pickup.out_of_region_surcharge)} />
+                                        </>
+                                    ) : (
+                                        <p className="text-sm">{t('agency.detail.available')}</p>
+                                    )}
+                                </Section>
 
-                                <section>
-                                    <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">
-                                        {t('agency.detail.returns')}
-                                    </h3>
-                                    <div className="rounded-lg border divide-y">
-                                        <PolicyRow
-                                            label={t('agency.detail.costPaidBy')}
-                                            value={
-                                                <span className="flex items-center gap-1">
-                                                    <RotateCcw className="w-3 h-3" />
-                                                    {RETURNS_PAYER_KEYS[p.returns.payer]
-                                                        ? t(RETURNS_PAYER_KEYS[p.returns.payer])
-                                                        : p.returns.payer}
-                                                </span>
-                                            }
-                                        />
-                                        <PolicyRow
-                                            label={t('agency.detail.returnWindow')}
-                                            value={
-                                                p.returns.return_window_days === 0
-                                                    ? t('agency.detail.noReturns')
-                                                    : t('agency.detail.returnWindowDays', {
-                                                          count: p.returns.return_window_days,
-                                                      })
-                                            }
-                                        />
-                                        {p.returns.notes && (
-                                            <div className="px-3 py-2">
-                                                <p className="text-xs text-muted-foreground">{p.returns.notes}</p>
-                                            </div>
-                                        )}
-                                    </div>
-                                </section>
+                                <Section title={t('agency.detail.storageTitle')}>
+                                    {!p.pricing.storage_based_enabled ? (
+                                        <p className="text-sm text-muted-foreground">{t('agency.detail.notOffered')}</p>
+                                    ) : storage ? (
+                                        <>
+                                            <Row label={t('agency.detail.storagePerProduct')} value={money(storage.monthly_storage_fee_per_sku)} />
+                                            <Row label={t('agency.detail.pickPack')} value={money(storage.pick_pack_fee_per_order)} />
+                                            <Row label={t('agency.detail.localDelivery')} value={money(storage.local_delivery_fee)} />
+                                            <Row label={t('agency.detail.outOfRegionDelivery')} value={money(storage.out_of_region_delivery_fee)} />
+                                        </>
+                                    ) : (
+                                        <p className="text-sm">{t('agency.detail.available')}</p>
+                                    )}
+                                </Section>
 
-                                <section>
-                                    <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">
-                                        {t('agency.detail.damageClaims')}
-                                    </h3>
-                                    <div className="rounded-lg border divide-y">
-                                        <PolicyRow
-                                            label={t('agency.detail.claimDeadline')}
-                                            value={
-                                                <span className="flex items-center gap-1">
-                                                    <AlertCircle className="w-3 h-3" />
-                                                    {t('agency.detail.claimDeadlineDays', {
-                                                        count: p.damage.claim_deadline_days,
-                                                    })}
-                                                </span>
-                                            }
-                                        />
-                                        <PolicyRow
-                                            label={t('agency.detail.maxRefundPerItem')}
-                                            value={fmt.currency(p.damage.max_refund_per_item)}
-                                        />
-                                        {p.damage.notes && (
-                                            <div className="px-3 py-2">
-                                                <p className="text-xs text-muted-foreground">{p.damage.notes}</p>
-                                            </div>
+                                {(fees || p.pricing.notes) && (
+                                    <Section title={t('agency.detail.otherFees')}>
+                                        {fees && (
+                                            <>
+                                                <Row
+                                                    label={t('agency.detail.codFee')}
+                                                    value={
+                                                        fees.cod_handling_fee.type === 'percentage'
+                                                            ? t('agency.detail.codFeePercent', { value: fmt.percent(fees.cod_handling_fee.value, Number.isInteger(fees.cod_handling_fee.value) ? 0 : 1) })
+                                                            : money(fees.cod_handling_fee.value)
+                                                    }
+                                                />
+                                                <Row label={t('agency.detail.failedDelivery')} value={money(fees.failed_delivery_fee)} />
+                                                <Row label={t('agency.detail.returnToSender')} value={money(fees.rto_fee)} />
+                                                {fees.peak_season_surcharge > 0 && (
+                                                    <Row label={t('agency.detail.peakSeason')} value={money(fees.peak_season_surcharge)} />
+                                                )}
+                                            </>
                                         )}
-                                    </div>
-                                </section>
+                                        {p.pricing.notes && <Note>{p.pricing.notes}</Note>}
+                                    </Section>
+                                )}
+
+                                {p.cod && (
+                                    <Section title={t('agency.detail.supportsCod')}>
+                                        <p className="py-1.5 text-sm">
+                                            {p.cod.enabled ? t('agency.detail.codAccepted') : t('agency.detail.codNotAccepted')}
+                                        </p>
+                                        {p.cod.enabled && (
+                                            <Row
+                                                label={t('agency.detail.codMaxOrder')}
+                                                value={p.cod.max_order_amount == null ? t('agency.detail.noLimit') : fmt.currency(p.cod.max_order_amount)}
+                                            />
+                                        )}
+                                    </Section>
+                                )}
+
+                                <Section title={t('agency.detail.returns')}>
+                                    <Row
+                                        label={t('agency.detail.returnWindow')}
+                                        value={
+                                            p.returns.return_window_days === 0
+                                                ? t('agency.detail.noReturns')
+                                                : t('agency.detail.returnWindowDays', { count: p.returns.return_window_days })
+                                        }
+                                    />
+                                    <Row
+                                        label={t('agency.detail.costPaidBy')}
+                                        value={RETURNS_PAYER_KEYS[p.returns.payer] ? t(RETURNS_PAYER_KEYS[p.returns.payer]) : p.returns.payer}
+                                    />
+                                    {p.returns.handling_fee != null && (
+                                        <Row label={t('agency.detail.handlingFee')} value={money(p.returns.handling_fee)} />
+                                    )}
+                                    {p.returns.notes && <Note>{p.returns.notes}</Note>}
+                                </Section>
+
+                                <Section title={t('agency.detail.damageClaims')}>
+                                    <Row
+                                        label={t('agency.detail.claimDeadline')}
+                                        value={t('agency.detail.claimDeadlineDays', { count: p.damage.claim_deadline_days })}
+                                    />
+                                    <Row label={t('agency.detail.maxRefundPerItem')} value={fmt.currency(p.damage.max_refund_per_item)} />
+                                    {p.damage.inspector && INSPECTOR_KEYS[p.damage.inspector] && (
+                                        <Row label={t('agency.detail.checkedBy')} value={t(INSPECTOR_KEYS[p.damage.inspector])} />
+                                    )}
+                                    {p.damage.investigation_fee != null && (
+                                        <Row label={t('agency.detail.investigationFee')} value={money(p.damage.investigation_fee)} />
+                                    )}
+                                    {p.damage.notes && <Note>{p.damage.notes}</Note>}
+                                </Section>
+
+                                {documents.length > 0 && (
+                                    <Section title={t('agency.detail.documents')}>
+                                        {documents.map((url, i) => (
+                                            <a
+                                                key={url}
+                                                href={url}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="flex min-h-11 items-center gap-2 text-sm font-medium text-primary hover:underline"
+                                            >
+                                                <FileText className="h-4 w-4 flex-shrink-0" />
+                                                {t('agency.detail.documentN', { n: i + 1 })}
+                                            </a>
+                                        ))}
+                                    </Section>
+                                )}
                             </>
                         )}
                     </div>
-                </ScrollArea>
+                </div>
 
                 {footerSlot && (
-                    <div className="px-5 py-4 border-t flex-shrink-0">
+                    <div className="flex flex-shrink-0 justify-end border-t px-4 py-3">
                         {footerSlot}
                     </div>
                 )}

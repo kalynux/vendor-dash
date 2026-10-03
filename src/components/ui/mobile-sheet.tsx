@@ -174,7 +174,9 @@ export function MobileSheetPortalScrim({ className }: { className?: string }) {
   return (
     <div
       aria-hidden
-      className={cn('fixed inset-0 z-40 bg-black/40 animate-in fade-in-0 md:hidden', className)}
+      // `cursor-pointer`: without it iOS WebKit sends no click for a tap here,
+      // and Radix waits for that click to dismiss a touch — see SheetOverlay.
+      className={cn('fixed inset-0 z-40 cursor-pointer bg-black/40 animate-in fade-in-0 md:hidden', className)}
     />
   );
 }

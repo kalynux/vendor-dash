@@ -902,22 +902,60 @@ export interface VendorAgencyHQAddressDto {
   address_description: string;
 }
 
+/**
+ * An agency's terms, as a vendor reads them before asking to connect.
+ *
+ * Everything marked optional arrived on 2026-10-03 (api-doc/vendor/delivery-agencies.md
+ * § policies) — optional only so a screen keeps rendering against a server that
+ * predates it. Amounts are minor units, which for XAF are whole francs.
+ */
 export interface VendorAgencyPolicySummaryDto {
   pricing: {
     storage_based_enabled: boolean;
     pickup_based_enabled: boolean;
     notes: string | null;
+    /** Sent even when the mode is off — check the flag before showing these. */
+    storage_based?: {
+      monthly_storage_fee_per_sku: number;
+      pick_pack_fee_per_order: number;
+      local_delivery_fee: number;
+      out_of_region_delivery_fee: number;
+    };
+    pickup_based?: {
+      base_rate_first_kg: number;
+      additional_per_kg: number;
+      out_of_region_surcharge: number;
+    };
+    additional_fees?: {
+      cod_handling_fee: { type: 'percentage' | 'fixed'; value: number };
+      failed_delivery_fee: number;
+      /** Return to origin. */
+      rto_fee: number;
+      /** 0 = none. */
+      peak_season_surcharge: number;
+    };
   };
   returns: {
     payer: 'vendor' | 'agency' | 'customer';
     return_window_days: number;
+    handling_fee?: number;
     notes: string | null;
   };
   damage: {
     claim_deadline_days: number;
     max_refund_per_item: number;
+    /** Admin preset, not the agency's choice. */
+    inspector?: 'agency' | 'vendor' | 'admin';
+    investigation_fee?: number;
     notes: string | null;
   };
+  cod?: {
+    enabled: boolean;
+    /** null = no cap. */
+    max_order_amount: number | null;
+  };
+  /** Up to two public PDF URLs. */
+  documents?: string[];
 }
 
 export interface VendorAgencyListItemDto {
