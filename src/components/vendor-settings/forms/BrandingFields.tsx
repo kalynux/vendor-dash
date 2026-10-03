@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useForm, useFieldArray, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Plus, Trash2, Image as ImageIcon } from 'lucide-react';
@@ -22,10 +22,13 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { useFormatters, useMessage, useTranslation } from '@/i18n';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useFormatters, useLocale, useMessage, useTranslation } from '@/i18n';
 import { cn } from '@/lib/utils';
 import { hasDirtyField } from '@/components/vendor-settings/forms/dirty';
 import type { ApiFile } from '@/types/file.types';
+import { allowedRegionName, type AddressRegionInvalidDetails } from '@/types/address-region.types';
+import type { AddressRegionProblem, AddressValue } from '@/components/vendor-settings/forms/address-region';
 
 // ─── Shared Branding & Addresses form body ────────────────────────────────────
 // Renders just the <form> with fields. Submit is driven externally via a button
@@ -55,6 +58,12 @@ export interface BrandingFieldsProps {
     onBrandingFileChange?: (which: 'logo' | 'cover', file: ApiFile | null) => void;
     /** Reports whether the form differs from its initial values (drives a floating save bar). */
     onDirtyChange?: (dirty: boolean) => void;
+    /**
+     * The last save was refused with `ADDRESS_REGION_INVALID`. `index` is the
+     * FORM row (see `sendableAddresses`), not the position in the sent list.
+     * That row is highlighted and gets a region picker; a new object re-arms it.
+     */
+    regionProblem?: AddressRegionProblem | null;
 }
 
 /** Identity of a geocoded place — its coordinates are what "same place" means. */
@@ -137,8 +146,10 @@ export function BrandingFields({
     coverPreviewUrl = null,
     onBrandingFileChange,
     onDirtyChange,
+    regionProblem = null,
 }: BrandingFieldsProps) {
     const { t } = useTranslation();
+    const { locale } = useLocale();
     const m = useMessage();
     const fmt = useFormatters();
     const {
@@ -169,6 +180,43 @@ export function BrandingFields({
         name: 'business_addresses',
     });
 
+    // ADDRESS_REGION_INVALID: the refused row, pinned by its field id so that
+    // removing a row above it doesn't move the highlight onto a neighbour.
+    const [regionRow, setRegionRow] = useState<{ fieldId: string; details: AddressRegionInvalidDetails } | null>(null);
+    const regionRowRef = useRef<HTMLDivElement | null>(null);
+    useEffect(() => {
+        const fieldId = regionProblem ? fields[regionProblem.index]?.id : undefined;
+        setRegionRow(fieldId && regionProblem ? { fieldId, details: regionProblem.details } : null);
+        // Only a new refusal re-arms the picker; `fields` changing must not.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [regionProblem]);
+    useEffect(() => {
+        regionRowRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, [regionRow?.fieldId, regionRow?.details]);
+
+    /** The picked key, if the row's current region is one the server offered. */
+    const pickedRegionKey = (index: number) => {
+        const current = watch(`business_addresses.${index}.geo`)?.components?.region;
+        return regionRow?.details.allowedRegions.some((r) => r.key === current) ? current! : '';
+    };
+
+    // The docs' fix: that entry's `geo.components.region` becomes the picked
+    // KEY, and the whole list is resent. `state` gets the region's English name
+    // too — the canonical name the server stores in both — so the "Region:"
+    // line on the card stops showing the spelling that was refused.
+    const pickRegion = (index: number, key: string) => {
+        const geo = watch(`business_addresses.${index}.geo`);
+        const region = regionRow?.details.allowedRegions.find((r) => r.key === key);
+        if (!geo || !region) return;
+        setValue(
+            `business_addresses.${index}.geo`,
+            { ...geo, components: { ...geo.components, region: key } },
+            { shouldDirty: true },
+        );
+        setValue(`business_addresses.${index}.state`, allowedRegionName(region, 'en'), { shouldDirty: true });
+        clearErrors(`business_addresses.${index}.geo`);
+    };
+
     // Backend rule (ADDRESS_GEO_REQUIRED / ADDRESS_COUNTRY_MISMATCH): every NEW or
     // EDITED business address must carry a geocoded `geo` that resolves inside the
     // vendor's country. Addresses echoed back byte-identical are grandfathered, so
@@ -194,6 +242,9 @@ export function BrandingFields({
         if (c.city) setValue(`business_addresses.${index}.city`, c.city, { shouldDirty: true, shouldValidate: true });
         if (c.region) setValue(`business_addresses.${index}.state`, c.region, { shouldDirty: true });
         setValue(`business_addresses.${index}.geo`, { ...candidate, raw_input: rawInput }, { shouldDirty: true });
+        // A new place answers the region question afresh — the next save says
+        // whether it names one, so the old refusal no longer applies.
+        if (regionRow?.fieldId === fields[index]?.id) setRegionRow(null);
         if (outsideCountry(candidate)) {
             // Said now, next to the pin, rather than only when Save is pressed —
             // "use my location" can land abroad (a travelling vendor, a phone
@@ -208,7 +259,6 @@ export function BrandingFields({
         }
     };
 
-    type AddressValue = NonNullable<Step3FormValues['business_addresses']>[number];
     // Moving (or clearing) the pin counts as an edit too — otherwise a row whose
     // text was left alone would submit `geo: null` and silently wipe the stored
     // coordinates, since the full-replace endpoint writes exactly what we send.
@@ -226,6 +276,7 @@ export function BrandingFields({
         addresses.forEach((_, index) => clearErrors(`business_addresses.${index}.geo`));
 
         let hasGeoError = false;
+        let missingRegion = false;
         addresses.forEach((addr, index) => {
             const initial = addr._id
                 ? defaultValues.business_addresses?.find((a) => a._id === addr._id)
@@ -248,9 +299,20 @@ export function BrandingFields({
                     message: t('settings.branding.geoCountryMismatch', { country: requiredCountryName }),
                 });
                 hasGeoError = true;
+                return;
+            }
+
+            // Resending the refused row unchanged would only be refused again.
+            if (regionRow?.fieldId === fields[index]?.id && addr.geo && !pickedRegionKey(index)) {
+                missingRegion = true;
             }
         });
 
+        if (missingRegion && !hasGeoError) {
+            regionRowRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            toast.error(t('settings.branding.regionPickBlocked'));
+            return;
+        }
         if (hasGeoError) {
             toast.error(t('settings.branding.geoBlocked'));
             return;
@@ -363,11 +425,18 @@ export function BrandingFields({
                             const showCityInput = !geo || !city;
                             const showStateInput = !geo || !state;
                             const geoError = errors.business_addresses?.[index]?.geo?.message;
+                            const regionDetails =
+                                geo && regionRow?.fieldId === field.id ? regionRow.details : null;
+                            const regionKey = regionDetails ? pickedRegionKey(index) : '';
 
                             return (
                             <div
                                 key={field.id}
-                                className="space-y-3 max-md:py-5 max-md:first:pt-1 max-md:last:pb-0 md:rounded-lg md:border md:p-4"
+                                ref={regionDetails ? regionRowRef : undefined}
+                                className={cn(
+                                    'space-y-3 max-md:py-5 max-md:first:pt-1 max-md:last:pb-0 md:rounded-lg md:border md:p-4',
+                                    regionDetails && !regionKey && 'md:border-destructive',
+                                )}
                             >
                                 <AddressRowHeading
                                     index={index}
@@ -404,6 +473,37 @@ export function BrandingFields({
                                         )
                                     )}
                                 </div>
+
+                                {/* ADDRESS_REGION_INVALID — the server named the regions it accepts. */}
+                                {regionDetails && (
+                                    <div className="space-y-2">
+                                        <Label htmlFor={`addr-region-${index}`}>
+                                            {t('settings.branding.regionPickLabel')}{' '}
+                                            <span className="text-destructive">*</span>
+                                        </Label>
+                                        <Select value={regionKey} onValueChange={(key) => pickRegion(index, key)}>
+                                            <SelectTrigger
+                                                id={`addr-region-${index}`}
+                                                aria-invalid={!regionKey}
+                                                className={cn('h-10 w-full', !regionKey && 'border-destructive')}
+                                            >
+                                                <SelectValue placeholder={t('settings.branding.regionPickPlaceholder')} />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {regionDetails.allowedRegions.map((r) => (
+                                                    <SelectItem key={r.key} value={r.key}>
+                                                        {allowedRegionName(r, locale)}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                        {!regionKey && (
+                                            <p className="text-sm text-destructive" role="alert">
+                                                {t('settings.branding.regionPickHint')}
+                                            </p>
+                                        )}
+                                    </div>
+                                )}
 
                                 {/* Label — required by backend */}
                                 <div className="space-y-2">

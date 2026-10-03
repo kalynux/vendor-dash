@@ -1,6 +1,7 @@
 import { useParams, Navigate } from 'react-router-dom';
 import { Tabs, TabsContent } from '@/components/ui/tabs';
 import { PoliciesSettings } from '@/components/vendor-settings/PoliciesSettings';
+import { CodTermsSettings } from '@/components/vendor-settings/CodTermsSettings';
 import { NotificationSettings } from '@/components/vendor-settings/NotificationSettings';
 import { PreferencesSettings } from '@/components/vendor-settings/PreferencesSettings';
 import { SubPageHeader } from '@/components/layout/SubPageHeader';
@@ -48,6 +49,8 @@ export function Settings() {
     <Tabs value={tab} className="w-full">
       <TabsContent value="policies" className="space-y-6">
         <PoliciesSettings />
+        {/* Its own card and its own save — never part of the policies PATCH. */}
+        <CodTermsSettings />
       </TabsContent>
 
       <TabsContent value="notifications" className="space-y-6">

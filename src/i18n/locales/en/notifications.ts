@@ -195,6 +195,12 @@ export const notifications = {
             shipmentRejected: 'Shipment rejected',
             shipmentRejectedHint:
                 'When a delivery agency declines a shipment and its items need rerouting',
+            codLimitUpdates: 'Cash-on-delivery limits',
+            codLimitUpdatesHint:
+                'When an order is held back because a delivery agency is at a cash-on-delivery limit',
+            deliveryFeeProposals: 'Delivery fee changes',
+            deliveryFeeProposalsHint:
+                'When an agency asks to change a delivery fee, edits the request or withdraws it',
             planUpdates: 'Plan updates',
             planUpdatesHint: 'When your subscription plan is nearing expiry or has expired',
         },

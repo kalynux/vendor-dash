@@ -8,6 +8,11 @@ import { useOnboarding } from '@/onboarding/store/onboarding.store';
 import { useStoreStore } from '@/store';
 import { fetchStore as fetchStoreProfile } from '@/services/store.service';
 import { BrandingFields } from '@/components/vendor-settings/forms/BrandingFields';
+import {
+    regionProblemFrom,
+    sendableAddresses,
+    type AddressRegionProblem,
+} from '@/components/vendor-settings/forms/address-region';
 import { Button } from '@/components/ui/button';
 import { useTranslation, useApiError } from '@/i18n';
 
@@ -18,6 +23,7 @@ export function Step3Branding() {
     const { store, applyStore } = useStoreStore();
     const [apiError, setApiError] = useState<string | null>(null);
     const [isSkipping, setIsSkipping] = useState(false);
+    const [regionProblem, setRegionProblem] = useState<AddressRegionProblem | null>(null);
 
     const roleEntity = session?.role_entity;
     const draft = drafts.branding;
@@ -72,8 +78,12 @@ export function Step3Branding() {
     const handleSave = useCallback(
         async (values: Step3FormValues) => {
             setApiError(null);
+            setRegionProblem(null);
             // Save draft before API call
             saveDraft(3, values);
+            // Full replace: untouched rows go back with their `_id` and `geo`
+            // exactly as loaded, so the server sees them as unchanged.
+            const sent = sendableAddresses(values.business_addresses);
             try {
                 await submitBranding({
                     skip: false,
@@ -81,9 +91,7 @@ export function Step3Branding() {
                         logo_file_id: values.logo_file_id ?? null,
                         cover_image_file_id: values.cover_image_file_id ?? null,
                     },
-                    business_addresses: values.business_addresses?.filter(
-                        (a) => a.address_line1.trim().length > 0,
-                    ),
+                    business_addresses: values.business_addresses ? sent.addresses : undefined,
                     version: roleEntity?.version,
                 });
                 // The logo/banner landed on the store — refresh it so the header,
@@ -91,6 +99,8 @@ export function Step3Branding() {
                 await loadStore();
                 toast.success(t('onboarding.branding.saved'));
             } catch (err) {
+                // ADDRESS_REGION_INVALID: the refused address gets a region picker.
+                setRegionProblem(regionProblemFrom(err, sent));
                 setApiError(errors.resolve(err, { fallbackKey: 'onboarding.errors.saveFailed' }));
             }
         },
@@ -175,6 +185,7 @@ export function Step3Branding() {
                 defaultValues={defaultValues}
                 onSubmit={handleSave}
                 addressCountryBias={roleEntity?.country}
+                regionProblem={regionProblem}
                 logoPreviewUrl={savedLogo?.url ?? null}
                 coverPreviewUrl={savedCover?.url ?? null}
             />

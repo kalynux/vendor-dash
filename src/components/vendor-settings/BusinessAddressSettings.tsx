@@ -4,6 +4,11 @@ import { toast } from 'sonner';
 import { useOnboarding } from '@/onboarding/store/onboarding.store';
 import { type Step3FormValues } from '@/onboarding/schemas/onboarding.schemas';
 import { BrandingFields } from '@/components/vendor-settings/forms/BrandingFields';
+import {
+    regionProblemFrom,
+    sendableAddresses,
+    type AddressRegionProblem,
+} from '@/components/vendor-settings/forms/address-region';
 import { mapProfileError } from '@/components/vendor-settings/errors';
 import { UnsavedChangesBar } from '@/components/vendor-settings/UnsavedChangesBar';
 import { SettingsSection } from '@/components/vendor-settings/SettingsSection';
@@ -24,6 +29,7 @@ export function BusinessAddressSettings() {
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [dirty, setDirty] = useState(false);
+    const [regionProblem, setRegionProblem] = useState<AddressRegionProblem | null>(null);
     // Bumped after a save or discard to remount BrandingFields, resetting its
     // internal form to the latest persisted defaults.
     const [formKey, setFormKey] = useState(0);
@@ -32,6 +38,7 @@ export function BusinessAddressSettings() {
 
     const handleDiscard = useCallback(() => {
         setError(null);
+        setRegionProblem(null);
         setDirty(false);
         setFormKey((k) => k + 1);
     }, []);
@@ -40,23 +47,26 @@ export function BusinessAddressSettings() {
         async (values: Step3FormValues) => {
             setSaving(true);
             setError(null);
+            setRegionProblem(null);
+            // Full replace: every row goes back, untouched ones with their `_id`
+            // and `geo` exactly as loaded, so the server sees them as unchanged.
+            const sent = sendableAddresses(values.business_addresses);
             try {
-                await updateVendorProfile({
-                    business_addresses: (values.business_addresses ?? []).filter(
-                        (a) => a.address_line1.trim().length > 0,
-                    ),
-                });
+                await updateVendorProfile({ business_addresses: sent.addresses });
                 toast.success(t('settings.addresses.saved'));
                 // Reset the dirty state by remounting against the freshly-saved session.
                 setDirty(false);
                 setFormKey((k) => k + 1);
             } catch (err) {
+                // ADDRESS_REGION_INVALID: the form keeps the vendor's edits and
+                // shows a region picker on the refused row.
+                setRegionProblem(regionProblemFrom(err, sent));
                 setError(mapProfileError(err));
             } finally {
                 setSaving(false);
             }
         },
-        [updateVendorProfile],
+        [updateVendorProfile, t],
     );
 
     if (!roleEntity) return null;
@@ -106,6 +116,7 @@ export function BusinessAddressSettings() {
                     showBranding={false}
                     showAddressesHeading={false}
                     addressCountryBias={roleEntity.country}
+                    regionProblem={regionProblem}
                 />
             </SettingsSection>
 

@@ -172,6 +172,12 @@ export const notifications = {
             shipmentRejected: 'Expédition refusée',
             shipmentRejectedHint:
                 'Lorsqu’une agence de livraison refuse une expédition et que ses articles doivent être réacheminés',
+            codLimitUpdates: 'Limites de paiement à la livraison',
+            codLimitUpdatesHint:
+                'Lorsqu’une commande est retenue car une agence a atteint une limite de paiement à la livraison',
+            deliveryFeeProposals: 'Changements de frais de livraison',
+            deliveryFeeProposalsHint:
+                'Lorsqu’une agence demande à changer des frais de livraison, modifie sa demande ou la retire',
             planUpdates: 'Mises à jour de formule',
             planUpdatesHint: 'Lorsque votre formule approche de son expiration ou a expiré',
         },

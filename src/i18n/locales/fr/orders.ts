@@ -373,6 +373,86 @@ export const orders = {
         fulfillmentChanged: 'Statut de traitement modifié de « {{from}} » à « {{to}} »',
         systemActor: 'Système',
     },
+
+    codLimit: {
+        title: {
+            agency_limit: 'Cette agence a atteint sa limite de paiement à la livraison',
+            vendor_terms: 'Vos propres conditions de paiement à la livraison plafonnent cette agence',
+            unknown: 'Cette remise dépasse une limite de paiement à la livraison',
+        },
+        body: 'L’agence détient déjà {{current}}. Cette commande ajoute {{added}}, ce qui dépasserait {{limit}}.',
+        bodyMove: 'Cette agence détient déjà {{current}}. Cet article ajoute {{added}}, ce qui dépasserait {{limit}}.',
+        forceNote: 'Nous noterons que vous avez expédié au-delà de la limite.',
+        forceNoteMove: 'Nous noterons que vous l’avez déplacé au-delà de la limite.',
+        dispatchAnyway: 'Expédier quand même',
+        moveAnyway: 'Déplacer quand même',
+        chooseAnotherAgency: 'Choisir une autre agence',
+        openCodTerms: 'Modifier mes conditions',
+        heldBadge: 'Bloquée — limite espèces',
+        hold: {
+            agency_limit: 'Non envoyé à l’agence : elle a atteint sa limite de paiement à la livraison.',
+            vendor_terms: 'Non envoyé à l’agence : vos propres conditions plafonnent cette agence.',
+            unknown: 'Non envoyé à l’agence : une limite de paiement à la livraison serait dépassée.',
+        },
+        holdNumbers: 'L’agence détient {{current}}, ce colis ajoute {{added}}, la limite est de {{limit}}.',
+        holdNoRetry: 'Il n’est pas relancé automatiquement. Expédiez-le quand vous êtes prêt.',
+        forced: 'Expédié au-delà de la limite le {{date}}',
+        bulkFailed: plural({
+            one: '{{count}} commande dépasse une limite de paiement à la livraison et n’a pas été expédiée.',
+            other: '{{count}} commandes dépassent une limite de paiement à la livraison et n’ont pas été expédiées.',
+        }),
+        bulkRetry: plural({ one: 'L’expédier quand même', other: 'Expédier ces {{count}} quand même' }),
+    },
+
+    feeProposals: {
+        title: 'Changements de frais de livraison',
+        fromAgency: 'De {{agency}}',
+        fromAgent: 'D’un livreur de {{agency}}',
+        unknownAgency: 'l’agence de livraison',
+        blocksPickup: 'Le colis ne peut pas être récupéré tant que vous n’avez pas répondu.',
+        changedHighlight: 'L’agence a modifié ces frais. Vérifiez le nouveau montant.',
+        edits: plural({ one: 'Modifié {{count}} fois', other: 'Modifié {{count}} fois' }),
+        status: {
+            pending: 'En attente de vous',
+            approved: 'Accepté',
+            rejected: 'Refusé',
+            withdrawn: 'Retiré',
+            unknown: 'Clos',
+        },
+        withdrawn: {
+            shipment_declined: 'Retiré — l’agence a refusé la livraison',
+            agent_detached: 'Retiré — le livreur a quitté la course',
+            other: 'Retiré',
+        },
+        rejectionNote: 'Votre note : {{note}}',
+        answeredOn: 'Répondu le {{date}}',
+        earnings: 'Vos gains sur cette commande : {{before}} → {{after}}',
+        approve: 'Accepter',
+        reject: 'Refuser',
+        approveDialog: {
+            title: 'Accepter les nouveaux frais de livraison ?',
+            earningsDown: 'Vos gains sur cette commande baissent de {{amount}}.',
+            earningsUp: 'Vos gains sur cette commande augmentent de {{amount}}.',
+            onlineNote: 'La commande est déjà payée : vos gains en attente changent tout de suite.',
+            codNote: 'C’est un paiement à la livraison : les nouveaux frais s’appliquent à l’encaissement.',
+        },
+        rejectDialog: {
+            title: 'Garder les frais d’origine ?',
+            body: 'L’agence peut faire une dernière proposition, ou refuser cette livraison.',
+            noteLabel: 'Note pour l’agence (facultatif)',
+            notePlaceholder: 'Pourquoi vous gardez les frais d’origine',
+        },
+        toast: {
+            approved: 'Nouveaux frais de livraison acceptés',
+            rejected: 'Changement de frais refusé',
+        },
+        banner: plural({
+            one: '{{count}} changement de frais vous attend',
+            other: '{{count}} changements de frais vous attendent',
+        }),
+        bannerAction: 'Ouvrir',
+        rowBadge: 'Frais modifiés',
+    },
 };
 
 export default orders;

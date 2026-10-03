@@ -3,6 +3,8 @@ import { apiErrorMessage, tStatic, type TranslationKey } from '@/i18n';
 import { fileRefUrl } from '@/services/files.service';
 import { refreshPendingOrdersCount } from '@/lib/pending-orders-count';
 import type { FileRef } from '@/types/file.types';
+import type { CodLimitForce, CodLimitHold } from '@/types/cod-limits.types';
+import type { DeliveryFeeProposal } from '@/types/delivery-fee-proposals.types';
 import type { Order, OrderItem, Customer, OrderTimelineEvent, Entitlement, TimelineEventType, DisputeHold, OrderItemDelivery, OrderDeliveryTimelineEntry, VendorSettableStatus, PaymentMethod } from '@/types';
 
 // ─── Error Handling ────────────────────────────────────────────────────────────
@@ -25,6 +27,8 @@ export const ORDER_ERROR_LABELS: Record<string, string> = {
   // item-level delivery-agency reassignment (PATCH /vendor/orders/:id/delivery-agency)
   ORDER_ITEM_NOT_FOUND: 'This item could no longer be found on the order.',
   ORDER_ITEM_NOT_REASSIGNABLE: "This item has already been dispatched and can't be reassigned to a different agency.",
+  // dispatch / bulk dispatch / change-agency over a COD cash limit (2026-10-02) — resend with `force: true`
+  COD_AGENCY_LIMIT_EXCEEDED: 'This delivery agency is already holding as much cash on delivery as it may.',
   // entitlements (revoke/restore)
   DIGITAL_ENTITLEMENT_NOT_FOUND: 'This entitlement could no longer be found.',
   DIGITAL_ENTITLEMENT_ALREADY_REVOKED: 'This entitlement has already been revoked.',
@@ -81,6 +85,10 @@ interface ApiOrderDelivery {
     /** Added 2026-09-27 — `kyc.status === 'verified'`; absent on older servers. */
     verified?: boolean;
   } | null;
+  /** 2026-10-02 — auto-dispatch held this COD shipment back. */
+  codLimitHold?: CodLimitHold | null;
+  /** 2026-10-02 — dispatched over a COD limit on purpose. */
+  codLimitForce?: CodLimitForce | null;
 }
 
 /** One entry in the merged, per-agency shipment status history returned as `deliveryTimeline`. */
@@ -115,6 +123,8 @@ interface ApiOrderListItem {
   currency: string;
   itemCount: number;
   createdAt: string;
+  /** 2026-10-02 — a shipment of this order is held over a COD limit. */
+  codLimitHeld?: boolean;
 }
 
 interface ApiOrderDetail {
@@ -168,6 +178,8 @@ interface ApiOrderDetail {
   deliveries?: ApiOrderDelivery[] | null;
   /** Merged, per-agency shipment status history, sorted chronologically. Empty for digital orders. */
   deliveryTimeline?: ApiDeliveryTimelineEntry[];
+  /** 2026-10-02 — newest first; `[]` for digital orders. */
+  deliveryFeeProposals?: DeliveryFeeProposal[];
   notes?: Array<{
     id: string;
     message: string;
@@ -269,6 +281,8 @@ export interface BulkActionFailure {
   orderId: string;
   code: string;
   reason: string;
+  /** e.g. the `COD_AGENCY_LIMIT_EXCEEDED` figures (2026-10-02). */
+  details?: Record<string, unknown>;
 }
 
 interface BulkStatusResponse {
@@ -376,6 +390,8 @@ function adaptOrderDelivery(delivery: ApiOrderDelivery): OrderItemDelivery {
           verified: delivery.agent.verified === true,
         }
       : null,
+    codLimitHold: delivery.codLimitHold ?? null,
+    codLimitForce: delivery.codLimitForce ?? null,
   };
 }
 
@@ -420,6 +436,7 @@ function adaptListItemToOrder(item: ApiOrderListItem): Order {
     paymentStatus: adaptPaymentStatus(item.paymentStatus),
     paymentMethod: adaptPaymentMethod(item.paymentMethod),
     disputeHold: adaptDisputeHold(item.dispute_hold),
+    codLimitHeld: item.codLimitHeld === true,
     fulfillmentStatus: 'unfulfilled',
     total: item.total,
     subtotal: item.subtotal,
@@ -513,6 +530,7 @@ function adaptDetailToOrder(detail: ApiOrderDetail): Order {
     // An order can be split across several shipments — one entry per agency/shipment.
     deliveries: detail.deliveries?.map(adaptOrderDelivery) ?? null,
     deliveryTimeline: detail.deliveryTimeline?.map(adaptDeliveryTimelineEntry) ?? [],
+    deliveryFeeProposals: detail.deliveryFeeProposals ?? [],
     createdAt: detail.createdAt,
     updatedAt: detail.updatedAt,
     tags: [],
@@ -635,24 +653,36 @@ export async function updateOrderStatus(id: string, status: VendorSettableStatus
  * The vendor's explicit review/approval step before a physical order reaches its
  * delivery agency — advances every `pending` shipment to `assigned`. Harmless no-op
  * if there's nothing pending (already dispatched, or auto-redirect handled it).
+ *
+ * A COD shipment over a cash limit is refused with `422 COD_AGENCY_LIMIT_EXCEEDED`
+ * (nothing dispatched). Send `force: true` only on the vendor's explicit retry.
  */
 export async function dispatchOrder(
   id: string,
+  options: { force?: boolean } = {},
 ): Promise<{ order: Order; dispatchedShipments: number; message: string }> {
-  const res = await api.post<DispatchOrderResponse>(`/vendor/orders/${id}/dispatch`, undefined);
+  const res = await api.post<DispatchOrderResponse>(
+    `/vendor/orders/${id}/dispatch`,
+    options.force ? { force: true } : undefined,
+  );
   const { dispatchedShipments, ...detail } = res.data;
   return { order: adaptDetailToOrder(detail), dispatchedShipments, message: res.message };
 }
 
-/** Reassign a single order item to a different delivery agency. */
+/**
+ * Reassign a single order item to a different delivery agency. Gated against the
+ * DESTINATION agency's COD limits — `force: true` moves it anyway.
+ */
 export async function reassignItemDeliveryAgency(
   orderId: string,
   itemId: string,
   deliveryAgencyId: string,
+  options: { force?: boolean } = {},
 ): Promise<Order> {
   const res = await api.patch<ReassignDeliveryAgencyResponse>(`/vendor/orders/${orderId}/delivery-agency`, {
     itemId,
     deliveryAgencyId,
+    ...(options.force ? { force: true } : {}),
   });
   return adaptDetailToOrder(res.data);
 }
@@ -667,11 +697,20 @@ export async function bulkUpdateOrderStatus(
   return { ...res.data, message: res.message };
 }
 
-/** Dispatch up to 50 reviewed, paid physical orders to their delivery agency in one call. */
+/**
+ * Dispatch up to 50 reviewed, paid physical orders to their delivery agency in one call.
+ *
+ * ⚠ `force` applies to EVERY order in the request — resend only the ids that
+ * failed with `COD_AGENCY_LIMIT_EXCEEDED`, never the original batch.
+ */
 export async function bulkDispatchOrders(
   orderIds: string[],
+  options: { force?: boolean } = {},
 ): Promise<{ total: number; succeeded: { orderId: string; dispatchedShipments: number }[]; failed: BulkActionFailure[]; message: string }> {
-  const res = await api.post<BulkDispatchResponse>('/vendor/orders/bulk/dispatch', { orderIds });
+  const res = await api.post<BulkDispatchResponse>('/vendor/orders/bulk/dispatch', {
+    orderIds,
+    ...(options.force ? { force: true } : {}),
+  });
   return { ...res.data, message: res.message };
 }
 

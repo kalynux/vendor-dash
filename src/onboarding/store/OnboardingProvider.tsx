@@ -13,6 +13,7 @@ import { deleteCurrentToken } from '@/lib/fcm';
 import { unregisterDevice } from '@/services/devices.service';
 import { stopRefreshScheduler } from '@/platform/auth/refreshScheduler';
 import { resetPendingOrdersCount } from '@/lib/pending-orders-count';
+import { resetPendingFeeProposals } from '@/lib/pending-fee-proposals';
 import { ApiError } from '@/types/api';
 import type {
     AuthMeVendorResponse,
@@ -522,6 +523,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
         } finally {
             setSession(null);
             resetPendingOrdersCount();
+            resetPendingFeeProposals();
             setDrafts({ basicSetup: null, deliveryLinking: null, branding: null, policySetup: null });
             initCalled.current = false;
             navigate('/login', { replace: true });
@@ -543,6 +545,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
         const handler = () => {
             setSession(null);
             resetPendingOrdersCount();
+            resetPendingFeeProposals();
             setDrafts({ basicSetup: null, deliveryLinking: null, branding: null, policySetup: null });
             initCalled.current = false;
             navigate('/login', { replace: true });

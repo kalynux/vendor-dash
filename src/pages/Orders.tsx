@@ -14,6 +14,7 @@ import {
   AlertTriangle,
   PackageCheck,
   Banknote,
+  CircleDollarSign,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -59,6 +60,10 @@ import {
   isOrderFrozen,
   type BulkActionFailure,
 } from '@/services/orders.service';
+import { CodLimitDialog } from '@/components/orders/CodLimitDialog';
+import { usePendingFeeProposals } from '@/lib/pending-fee-proposals';
+import { ApiError } from '@/types/api';
+import { COD_AGENCY_LIMIT_EXCEEDED, readCodLimitDetails, type CodLimitExceededDetails } from '@/types/cod-limits.types';
 import {
   getNextStatuses,
   STATUS_ACTION_KEYS,
@@ -261,6 +266,12 @@ export function Orders() {
   const [showBulkCancelConfirm, setShowBulkCancelConfirm] = useState(false);
   const [bulkCancelConfirmationText, setBulkCancelConfirmationText] = useState('');
   const [selectionMode, setSelectionMode] = useState(false);
+  /** A row's single dispatch hit a COD limit — confirm before forcing. */
+  const [rowOverLimit, setRowOverLimit] = useState<{ order: Order; details: CodLimitExceededDetails } | null>(null);
+  /** Bulk dispatch: ids refused over a COD limit, offered for a forced retry. */
+  const [codRetryIds, setCodRetryIds] = useState<string[]>([]);
+  const pendingFees = usePendingFeeProposals();
+  const pendingFeeOrderIds = useMemo(() => new Set(pendingFees.orderIds), [pendingFees.orderIds]);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressTriggered = useRef(false);
 
@@ -403,15 +414,25 @@ export function Orders() {
   };
 
   // Single-row "Dispatch to Agency" (per-row desktop dropdown item / mobile "…" sheet action).
-  const handleDispatch = async (order: Order) => {
+  // Never forced on the first try; a COD-limit refusal opens a confirm instead.
+  const handleDispatch = async (order: Order, force = false) => {
     setStatusLoading('dispatch');
     try {
-      await dispatchOrder(order.id);
+      await dispatchOrder(order.id, { force });
+      setRowOverLimit(null);
       if (isMobile) infinite.reload();
       else fetchOrders(query);
       toast.success(t('orders.toast.dispatched'));
     } catch (err) {
-      toast.error(getOrderErrorMessage(err));
+      const details =
+        !force && err instanceof ApiError && err.code === COD_AGENCY_LIMIT_EXCEEDED
+          ? readCodLimitDetails(err.detailsObject)
+          : null;
+      if (details) setRowOverLimit({ order, details });
+      else {
+        setRowOverLimit(null);
+        toast.error(getOrderErrorMessage(err));
+      }
     } finally {
       setStatusLoading(null);
     }
@@ -466,13 +487,36 @@ export function Orders() {
     }
   };
 
+  /**
+   * `force` covers EVERY order in a request, so a forced retry sends only the
+   * ids that failed over a COD limit — never the original batch.
+   */
   const handleBulkDispatch = async () => {
     setBulkActionLoading(true);
     try {
       const { succeeded, failed } = await bulkDispatchOrders(selectedOrders);
       toast.success(t('orders.bulk.dispatched', { count: succeeded.length }));
-      if (failed.length > 0) toast.error(summarizeBulkFailures(failed));
+      const overLimit = failed.filter((f) => f.code === COD_AGENCY_LIMIT_EXCEEDED);
+      const otherFailures = failed.filter((f) => f.code !== COD_AGENCY_LIMIT_EXCEEDED);
+      if (otherFailures.length > 0) toast.error(summarizeBulkFailures(otherFailures));
+      setCodRetryIds(overLimit.map((f) => f.orderId));
       selectAllOrders([]);
+      refreshAfterBulkAction();
+    } catch (err) {
+      toast.error(getOrderErrorMessage(err));
+    } finally {
+      setBulkActionLoading(false);
+    }
+  };
+
+  const forceBulkDispatch = async () => {
+    const ids = codRetryIds;
+    setBulkActionLoading(true);
+    try {
+      const { succeeded, failed } = await bulkDispatchOrders(ids, { force: true });
+      toast.success(t('orders.bulk.dispatched', { count: succeeded.length }));
+      if (failed.length > 0) toast.error(summarizeBulkFailures(failed));
+      setCodRetryIds([]);
       refreshAfterBulkAction();
     } catch (err) {
       toast.error(getOrderErrorMessage(err));
@@ -566,6 +610,93 @@ export function Orders() {
 
   const allSelected = orders.length > 0 && selectedOrders.length === orders.length;
   const cancelWord = t('orders.detail.cancelDialog.confirmWord');
+
+  const codLimitDialogs = (
+    <>
+      <CodLimitDialog
+        details={rowOverLimit?.details ?? null}
+        currency={rowOverLimit?.order.currency ?? 'XAF'}
+        mode="dispatch"
+        forcing={statusLoading === 'dispatch'}
+        onForce={() => rowOverLimit && void handleDispatch(rowOverLimit.order, true)}
+        onClose={() => setRowOverLimit(null)}
+        onChooseAnotherAgency={
+          rowOverLimit
+            ? () => {
+                // Changing agency is per item, on the order's own screen.
+                const id = rowOverLimit.order.id;
+                setRowOverLimit(null);
+                setSearchParams((prev) => {
+                  const next = new URLSearchParams(prev);
+                  next.set('view', id);
+                  return next;
+                });
+              }
+            : undefined
+        }
+      />
+      <Dialog open={codRetryIds.length > 0} onOpenChange={(open) => !open && !bulkActionLoading && setCodRetryIds([])}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t('orders.codLimit.title.unknown')}</DialogTitle>
+            <DialogDescription className="space-y-2 pt-2" asChild>
+              <div>
+                <p className="text-foreground">{t('orders.codLimit.bulkFailed', { count: codRetryIds.length })}</p>
+                <p>{t('orders.codLimit.forceNote')}</p>
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-2">
+            <Button variant="outline" onClick={() => setCodRetryIds([])} disabled={bulkActionLoading}>
+              {t('common.actions.cancel')}
+            </Button>
+            <Button onClick={() => void forceBulkDispatch()} disabled={bulkActionLoading} className="gap-2">
+              {bulkActionLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+              {t('orders.codLimit.bulkRetry', { count: codRetryIds.length })}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+
+  /** COD hold + pending fee-change flags, shown beside the payment badges. */
+  const rowFlags = (order: Order) => (
+    <>
+      {order.codLimitHeld && (
+        <Badge variant="outline" className="gap-1 text-[10px] px-1.5 py-0 h-4 border-orange-300 text-orange-700 bg-orange-50">
+          <AlertTriangle className="w-2.5 h-2.5" />{t('orders.codLimit.heldBadge')}
+        </Badge>
+      )}
+      {pendingFeeOrderIds.has(order.id) && (
+        <Badge variant="outline" className="gap-1 text-[10px] px-1.5 py-0 h-4 border-amber-300 text-amber-800 bg-amber-50">
+          <CircleDollarSign className="w-2.5 h-2.5" />{t('orders.feeProposals.rowBadge')}
+        </Badge>
+      )}
+    </>
+  );
+
+  /** A pending fee change blocks pickup — say so above the list. Opens the newest. */
+  const feeProposalsBanner = pendingFees.count > 0 && pendingFees.orderIds.length > 0 && (
+    <div className="flex items-center gap-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+      <CircleDollarSign className="w-4 h-4 flex-shrink-0" />
+      <p className="flex-1 min-w-0">{t('orders.feeProposals.banner', { count: pendingFees.count })}</p>
+      <Button
+        size="sm"
+        variant="outline"
+        className="h-8 bg-background"
+        onClick={() =>
+          setSearchParams((prev) => {
+            const next = new URLSearchParams(prev);
+            next.set('view', pendingFees.orderIds[0]);
+            return next;
+          })
+        }
+      >
+        {t('orders.feeProposals.bannerAction')}
+      </Button>
+    </div>
+  );
 
   const cancelOrderDialog = (
     <Dialog open={!!orderToCancel} onOpenChange={(open) => {
@@ -813,6 +944,8 @@ export function Orders() {
           />
         )}
 
+        {feeProposalsBanner && <div className="px-4 pt-3">{feeProposalsBanner}</div>}
+
         {/* Order cards */}
         <div className="pb-28">
           {infinite.loading ? (
@@ -902,6 +1035,7 @@ export function Orders() {
                               <Banknote className="w-2.5 h-2.5" />{t('orders.paymentMethod.cashOnDeliveryShort')}
                             </Badge>
                           )}
+                          {rowFlags(order)}
                         </div>
                         <p className="text-xs text-muted-foreground">{t('common.units.items', { count: order.items.length })}</p>
                       </div>
@@ -1007,6 +1141,7 @@ export function Orders() {
         {ordersFilterSheet}
 
         {cancelOrderDialog}
+        {codLimitDialogs}
         {bulkCancelDialog}
       </div>
     );
@@ -1038,6 +1173,7 @@ export function Orders() {
 
       {/* Search + Filters */}
       {ordersSearchBar}
+      {feeProposalsBanner}
       {ordersFilterSheet}
 
       {/* Orders Table */}
@@ -1207,6 +1343,7 @@ export function Orders() {
                               <Banknote className="w-2.5 h-2.5" />{t('orders.paymentMethod.cashOnDeliveryShort')}
                             </Badge>
                           )}
+                          {rowFlags(order)}
                         </div>
                       </td>
                       <td className="p-4 text-right font-medium">
@@ -1325,6 +1462,7 @@ export function Orders() {
 
       {/* Order Cancellation Warning Dialog */}
       {cancelOrderDialog}
+      {codLimitDialogs}
     </div>
   );
 }

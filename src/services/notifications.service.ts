@@ -12,9 +12,23 @@ const BASE = '/vendor/notification-preferences';
 const NOTIFICATIONS = '/vendor/notifications';
 
 /** Retrieve channel enablement, live verification status, and per-event subscriptions. */
+/**
+ * Events a preferences document written before the key existed omits. The
+ * backend treats a missing key as ON, so must the screen — otherwise the switch
+ * renders off and the save bar compares `true` against `undefined`. Filled on
+ * every read so the saved snapshot and the edited copy agree.
+ */
+const DEFAULT_ON_EVENTS = ['agencyStorageUpdates', 'codLimitUpdates', 'deliveryFeeProposals'] as const;
+
+function withEventDefaults(data: NotificationPreferences): NotificationPreferences {
+  const preferences = { ...data.preferences };
+  for (const key of DEFAULT_ON_EVENTS) preferences[key] = preferences[key] ?? true;
+  return { ...data, preferences };
+}
+
 export async function fetchNotificationPreferences(): Promise<NotificationPreferences> {
   const res = await api.get<NotificationPreferencesResponse>(BASE);
-  return res.data;
+  return withEventDefaults(res.data);
 }
 
 /**
@@ -26,7 +40,7 @@ export async function updateNotificationPreferences(
   payload: NotificationPreferencesUpdate,
 ): Promise<NotificationPreferences> {
   const res = await api.patch<NotificationPreferencesResponse>(BASE, payload);
-  return res.data;
+  return withEventDefaults(res.data);
 }
 
 // ─── In-app notification feed ──────────────────────────────────────────────

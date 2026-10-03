@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Package,
   Truck,
@@ -41,7 +41,10 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { useOrderStore } from '@/store';
-import { addNote, fetchNote, revokeEntitlement, restoreEntitlement, dispatchOrder, fetchOrderById, getOrderErrorMessage, isOrderFrozen } from '@/services/orders.service';
+import { addNote, fetchNote, revokeEntitlement, restoreEntitlement, fetchOrderById, getOrderErrorMessage, isOrderFrozen } from '@/services/orders.service';
+import { useOrderDispatch } from '@/hooks/use-order-dispatch';
+import { CodLimitShipmentNotice } from '@/components/orders/CodLimitShipmentNotice';
+import { DeliveryFeeProposals } from '@/components/orders/DeliveryFeeProposals';
 import { RefundDialog } from '@/components/customers/RefundDialog';
 import { REFUND_REASON_KEYS } from '@/components/customers/customer.constants';
 import { useRefundEligibility } from '@/hooks/use-refund-eligibility';
@@ -103,7 +106,9 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
   const [statusLoading, setStatusLoading] = useState(false);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [cancelConfirmationText, setCancelConfirmationText] = useState('');
-  const [dispatchLoading, setDispatchLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState('details');
+  /** "Choose another agency" from the COD-limit dialog: open that item's agency picker. */
+  const [reassignRequest, setReassignRequest] = useState<{ itemId: string; n: number } | null>(null);
 
   // Entitlement action dialog
   const [actionDialog, setActionDialog] = useState<{
@@ -182,18 +187,32 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
     }
   };
 
-  const handleDispatch = async () => {
-    setDispatchLoading(true);
-    try {
-      const { order: updated } = await dispatchOrder(currentOrder.id);
+  const { dispatch: handleDispatch, dispatching: dispatchLoading, dialog: codLimitDialog } = useOrderDispatch(currentOrder, {
+    onDispatched: (updated) => {
       setCurrentOrder(updated);
       onOrderUpdated?.(updated);
-      toast.success(t('orders.toast.dispatched'));
-    } catch (err) {
-      toast.error(getOrderErrorMessage(err));
-    } finally {
-      setDispatchLoading(false);
-    }
+    },
+    onChooseAnotherAgency: (agencyId) => {
+      const movable = currentOrder.items.filter(
+        (item) => item.delivery?.deliveryStatus && REASSIGNABLE_DELIVERY_STATUSES.includes(item.delivery.deliveryStatus),
+      );
+      const target = movable.find((item) => item.delivery?.agencyId === agencyId) ?? movable[0];
+      setActiveTab('items');
+      if (target) setReassignRequest({ itemId: target.id, n: Date.now() });
+    },
+  });
+
+  // The picker's trigger sits in the Items tab — bring it into view once it mounts.
+  useEffect(() => {
+    if (!reassignRequest) return;
+    document.getElementById(`order-item-${reassignRequest.itemId}`)?.scrollIntoView({ block: 'center' });
+  }, [reassignRequest]);
+
+  /** Re-read the whole order — after a fee-change answer, or when one went stale. */
+  const reloadOrder = async () => {
+    const updated = await fetchOrderById(currentOrder.id);
+    setCurrentOrder(updated);
+    onOrderUpdated?.(updated);
   };
 
   const handleItemReassigned = (updated: Order) => {
@@ -397,7 +416,7 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
         </div>
       )}
 
-      <Tabs defaultValue="details" className="w-full flex flex-col flex-1 min-h-0">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full flex flex-col flex-1 min-h-0">
         <TabsList className={`grid w-full flex-shrink-0 ${hasEntitlements ? 'grid-cols-5' : 'grid-cols-4'}`}>
           <TabsTrigger value="details">{t('orders.detail.tabs.details')}</TabsTrigger>
           <TabsTrigger value="items">{t('orders.detail.tabs.itemsWithCount', { count: currentOrder.items.length })}</TabsTrigger>
@@ -556,10 +575,29 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
                       agencyName={shipment.agencyName}
                       agentName={shipment.agent?.name}
                     />
+                    {(shipment.codLimitHold || shipment.codLimitForce) && (
+                      <div className="col-span-2 space-y-1.5">
+                        <CodLimitShipmentNotice
+                          shipment={shipment}
+                          currency={currentOrder.currency}
+                          onDispatchAnyway={canDispatch ? handleDispatch : undefined}
+                          dispatching={dispatchLoading}
+                        />
+                      </div>
+                    )}
                   </div>
                 ))}
               </CardContent>
             </Card>
+          )}
+
+          {/* Delivery-fee changes — a pending one blocks pickup, so it sits high. */}
+          {isPhysical && (
+            <DeliveryFeeProposals
+              order={currentOrder}
+              onChanged={reloadOrder}
+              className="rounded-xl border bg-card p-4"
+            />
           )}
 
           {/* Order Summary */}
@@ -606,7 +644,7 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
             {currentOrder.items.map((item) => {
               const image = item.image ?? productImages[item.productId];
               return (
-              <Card key={item.id} className="hover:shadow-sm transition-shadow">
+              <Card key={item.id} id={`order-item-${item.id}`} className="hover:shadow-sm transition-shadow">
                 <CardContent className="p-4 space-y-3">
                   <div className="flex items-center justify-between gap-4">
                     {/* Product Details (Left) */}
@@ -669,7 +707,9 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
                             orderId={currentOrder.id}
                             itemId={item.id}
                             currentAgencyId={item.delivery.agencyId}
+                            currency={currentOrder.currency}
                             onReassigned={handleItemReassigned}
+                            openRequest={reassignRequest?.itemId === item.id ? reassignRequest.n : undefined}
                           />
                         )}
                       </div>
@@ -971,6 +1011,8 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
       </Tabs>
 
       {/* Refund dialog ── amount + reason, re-checking eligibility on open */}
+      {codLimitDialog}
+
       <RefundDialog
         orderId={currentOrder.id}
         orderNumber={currentOrder.orderNumber}

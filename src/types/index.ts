@@ -1,4 +1,6 @@
 import type { TranslationKey } from '@/i18n';
+import type { CodLimitForce, CodLimitHold } from './cod-limits.types';
+import type { DeliveryFeeProposal } from './delivery-fee-proposals.types';
 
 // Product Types - Legacy (for backward compatibility)
 export interface Product {
@@ -111,6 +113,10 @@ export interface Order {
    * Resolution is automatic via Stripe webhooks; the vendor cannot act on it.
    */
   disputeHold?: DisputeHold;
+  /** List rows only (2026-10-02): a shipment of this order is held back over a COD limit. */
+  codLimitHeld?: boolean;
+  /** Detail only (2026-10-02): this order's delivery-fee proposals, newest first. `[]` for digital orders. */
+  deliveryFeeProposals?: DeliveryFeeProposal[];
 }
 
 /** Chargeback freeze marker carried on an order (mirrors the API `dispute_hold` object). */
@@ -207,6 +213,10 @@ export interface OrderItemDelivery {
     /** Admin has verified the agent's identity — shows the verified badge. */
     verified?: boolean;
   } | null;
+  /** Auto-dispatch held this COD shipment back over a limit; only the vendor's dispatch moves it (2026-10-02). */
+  codLimitHold?: CodLimitHold | null;
+  /** The shipment was dispatched over a COD limit on purpose — an audit line (2026-10-02). */
+  codLimitForce?: CodLimitForce | null;
 }
 
 /** One entry in the merged, per-agency shipment status history (`Order.deliveryTimeline`). */

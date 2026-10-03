@@ -1,7 +1,7 @@
 // Notification settings — mirrors `GET/PATCH /api/vendor/notification-preferences`.
 // See api-doc/vendor/notifications.md.
 
-/** The twelve subscribable events (`preferences.*` keys). See api-doc/vendor/notifications.md. */
+/** The fourteen subscribable events (`preferences.*` keys). See api-doc/vendor/notifications.md. */
 export type NotificationEventKey =
   | 'orderCreated'
   | 'orderCancelled'
@@ -19,7 +19,11 @@ export type NotificationEventKey =
    * Physical goods an agency warehouses for you: stock requests, depot moves,
    * and storage suspensions. Shares only a word with `storageAlert`.
    */
-  | 'agencyStorageUpdates';
+  | 'agencyStorageUpdates'
+  /** Auto-dispatch held a cash-on-delivery shipment back over a COD limit (2026-10-02). */
+  | 'codLimitUpdates'
+  /** An agency proposed, edited or withdrew a delivery-fee change (2026-10-02). */
+  | 'deliveryFeeProposals';
 
 export type NotificationEventPreferences = Record<NotificationEventKey, boolean>;
 
@@ -101,7 +105,16 @@ export type NotificationType =
   // and the agency's note is the only explanation. `aggregateType` is `product`.
   | 'storage.depot_changed'
   | 'storage.product_suspended'
-  | 'storage.product_unsuspended';
+  | 'storage.product_unsuspended'
+  // 2026-10-02. All four are `aggregateType: 'order'` and link `orders/{orderId}`.
+  // Auto-dispatch held a COD shipment back — the agency is over its cash limit,
+  // or over the vendor's own `maxCashPerAgency`. Only the vendor can push it out.
+  | 'shipment.cod_limit_held'
+  // An agency (or its agent) wants a different delivery fee for one shipment;
+  // pickup waits for the vendor's answer. `edited` = re-read before answering.
+  | 'delivery_fee_proposal.received'
+  | 'delivery_fee_proposal.edited'
+  | 'delivery_fee_proposal.withdrawn';
 
 /** Entity kind a notification points at, for deep-linking. */
 export type NotificationAggregateType =

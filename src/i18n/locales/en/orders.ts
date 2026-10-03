@@ -392,6 +392,88 @@ export const orders = {
         /** Actor shown when the backend attributes an event to no one. */
         systemActor: 'System',
     },
+
+    /** Cash-on-delivery limits on dispatch (2026-10-02). Copy is chosen by `kind`. */
+    codLimit: {
+        title: {
+            agency_limit: 'This agency is at its cash-on-delivery limit',
+            vendor_terms: 'Your own COD terms cap this agency',
+            unknown: 'This hand-off is over a cash-on-delivery limit',
+        },
+        body: 'The agency already holds {{current}}. This order adds {{added}}, which would take it past {{limit}}.',
+        bodyMove: 'That agency already holds {{current}}. This item adds {{added}}, which would take it past {{limit}}.',
+        forceNote: "We'll note that you dispatched over the limit.",
+        forceNoteMove: "We'll note that you moved it over the limit.",
+        dispatchAnyway: 'Dispatch anyway',
+        moveAnyway: 'Move anyway',
+        chooseAnotherAgency: 'Choose another agency',
+        openCodTerms: 'Change my COD terms',
+        heldBadge: 'Held — COD limit',
+        hold: {
+            agency_limit: 'Not sent to the agency: it is at its cash-on-delivery limit.',
+            vendor_terms: 'Not sent to the agency: your own COD terms cap this agency.',
+            unknown: 'Not sent to the agency: it would go over a cash-on-delivery limit.',
+        },
+        holdNumbers: 'The agency holds {{current}}, this parcel adds {{added}}, the limit is {{limit}}.',
+        holdNoRetry: 'It is not retried on its own. Dispatch it when you are ready.',
+        forced: 'Dispatched over the COD limit on {{date}}',
+        bulkFailed: plural({
+            one: '{{count}} order is over a cash-on-delivery limit and was not dispatched.',
+            other: '{{count}} orders are over a cash-on-delivery limit and were not dispatched.',
+        }),
+        bulkRetry: plural({ one: 'Dispatch it anyway', other: 'Dispatch these {{count}} anyway' }),
+    },
+
+    /** Delivery-fee changes an agency asks the vendor to approve (2026-10-02). */
+    feeProposals: {
+        title: 'Delivery fee changes',
+        fromAgency: 'From {{agency}}',
+        fromAgent: 'From an agent of {{agency}}',
+        unknownAgency: 'the delivery agency',
+        blocksPickup: 'The parcel can’t be picked up until you answer.',
+        changedHighlight: 'The agency changed this fee. Check the new amount.',
+        edits: plural({ one: 'Changed {{count}} time', other: 'Changed {{count}} times' }),
+        status: {
+            pending: 'Waiting for you',
+            approved: 'Approved',
+            rejected: 'Rejected',
+            withdrawn: 'Withdrawn',
+            unknown: 'Closed',
+        },
+        withdrawn: {
+            shipment_declined: 'Withdrawn — the agency declined the delivery',
+            agent_detached: 'Withdrawn — the agent left the job',
+            other: 'Withdrawn',
+        },
+        rejectionNote: 'Your note: {{note}}',
+        answeredOn: 'Answered on {{date}}',
+        earnings: 'Your earnings on this order: {{before}} → {{after}}',
+        approve: 'Approve',
+        reject: 'Reject',
+        approveDialog: {
+            title: 'Approve the new delivery fee?',
+            earningsDown: 'Your earnings on this order go down by {{amount}}.',
+            earningsUp: 'Your earnings on this order go up by {{amount}}.',
+            onlineNote: 'The order is already paid, so your held earnings change right away.',
+            codNote: 'This is cash on delivery, so the new fee applies when the cash is collected.',
+        },
+        rejectDialog: {
+            title: 'Keep the original fee?',
+            body: 'The agency may propose once more, or decline this delivery.',
+            noteLabel: 'Note for the agency (optional)',
+            notePlaceholder: 'Why you are keeping the original fee',
+        },
+        toast: {
+            approved: 'New delivery fee approved',
+            rejected: 'Fee change rejected',
+        },
+        banner: plural({
+            one: '{{count}} fee change waiting for you',
+            other: '{{count}} fee changes waiting for you',
+        }),
+        bannerAction: 'Open',
+        rowBadge: 'Fee change',
+    },
 } as const;
 
 export default orders;

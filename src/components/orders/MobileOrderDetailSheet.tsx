@@ -51,7 +51,10 @@ import { DeliveryRejectionNotice } from './DeliveryRejectionNotice';
 import { ReassignAgencyPopover } from './ReassignAgencyPopover';
 import { cn } from '@/lib/utils';
 import { useOrderStore } from '@/store';
-import { addNote, revokeEntitlement, restoreEntitlement, fetchNote, dispatchOrder, fetchOrderById, getOrderErrorMessage, isOrderFrozen } from '@/services/orders.service';
+import { addNote, revokeEntitlement, restoreEntitlement, fetchNote, fetchOrderById, getOrderErrorMessage, isOrderFrozen } from '@/services/orders.service';
+import { useOrderDispatch } from '@/hooks/use-order-dispatch';
+import { CodLimitShipmentNotice } from './CodLimitShipmentNotice';
+import { DeliveryFeeProposals } from './DeliveryFeeProposals';
 import { RefundDialog } from '@/components/customers/RefundDialog';
 import { REFUND_REASON_KEYS } from '@/components/customers/customer.constants';
 import { useRefundEligibility } from '@/hooks/use-refund-eligibility';
@@ -145,7 +148,8 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
   const [statusLoading, setStatusLoading] = useState(false);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [cancelConfirmationText, setCancelConfirmationText] = useState('');
-  const [dispatchLoading, setDispatchLoading] = useState(false);
+  /** "Choose another agency" from the COD-limit dialog: open that item's agency picker. */
+  const [reassignRequest, setReassignRequest] = useState<{ itemId: string; n: number } | null>(null);
 
   // Entitlement action dialog
   const [actionDialog, setActionDialog] = useState<{
@@ -170,6 +174,24 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
   const productImages = useProductImages(order?.items.map((item) => item.productId) ?? []);
   // Likewise called before the early return — hooks may not sit behind a branch.
   const refund = useRefundEligibility(order);
+
+  const { dispatch: handleDispatch, dispatching: dispatchLoading, dialog: codLimitDialog } = useOrderDispatch(order, {
+    onDispatched: setOrder,
+    onChooseAnotherAgency: (agencyId) => {
+      const movable = (order?.items ?? []).filter(
+        (item) => item.delivery?.deliveryStatus && REASSIGNABLE_DELIVERY_STATUSES.includes(item.delivery.deliveryStatus),
+      );
+      const target = movable.find((item) => item.delivery?.agencyId === agencyId) ?? movable[0];
+      setActiveTab('items');
+      if (target) setReassignRequest({ itemId: target.id, n: Date.now() });
+    },
+  });
+
+  // The picker's trigger sits in the Items tab — bring it into view once it mounts.
+  useEffect(() => {
+    if (!reassignRequest) return;
+    document.getElementById(`mobile-order-item-${reassignRequest.itemId}`)?.scrollIntoView({ block: 'center' });
+  }, [reassignRequest]);
 
   if (!order) return null;
 
@@ -244,17 +266,9 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
     }
   };
 
-  const handleDispatch = async () => {
-    setDispatchLoading(true);
-    try {
-      const { order: updated } = await dispatchOrder(order.id);
-      setOrder(updated);
-      toast.success(t('orders.toast.dispatched'));
-    } catch (err) {
-      toast.error(getOrderErrorMessage(err));
-    } finally {
-      setDispatchLoading(false);
-    }
+  /** Re-read the whole order — after a fee-change answer, or when one went stale. */
+  const reloadOrder = async () => {
+    setOrder(await fetchOrderById(order.id));
   };
 
   const handleItemReassigned = (updated: Order) => {
@@ -534,9 +548,25 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                               agencyName={shipment.agencyName}
                               agentName={shipment.agent?.name}
                             />
+                            {(shipment.codLimitHold || shipment.codLimitForce) && (
+                              <div className="mt-2 space-y-1.5">
+                                <CodLimitShipmentNotice
+                                  shipment={shipment}
+                                  currency={order.currency}
+                                  onDispatchAnyway={canDispatch ? handleDispatch : undefined}
+                                  dispatching={dispatchLoading}
+                                  size="xs"
+                                />
+                              </div>
+                            )}
                           </div>
                         ))}
                       </Section>
+                    )}
+
+                    {/* Delivery-fee changes — a pending one blocks pickup, so it sits high. */}
+                    {isPhysical && (
+                      <DeliveryFeeProposals order={order} onChanged={reloadOrder} className="border-b px-4 py-4" />
                     )}
 
                     <Section title={t('orders.detail.summary.title')}>
@@ -577,7 +607,7 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                     {order.items.map((item) => {
                       const image = item.image ?? productImages[item.productId];
                       return (
-                      <div key={item.id} className="border-b px-4 py-3 space-y-2">
+                      <div key={item.id} id={`mobile-order-item-${item.id}`} className="border-b px-4 py-3 space-y-2">
                         <div className="flex items-center gap-3">
                           {image ? (
                             <img src={image} alt={item.name} className="w-14 h-14 rounded-lg object-cover flex-shrink-0" />
@@ -631,7 +661,9 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                                 orderId={order.id}
                                 itemId={item.id}
                                 currentAgencyId={item.delivery.agencyId}
+                                currency={order.currency}
                                 onReassigned={handleItemReassigned}
+                                openRequest={reassignRequest?.itemId === item.id ? reassignRequest.n : undefined}
                               />
                             )}
                           </div>
@@ -1032,6 +1064,8 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
       </Sheet>
 
       {/* Refund dialog — amount + reason, re-checking eligibility on open */}
+      {codLimitDialog}
+
       <RefundDialog
         orderId={order.id}
         orderNumber={order.orderNumber}

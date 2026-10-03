@@ -285,6 +285,10 @@ export const settings = {
         geoRequired: 'Recherchez et sélectionnez cette adresse pour que nous puissions la situer sur la carte.',
         geoCountryMismatch: 'Cette adresse doit se trouver dans votre pays d’enregistrement ({{country}}). Recherchez-la à nouveau à l’intérieur de {{country}}.',
         geoBlocked: 'Certaines adresses ont besoin d’un emplacement valide avant l’enregistrement.',
+        regionPickLabel: 'Région',
+        regionPickPlaceholder: 'Choisissez la région',
+        regionPickHint: 'Impossible de savoir dans quelle région se trouve cette adresse. Choisissez-la, puis enregistrez à nouveau.',
+        regionPickBlocked: 'Choisissez la région de l’adresse signalée, puis enregistrez à nouveau.',
 
         removeConfirmTitle: 'Supprimer cette adresse ?',
         removeConfirmBody: 'Si elle est encore définie comme point de retrait sur un produit, l’enregistrement sera bloqué tant que vous n’aurez pas réaffecté ce produit.',
@@ -413,6 +417,22 @@ export const settings = {
             remove: 'Supprimer le document',
             uploadFailed: 'Impossible d’envoyer le document. Veuillez réessayer.',
         },
+    },
+
+    codTerms: {
+        title: 'Paiement à la livraison',
+        info: 'Ces conditions s’enregistrent à part. Contrairement à vos politiques, les modifier ne demande pas à vos agences de vous approuver à nouveau.',
+        acceptLabel: 'Accepter le paiement à la livraison',
+        acceptHint: 'Le désactiver s’applique tout de suite au paiement : les clients devront payer en ligne toute commande contenant vos articles.',
+        maxLabel: 'Espèces maximum qu’une agence peut détenir pour moi',
+        maxHint: 'Laissez vide pour ne fixer aucune limite. La limite propre à l’agence s’applique toujours.',
+        maxPlaceholder: 'Aucune limite',
+        maxInvalid: 'Saisissez un montant entier entre 0 et {{max}}.',
+        lastChanged: 'Modifié le {{date}}',
+        agenciesTold: 'Vos agences connectées seront prévenues quand vous enregistrez un changement.',
+        saved: 'Conditions de paiement à la livraison enregistrées',
+        loadFailed: 'Impossible de charger vos conditions de paiement à la livraison.',
+        saveFailed: 'Impossible d’enregistrer vos conditions de paiement à la livraison.',
     },
 };
 

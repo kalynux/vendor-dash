@@ -207,6 +207,13 @@ const TYPE_VISUALS: Record<NotificationType, Visual> = {
   // explanation the vendor gets.
   'storage.product_suspended': { Icon: Ban, iconWrap: 'bg-red-100 text-red-600', dot: 'bg-red-500' },
   'storage.product_unsuspended': { Icon: CheckCircle2, iconWrap: 'bg-green-100 text-green-600', dot: 'bg-green-500' },
+  // Amber: each of these is the vendor's to act on — a held shipment only moves
+  // when the vendor dispatches it, and a pending fee change blocks pickup.
+  'shipment.cod_limit_held': { Icon: AlertTriangle, iconWrap: 'bg-amber-100 text-amber-600', dot: 'bg-amber-500' },
+  'delivery_fee_proposal.received': { Icon: CircleDollarSign, iconWrap: 'bg-amber-100 text-amber-600', dot: 'bg-amber-500' },
+  'delivery_fee_proposal.edited': { Icon: CircleDollarSign, iconWrap: 'bg-amber-100 text-amber-600', dot: 'bg-amber-500' },
+  // Nothing to answer any more — informational.
+  'delivery_fee_proposal.withdrawn': { Icon: CircleDollarSign, iconWrap: 'bg-gray-100 text-gray-600', dot: 'bg-gray-500' },
 };
 
 const AGGREGATE_FALLBACK: Record<NotificationAggregateType, Visual> = {

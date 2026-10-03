@@ -323,6 +323,11 @@ export const settings = {
         geoRequired: 'Search and select this address so we can pin it on the map.',
         geoCountryMismatch: 'This address must be in your registered country ({{country}}). Search for it again within {{country}}.',
         geoBlocked: 'Some addresses need a valid pinned location before saving.',
+        // ADDRESS_REGION_INVALID — the server could not place a saved address in a region.
+        regionPickLabel: 'Region',
+        regionPickPlaceholder: 'Pick the region',
+        regionPickHint: 'We could not tell which region this address is in. Pick it, then save again.',
+        regionPickBlocked: 'Pick the region for the highlighted address, then save again.',
 
         removeConfirmTitle: 'Remove this address?',
         removeConfirmBody: "If it's still set as a pickup location on a product, saving will be blocked until you reassign that product.",
@@ -453,6 +458,23 @@ export const settings = {
             remove: 'Remove document',
             uploadFailed: 'Could not upload document. Please try again.',
         },
+    },
+
+    /** COD terms card on the Policies tab (2026-10-02). Saved on its own, never with the policies. */
+    codTerms: {
+        title: 'Cash on delivery',
+        info: 'These terms are saved on their own. Unlike your policies, changing them does not ask your agencies to approve you again.',
+        acceptLabel: 'Accept cash on delivery',
+        acceptHint: 'Turning this off applies at checkout right away: customers will have to pay online for any order containing your items.',
+        maxLabel: 'Most cash one agency may hold for me',
+        maxHint: 'Leave empty for no limit of yours. The agency’s own limit still applies.',
+        maxPlaceholder: 'No limit',
+        maxInvalid: 'Enter a whole amount from 0 to {{max}}.',
+        lastChanged: 'Last changed {{date}}',
+        agenciesTold: 'Your connected agencies will be told when you save a change.',
+        saved: 'Cash-on-delivery terms saved',
+        loadFailed: 'Could not load your cash-on-delivery terms.',
+        saveFailed: 'Could not save your cash-on-delivery terms.',
     },
 } as const;
 

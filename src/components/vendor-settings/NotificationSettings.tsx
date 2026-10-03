@@ -123,6 +123,8 @@ const EVENTS: EventMeta[] = [
   { key: 'connectionUpdated', labelKey: 'notifications.settings.events.connectionUpdated', descriptionKey: 'notifications.settings.events.connectionUpdatedHint' },
   { key: 'payoutUpdates', labelKey: 'notifications.settings.events.payoutUpdates', descriptionKey: 'notifications.settings.events.payoutUpdatesHint' },
   { key: 'shipmentRejected', labelKey: 'notifications.settings.events.shipmentRejected', descriptionKey: 'notifications.settings.events.shipmentRejectedHint' },
+  { key: 'codLimitUpdates', labelKey: 'notifications.settings.events.codLimitUpdates', descriptionKey: 'notifications.settings.events.codLimitUpdatesHint' },
+  { key: 'deliveryFeeProposals', labelKey: 'notifications.settings.events.deliveryFeeProposals', descriptionKey: 'notifications.settings.events.deliveryFeeProposalsHint' },
   { key: 'planUpdates', labelKey: 'notifications.settings.events.planUpdates', descriptionKey: 'notifications.settings.events.planUpdatesHint', readOnly: true },
 ];
 
@@ -214,13 +216,9 @@ export function NotificationSettings() {
       const ch = deriveChannel(data);
       setChannel(ch);
       setSavedChannel(ch);
-      // A backend that predates a key omits it, and `undefined` would render
-      // the row as off — the opposite of its documented default. Coalesce after
-      // the spread so the stored value still wins when it is present.
-      setEvents({
-        ...data.preferences,
-        agencyStorageUpdates: data.preferences.agencyStorageUpdates ?? true,
-      });
+      // Keys an older document omits already read as ON — the service fills
+      // them (`withEventDefaults`), so this copy and `prefs` agree.
+      setEvents({ ...data.preferences });
     } catch (err) {
       setLoadError(mapProfileError(err));
     } finally {
