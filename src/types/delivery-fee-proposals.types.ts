@@ -2,6 +2,12 @@
 // (2026-10-02). An agency, or its agent, asks for a different delivery fee on
 // one shipment; the vendor pays the fee, so the vendor approves or rejects.
 //
+// Since 2026-10-04 (ADR-A11) the CUSTOMER answers on a customer-paid shipment —
+// those rows are read-only here (`availableActions: []`) — and a change of
+// delivery company on a customer-paid parcel raises a `change_agency`
+// difference the vendor may `cover` at once. Shapes not in the doc were read
+// from the backend's `delivery-fee-proposal.dto.ts`.
+//
 // Amounts are XAF "minor units" — whole francs, never divided by 100.
 //
 // Enums are kept open with `string & {}`: an unknown value renders read-only
@@ -9,10 +15,17 @@
 
 export type DeliveryFeeProposalStatus = 'pending' | 'approved' | 'rejected' | 'withdrawn' | (string & {});
 
-export type DeliveryFeeProposalAction = 'approve' | 'reject' | (string & {});
+export type DeliveryFeeProposalAction = 'approve' | 'reject' | 'cover' | (string & {});
+
+/** Who answers: `vendor` (vendor-paid), `customer` (a rise on a customer-paid parcel), `none` (a cut, applied at once). */
+export type DeliveryFeeProposalApprover = 'vendor' | 'customer' | 'none' | (string & {});
+
+/** `agency` (the agency or its agent asked) · `change_agency` (you moved the parcel) · `combined_request`. */
+export type DeliveryFeeProposalOrigin = 'agency' | 'change_agency' | 'combined_request' | (string & {});
 
 export interface DeliveryFeeProposer {
-  role: 'agency' | 'agent' | (string & {});
+  /** `system` raised a `change_agency` difference. */
+  role: 'agency' | 'agent' | 'system' | (string & {});
   userId: string | null;
   agentId: string | null;
 }
@@ -33,6 +46,15 @@ export interface DeliveryFeeProposal {
   orderId: string;
   agencyId: string;
   proposedBy: DeliveryFeeProposer;
+  /** 2026-10-04 — absent on older servers, which means `vendor`. */
+  approver?: DeliveryFeeProposalApprover;
+  /** 2026-10-04 — absent on older servers, which means `agency`. */
+  origin?: DeliveryFeeProposalOrigin;
+  direction?: 'increase' | 'decrease' | null;
+  /** The customer approved a rise (online: the top-up it needs is on `topup`). */
+  customerApproval?: { approvedAt: string; version: number } | null;
+  topup?: { amount: number; status: 'awaiting_payment' | 'paid' | (string & {}); paidAt: string | null } | null;
+  combinedRequestId?: string | null;
   currency: string;
   feeBefore: number;
   proposedFee: number;
@@ -52,6 +74,14 @@ export interface DeliveryFeeProposal {
     vendorAllocationBefore: number | null;
     vendorAllocationAfter: number | null;
     snapshotRewritten: boolean;
+    /** 2026-10-04 — the customer side of a customer-paid change; `null` on a vendor-paid one. */
+    customerFeeBefore?: number | null;
+    customerFeeAfter?: number | null;
+    customerTopupAmount?: number | null;
+    customerRefundDue?: number | null;
+    codCollectionAdjusted?: boolean;
+    /** How much more (or less) delivery this change put on you. */
+    vendorBorneDelta?: number | null;
   } | null;
   /** Starts at 1, +1 per edit. Send back the one you displayed on approve/reject. */
   version: number;

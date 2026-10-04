@@ -40,10 +40,21 @@ function flushQueue(err?: ApiError) {
 // Hard logout: end the session on whichever transport is active, then tell the
 // app. `endSession()` clears the server's cookies on web and forgets the stored
 // pair on native — the strategy owns that difference, not this file.
-async function hardLogout(): Promise<void> {
+//
+// The error code rides along as `detail.code`, so the listener can tell the
+// vendor *why* — a closed shop (`AUTH_ROLE_CLOSED`) should not look like an
+// ordinary expired session.
+async function hardLogout(cause?: ApiError): Promise<void> {
     await authStrategy.endSession();
     // Signal to the app that auth is gone
-    window.dispatchEvent(new Event('auth:logout'));
+    window.dispatchEvent(
+        new CustomEvent<AuthLogoutDetail>('auth:logout', { detail: { code: cause?.code ?? null } }),
+    );
+}
+
+/** `detail` of the `auth:logout` event: the error code that ended the session, when known. */
+export interface AuthLogoutDetail {
+    code: string | null;
 }
 
 // ─── Terminal vs. recoverable auth failures ───────────────────────────────────
@@ -109,6 +120,10 @@ const TERMINAL_403_CODES: ReadonlySet<string> = new Set([
     // but this dashboard only ever acts as a vendor, so there is nothing here to
     // switch to — the session is over as far as this app is concerned.
     'AUTH_VENDOR_SUSPENDED',
+    // The vendor *role* was closed (ADR-A10) — by the vendor, from this device
+    // or another. Irreversible, and raised by the refresh as well, so refreshing
+    // can never help. The person's other roles still work, just not here.
+    'AUTH_ROLE_CLOSED',
 ]);
 
 /**
@@ -130,7 +145,7 @@ async function classifyAuthError(
     // refuses every credential this session holds.
     isRefreshing = false;
     flushQueue(err);
-    await hardLogout();
+    await hardLogout(err);
     return { err, terminal: true };
 }
 
@@ -170,7 +185,7 @@ async function refreshThenRetry<T>(retry: () => Promise<T>): Promise<T> {
                 ? refreshErr
                 : new ApiError(401, 'REFRESH_FAILED', 'Session expired');
         flushQueue(apiErr); // reject all queued requests
-        await hardLogout();
+        await hardLogout(apiErr);
         throw apiErr;
     }
 }

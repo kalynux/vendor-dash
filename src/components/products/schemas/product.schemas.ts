@@ -10,12 +10,28 @@ import type { ApiProductType, ApiVariant } from '@/types/product.types';
 // module load, long before a locale exists. The components that render these
 // pipe `errors.<field>.message` through `useMessage()`, which resolves the key.
 
+/**
+ * The 1–5 category chips (api-doc/vendor/categories.md). A picked category is
+ * `{ id, name }` — the name is for the chip only; a typed one is `{ name }`.
+ * Name rules (2–60 chars, a letter or digit) are the server's to enforce, along
+ * with every kind of matching.
+ */
+export const categoriesSchema = z
+  .array(
+    z.union([
+      z.object({ id: z.string().min(1), name: z.string() }),
+      z.object({ name: z.string().min(1), confirmNew: z.boolean().optional() }),
+    ]),
+  )
+  .min(1, 'products.validation.categoryRequired')
+  .max(5, 'products.validation.categoryMax');
+
 export const basicInfoSchema = z.object({
   title: z
     .string()
     .min(3, 'products.validation.titleMin')
     .max(200, 'products.validation.titleMax'),
-  category: z.string().min(1, 'products.validation.categoryRequired'),
+  categories: categoriesSchema,
   /**
    * The plain-text projection of `descriptionRich`, written by the editor on
    * every change. It stays the validated field — so the required-ness rule, the

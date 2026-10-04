@@ -1,10 +1,13 @@
-import { useCallback, useEffect, useReducer } from 'react';
+import { useCallback, useEffect, useReducer, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Package, ImageIcon, Clock, CalendarRange, CheckSquare } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EditorPageShell } from '@/components/layout/EditorPageShell';
+import { useCategoryConflicts } from '@/components/products/categories/useCategoryConflicts';
+import { fromProductCategories, toCategoryWire } from '@/services/categories.service';
+import type { CategoryEntry } from '@/types/category.types';
 import { PageBackButton } from '@/components/layout/PageBackButton';
 import { ProductStepIndicator } from '@/components/products/ProductStepIndicator';
 import { StepServiceBasics } from '@/components/services/wizard/StepServiceBasics';
@@ -28,6 +31,7 @@ import type {
 } from '@/components/services/schemas/service.schemas';
 import { descriptionCreateWire, hydrateDoc } from '@/lib/richtext';
 import type { ServiceProduct, ServiceConfig } from '@/types/services.types';
+import type { ApiFileDetail } from '@/types/product.types';
 import type { TranslationKey } from '@/i18n';
 
 // ─── Step definitions ─────────────────────────────────────────────────────────
@@ -119,6 +123,10 @@ export function ServiceEdit() {
   const { t } = useTranslation();
   const apiError = useApiError();
   const [state, dispatch] = useReducer(reducer, INITIAL_STATE);
+  const { run: runCategorySave, dialog: categoryConflictDialog } = useCategoryConflicts();
+  const [resolvedCategories, setResolvedCategories] = useState<CategoryEntry[] | null>(null);
+  // Photos picked in the description's "Generate" popup on a service that had none.
+  const [aiPhotos, setAiPhotos] = useState<ApiFileDetail[]>([]);
 
   useEffect(() => {
     if (!id) return;
@@ -161,14 +169,25 @@ export function ServiceEdit() {
       if (!id) return;
       dispatch({ type: 'SET_SAVING', value: true });
       try {
-        const service = await updateService(id, {
-          title: values.title,
-          category: values.category,
-          ...descriptionCreateWire(values.descriptionRich),
-          tags: values.tags,
-          seoTitle: values.seoTitle || undefined,
-          seoDescription: values.seoDescription || undefined,
-        });
+        // "Did you mean …?" re-submits this same save — the 422 wrote nothing.
+        const saved = await runCategorySave(
+          values.categories,
+          (categories) =>
+            updateService(id, {
+              title: values.title,
+              categories: toCategoryWire(categories),
+              ...descriptionCreateWire(values.descriptionRich),
+              tags: values.tags,
+              seoTitle: values.seoTitle || undefined,
+              seoDescription: values.seoDescription || undefined,
+            }),
+          setResolvedCategories,
+        );
+        if (!saved.ok) {
+          dispatch({ type: 'SET_SAVING', value: false });
+          return;
+        }
+        const service = saved.value;
         toast.success(t('services.toast.detailsSaved'));
         advance({ service });
       } catch (err) {
@@ -182,7 +201,7 @@ export function ServiceEdit() {
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [id, state.currentStep],
+    [id, state.currentStep, runCategorySave],
   );
 
   // ─── Images ───────────────────────────────────────────────────────────────────
@@ -329,10 +348,11 @@ export function ServiceEdit() {
       case 'basic-info':
         return (
           <StepServiceBasics
+            resolvedCategories={resolvedCategories}
             mode="edit"
             defaultValues={{
               title: service.title,
-              category: service.category,
+              categories: fromProductCategories(service.categories),
               description: service.description,
               descriptionRich: hydrateDoc(service.descriptionRich, service.description),
               seoTitle: service.seo?.title ?? '',
@@ -343,13 +363,16 @@ export function ServiceEdit() {
             stepError={state.stepError}
             onSaveComplete={handleBasicsSave}
             onBack={handleBack}
+            serviceId={service.id}
+            photos={service.files?.length ? service.files : aiPhotos}
+            onAiPhotosPicked={setAiPhotos}
           />
         );
       case 'images':
         return (
           <StepServiceImages
             mode="edit"
-            existingFiles={service.files}
+            existingFiles={service.files?.length ? service.files : aiPhotos}
             isSaving={state.isSaving}
             stepError={state.stepError}
             onSaveComplete={handleImagesSave}
@@ -431,6 +454,7 @@ export function ServiceEdit() {
       <Card className="rounded-none border-x-0 md:rounded-xl md:border">
         <CardContent className="p-4 sm:p-6">{renderStep()}</CardContent>
       </Card>
+      {categoryConflictDialog}
     </EditorPageShell>
   );
 }

@@ -114,7 +114,18 @@ export type NotificationType =
   // pickup waits for the vendor's answer. `edited` = re-read before answering.
   | 'delivery_fee_proposal.received'
   | 'delivery_fee_proposal.edited'
-  | 'delivery_fee_proposal.withdrawn';
+  | 'delivery_fee_proposal.withdrawn'
+  // 2026-10-04 (ADR-A11). You moved a customer-paid parcel to a dearer agency and
+  // the customer declined the difference — it comes out of your earnings. Same
+  // `deliveryFeeProposals` preference, links `orders/{orderId}`.
+  | 'delivery_fee_proposal.customer_declined'
+  // 2026-10-04 (ADR-A10). An administrator asked to close this shop; nothing
+  // happens until the vendor confirms. `aggregateType` is `account`,
+  // `aggregateId` the request id. No preference can mute it.
+  | 'account.closure_requested'
+  // A connected agency closed its account, so the connection ENDED
+  // (`terminated`, `termination.reason: 'role_closed'`). `aggregateType` is `connection`.
+  | 'connection.ended_by_closure';
 
 /** Entity kind a notification points at, for deep-linking. */
 export type NotificationAggregateType =
@@ -127,7 +138,9 @@ export type NotificationAggregateType =
   | 'payout'
   | 'plan'
   | 'stock_request'
-  | 'product';
+  | 'product'
+  /** `account.closure_requested` — `aggregateId` is the closure request id. */
+  | 'account';
 
 /** Channels a notification was actually delivered on. */
 export type DeliveredVia = 'in-app' | 'push' | 'telegram' | 'email' | 'whatsapp';

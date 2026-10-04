@@ -1,8 +1,9 @@
+import { categoryNames } from '@/services/categories.service';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Plus, CalendarClock, CalendarX2, Loader2, Clock, Grid3X3, List,
   MoreHorizontal, Edit, Rocket, RotateCcw, Trash2, Sparkles, RotateCw, XCircle,
-  CheckCircle2,
+  CheckCircle2, TriangleAlert,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -96,12 +97,18 @@ const VECTORISATION_META: Record<
     className: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
     Icon: XCircle,
   },
+  skipped_no_credits: {
+    labelKey: 'services.vectorisation.noCredits',
+    className: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
+    Icon: TriangleAlert,
+  },
 };
 
 function VectorisationBadge({ enabled, status }: { enabled: boolean; status: ApiVectorisationStatus }) {
   const { t } = useTranslation();
   if (!enabled) return null;
-  const meta = VECTORISATION_META[status];
+  // A state the server adds later must not take the whole page down.
+  const meta = VECTORISATION_META[status] ?? VECTORISATION_META.not_started;
   const { Icon } = meta;
   return (
     <span className={cn('inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium', meta.className)}>
@@ -281,6 +288,7 @@ interface ServiceCardProps {
 }
 
 function ServiceGridCard({ service, onOpen, actions, calendarDesynced }: ServiceCardProps) {
+  const { t } = useTranslation();
   return (
     <Card
       onClick={onOpen}
@@ -308,7 +316,7 @@ function ServiceGridCard({ service, onOpen, actions, calendarDesynced }: Service
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
             <h3 className="truncate text-sm font-medium">{service.title}</h3>
-            <p className="truncate text-xs text-muted-foreground">{service.category}</p>
+            <p className="truncate text-xs text-muted-foreground">{categoryNames(service.categories) || t('products.categories.none')}</p>
           </div>
           {actions}
         </div>
@@ -629,7 +637,7 @@ export function ServicesListPanel({ onOpenDetail, onCreate, reloadToken, calenda
                     </div>
                     <div className="min-w-0">
                       <p className="truncate font-medium">{s.title}</p>
-                      <p className="truncate text-xs text-muted-foreground">{s.category}</p>
+                      <p className="truncate text-xs text-muted-foreground">{categoryNames(s.categories) || t('products.categories.none')}</p>
                     </div>
                   </div>
                 </td>

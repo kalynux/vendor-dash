@@ -13,6 +13,7 @@ import {
   ProductPreview,
   Register,
   ResetPassword,
+  AccountClosed,
   StorePreview,
   prefetchDashboard,
 } from '@/routes/lazy';
@@ -42,6 +43,7 @@ import { OnboardingProvider, useOnboarding } from '@/onboarding/store/onboarding
 import { OnboardingGuard } from '@/onboarding/OnboardingGuard';
 import { OnboardingErrorBoundary } from '@/onboarding/OnboardingErrorBoundary';
 import { OnboardingSkeleton } from '@/onboarding/OnboardingSkeleton';
+import { ACCOUNT_CLOSED_PATH } from '@/lib/signed-out-notice';
 
 // i18n — binds the dashboard language to the vendor's Profile setting
 import { SessionLocaleSync, useTranslation } from '@/i18n';
@@ -183,6 +185,11 @@ function AppContent() {
                       because a packaged app has nowhere to come back to. The
                       choice lives in `pages/auth/index.tsx`, not here. */}
                   <Route path="/login" element={<LoginScreen />} />
+
+                  {/* After closing the shop when it was the person's last role:
+                      the whole account is closed and there is nothing to sign
+                      in to (ADR-A10). Public — the session is already gone. */}
+                  <Route path={ACCOUNT_CLOSED_PATH} element={<AccountClosed />} />
 
                   {/* `/account/confirm-email` used to be routed here and is GONE.
 

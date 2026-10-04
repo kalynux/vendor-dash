@@ -6,8 +6,10 @@
 // side proposes, the other approves. Every other product in the catalogue is
 // unchanged — its stock is still edited directly.
 //
-// Standalone on purpose (imports nothing) so `product.types.ts` and
-// `inventory.types.ts` can both pull from it without a cycle.
+// Standalone on purpose (imports only the leaf `file.types.ts`) so
+// `product.types.ts` and `inventory.types.ts` can both pull from it without a cycle.
+
+import type { FileRef } from './file.types';
 
 export type StockRequestStatus = 'pending' | 'approved' | 'rejected' | 'withdrawn';
 
@@ -48,6 +50,28 @@ export interface StockRequestStatusEvent {
   changedAt: string;
   changedByRole: StockRequestParty;
   note?: string | null;
+}
+
+export interface StockRequestProduct {
+  /** The product's CURRENT title. */
+  title: string | null;
+  variantTitle: string | null;
+  sku: string | null;
+  /** Variant's first image, else the product's. `url` is `null` unless `access` is `public`. */
+  image: FileRef | null;
+}
+
+export interface StockRequestVendor {
+  id: string;
+  businessName: string | null;
+  verified: boolean;
+}
+
+export interface StockRequestLocation {
+  id: string;
+  label: string | null;
+  city: string | null;
+  isPrimary: boolean;
 }
 
 export interface StockRequestDto {
@@ -92,13 +116,19 @@ export interface StockRequestDto {
   createdAt: string;
   updatedAt: string;
 
-  // ─── Display enrichment ──────────────────────────────────────────────────
-  // NOT in the documented DTO (api-doc/agency/stock-requests.md §3 lists ids
-  // only). Optional so every consumer is forced to degrade — a row falls back
-  // to a shortened variantId rather than rendering "undefined".
-  sku?: string;
-  productTitle?: string;
-  agencyName?: string;
+  // ─── What it is about (added 2026-10-04) ──────────────────────────────────
+  // See api-doc/vendor/FRONTEND-CHANGELOG-stock-request-names.md. Resolved LIVE
+  // when the request is read, not snapshotted when raised — a renamed product
+  // shows its current title even on closed requests. A deleted product, variant
+  // or depot reads as `null`, so every one of these needs a fallback.
+
+  product: StockRequestProduct | null;
+  /** Yourself. Not rendered. */
+  vendor: StockRequestVendor | null;
+  /** The agency's depot holding this SKU. `null` when it has no inventory row, or deleted the depot. */
+  location: StockRequestLocation | null;
+  /** The AGENCY's inventory row id. No vendor endpoint opens it — never link to it. */
+  stockLevelId: string | null;
 }
 
 // ─── The shared `meta.stockAdjustment` block ────────────────────────────────
@@ -142,6 +172,11 @@ export interface StockRequestListParams {
   productId?: string;
   variantId?: string;
   direction?: StockRequestDirection;
+  /**
+   * 1–100 chars, case-insensitive substring over product title and variant SKU.
+   * Trimmed before sending; an empty value is never sent (it would be a 400).
+   */
+  search?: string;
 }
 
 export interface CreateStockRequestPayload {

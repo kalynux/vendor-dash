@@ -1,3 +1,4 @@
+import { categoryNames } from '@/services/categories.service';
 import { useEffect, useState } from 'react';
 import { AlertCircle, CheckCircle2 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -30,7 +31,6 @@ interface StepReviewProps {
   onSaveDraft: (values: { vectorisationEnabled: boolean; bargainEdits: BargainCeilingEdit[] }) => void;
   onBack: () => void;
   onAgencyChange: (agencyId: string | null) => Promise<void> | void;
-  onFreeDeliveryChange: (freeDelivery: boolean) => Promise<void> | void;
   onPickupLocationChange: (pickupLocation: ApiPickupLocation | null) => Promise<void> | void;
 }
 
@@ -42,7 +42,6 @@ export function StepReview({
   onSaveDraft,
   onBack,
   onAgencyChange,
-  onFreeDeliveryChange,
   onPickupLocationChange,
 }: StepReviewProps) {
   const { t } = useTranslation();
@@ -136,7 +135,6 @@ export function StepReview({
   const liveFormatCount = variants.filter((v) => v.status === 'active').length;
 
   const productAgencyId = product?.delivery?.agencyId ?? null;
-  const productFreeDelivery = product?.delivery?.freeDelivery ?? false;
   const productPickupLocation = product?.delivery?.pickupLocation ?? null;
   const effectiveAgencyId = productAgencyId ?? defaultAgency?.id ?? null;
   const physicalNeedsAgency = isPhysical && !effectiveAgencyId;
@@ -253,12 +251,10 @@ export function StepReview({
                     {t(statusLabelKeys[product.status] ?? 'products.status.draft')}
                   </span>
                   <span>{t(`products.type.${product.type}` as TranslationKey)}</span>
-                  {product.category && (
-                    <>
-                      <span aria-hidden>·</span>
-                      <span className="min-w-0 truncate">{product.category}</span>
-                    </>
-                  )}
+                  <span aria-hidden>·</span>
+                  <span className="min-w-0 truncate">
+                    {categoryNames(product.categories) || t('products.categories.none')}
+                  </span>
                 </div>
               </div>
 
@@ -317,8 +313,6 @@ export function StepReview({
               productAgencyId={productAgencyId}
               isSaving={controlsDisabled}
               onAgencyChange={onAgencyChange}
-              freeDelivery={productFreeDelivery}
-              onFreeDeliveryChange={onFreeDeliveryChange}
               pickupLocation={productPickupLocation}
               onPickupLocationChange={onPickupLocationChange}
               pickup={product?.pickup ?? null}

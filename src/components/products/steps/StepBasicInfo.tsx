@@ -1,5 +1,5 @@
-import { useRef, useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useEffect, useRef, useState } from 'react';
+import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import type { z } from 'zod';
 import { X, ChevronRight } from 'lucide-react';
@@ -14,9 +14,14 @@ import { SettingsSection, SettingsSections } from '@/components/vendor-settings/
 import { basicInfoSchema, type BasicInfoFormValues } from '@/components/products/schemas/product.schemas';
 import { useMessage, useTranslation } from '@/i18n';
 import { hydrateDoc, toPlainText, type RichDoc } from '@/lib/richtext';
-import type { WizardState } from '@/types/product.types';
+import type { ApiFileDetail, WizardState } from '@/types/product.types';
 import { DisclosureTrigger } from '@/components/products/form/DisclosureTrigger';
 import { StepActions, StepError } from './StepLayout';
+import { CategoryPicker } from '@/components/products/categories/CategoryPicker';
+import { fromProductCategories } from '@/services/categories.service';
+import type { CategoryEntry } from '@/types/category.types';
+import { ListingCopyAssistant, type ListingCopyApplied } from '@/components/ai-copy/ListingCopyAssistant';
+import { PRODUCT_IMAGE_LIMIT } from '@/components/products/media.constants';
 
 interface StepBasicInfoProps {
   mode: 'create' | 'edit';
@@ -25,6 +30,18 @@ interface StepBasicInfoProps {
   stepError: string | null;
   onSaveComplete: (updates: Partial<WizardState>) => void;
   onBack: () => void;
+  /**
+   * The chips after the vendor answered "Did you mean …?". The page owns the
+   * save, so it hands the rewritten list back here; a later save then sends
+   * the answers instead of asking the same question again.
+   */
+  resolvedCategories?: CategoryEntry[] | null;
+  /**
+   * Photos picked in the "Generate" popup before the product had any. The page
+   * keeps them so the photo step opens with them already in place.
+   */
+  aiPhotos?: ApiFileDetail[];
+  onAiPhotosPicked?: (files: ApiFileDetail[]) => void;
 }
 
 export function StepBasicInfo({
@@ -34,6 +51,9 @@ export function StepBasicInfo({
   stepError,
   onSaveComplete,
   onBack,
+  resolvedCategories,
+  aiPhotos,
+  onAiPhotosPicked,
 }: StepBasicInfoProps) {
   const { t } = useTranslation();
   const m = useMessage();
@@ -43,15 +63,17 @@ export function StepBasicInfo({
 
   const {
     register,
+    control,
     handleSubmit,
     watch,
     setValue,
+    getValues,
     formState: { errors },
   } = useForm<z.input<typeof basicInfoSchema>, unknown, BasicInfoFormValues>({
     resolver: zodResolver(basicInfoSchema),
     defaultValues: {
       title: product?.title ?? '',
-      category: product?.category ?? '',
+      categories: fromProductCategories(product?.categories),
       description: product?.description ?? '',
       // A saved rich document wins; otherwise the plain description is parsed
       // back into one, so a product written before this editor existed opens
@@ -62,6 +84,10 @@ export function StepBasicInfo({
       seoDescription: product?.seo?.description ?? '',
     },
   });
+
+  useEffect(() => {
+    if (resolvedCategories) setValue('categories', resolvedCategories, { shouldDirty: true });
+  }, [resolvedCategories, setValue]);
 
   const tags = watch('tags') as string[];
   const descriptionRich = watch('descriptionRich') as RichDoc;
@@ -79,6 +105,27 @@ export function StepBasicInfo({
   function onDescriptionChange(doc: RichDoc) {
     setValue('descriptionRich', doc, { shouldValidate: false });
     setValue('description', toPlainText(doc), { shouldValidate: true, shouldDirty: true });
+  }
+
+  const productType = serverData.productType ?? 'physical';
+  const savedPhotos = product && 'files' in product ? product.files : [];
+
+  function applyGenerated(applied: ListingCopyApplied) {
+    const opts = { shouldValidate: true, shouldDirty: true };
+    if (applied.title) setValue('title', applied.title, opts);
+    if (applied.categories) setValue('categories', applied.categories, opts);
+    if (applied.descriptionRich) onDescriptionChange(applied.descriptionRich);
+    if (applied.tags) {
+      // Added to the vendor's own tags, never replacing them.
+      const current = (getValues('tags') ?? []) as string[];
+      const have = new Set(current.map((tag) => tag.toLowerCase()));
+      setValue('tags', [...current, ...applied.tags.filter((tag) => !have.has(tag.toLowerCase()))], opts);
+    }
+    if (applied.seoTitle) setValue('seoTitle', applied.seoTitle, opts);
+    if (applied.seoDescription) setValue('seoDescription', applied.seoDescription, opts);
+    // Tags and SEO live behind "More options" — open it so the vendor sees them.
+    if (applied.tags || applied.seoTitle || applied.seoDescription) setMoreOpen(true);
+    if (applied.photos) onAiPhotosPicked?.(applied.photos);
   }
 
   function addTag() {
@@ -142,25 +189,48 @@ export function StepBasicInfo({
 
           {/* Category */}
           <div className="space-y-2">
-            <Label htmlFor="category">
-              {t('products.fields.category')} <span className="text-destructive">*</span>
+            <Label htmlFor="categories">
+              {t('products.categories.label')} <span className="text-destructive">*</span>
             </Label>
-            <Input
-              id="category"
-              placeholder={t('products.wizard.categoryPlaceholder')}
-              {...register('category')}
-              aria-invalid={!!errors.category}
+            <Controller
+              control={control}
+              name="categories"
+              render={({ field }) => (
+                <CategoryPicker
+                  id="categories"
+                  value={field.value as CategoryEntry[]}
+                  onChange={field.onChange}
+                  invalid={!!errors.categories}
+                  describedBy={errors.categories ? 'categories-error' : undefined}
+                />
+              )}
             />
-            {errors.category && (
-              <p className="text-sm text-destructive">{m(errors.category.message)}</p>
+            {errors.categories && (
+              <p id="categories-error" className="text-sm text-destructive">
+                {m(errors.categories.message ?? errors.categories.root?.message)}
+              </p>
             )}
           </div>
 
           {/* Description */}
           <div className="space-y-2">
-            <Label htmlFor="description">
-              {t('products.fields.description')} <span className="text-destructive">*</span>
-            </Label>
+            <div className="flex items-center justify-between gap-3">
+              <Label htmlFor="description">
+                {t('products.fields.description')} <span className="text-destructive">*</span>
+              </Label>
+              <ListingCopyAssistant
+                target="product"
+                productType={productType}
+                listingId={product?.id}
+                photoLimit={PRODUCT_IMAGE_LIMIT[productType]}
+                getSnapshot={() => ({
+                  title: getValues('title') ?? '',
+                  categories: (getValues('categories') ?? []) as CategoryEntry[],
+                  photos: savedPhotos.length > 0 ? savedPhotos : (aiPhotos ?? []),
+                })}
+                onApply={applyGenerated}
+              />
+            </div>
             <ChatRichTextEditor
               id="description"
               value={descriptionRich}

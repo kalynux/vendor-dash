@@ -1,6 +1,7 @@
 import type { TranslationKey } from '@/i18n';
 import type {
   StockRequestDirection,
+  StockRequestLocation,
   StockRequestStatus,
 } from '@/types/stock-requests.types';
 
@@ -55,4 +56,11 @@ export const STATUS_DOT_CLASSES: Record<StockRequestStatus, string> = {
 /** Fallback label for a row the list did not enrich with a SKU. */
 export function shortVariantId(variantId: string): string {
   return variantId.length > 8 ? `…${variantId.slice(-6)}` : variantId;
+}
+
+/** "Main depot, Douala" — whichever halves the agency filled in, or `null`. */
+export function stockRequestPlace(location: StockRequestLocation | null): string | null {
+  if (!location) return null;
+  const place = [location.label, location.city].filter(Boolean).join(', ');
+  return place || null;
 }

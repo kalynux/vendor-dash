@@ -23,7 +23,7 @@ export interface SimpleErrorProjection {
 
 const FORM_KEYS = new Set<string>([
   'title',
-  'category',
+  'categories',
   'description',
   'tags',
   'seoTitle',
@@ -96,6 +96,16 @@ export function projectSimpleError(err: unknown): SimpleErrorProjection {
         offerDraftFallback: false,
       };
 
+    // A bad typed name, or a picked category an administrator merged away
+    // since the list loaded. Either way the chips are what needs fixing.
+    case 'CATEGORY_NAME_INVALID':
+    case 'CATEGORY_NOT_FOUND':
+      return {
+        formError: null,
+        fieldErrors: { categories: `errors.codes.${err.code}` },
+        offerDraftFallback: false,
+      };
+
     // Unreachable by construction — `BargainWrite` has no `minPrice`, so we never
     // send one to disagree with. Mapped anyway so a future regression surfaces as
     // a sentence rather than a raw error code.
@@ -113,7 +123,10 @@ export function projectSimpleError(err: unknown): SimpleErrorProjection {
   const fieldErrors: SimpleFieldErrors = {};
   for (const detail of err.fieldErrors) {
     // Nested paths like "variant.price" still point at a flat form field here.
-    const key = detail.field.split('.').pop() ?? detail.field;
+    // ...except `categories.2.name`, whose last segment names a chip's part.
+    const key = detail.field.startsWith('categories')
+      ? 'categories'
+      : (detail.field.split('.').pop() ?? detail.field);
     if (FORM_KEYS.has(key)) {
       fieldErrors[key as keyof SimpleProductFormValues] = detail.message;
     }

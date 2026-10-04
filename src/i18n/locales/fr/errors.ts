@@ -248,6 +248,7 @@ export const errors = {
             'Ce compte a été suspendu. Contactez le support pour le faire réexaminer.',
         AUTH_VENDOR_SUSPENDED:
             'Votre boutique a été suspendue, le tableau de bord est donc indisponible. Contactez le support pour la faire réexaminer.',
+        AUTH_ROLE_CLOSED: 'Votre boutique a été fermée, le tableau de bord n’est donc plus disponible.',
         AUTH_ADMIN_CALLER_NOT_CONFIGURED: "Cette requête n'a pas pu être autorisée.",
         AUTH_ADMIN_CALLER_TOKEN_INVALID: "Cette requête n'a pas pu être autorisée.",
         AUTH_ADMIN_CALLER_ACTOR_MISSING: "Cette requête n'a pas pu être autorisée.",
@@ -624,6 +625,10 @@ export const errors = {
         CATALOG_IMAGE_LIMIT_EXCEEDED: 'Ce produit a atteint son nombre maximum d’images.',
         CATALOG_SHIPPING_NOT_FOUND: "Ces paramètres d'expédition sont introuvables.",
         CATALOG_SHIPPING_ACCESS_DENIED: "Vous n'avez pas accès à ces paramètres d'expédition.",
+
+        CATEGORY_SIMILAR_EXISTS: 'Une de vos catégories ressemble à une catégorie existante. Rien n’a été enregistré.',
+        CATEGORY_NAME_INVALID: 'Un nom de catégorie doit faire de 2 à 60 caractères, avec au moins une lettre ou un chiffre.',
+        CATEGORY_NOT_FOUND: 'Une de vos catégories n’existe plus. Retirez-la et choisissez-la de nouveau dans la liste.',
 
         // ── Catalogue : réservations & services ───────────────────────────────
         CATALOG_BOOKING_PRODUCT_NOT_FOUND: 'Ce service est introuvable.',
@@ -1014,6 +1019,13 @@ export const errors = {
         ACCOUNT_CLOSURE_ORDERS_IN_FLIGHT:
             'Des commandes sont encore en cours. Elles doivent d’abord se terminer.',
 
+        ROLE_CLOSURE_REQUEST_NOT_FOUND: 'Il n’y a plus de demande de fermeture de votre boutique.',
+        ROLE_CLOSURE_ALREADY_PENDING: 'Une demande de fermeture de cette boutique attend déjà une réponse.',
+        ROLE_CLOSURE_ROLE_NOT_HELD: 'Ce compte n’a pas ce rôle.',
+        ROLE_CLOSURE_BLOCKED: 'Votre boutique ne peut pas encore fermer. Certains éléments doivent d’abord être réglés.',
+        ROLE_CLOSURE_REQUEST_EXPIRED: 'Cette demande a expiré ou a déjà reçu une réponse.',
+        ROLE_CLOSED: 'Cette boutique a été fermée sur votre compte et ne peut pas être rouverte.',
+
         REVIEW_NOT_FOUND: 'Cet avis n’existe plus.',
         REVIEW_ALREADY_EXISTS: 'Vous avez déjà évalué cette livraison.',
         REVIEW_NOT_ELIGIBLE: 'Cette livraison ne peut pas encore être évaluée.',
@@ -1082,8 +1094,9 @@ export const errors = {
         DELIVERY_FEE_PROPOSAL_AGENTS_NOT_ALLOWED: 'Cette agence ne permet pas à ses livreurs de proposer des frais de livraison.',
         DELIVERY_FEE_PROPOSAL_LIMIT_REACHED: 'Plus aucun changement de frais ne peut être proposé pour ce colis.',
         DELIVERY_FEE_PROPOSAL_NO_CHANGE: 'Ce sont déjà les frais de livraison actuels.',
-        DELIVERY_FEE_PROPOSAL_VENDOR_NET_NOT_POSITIVE: 'Accepter ce changement ne vous laisserait rien gagner sur cette commande.',
-        DELIVERY_FEE_PROPOSAL_NOT_YOURS: 'Seul l’auteur de ce changement de frais peut le retirer.',
+        DELIVERY_FEE_PROPOSAL_VENDOR_NET_NOT_POSITIVE: 'Cela ne vous laisserait rien gagner sur cette commande.',
+        DELIVERY_FEE_PROPOSAL_NOT_YOURS: 'C’est le client qui répond à ce changement de frais, pas vous.',
+        DELIVERY_FEE_PROPOSAL_ORDER_NOT_PAID: 'Cette commande n’est plus entièrement payée : ses frais de livraison ne peuvent plus changer.',
         DELIVERY_FEE_PROPOSAL_STALE: 'Cette livraison a avancé ; le changement de frais ne s’applique plus.',
         DELIVERY_FEE_PROPOSAL_SETTLEMENT_CONFLICT: 'Vos gains sur cette commande ne peuvent plus être ajustés.',
         DELIVERY_FEE_PROPOSAL_VERSION_MISMATCH: 'L’agence a modifié ces frais. Vérifiez le nouveau montant et répondez à nouveau.',

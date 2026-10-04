@@ -68,6 +68,9 @@ import type {
 } from '@/types/product.types';
 import { getProductFileCount } from '@/types/product.types';
 import type { BasicInfoFormValues } from '@/components/products/schemas/product.schemas';
+import { useCategoryConflicts } from '@/components/products/categories/useCategoryConflicts';
+import { toCategoryWire } from '@/services/categories.service';
+import type { CategoryEntry } from '@/types/category.types';
 import type { VariantPhase1Payload, VariantPhase2Payload } from '@/components/products/variants';
 
 // ─── Step definitions ─────────────────────────────────────────────────────────
@@ -187,6 +190,10 @@ export function ProductEdit() {
   const navigate = useNavigate();
   const openPreview = useOpenPreview();
   const [state, dispatch] = useReducer(wizardReducer, INITIAL_STATE);
+  const { run: runCategorySave, dialog: categoryConflictDialog } = useCategoryConflicts();
+  const [resolvedCategories, setResolvedCategories] = useState<CategoryEntry[] | null>(null);
+  // Photos picked in the description's "Generate" popup on a product that had none.
+  const [aiPhotos, setAiPhotos] = useState<ApiFileDetail[]>([]);
   // Safety net for the race where a product is converted (or was already simple)
   // in another tab: the variant/option writes 409 and we offer the escape hatch
   // the backend hands us instead of a dead-end error.
@@ -326,16 +333,28 @@ export function ProductEdit() {
       const statusBefore = state.serverProduct?.status;
       dispatch({ type: 'SET_SAVING', value: true });
       try {
-        const { data: updated } = await updateProduct(productId, {
-          title: values.title,
-          category: values.category,
-          // This step sends its whole form on every save (no diff), so the
-          // create-shaped wire builder is the right one here.
-          ...descriptionCreateWire(values.descriptionRich),
-          tags: values.tags,
-          seoTitle: values.seoTitle || undefined,
-          seoDescription: values.seoDescription || undefined,
-        });
+        // A "Did you mean …?" answer re-submits this same update — the 422
+        // means nothing was written.
+        const saved = await runCategorySave(
+          values.categories,
+          (categories) =>
+            updateProduct(productId, {
+              title: values.title,
+              categories: toCategoryWire(categories),
+              // This step sends its whole form on every save (no diff), so the
+              // create-shaped wire builder is the right one here.
+              ...descriptionCreateWire(values.descriptionRich),
+              tags: values.tags,
+              seoTitle: values.seoTitle || undefined,
+              seoDescription: values.seoDescription || undefined,
+            }),
+          setResolvedCategories,
+        );
+        if (!saved.ok) {
+          dispatch({ type: 'SET_SAVING', value: false });
+          return;
+        }
+        const { data: updated } = saved.value;
         toast.success(t('products.toast.infoSaved'));
         notifyIfDemoted(statusBefore, updated);
         advance({ serverProduct: updated });
@@ -344,7 +363,7 @@ export function ProductEdit() {
         dispatch({ type: 'SET_STEP_ERROR', error: msg });
       }
     },
-    [state.productId, state.currentStep, state.completedSteps],
+    [state.productId, state.currentStep, state.completedSteps, runCategorySave],
   );
 
   // ─── Media ───────────────────────────────────────────────────────────────────
@@ -734,29 +753,6 @@ export function ProductEdit() {
     [state.productId],
   );
 
-  const handleFreeDeliveryChange = useCallback(
-    async (freeDelivery: boolean) => {
-      const productId = state.productId;
-      if (!productId) return;
-      dispatch({ type: 'SET_SAVING', value: true });
-      try {
-        await updateProduct(productId, { delivery: { freeDelivery } });
-        const updated = await fetchProductById(productId);
-        dispatch({ type: 'SAVE_COMPLETE', updates: { serverProduct: updated } });
-        toast.success(
-          t(freeDelivery
-            ? 'products.toast.freeDeliveryEnabled'
-            : 'products.toast.freeDeliveryDisabled'),
-        );
-      } catch (err: unknown) {
-        const msg = apiError.resolve(err, { fallbackKey: 'products.errors.freeDeliveryFailed' });
-        dispatch({ type: 'SET_STEP_ERROR', error: msg });
-        toast.error(msg);
-      }
-    },
-    [state.productId],
-  );
-
   const handlePickupLocationChange = useCallback(
     async (pickupLocation: ApiPickupLocation | null) => {
       const productId = state.productId;
@@ -953,9 +949,19 @@ export function ProductEdit() {
       case 'type':
         return <StepTypeSelect selectedType={state.productType} onSelect={() => { }} disabled />;
       case 'basic-info':
-        return <StepBasicInfo {...sharedStepProps} onSaveComplete={handleBasicInfoSave} />;
+        return (
+          <StepBasicInfo
+            {...sharedStepProps}
+            onSaveComplete={handleBasicInfoSave}
+            resolvedCategories={resolvedCategories}
+            aiPhotos={aiPhotos}
+            onAiPhotosPicked={setAiPhotos}
+          />
+        );
       case 'media':
-        return <StepMedia {...sharedStepProps} onSaveComplete={handleMediaSave} />;
+        return (
+          <StepMedia {...sharedStepProps} onSaveComplete={handleMediaSave} pendingFiles={aiPhotos} />
+        );
       case 'options-variants':
         return state.productId ? (
           <StepVariants
@@ -982,7 +988,6 @@ export function ProductEdit() {
             onPublish={handlePublish}
             onSaveDraft={handleSaveDraft}
             onAgencyChange={handleAgencyChange}
-            onFreeDeliveryChange={handleFreeDeliveryChange}
             onPickupLocationChange={handlePickupLocationChange}
           />
         );
@@ -1022,6 +1027,8 @@ export function ProductEdit() {
           : []
       }
     >
+      {categoryConflictDialog}
+
       <ShareProductDialog
         productId={shareOpen ? state.productId : null}
         onOpenChange={(open) => !open && setShareOpen(false)}

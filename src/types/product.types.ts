@@ -1,6 +1,7 @@
 // ─── Product Types & Status ───────────────────────────────────────────────────
 
 import type { RichDoc } from '@/lib/richtext';
+import type { CategoryWrite, ProductCategory } from '@/types/category.types';
 import type { ApiFile, FileAccess, FileRef } from '@/types/file.types';
 // Service variants carry serviceConfig. Type-only import (erased at compile) —
 // no runtime circular dependency with services.types.
@@ -61,7 +62,13 @@ export interface ApiProductSuspension {
   suspendedAt: string;
 }
 
-export type ApiVectorisationStatus = 'not_started' | 'pending' | 'completed' | 'failed';
+/** `skipped_no_credits`: saved, but not indexed — the wallet couldn't cover it. */
+export type ApiVectorisationStatus =
+  | 'not_started'
+  | 'pending'
+  | 'completed'
+  | 'failed'
+  | 'skipped_no_credits';
 
 export type PickupLocationSource = 'vendor_address' | 'agency_storage';
 
@@ -85,7 +92,8 @@ export interface ApiPickupLocation {
 
 export interface ApiProductDelivery {
   agencyId: string | null;
-  freeDelivery: boolean;
+  // No `freeDelivery` since 2026-10-03 — free delivery is the shop's delivery
+  // terms (`/vendor/profile/delivery-terms`), and a write that sends it is a 400.
   pickupLocation?: ApiPickupLocation | null;
 }
 
@@ -215,7 +223,13 @@ export interface ApiProduct {
    */
   descriptionRich?: RichDoc | null;
   slug: string;
-  category: string;
+  /**
+   * 1–5 from the shared list, in the vendor's order; `[0]` is the main one.
+   * `[]` on an environment where the data migration has not run — that is "no
+   * category", not an error. The deprecated `category` string is deliberately
+   * not typed: read this instead.
+   */
+  categories: ProductCategory[];
   tags: string[];
   seo: ApiProductSeo;
   fileIds: ApiFileDetail[];
@@ -360,7 +374,7 @@ export interface ProductListItem {
   suspension?: ApiProductSuspension | null;
   /** Routes the Edit action to the right editor. Defaults to 'advanced'. */
   mode: ProductMode;
-  category: string;
+  categories: ProductCategory[];
   tags: string[];
   firstFileUrl: string | null; // URL of the first file, used for the thumbnail
   /**
@@ -403,7 +417,11 @@ export interface ProductsQueryParams {
 export interface CreateProductPayload {
   type: ApiProductType;
   title: string;
-  category: string;
+  /**
+   * Required on create. Never send the deprecated `category` string as well —
+   * both together is `400 CATEGORY_NAME_INVALID`.
+   */
+  categories: CategoryWrite[];
   description: string;
   /** Built by `descriptionCreateWire`; omitted while the wire gate is off. */
   descriptionRich?: RichDoc | null;
@@ -414,7 +432,8 @@ export interface CreateProductPayload {
 
 export interface UpdateProductPayload {
   title?: string;
-  category?: string;
+  /** Replaces the whole list; omit to keep it. */
+  categories?: CategoryWrite[];
   description?: string;
   /** `null` clears it — see `descriptionUpdateWire`. */
   descriptionRich?: RichDoc | null;
@@ -431,7 +450,6 @@ export interface UpdateProductPayload {
   // existing value rather than replacing the whole object.
   delivery?: {
     agencyId?: string | null;
-    freeDelivery?: boolean;
     pickupLocation?: ApiPickupLocation | null;
   };
 }
@@ -456,7 +474,7 @@ export interface SimpleProductPayload {
    * attached only through `descriptionCreateWire`, behind the wire gate.
    */
   descriptionRich?: RichDoc | null;
-  category: string;           // non-empty
+  categories: CategoryWrite[]; // 1–5; never with the deprecated `category`
   price: number;              // > 0 — zero is rejected outright
   stock?: number;             // integer ≥ 0, default 0
   isInfiniteStock?: boolean;  // default false
@@ -476,7 +494,6 @@ export interface SimpleProductPayload {
   length?: number;            // cm
   width?: number;             // cm
   height?: number;            // cm
-  freeDelivery?: boolean;     // default false
   /**
    * OMIT to let the backend derive it from the vendor profile + agency policy
    * (the outcome is reported in meta.activation.pickupReason). Sending it
@@ -497,13 +514,13 @@ export interface SimpleProductUpdatePayload {
   description?: string;
   /** Same `.strict()` caveat as the create payload — gated, never sent bare. */
   descriptionRich?: RichDoc | null;
-  category?: string;
+  /** Replaces the whole list; omit to keep it. */
+  categories?: CategoryWrite[];
   tags?: string[];
   /** FULL REPLACEMENT, same as PATCH /products/:id. Order matters (index 0 = thumbnail). */
   fileIds?: string[];
   seoTitle?: string;
   seoDescription?: string;
-  freeDelivery?: boolean;
   pickupLocation?: ApiPickupLocation | null;
   // → its single variant
   price?: number;
@@ -934,6 +951,10 @@ export interface VendorAgencyPolicySummaryDto {
       /** 0 = none. */
       peak_season_surcharge: number;
     };
+    /** 2026-10-03 (ADR-A11) — the most one parcel's delivery fee can be; `null` = no ceiling. */
+    max_fee_per_shipment?: number | null;
+    /** 2026-10-03 — a customer may pay this agency's delivery fee in cash to the rider. Informational for now. */
+    accepts_cash_delivery_fee?: boolean;
   };
   returns: {
     payer: 'vendor' | 'agency' | 'customer';

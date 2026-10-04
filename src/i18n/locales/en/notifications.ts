@@ -45,6 +45,7 @@ export const notifications = {
         plan: 'Manage plan',
         stockRequest: 'Answer request',
         product: 'View product',
+        account: 'Review request',
     },
 
     empty: {
@@ -200,7 +201,7 @@ export const notifications = {
                 'When an order is held back because a delivery agency is at a cash-on-delivery limit',
             deliveryFeeProposals: 'Delivery fee changes',
             deliveryFeeProposalsHint:
-                'When an agency asks to change a delivery fee, edits the request or withdraws it',
+                'When an agency asks to change a delivery fee, edits or withdraws the request, or a customer declines to pay a higher fee after you change delivery company',
             planUpdates: 'Plan updates',
             planUpdatesHint: 'When your subscription plan is nearing expiry or has expired',
         },

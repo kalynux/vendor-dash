@@ -62,6 +62,7 @@ import {
 } from '@/services/orders.service';
 import { CodLimitDialog } from '@/components/orders/CodLimitDialog';
 import { usePendingFeeProposals } from '@/lib/pending-fee-proposals';
+import { DeliveryPayerTag } from '@/components/orders/DeliveryMoney';
 import { ApiError } from '@/types/api';
 import { COD_AGENCY_LIMIT_EXCEEDED, readCodLimitDetails, type CodLimitExceededDetails } from '@/types/cod-limits.types';
 import {
@@ -660,9 +661,10 @@ export function Orders() {
     </>
   );
 
-  /** COD hold + pending fee-change flags, shown beside the payment badges. */
+  /** Who paid delivery, COD hold + pending fee-change flags, shown beside the payment badges. */
   const rowFlags = (order: Order) => (
     <>
+      <DeliveryPayerTag order={order} />
       {order.codLimitHeld && (
         <Badge variant="outline" className="gap-1 text-[10px] px-1.5 py-0 h-4 border-orange-300 text-orange-700 bg-orange-50">
           <AlertTriangle className="w-2.5 h-2.5" />{t('orders.codLimit.heldBadge')}

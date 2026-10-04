@@ -118,7 +118,7 @@ function adaptListItem(p: ApiServiceListRaw): ServiceListItem {
     id: p.id,
     title: p.title,
     status: p.status,
-    category: p.category,
+    categories: p.categories ?? [],
     tags: p.tags ?? [],
     firstFileUrl: p.fileIds?.[0]?.url ?? null,
     // serviceConfig now lives on the variant; the trimmed product-list payload

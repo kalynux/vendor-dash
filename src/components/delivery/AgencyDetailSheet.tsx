@@ -158,6 +158,24 @@ export function AgencyDetailSheet({ agency, open, onOpenChange, footerSlot }: Ag
                                     )}
                                 </Section>
 
+                                {/* 2026-10-03 — absent on older servers, so each row shows only when sent. */}
+                                {(p.pricing.max_fee_per_shipment !== undefined || p.pricing.accepts_cash_delivery_fee !== undefined) && (
+                                    <Section title={t('agency.detail.deliveryFeeTitle')}>
+                                        {p.pricing.max_fee_per_shipment !== undefined && (
+                                            <Row
+                                                label={t('agency.detail.maxFeePerParcel')}
+                                                value={p.pricing.max_fee_per_shipment === null ? t('agency.detail.noLimit') : fmt.currency(p.pricing.max_fee_per_shipment)}
+                                            />
+                                        )}
+                                        {p.pricing.accepts_cash_delivery_fee !== undefined && (
+                                            <Row
+                                                label={t('agency.detail.cashDeliveryFee')}
+                                                value={t(p.pricing.accepts_cash_delivery_fee ? 'agency.detail.codAccepted' : 'agency.detail.codNotAccepted')}
+                                            />
+                                        )}
+                                    </Section>
+                                )}
+
                                 {(fees || p.pricing.notes) && (
                                     <Section title={t('agency.detail.otherFees')}>
                                         {fees && (

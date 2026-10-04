@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { AlertCircle, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -30,6 +30,13 @@ import {
   type SimpleProductFormInput,
 } from '@/components/products/schemas/simple-product.schemas';
 import type { ApiFileDetail } from '@/types/product.types';
+import type { CategoryEntry } from '@/types/category.types';
+import { CategoryPicker } from '@/components/products/categories/CategoryPicker';
+import {
+  ListingCopyAssistant,
+  type ListingCopyApplied,
+  type ListingCopyPhoto,
+} from '@/components/ai-copy/ListingCopyAssistant';
 
 /** Which button the vendor pressed — the pages turn this into a `publish` value. */
 export type SimpleSubmitIntent = 'publish' | 'draft' | 'save';
@@ -95,11 +102,17 @@ export interface SimpleProductFormProps {
    * validates the window happily — it is simply inert until the flag is on.
    */
   showBargainField?: boolean;
+  /**
+   * Chips the page wants the picker to show instead of what was typed: the
+   * vendor's "Did you mean …?" answers, or the names the server stored after a
+   * save. A new array replaces the field's value.
+   */
+  resolvedCategories?: CategoryEntry[] | null;
 }
 
 const EMPTY_VALUES: SimpleProductFormValues = {
   title: '',
-  category: '',
+  categories: [],
   description: '',
   descriptionRich: EMPTY_DOC,
   tags: [],
@@ -154,6 +167,7 @@ export function SimpleProductForm({
   disableUnlimitedStock = false,
   onStockModeChange,
   showBargainField = true,
+  resolvedCategories,
 }: SimpleProductFormProps) {
   const { t } = useTranslation();
   const m = useMessage();
@@ -164,9 +178,11 @@ export function SimpleProductForm({
 
   const {
     register,
+    control,
     handleSubmit,
     watch,
     setValue,
+    getValues,
     setError,
     setFocus,
     formState: { errors },
@@ -174,6 +190,33 @@ export function SimpleProductForm({
     resolver: zodResolver(simpleProductSchema),
     defaultValues: (initialValues ?? EMPTY_VALUES) as SimpleProductFormInput,
   });
+
+  // The gallery's live photos, for the description's "Generate" popup. A ref:
+  // nothing renders from it, the popup reads it when opened.
+  const galleryRef = useRef<ListingCopyPhoto[]>([]);
+  const trackGallery = useCallback((files: ListingCopyPhoto[]) => {
+    galleryRef.current = files;
+  }, []);
+  // Photos picked in that popup while the gallery was empty. The gallery only
+  // seeds itself once, so it is remounted (new key) to take them in.
+  const [aiPhotos, setAiPhotos] = useState<ApiFileDetail[] | null>(null);
+
+  function applyGenerated(applied: ListingCopyApplied) {
+    const opts = { shouldValidate: true, shouldDirty: true };
+    if (applied.title) setValue('title', applied.title, opts);
+    if (applied.categories) setValue('categories', applied.categories, opts);
+    if (applied.descriptionRich) onDescriptionChange(applied.descriptionRich);
+    if (applied.tags) {
+      // Added to the vendor's own tags, never replacing them.
+      const current = (getValues('tags') ?? []) as string[];
+      const have = new Set(current.map((tag) => tag.toLowerCase()));
+      setValue('tags', [...current, ...applied.tags.filter((tag) => !have.has(tag.toLowerCase()))], opts);
+    }
+    if (applied.seoTitle) setValue('seoTitle', applied.seoTitle, opts);
+    if (applied.seoDescription) setValue('seoDescription', applied.seoDescription, opts);
+    if (applied.tags || applied.seoTitle || applied.seoDescription) setMoreOpen(true);
+    if (applied.photos) setAiPhotos(applied.photos);
+  }
 
   const tags = (watch('tags') ?? []) as string[];
   const isInfiniteStock = watch('isInfiniteStock');
@@ -229,6 +272,10 @@ export function SimpleProductForm({
     setValue('description', toPlainText(doc), { shouldValidate: true, shouldDirty: true });
   }
 
+  useEffect(() => {
+    if (resolvedCategories) setValue('categories', resolvedCategories, { shouldValidate: true });
+  }, [resolvedCategories, setValue]);
+
   // Report the live switch value up, including the value it mounted with, so the
   // pickup picker judges "agency storage" against what the vendor sees rather
   // than against what was last persisted.
@@ -260,7 +307,7 @@ export function SimpleProductForm({
       if (!focused) {
         focused = true;
         // fileIds has no focusable input — skip rather than throw.
-        if (field !== 'fileIds' && field !== 'tags') setFocus(field);
+        if (field !== 'fileIds' && field !== 'tags' && field !== 'categories') setFocus(field);
       }
     }
   }, [fieldErrors, setError, setFocus]);
@@ -321,10 +368,12 @@ export function SimpleProductForm({
           contentClassName="space-y-2"
         >
           <ProductMediaUpload
-            existingFiles={existingFiles}
+            key={aiPhotos ? aiPhotos.map((f) => f.id).join() : 'saved'}
+            existingFiles={aiPhotos ?? existingFiles}
             maxFiles={PRODUCT_IMAGE_LIMIT.physical}
             disabled={isBusy}
             onMediaChange={(ids) => setValue('fileIds', ids, { shouldDirty: true })}
+            onFilesChange={trackGallery}
           />
           <FieldError message={m(errors.fileIds?.message as string | undefined)} />
         </SettingsSection>
@@ -346,9 +395,23 @@ export function SimpleProductForm({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="description">
-              {t('products.fields.description')} <span className="text-destructive">*</span>
-            </Label>
+            <div className="flex items-center justify-between gap-3">
+              <Label htmlFor="description">
+                {t('products.fields.description')} <span className="text-destructive">*</span>
+              </Label>
+              <ListingCopyAssistant
+                target="product"
+                productType="physical"
+                photoLimit={PRODUCT_IMAGE_LIMIT.physical}
+                disabled={isBusy}
+                getSnapshot={() => ({
+                  title: getValues('title') ?? '',
+                  categories: (getValues('categories') ?? []) as CategoryEntry[],
+                  photos: galleryRef.current,
+                })}
+                onApply={applyGenerated}
+              />
+            </div>
             <ChatRichTextEditor
               id="description"
               value={descriptionRich}
@@ -362,17 +425,23 @@ export function SimpleProductForm({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="category">
-              {t('products.fields.category')} <span className="text-destructive">*</span>
+            <Label htmlFor="categories">
+              {t('products.categories.label')} <span className="text-destructive">*</span>
             </Label>
-            <Input
-              id="category"
-              placeholder={t('products.fields.categoryPlaceholder')}
-              disabled={isBusy}
-              {...register('category')}
-              aria-invalid={!!errors.category}
+            <Controller
+              control={control}
+              name="categories"
+              render={({ field }) => (
+                <CategoryPicker
+                  id="categories"
+                  value={field.value as CategoryEntry[]}
+                  onChange={field.onChange}
+                  disabled={isBusy}
+                  invalid={!!errors.categories}
+                />
+              )}
             />
-            <FieldError message={m(errors.category?.message)} />
+            <FieldError message={m(errors.categories?.message ?? errors.categories?.root?.message)} />
           </div>
         </SettingsSection>
 

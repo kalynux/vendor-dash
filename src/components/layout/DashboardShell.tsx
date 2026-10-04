@@ -5,6 +5,7 @@ import { Sidebar } from '@/components/layout/Sidebar';
 import { Header } from '@/components/layout/Header';
 import { MobileTabBar } from '@/components/layout/MobileTabBar';
 import { NotificationsBootstrap } from '@/components/notifications/NotificationsBootstrap';
+import { ClosureRequestBanner } from '@/components/account-closure/ClosureRequestBanner';
 import { PageSkeleton } from '@/components/layout/RouteSkeleton';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useRouteSwipe } from '@/hooks/use-route-swipe';
@@ -15,6 +16,7 @@ import { useUI } from '@/app-context';
 import { DeepLinkFallback } from '@/routes/DeepLinkFallback';
 import {
     Account,
+    AccountClosure,
     Agency,
     Analytics,
     Customers,
@@ -106,6 +108,11 @@ export function DashboardShell() {
                     )}
                 >
                     <div className="mx-auto w-full max-w-[1600px]">
+                        {/* Read once per dashboard visit; shown until the vendor answers.
+                            Phones get it inside Overview instead: there each page's own
+                            header sits flush with the top edge, and a strip above it
+                            would push it down. */}
+                        {!isMobile && <ClosureRequestBanner className="mb-4" />}
                         {/* The boundary sits *inside* the shell on purpose: moving between
                             two dashboard pages should swap the content and leave the
                             sidebar, header and tab bar painted. A boundary above the shell
@@ -134,6 +141,9 @@ export function DashboardShell() {
                                 <Route path="analytics/:tab" element={<Analytics />} />
                                 <Route path="notifications" element={<Notifications />} />
                                 <Route path="account" element={<Navigate to="/dashboard/account/profile" replace />} />
+                                {/* Before `account/:tab` in spirit — a fixed segment outranks a
+                                    param anyway. The `account/closure` deep link (ADR-A10). */}
+                                <Route path="account/closure" element={<AccountClosure />} />
                                 <Route path="account/:tab" element={<Account />} />
                                 <Route path="agency" element={<Navigate to="/dashboard/agency/connections" replace />} />
                                 <Route path="agency/:tab" element={<Agency />} />

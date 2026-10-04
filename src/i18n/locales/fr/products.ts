@@ -105,13 +105,7 @@ export const products = {
 
     /** Éditeur de description pour le chat et son aperçu WhatsApp / Telegram. */
     editor: {
-        placeholder:
-            'Nike Air Max 90 — originales, pointures 40 à 45 👟\n\n' +
-            'Points forts :\n' +
-            '• Tige en cuir véritable\n' +
-            '• Amorti Air, confort toute la journée\n' +
-            '• Garantie 2 ans\n\n' +
-            'Livraison en 48h à Douala et Yaoundé 🚚',
+        placeholder: 'Ce que c’est, ses points forts et les détails clés.',
         hint: 'Sélectionnez le texte, puis utilisez la barre d’outils. Aucun symbole à taper.',
 
         toolbar: {
@@ -290,7 +284,6 @@ export const products = {
         stock: 'Stock',
         lowStockThreshold: 'Seuil de stock faible',
         weight: 'Poids',
-        category: 'Catégorie',
         tags: 'Étiquettes',
         images: 'Images',
         pickupLocation: 'Point de retrait',
@@ -300,7 +293,6 @@ export const products = {
         namePlaceholder: 'ex. Nike Air Max 90',
         descriptionHelp: 'Décrivez votre produit — matériaux, caractéristiques, usages…',
         descriptionRequired: 'Obligatoire — un produit sans description ne peut pas être publié.',
-        categoryPlaceholder: 'ex. Vêtements, Électronique, Chaussures',
         compareAtOptional: 'Facultatif',
         compareAtHigherHint: 'Affiché barré lorsqu’il est supérieur au prix.',
         compareAtTooLowHint:
@@ -504,7 +496,6 @@ export const products = {
             'Les détails essentiels de votre produit. Vous pourrez les modifier plus tard.',
         productTitle: 'Titre du produit',
         productTitlePlaceholder: 'ex. T-shirt classique en coton',
-        categoryPlaceholder: 'ex. Vêtements, Électronique, Téléchargements numériques',
         modeTitle: 'Comment souhaitez-vous ajouter ce produit ?',
         modeQuick: 'Rapide',
         modeQuickDescription: 'Un prix, un stock. Prêt en une minute.',
@@ -700,6 +691,7 @@ export const products = {
         indexing: 'Indexation…',
         ready: 'Recherche IA prête',
         failed: 'Échec de l’indexation',
+        noCredits: 'Non indexé — rechargez vos crédits',
         enable: 'Activer la recherche IA',
         retry: 'Relancer la recherche IA',
         disable: 'Désactiver la recherche IA',
@@ -737,17 +729,9 @@ export const products = {
         defaultConnectionLost:
             'La connexion de votre agence par défaut n’est plus active. Choisissez une autre agence ici ou mettez à jour votre valeur par défaut dans les Paramètres.',
         usingDefaultAgency: 'Le système utilisera votre agence par défaut — {{name}}.',
-        freeDelivery: 'Livraison offerte',
-        freeDeliveryHint:
-            'Activée par défaut. Vous prenez en charge les frais de l’agence et le client ne paie rien de plus à la commande.',
-        /** Shown the moment the switch goes off — the fee moves into the price, not onto the customer. */
-        freeDeliveryOffNotice:
-            'La livraison n’est jamais facturée au client : nous ajouterons donc automatiquement les frais de l’agence au prix de chaque variante de ce produit.',
-        freeDeliveryExplainerLabel:
-            'Pourquoi désactiver la livraison offerte augmente mes prix',
-        freeDeliveryExplainerTitle: 'Le client ne paie jamais la livraison séparément',
-        freeDeliveryExplainerBody:
-            'Wi-Mall ne facture pas la livraison à la commande — c’est toujours le vendeur qui prend en charge les frais de l’agence. La « livraison offerte » est donc la situation normale, et non une remise que vous financez. Si vous préférez que le client supporte ce coût, la seule façon de le faire est d’augmenter le prix de chaque variante du montant des frais d’agence, et c’est exactement ce que nous faisons lorsque cette option est désactivée. Vos prix affichés augmentent, et votre produit paraît plus cher que des annonces identiques qui la laissent activée.',
+        /** Under the agency + pickup pickers — free delivery is a shop setting since 2026-10-03. */
+        shopTermsNote: 'Qui paie la livraison se règle une seule fois pour toute votre boutique.',
+        shopTermsLink: 'Conditions de livraison',
         pickupLabel: 'Point de retrait',
         pickupDescription:
             'Là où l’agence de livraison récupère ce produit. Obligatoire pour publier.',
@@ -914,10 +898,35 @@ export const products = {
         useGeneratedSku: 'Utiliser un SKU généré automatiquement',
     },
 
+    categories: {
+        label: 'Catégories',
+        hint: 'Jusqu’à 5. La première est la catégorie principale. Touchez-en une autre pour la rendre principale.',
+        placeholder: 'Cherchez ou saisissez une nouvelle catégorie',
+        main: 'Principale',
+        makeMain: 'Faire de {{name}} la catégorie principale',
+        remove: 'Retirer {{name}}',
+        limitReached: 'Un produit peut avoir 5 catégories au maximum.',
+        addNew: 'Ajouter « {{name}} » comme nouvelle catégorie',
+        didYouMean: 'Vouliez-vous dire {{name}} ?',
+        searching: 'Recherche…',
+        noMatch: 'Aucune catégorie pour l’instant. Saisissez-en une pour l’ajouter.',
+        loadFailed: 'Impossible de charger les catégories. Vous pouvez quand même en saisir une.',
+        none: 'Aucune catégorie',
+        conflict: {
+            title: 'Vouliez-vous dire… ?',
+            description:
+                'Certaines de vos catégories ressemblent à des catégories existantes. Rien n’a encore été enregistré. Choisissez celle qui existe pour que les acheteurs trouvent votre produit à côté de produits semblables, ou gardez la vôtre.',
+            typed: 'Vous avez saisi « {{name}} »',
+            keep: 'Garder « {{name}} » comme nouvelle catégorie',
+            confirm: 'Enregistrer',
+        },
+    },
+
     validation: {
         titleMin: 'Le titre doit contenir au moins 3 caractères',
         titleMax: 'Le titre ne doit pas dépasser 200 caractères',
-        categoryRequired: 'La catégorie est obligatoire',
+        categoryRequired: 'Ajoutez au moins une catégorie',
+        categoryMax: 'Un produit peut avoir 5 catégories au maximum',
         descriptionRequired: 'La description est obligatoire',
         tagEmpty: 'Une étiquette ne peut pas être vide',
         tagsUnique: 'Les étiquettes doivent être uniques',
@@ -978,8 +987,6 @@ export const products = {
         formatsSaved: 'Formats enregistrés.',
         agencyUpdated: 'Agence de livraison mise à jour.',
         agencyDefault: 'Utilisation de votre agence de livraison par défaut.',
-        freeDeliveryEnabled: 'Livraison offerte activée.',
-        freeDeliveryDisabled: 'Livraison offerte désactivée.',
         pickupUpdated: 'Point de retrait mis à jour.',
         publishedBang: 'Produit publié !',
         savedAsDraft: 'Produit enregistré en brouillon.',
@@ -1003,7 +1010,6 @@ export const products = {
         formatsFailed: "Nous n'avons pas pu enregistrer vos formats. Réessayez.",
         mediaFailed: "Nous n'avons pas pu enregistrer vos images. Réessayez.",
         agencyFailed: "Nous n'avons pas pu mettre à jour l’agence de livraison. Réessayez.",
-        freeDeliveryFailed: "Nous n'avons pas pu mettre à jour la livraison offerte. Réessayez.",
         pickupFailed: "Nous n'avons pas pu mettre à jour le point de retrait. Réessayez.",
         draftFailed: "Nous n'avons pas pu enregistrer votre brouillon. Réessayez.",
         bargainPartial:

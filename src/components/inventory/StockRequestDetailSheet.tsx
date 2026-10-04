@@ -15,11 +15,13 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { StockRequestActions } from './StockRequestActions';
+import { StockRequestProduct } from './StockRequestProduct';
 import {
   STATUS_BADGE_CLASSES,
   STATUS_DOT_CLASSES,
   STATUS_LABEL_KEYS,
   shortVariantId,
+  stockRequestPlace,
 } from './stockRequest.constants';
 import { fetchStockRequestById } from '@/services/stockRequests.service';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -122,7 +124,7 @@ export function StockRequestDetailSheet({
           </SheetTitle>
           <SheetDescription>
             {request
-              ? request.sku ??
+              ? request.product?.sku ??
                 t('inventory.requests.unknownSku', { id: shortVariantId(request.variantId) })
               : ''}
           </SheetDescription>
@@ -146,14 +148,19 @@ export function StockRequestDetailSheet({
 
           {!loading && request && (
             <>
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="outline" className={cn('gap-1.5', STATUS_BADGE_CLASSES[request.status])}>
-                  <span className={cn('size-1.5 rounded-full', STATUS_DOT_CLASSES[request.status])} />
-                  {t(STATUS_LABEL_KEYS[request.status])}
-                </Badge>
-                {request.productTitle && (
-                  <span className="text-sm text-muted-foreground truncate">{request.productTitle}</span>
-                )}
+              <div className="space-y-2">
+                <StockRequestProduct request={request} size="lg" />
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="outline" className={cn('gap-1.5', STATUS_BADGE_CLASSES[request.status])}>
+                    <span className={cn('size-1.5 rounded-full', STATUS_DOT_CLASSES[request.status])} />
+                    {t(STATUS_LABEL_KEYS[request.status])}
+                  </Badge>
+                  <span className="text-sm text-muted-foreground">
+                    {stockRequestPlace(request.location)
+                      ? t('inventory.requests.heldAt', { place: stockRequestPlace(request.location) })
+                      : t('inventory.requests.locationUnknown')}
+                  </span>
+                </div>
               </div>
 
               {/* The three quantities. quantityBefore ≠ currentQuantity is DRIFT,

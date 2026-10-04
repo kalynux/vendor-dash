@@ -9,16 +9,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
-import { InfoHint, LabelWithHint } from '@/components/ui/info-hint';
+import { LabelWithHint } from '@/components/ui/info-hint';
 import { fetchAgencyLocations, fetchDefaultDeliveryAgency } from '@/services/agencies.service';
 import { getActiveConnectedAgencies, getAgencyConnectionErrorMessage } from '@/services/agency-connections.service';
 import { getDeliveryErrorMessage } from '@/services/products.service';
 import { useOnboarding } from '@/onboarding/store/onboarding.store';
 import { formatAgencyLocationLocality } from '@/lib/agencyAddress';
 import { cn } from '@/lib/utils';
-import { useApiError, useMessage, useTranslation } from '@/i18n';
+import { useMessage, useTranslation } from '@/i18n';
 import { VerifiedBadge } from '@/components/common/VerifiedBadge';
 import type {
   VendorAgencyListItemDto,
@@ -42,8 +41,6 @@ interface AgencySelectorProps {
   productAgencyId: string | null;
   isSaving: boolean;
   onAgencyChange: (agencyId: string | null) => void | Promise<void>;
-  freeDelivery: boolean;
-  onFreeDeliveryChange: (freeDelivery: boolean) => void | Promise<void>;
   pickupLocation: ApiPickupLocation | null;
   onPickupLocationChange: (pickupLocation: ApiPickupLocation | null) => void | Promise<void>;
   /**
@@ -78,8 +75,6 @@ export function AgencySelector({
   productAgencyId,
   isSaving,
   onAgencyChange,
-  freeDelivery,
-  onFreeDeliveryChange,
   pickupLocation,
   onPickupLocationChange,
   pickup,
@@ -88,11 +83,9 @@ export function AgencySelector({
 }: AgencySelectorProps) {
   const { t } = useTranslation();
   const m = useMessage();
-  const apiError = useApiError();
   const { session } = useOnboarding();
   const agencyFieldId = useId();
   const pickupFieldId = useId();
-  const freeDeliveryId = useId();
   const businessAddresses = session?.role_entity.business_addresses ?? [];
   const [agencies, setAgencies] = useState<VendorAgencyListItemDto[]>([]);
   const [defaultAgency, setDefaultAgency] =
@@ -325,19 +318,10 @@ export function AgencySelector({
     });
   }
 
-  async function handleFreeDeliveryToggle(checked: boolean) {
-    if (!productId) return;
-    try {
-      await onFreeDeliveryChange(checked);
-    } catch (err: unknown) {
-      apiError.toast(err, { fallbackKey: 'products.errors.freeDeliveryFailed' });
-    }
-  }
-
   // No outer box and no heading of its own: the page wraps this in its
-  // "Delivery" `SettingsSection`. Inside, three plain labelled groups — agency,
-  // pickup location, free delivery — with the long explanations behind the info
-  // icon next to each label.
+  // "Delivery" `SettingsSection`. Inside, two plain labelled groups — agency
+  // and pickup location — with the long explanations behind the info icon
+  // next to each label, then a pointer to the shop's delivery terms.
   return (
     <div className="space-y-6">
       <div className="space-y-2">
@@ -563,48 +547,17 @@ export function AgencySelector({
         </div>
       )}
 
-      <div className="space-y-2">
-        <div className="flex items-center justify-between gap-4">
-          <LabelWithHint
-            htmlFor={freeDeliveryId}
-            hint={t('products.delivery.freeDeliveryHint')}
-            hintLabel={t('account.section.aboutTitle', { title: t('products.delivery.freeDelivery') })}
-          >
-            {t('products.delivery.freeDelivery')}
-          </LabelWithHint>
-          <Switch
-            id={freeDeliveryId}
-            className="shrink-0"
-            checked={freeDelivery}
-            onCheckedChange={handleFreeDeliveryToggle}
-            disabled={isSaving || !productId}
-            aria-label={t('products.delivery.freeDelivery')}
-          />
-        </div>
-
-        {/* Turning this off does not move the fee onto the customer — nothing on
-            the platform can, because delivery is never billed at checkout. It
-            moves the fee into the *price*, which is a decision about how this
-            product will look next to competing listings, so it is stated the
-            moment the switch flips rather than discovered later. */}
-        {!freeDelivery && (
-          <Notice tone="warning">
-            {t('products.delivery.freeDeliveryOffNotice')}
-            <InfoHint
-              label={t('products.delivery.freeDeliveryExplainerLabel')}
-              align="start"
-              className="ml-1 inline-flex translate-y-[3px] text-amber-700/80 hover:text-amber-800 dark:text-amber-400/80 dark:hover:text-amber-300"
-            >
-              <span className="block space-y-2">
-                <span className="block font-medium text-foreground">
-                  {t('products.delivery.freeDeliveryExplainerTitle')}
-                </span>
-                <span className="block">{t('products.delivery.freeDeliveryExplainerBody')}</span>
-              </span>
-            </InfoHint>
-          </Notice>
-        )}
-      </div>
+      {/* Who pays delivery is the shop's delivery terms since 2026-10-03 —
+          no longer a per-product switch. */}
+      <p className="text-sm text-muted-foreground">
+        {t('products.delivery.shopTermsNote')}{' '}
+        <Link
+          to="/dashboard/settings/policies#delivery-terms"
+          className="font-medium text-foreground underline underline-offset-4"
+        >
+          {t('products.delivery.shopTermsLink')}
+        </Link>
+      </p>
     </div>
   );
 }

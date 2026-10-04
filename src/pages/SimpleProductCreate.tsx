@@ -23,6 +23,8 @@ import {
 } from '@/services/products.service';
 import { useApiError, useTranslation } from '@/i18n';
 import type { ApiPickupLocation } from '@/types/product.types';
+import type { CategoryEntry } from '@/types/category.types';
+import { useCategoryConflicts } from '@/components/products/categories/useCategoryConflicts';
 
 export function SimpleProductCreate() {
   const { t } = useTranslation();
@@ -34,6 +36,8 @@ export function SimpleProductCreate() {
   const [fieldErrors, setFieldErrors] = useState<SimpleFieldErrors | undefined>();
   const [offerDraftFallback, setOfferDraftFallback] = useState(false);
   const [result, setResult] = useState<SimpleProductResult | null>(null);
+  const { run: runCategorySave, dialog: categoryConflictDialog } = useCategoryConflicts();
+  const [resolvedCategories, setResolvedCategories] = useState<CategoryEntry[] | null>(null);
 
   // Kept so the "Save as draft instead" / "auto-generate SKU" recoveries can
   // resubmit without asking the vendor to retype anything.
@@ -49,7 +53,19 @@ export function SimpleProductCreate() {
       setOfferDraftFallback(false);
       lastValuesRef.current = values;
       try {
-        const res = await createSimpleProduct(toCreatePayload(values, publish));
+        // "Did you mean …?" re-submits this same create — the 422 saved nothing.
+        // The answers go back into the form and into `lastValuesRef`, so the
+        // recovery buttons below resend them rather than asking again.
+        const saved = await runCategorySave(
+          values.categories,
+          (categories) => createSimpleProduct(toCreatePayload({ ...values, categories }, publish)),
+          (categories) => {
+            lastValuesRef.current = { ...values, categories };
+            setResolvedCategories(categories);
+          },
+        );
+        if (!saved.ok) return;
+        const res = saved.value;
         if (res.activation.published) {
           toast.success(t('products.quickAdd.createdPublished'));
           goToList();
@@ -73,7 +89,7 @@ export function SimpleProductCreate() {
         setIsSubmitting(false);
       }
     },
-    [goToList, t],
+    [goToList, t, runCategorySave],
   );
 
   const handleSubmit = useCallback(
@@ -194,10 +210,12 @@ export function SimpleProductCreate() {
               fieldErrors={fieldErrors}
               onSubmit={handleSubmit}
               onCancel={goToList}
+              resolvedCategories={resolvedCategories}
             />
           </>
         )}
       </ProductFormBody>
+      {categoryConflictDialog}
     </EditorPageShell>
   );
 }

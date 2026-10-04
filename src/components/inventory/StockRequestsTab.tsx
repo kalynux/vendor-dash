@@ -26,6 +26,7 @@ import {
 import { InventoryPagination } from './InventoryPagination';
 import { StockRequestActions } from './StockRequestActions';
 import { StockRequestDetailSheet } from './StockRequestDetailSheet';
+import { StockRequestProduct } from './StockRequestProduct';
 import { RaiseStockRequestDialog, type RaiseStockRequestSeed } from './RaiseStockRequestDialog';
 import {
   DIRECTION_LABEL_KEYS,
@@ -35,6 +36,7 @@ import {
   STOCK_REQUEST_DIRECTIONS,
   STOCK_REQUEST_STATUSES,
   shortVariantId,
+  stockRequestPlace,
 } from './stockRequest.constants';
 
 import { fetchStockRequests } from '@/services/stockRequests.service';
@@ -74,12 +76,12 @@ export interface StockRequestsTabProps {
 /**
  * The stock-request inbox — one of Inventory's four sub-tab routes.
  *
- * Two notes on how this deviates from the app's list conventions:
- *  - Search is CLIENT-SIDE over the loaded page. `/vendor/stock-requests` takes
- *    no `q` and rejects unknown query parameters outright, so the bar filters
- *    the rows in hand and `searchPartial` says so whenever there is more than
- *    one page — the same bargain `TransactionsTab` strikes. Filters, which the
- *    endpoint does understand, stay server-side and reset to page 1.
+ * Search is server-side (`?search=`, product title + SKU, since 2026-10-04),
+ * debounced, trimmed, and left off the query entirely when empty — the
+ * endpoint rejects an empty or unknown parameter with a 400. It combines with
+ * the filters, and every change resets to page 1.
+ *
+ * One deviation from the app's list conventions:
  *  - Plain pagination on mobile instead of `useInfiniteList` +
  *    `MobileListFooter`: that footer is fixed-position and would sit under the
  *    three sibling surfaces too, and an infinite sentinel next to three
@@ -108,6 +110,17 @@ export function StockRequestsTab({
   const [variantId, setVariantId] = useState<string | undefined>();
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+
+  useEffect(() => {
+    const next = search.trim().slice(0, 100);
+    if (next === debouncedSearch) return;
+    const id = setTimeout(() => {
+      setDebouncedSearch(next);
+      setPage(1);
+    }, 400);
+    return () => clearTimeout(id);
+  }, [search, debouncedSearch]);
 
   const [detailId, setDetailId] = useState<string | null>(null);
   const [raiseOpen, setRaiseOpen] = useState(false);
@@ -139,6 +152,7 @@ export function StockRequestsTab({
         status,
         direction,
         variantId,
+        search: debouncedSearch || undefined,
       });
       setRows(res.data);
       setMeta({
@@ -154,7 +168,7 @@ export function StockRequestsTab({
     } finally {
       setLoading(false);
     }
-  }, [page, status, direction, variantId, apiError, refreshToken]);
+  }, [page, status, direction, variantId, debouncedSearch, apiError, refreshToken]);
 
   useEffect(() => {
     load();
@@ -210,7 +224,7 @@ export function StockRequestsTab({
     if (variantId) {
       // Labelled with the SKU we already hold — an ObjectId is not something a
       // human types, so this filter only ever arrives from a caller.
-      const sku = rows.find((r) => r.variantId === variantId)?.sku;
+      const sku = rows.find((r) => r.variantId === variantId)?.product?.sku;
       chips.push({
         key: `variant:${variantId}`,
         label: t('inventory.requests.filters.variant', { sku: sku ?? shortVariantId(variantId) }),
@@ -232,21 +246,7 @@ export function StockRequestsTab({
   // the vendor's active connections, best-effort like the storage invoices tab.
   const agencies = useConnectedAgencyLookup(rows.map((r) => r.agencyId));
 
-  // Search matches what the row actually shows — SKU, product and the agency
-  // that raised it. Resolved against `rows`, never against the server.
-  const query = search.trim().toLowerCase();
-  const visibleRows = useMemo(() => {
-    if (!query) return rows;
-    return rows.filter((r) =>
-      [r.sku, r.productTitle, r.agencyName ?? agencies[r.agencyId]?.name].some((field) =>
-        field?.toLowerCase().includes(query),
-      ),
-    );
-  }, [rows, query, agencies]);
-  const searchIsPartial = Boolean(query) && meta.totalPages > 1;
 
-  // The chip label still resolves off the full page — hiding the row that
-  // carries the SKU shouldn't turn the chip back into an ObjectId.
   const detailSeed = detailId ? rows.find((r) => r.id === detailId) ?? null : null;
 
   const raiseButton = isMobile ? (
@@ -278,14 +278,6 @@ export function StockRequestsTab({
         filterLabel={t('inventory.requests.filterTitle')}
         trailing={raiseButton}
       />
-      {searchIsPartial && (
-        <p className="text-xs text-muted-foreground">
-          {t('inventory.requests.searchPartial', {
-            page: meta.page,
-            total: meta.totalPages,
-          })}
-        </p>
-      )}
       <ActiveFilterChips chips={activeChips} onClearAll={clearFilters} />
     </div>
   );
@@ -294,13 +286,13 @@ export function StockRequestsTab({
     <div className="py-12 text-center">
       <PackageSearch className="mx-auto mb-3 h-10 w-10 text-muted-foreground" />
       <p className="text-muted-foreground">
-        {query
+        {debouncedSearch
           ? t('inventory.requests.empty.searched')
           : activeFilterCount > 0
             ? t('inventory.requests.empty.filtered')
             : t('inventory.requests.empty.none')}
       </p>
-      {activeFilterCount === 0 && !query && (
+      {activeFilterCount === 0 && !debouncedSearch && (
         <>
           <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
             {t('inventory.requests.empty.noneHint')}
@@ -336,11 +328,11 @@ export function StockRequestsTab({
                 </Button>
               </div>
             </div>
-          ) : visibleRows.length === 0 ? (
+          ) : rows.length === 0 ? (
             emptyNode
           ) : isMobile ? (
             <ul className="divide-y">
-              {visibleRows.map((r) => (
+              {rows.map((r) => (
                 <li key={r.id} className="space-y-2 p-4">
                   <button
                     type="button"
@@ -348,15 +340,13 @@ export function StockRequestsTab({
                     onClick={() => setDetailId(r.id)}
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <p className="truncate font-mono text-sm">
-                        {r.sku ?? t('inventory.requests.unknownSku', { id: shortVariantId(r.variantId) })}
-                      </p>
+                      <StockRequestProduct request={r} />
                       <StatusPill status={r.status} />
                     </div>
-                    {r.productTitle && (
-                      <p className="truncate text-xs text-muted-foreground">{r.productTitle}</p>
-                    )}
-                    <ChangeCell request={r} />
+                    <div className="mt-2">
+                      <ChangeCell request={r} />
+                    </div>
+                    <HeldAt request={r} />
                     <p className="mt-1 text-xs text-muted-foreground">
                       {raisedByLabel(r, agencies, t)} · {fmt.dateTime(r.requestedAt)}
                     </p>
@@ -375,7 +365,7 @@ export function StockRequestsTab({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>{t('inventory.requests.columns.sku')}</TableHead>
+                  <TableHead>{t('inventory.requests.columns.product')}</TableHead>
                   <TableHead>{t('inventory.requests.columns.change')}</TableHead>
                   <TableHead>{t('inventory.requests.columns.raisedBy')}</TableHead>
                   <TableHead>{t('inventory.requests.columns.status')}</TableHead>
@@ -386,21 +376,15 @@ export function StockRequestsTab({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {visibleRows.map((r) => (
+                {rows.map((r) => (
                   <TableRow
                     key={r.id}
                     className="cursor-pointer"
                     onClick={() => setDetailId(r.id)}
                   >
-                    <TableCell>
-                      <p className="font-mono text-sm">
-                        {r.sku ?? t('inventory.requests.unknownSku', { id: shortVariantId(r.variantId) })}
-                      </p>
-                      {r.productTitle && (
-                        <p className="max-w-[16rem] truncate text-xs text-muted-foreground">
-                          {r.productTitle}
-                        </p>
-                      )}
+                    <TableCell className="max-w-[18rem]">
+                      <StockRequestProduct request={r} />
+                      <HeldAt request={r} className="pl-[3.25rem]" />
                     </TableCell>
                     <TableCell>
                       <ChangeCell request={r} />
@@ -546,6 +530,18 @@ function ChangeCell({ request }: { request: StockRequestDto }) {
   );
 }
 
+/** The agency's depot holding the SKU. Nothing at all when unknown — the list stays quiet. */
+function HeldAt({ request, className }: { request: StockRequestDto; className?: string }) {
+  const { t } = useTranslation();
+  const place = stockRequestPlace(request.location);
+  if (!place) return null;
+  return (
+    <p className={cn('mt-1 truncate text-xs text-muted-foreground', className)}>
+      {t('inventory.requests.heldAt', { place })}
+    </p>
+  );
+}
+
 function raisedByLabel(
   request: StockRequestDto,
   agencies: Record<string, ConnectedAgencyIdentity>,
@@ -553,7 +549,7 @@ function raisedByLabel(
 ): ReactNode {
   if (request.requestedByRole === 'vendor') return t('inventory.requests.raisedByYou');
   const agency = agencies[request.agencyId];
-  const name = request.agencyName ?? agency?.name;
+  const name = agency?.name;
   if (!name) return t('inventory.requests.raisedByAgency');
   return (
     <VerifiedName

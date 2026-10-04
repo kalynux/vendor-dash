@@ -14,6 +14,9 @@ import { unregisterDevice } from '@/services/devices.service';
 import { stopRefreshScheduler } from '@/platform/auth/refreshScheduler';
 import { resetPendingOrdersCount } from '@/lib/pending-orders-count';
 import { resetPendingFeeProposals } from '@/lib/pending-fee-proposals';
+import { resetPendingClosureRequest } from '@/lib/pending-closure-request';
+import { ACCOUNT_CLOSED_PATH, type SignedOutState } from '@/lib/signed-out-notice';
+import type { AuthLogoutDetail } from '@/services/api';
 import { ApiError } from '@/types/api';
 import type {
     AuthMeVendorResponse,
@@ -154,6 +157,13 @@ export interface OnboardingState {
 
     /** Logout: clear cookies and redirect to /login. */
     logout: () => Promise<void>;
+
+    /**
+     * After the vendor confirmed closing their shop: drop the (already dead)
+     * session without calling the server, then go to sign-in — or, when the
+     * whole account closed, to the "account closed" screen.
+     */
+    endClosedShopSession: (accountClosed: boolean) => Promise<void>;
 
     /** Clear last error. */
     clearError: () => void;
@@ -524,9 +534,47 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
             setSession(null);
             resetPendingOrdersCount();
             resetPendingFeeProposals();
+            resetPendingClosureRequest();
             setDrafts({ basicSetup: null, deliveryLinking: null, branding: null, policySetup: null });
             initCalled.current = false;
             navigate('/login', { replace: true });
+        }
+    }, [navigate]);
+
+    /**
+     * The sign-out after a confirmed shop closure (ADR-A10).
+     *
+     * Not `logout()`: the confirm answer already cleared the cookies and the
+     * server refuses this session from now on, so `DELETE /vendor/devices` would
+     * come back `AUTH_ROLE_CLOSED`, and the API client would answer THAT with its
+     * own `auth:logout` → `/login` — the wrong place when the whole account
+     * closed. Only local teardown here; the backend stops pushing to a closed
+     * role on its own.
+     */
+    const endClosedShopSession = useCallback(async (accountClosed: boolean) => {
+        try {
+            await deleteCurrentToken();
+        } catch {
+            // best-effort
+        }
+        stopRefreshScheduler();
+        try {
+            // Cookie: a no-op POST to an already-cleared session. Bearer: forgets the pair.
+            await authService.logout();
+        } catch {
+            // best-effort
+        }
+        setSession(null);
+        resetPendingOrdersCount();
+        resetPendingFeeProposals();
+        resetPendingClosureRequest();
+        setDrafts({ basicSetup: null, deliveryLinking: null, branding: null, policySetup: null });
+        initCalled.current = false;
+        if (accountClosed) {
+            navigate(ACCOUNT_CLOSED_PATH, { replace: true });
+        } else {
+            const state: SignedOutState = { notice: 'shopClosed' };
+            navigate('/login', { replace: true, state });
         }
     }, [navigate]);
 
@@ -542,13 +590,22 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
      * user staring at a stale page with a dead session behind it.
      */
     useEffect(() => {
-        const handler = () => {
+        const handler = (event: Event) => {
             setSession(null);
             resetPendingOrdersCount();
             resetPendingFeeProposals();
+            resetPendingClosureRequest();
             setDrafts({ basicSetup: null, deliveryLinking: null, branding: null, policySetup: null });
             initCalled.current = false;
-            navigate('/login', { replace: true });
+            // A request still in flight when the shop closed lands here too.
+            // The "account closed" screen is the final stop — never bounce off it.
+            if (window.location.pathname === ACCOUNT_CLOSED_PATH) return;
+            const code = (event as CustomEvent<AuthLogoutDetail | undefined>).detail?.code;
+            // `AUTH_ROLE_CLOSED`: the shop was closed (perhaps from another device).
+            // Say so on the sign-in screen rather than looking like a timeout.
+            const state: SignedOutState | undefined =
+                code === 'AUTH_ROLE_CLOSED' ? { notice: 'shopClosed' } : undefined;
+            navigate('/login', { replace: true, state });
         };
         window.addEventListener('auth:logout', handler);
         return () => window.removeEventListener('auth:logout', handler);
@@ -579,6 +636,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
                 setDeliveryAgency,
                 goBack,
                 logout,
+                endClosedShopSession,
                 clearError,
             }}
         >

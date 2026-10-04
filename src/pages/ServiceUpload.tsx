@@ -1,9 +1,12 @@
-import { useReducer, useCallback } from 'react';
+import { useReducer, useCallback, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Package, ImageIcon, Clock, CalendarRange, CheckSquare } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { EditorPageShell } from '@/components/layout/EditorPageShell';
+import { useCategoryConflicts } from '@/components/products/categories/useCategoryConflicts';
+import { fromProductCategories, toCategoryWire } from '@/services/categories.service';
+import type { CategoryEntry } from '@/types/category.types';
 import { ProductStepIndicator } from '@/components/products/ProductStepIndicator';
 import { StepServiceBasics } from '@/components/services/wizard/StepServiceBasics';
 import { StepServiceImages } from '@/components/services/wizard/StepServiceImages';
@@ -26,6 +29,7 @@ import type {
 } from '@/components/services/schemas/service.schemas';
 import { descriptionCreateWire, hydrateDoc } from '@/lib/richtext';
 import type { ServiceProduct, ServiceConfig } from '@/types/services.types';
+import type { ApiFileDetail } from '@/types/product.types';
 import type { TranslationKey } from '@/i18n';
 
 // ─── Step definitions ─────────────────────────────────────────────────────────
@@ -101,6 +105,10 @@ function wizardReducer(state: ServiceWizardState, action: ServiceWizardAction): 
 
 export function ServiceUpload() {
   const [state, dispatch] = useReducer(wizardReducer, INITIAL_STATE);
+  const { run: runCategorySave, dialog: categoryConflictDialog } = useCategoryConflicts();
+  const [resolvedCategories, setResolvedCategories] = useState<CategoryEntry[] | null>(null);
+  // Photos picked in the description's "Generate" popup — the photo step opens with them.
+  const [aiPhotos, setAiPhotos] = useState<ApiFileDetail[]>([]);
   const navigate = useNavigate();
   const { t } = useTranslation();
   const apiError = useApiError();
@@ -125,18 +133,29 @@ export function ServiceUpload() {
     async (values: ServiceBasicsFormValues) => {
       dispatch({ type: 'SET_SAVING', value: true });
       try {
-        const payload = {
-          title: values.title,
-          category: values.category,
-          ...descriptionCreateWire(values.descriptionRich),
-          tags: values.tags,
-          seoTitle: values.seoTitle || undefined,
-          seoDescription: values.seoDescription || undefined,
-        };
-        // Idempotent: create on first save, update when revisiting the step.
-        const service = state.serviceId
-          ? await updateService(state.serviceId, payload)
-          : await createService(payload);
+        const serviceId = state.serviceId;
+        // "Did you mean …?" re-submits this same save — the 422 wrote nothing.
+        const saved = await runCategorySave(
+          values.categories,
+          (categories) => {
+            const payload = {
+              title: values.title,
+              categories: toCategoryWire(categories),
+              ...descriptionCreateWire(values.descriptionRich),
+              tags: values.tags,
+              seoTitle: values.seoTitle || undefined,
+              seoDescription: values.seoDescription || undefined,
+            };
+            // Idempotent: create on first save, update when revisiting the step.
+            return serviceId ? updateService(serviceId, payload) : createService(payload);
+          },
+          setResolvedCategories,
+        );
+        if (!saved.ok) {
+          dispatch({ type: 'SET_SAVING', value: false });
+          return;
+        }
+        const service = saved.value;
         advance({ service, serviceId: service.id });
       } catch (err) {
         dispatch({
@@ -149,7 +168,7 @@ export function ServiceUpload() {
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [state.serviceId, state.currentStep, state.completedSteps],
+    [state.serviceId, state.currentStep, state.completedSteps, runCategorySave],
   );
 
   // ─── Images ───────────────────────────────────────────────────────────────────
@@ -288,9 +307,13 @@ export function ServiceUpload() {
       case 'basic-info':
         return (
           <StepServiceBasics
+            resolvedCategories={resolvedCategories}
+            serviceId={state.serviceId}
+            photos={state.service?.files?.length ? state.service.files : aiPhotos}
+            onAiPhotosPicked={setAiPhotos}
             defaultValues={{
               title: state.service?.title ?? '',
-              category: state.service?.category ?? '',
+              categories: fromProductCategories(state.service?.categories),
               description: state.service?.description ?? '',
               descriptionRich: hydrateDoc(
                 state.service?.descriptionRich,
@@ -309,7 +332,7 @@ export function ServiceUpload() {
       case 'images':
         return (
           <StepServiceImages
-            existingFiles={state.service?.files ?? []}
+            existingFiles={state.service?.files?.length ? state.service.files : aiPhotos}
             isSaving={state.isSaving}
             stepError={state.stepError}
             onSaveComplete={handleImagesSave}
@@ -394,6 +417,7 @@ export function ServiceUpload() {
       <Card className="rounded-none border-x-0 md:rounded-xl md:border">
         <CardContent className="p-4 sm:p-6">{renderStep()}</CardContent>
       </Card>
+      {categoryConflictDialog}
     </EditorPageShell>
   );
 }

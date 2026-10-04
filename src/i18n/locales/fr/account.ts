@@ -374,6 +374,148 @@ export const account = {
         languageHint: 'La langue de ce tableau de bord, ainsi que celle de toutes vos notifications — e-mail, WhatsApp, Telegram et alertes dans l’application. Le tableau de bord bascule dès que vous enregistrez.',
         languagePlaceholder: 'Sélectionnez une langue',
     },
+
+    closure: {
+        crumb: 'Fermeture de la boutique',
+        subtitle: 'Un administrateur a demandé la fermeture de votre boutique. Rien ne se passe sans votre accord.',
+        loadFailed: 'Impossible de charger la demande. Vérifiez votre connexion et réessayez.',
+        none: {
+            title: 'Aucune demande en attente',
+            body: 'Personne ne demande la fermeture de votre boutique pour le moment. La demande a peut-être reçu une réponse, été retirée ou expiré.',
+            back: 'Retour au tableau de bord',
+        },
+        reasonLabel: 'Pourquoi cette demande',
+        deadline: 'Répondez avant le {{date}}. Sans réponse, la demande expire et votre boutique reste ouverte.',
+        whatHappens: {
+            title: 'Si vous acceptez',
+            offline: 'Votre boutique est mise hors ligne et tous vos produits quittent la vitrine.',
+            removed: 'Le nom de la boutique, vos contacts, adresses, coordonnées de versement et pièces d’identité sont retirés.',
+            kept: 'Vos commandes et vos opérations financières sont conservées.',
+            otherAccounts: 'Tout autre usage de Wi-Mall — vos achats en tant que client, par exemple — continue de fonctionner.',
+            final: 'C’est définitif. Une boutique fermée ne peut pas être rouverte.',
+        },
+        warnings: {
+            title: 'Ce que vous perdrez',
+            plan: 'Votre abonnement payant {{plan}}, valable jusqu’au {{date}}.',
+            planNoDate: 'Le temps restant sur votre abonnement payant {{plan}}.',
+            credits: plural({
+                one: '{{count}} crédit dans votre portefeuille.',
+                other: '{{count}} crédits dans votre portefeuille.',
+            }),
+        },
+        blockers: {
+            title: 'À régler d’abord',
+            intro: 'Votre boutique ne peut fermer que lorsque plus rien n’est en cours.',
+            clear: 'Rien ne bloque — vous pouvez fermer votre boutique.',
+            open: 'Ouvrir',
+            items: {
+                vendor_orders_in_flight: {
+                    label: plural({
+                        one: '{{count}} commande encore en cours',
+                        other: '{{count}} commandes encore en cours',
+                    }),
+                    fix: 'Expédiez ou annulez chaque commande encore ouverte.',
+                },
+                vendor_bookings_open: {
+                    label: plural({
+                        one: '{{count}} réservation encore ouverte',
+                        other: '{{count}} réservations encore ouvertes',
+                    }),
+                    fix: 'Terminez, annulez ou réglez chaque réservation ouverte.',
+                },
+                cod_collections_pending: {
+                    label: plural({
+                        one: '{{count}} colis en paiement à la livraison encore en route',
+                        other: '{{count}} colis en paiement à la livraison encore en route',
+                    }),
+                    fix: 'Attendez que chaque colis soit livré ou retourné.',
+                },
+                payout_request_held: {
+                    label: plural({
+                        one: '{{count}} versement encore en traitement',
+                        other: '{{count}} versements encore en traitement',
+                    }),
+                    fix: 'Attendez qu’il soit payé ou refusé.',
+                },
+                earnings_balance: {
+                    label: 'Votre solde de gains est de {{amount}}, et non de zéro',
+                    labelNoAmount: 'Votre solde de gains n’est pas à zéro',
+                    fix: 'Retirez vos gains jusqu’à ce que le solde soit à zéro.',
+                },
+                earnings_allocations_held: {
+                    label: plural({
+                        one: '{{count}} paiement encore bloqué',
+                        other: '{{count}} paiements encore bloqués',
+                    }),
+                    fix: 'Attendez la fin de la période de blocage.',
+                },
+                agency_stock_held: {
+                    label: plural({
+                        one: '{{count}} produit encore stocké chez une agence',
+                        other: '{{count}} produits encore stockés chez une agence',
+                    }),
+                    fix: 'Récupérez le stock, ou faites-le ramener à zéro.',
+                },
+                storage_invoices_open: {
+                    label: plural({
+                        one: '{{count}} relevé de stockage encore ouvert',
+                        other: '{{count}} relevés de stockage encore ouverts',
+                    }),
+                    fix: 'Réglez vos relevés de stockage avec l’agence.',
+                },
+                negotiations_open: {
+                    label: plural({
+                        one: '{{count}} négociation de prix encore ouverte',
+                        other: '{{count}} négociations de prix encore ouvertes',
+                    }),
+                    fix: 'Attendez que les marchandages ouverts et les prix accordés expirent.',
+                },
+                stock_requests_pending: {
+                    label: plural({
+                        one: '{{count}} demande de stock en attente',
+                        other: '{{count}} demandes de stock en attente',
+                    }),
+                    fix: 'Répondez à chaque demande de stock en attente, ou retirez-la.',
+                },
+                other: {
+                    label: plural({
+                        one: '{{count}} autre élément encore en cours',
+                        other: '{{count}} autres éléments encore en cours',
+                    }),
+                    fix: 'Contactez le support pour savoir ce qui reste ouvert.',
+                },
+            },
+        },
+        actions: {
+            confirm: 'Fermer ma boutique',
+            decline: 'Garder ma boutique',
+        },
+        confirmDialog: {
+            title: 'Fermer définitivement votre boutique ?',
+            description: 'Votre boutique est mise hors ligne immédiatement et vous serez déconnecté. C’est définitif.',
+            checkbox: 'Je comprends que ma boutique sera fermée et ne pourra pas être rouverte.',
+            confirm: 'Fermer ma boutique',
+        },
+        declineDialog: {
+            title: 'Garder votre boutique ouverte ?',
+            description: 'L’administrateur verra que vous avez refusé. Votre boutique continue comme avant.',
+            noteLabel: 'Message à l’administrateur (facultatif)',
+            notePlaceholder: 'Par exemple : j’utilise encore cette boutique',
+            confirm: 'Garder ma boutique',
+        },
+        declined: 'Votre boutique reste ouverte. L’administrateur a été prévenu.',
+        blockedToast: 'Votre boutique ne peut pas encore fermer. La liste sur la page indique ce qu’il faut régler d’abord.',
+        banner: {
+            text: 'Un administrateur a demandé la fermeture de votre boutique. Répondez avant le {{date}}.',
+            action: 'Examiner la demande',
+        },
+        closed: {
+            title: 'Votre compte est fermé',
+            body: 'Votre boutique était le dernier élément de votre compte Wi-Mall, le compte entier est donc fermé. Vos commandes et opérations financières sont conservées. Il n’y a plus rien à quoi vous connecter.',
+            action: 'Aller sur Wi-Mall',
+        },
+        signedOut: 'Votre boutique est fermée. Tout autre usage de Wi-Mall, comme vos achats en tant que client, fonctionne toujours.',
+    },
 };
 
 export default account;

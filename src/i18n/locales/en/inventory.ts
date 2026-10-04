@@ -176,17 +176,13 @@ export const inventory = {
             variant: 'SKU: {{sku}}',
         },
 
-        /**
-         * Search is client-side — the endpoint takes no `q` and rejects unknown
-         * query parameters — so it only covers the page in hand. `searchPartial`
-         * says so out loud whenever there is more than one page.
-         */
-        searchPlaceholder: 'Search by SKU or product…',
-        searchPartial: 'Searching this page only — page {{page}} of {{total}}.',
+        /** Server-side since 2026-10-04: matches the product title and the SKU. */
+        searchPlaceholder: 'Search by product or SKU…',
         filterTitle: 'Filter stock requests',
 
         columns: {
             sku: 'SKU',
+            product: 'Product',
             change: 'Change',
             raisedBy: 'Raised by',
             status: 'Status',
@@ -201,6 +197,9 @@ export const inventory = {
             'The quantity moved after this was proposed. Approving still sets the requested figure.',
         unlimitedBefore: 'unlimited',
         unknownSku: 'Variant {{id}}',
+        /** The agency's depot holding the SKU, e.g. "Main depot, Douala". */
+        heldAt: 'Held at {{place}}',
+        locationUnknown: 'Location unknown',
 
         raisedByYou: 'You',
         raisedByAgency: 'The agency',
@@ -266,7 +265,7 @@ export const inventory = {
             noneHint:
                 'These appear when you or a storage agency proposes a quantity change on a warehoused product.',
             filtered: 'No stock requests match these filters.',
-            searched: 'No stock requests on this page match your search.',
+            searched: 'No stock requests match your search.',
         },
 
         errors: {

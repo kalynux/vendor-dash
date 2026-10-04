@@ -126,6 +126,8 @@ export const agency = {
         disconnected: 'Disconnected',
         withdrawn: 'Withdrawn',
         terminated: 'Terminated',
+        /** Terminated because the agency closed its account (`role_closed`). */
+        agencyClosed: 'Agency closed',
         reapprovalNeeded: 'Reapproval needed',
         awaitingTheirApproval: 'Awaiting their approval',
         awaitingYourApproval: 'Awaiting your approval',
@@ -209,6 +211,12 @@ export const agency = {
         localDelivery: 'Delivery in their regions',
         outOfRegionDelivery: 'Delivery outside their regions',
         notOffered: 'Not offered',
+        /** 2026-10-03 — the agency's ceiling per parcel and whether the rider takes the delivery fee in cash. */
+        deliveryFeeTitle: 'Delivery fee',
+        maxFeePerParcel: 'Most it charges for one parcel',
+        cashDeliveryFee: 'Customer may pay delivery in cash to the rider',
+        maxFeeChip: 'Up to {{amount}} a parcel',
+        cashDeliveryChip: 'Delivery fee in cash',
         otherFees: 'Other fees',
         codFee: 'Cash collection fee',
         codFeePercent: '{{value}} of the cash collected',

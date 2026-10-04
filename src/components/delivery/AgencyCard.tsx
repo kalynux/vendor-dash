@@ -1,12 +1,12 @@
 import type { ReactNode } from 'react';
-import { Building2, Check, Info, MapPin, Truck, Warehouse } from 'lucide-react';
+import { Banknote, Building2, Check, Info, MapPin, Truck, Warehouse } from 'lucide-react';
 import { VerifiedBadge } from '@/components/common/VerifiedBadge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { formatAgencyLocality } from '@/lib/agencyAddress';
 import { fileRefUrl } from '@/services/files.service';
 import type { VendorAgencyListItemDto } from '@/types/product.types';
-import { useTranslation } from '@/i18n';
+import { useFormatters, useTranslation } from '@/i18n';
 
 export interface AgencyCardProps {
     agency: VendorAgencyListItemDto;
@@ -22,6 +22,7 @@ export interface AgencyCardProps {
 /** Presentational agency card — logo, name, KYC badge, HQ, coverage chips. */
 export function AgencyCard({ agency, selected = false, onSelect, onInfo, rightSlot }: AgencyCardProps) {
     const { t } = useTranslation();
+    const fmt = useFormatters();
     const hq = agency.headquartersAddress;
     const p = agency.policies;
     const logoUrl = fileRefUrl(agency.logo);
@@ -77,6 +78,17 @@ export function AgencyCard({ agency, selected = false, onSelect, onInfo, rightSl
                             <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
                                 <Truck className="w-2.5 h-2.5" />
                                 {t('agency.detail.pickupBased')}
+                            </span>
+                        )}
+                        {p.pricing.max_fee_per_shipment != null && (
+                            <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                                {t('agency.detail.maxFeeChip', { amount: fmt.currency(p.pricing.max_fee_per_shipment) })}
+                            </span>
+                        )}
+                        {p.pricing.accepts_cash_delivery_fee && (
+                            <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                                <Banknote className="w-2.5 h-2.5" />
+                                {t('agency.detail.cashDeliveryChip')}
                             </span>
                         )}
                     </div>

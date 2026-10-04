@@ -164,12 +164,12 @@ export const inventory = {
             variant: 'SKU : {{sku}}',
         },
 
-        searchPlaceholder: 'Rechercher par SKU ou produit…',
-        searchPartial: 'Recherche sur cette page uniquement — page {{page}} sur {{total}}.',
+        searchPlaceholder: 'Rechercher par produit ou SKU…',
         filterTitle: 'Filtrer les demandes de stock',
 
         columns: {
             sku: 'SKU',
+            product: 'Produit',
             change: 'Modification',
             raisedBy: 'Proposée par',
             status: 'Statut',
@@ -183,6 +183,8 @@ export const inventory = {
             'La quantité a changé après cette proposition. L’approbation applique tout de même la valeur demandée.',
         unlimitedBefore: 'illimité',
         unknownSku: 'Variante {{id}}',
+        heldAt: 'Stocké à {{place}}',
+        locationUnknown: 'Emplacement inconnu',
 
         raisedByYou: 'Vous',
         raisedByAgency: 'L’agence',
@@ -249,7 +251,7 @@ export const inventory = {
             noneHint:
                 'Elles apparaissent lorsque vous ou une agence de stockage proposez une modification de quantité sur un produit entreposé.',
             filtered: 'Aucune demande de stock ne correspond à ces filtres.',
-            searched: 'Aucune demande de stock de cette page ne correspond à votre recherche.',
+            searched: 'Aucune demande de stock ne correspond à votre recherche.',
         },
 
         errors: {

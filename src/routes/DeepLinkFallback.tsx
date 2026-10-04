@@ -5,7 +5,7 @@ import { routeFromNotificationPath } from '@/lib/notifications.utils';
  * The catch-all, with one attempt at rescue before it gives up.
  *
  * Notification buttons on email, WhatsApp and Telegram can only carry a URL, so
- * the backend sends `{VENDOR_APP_URL}/{path}` where `path` is one of the eight
+ * the backend sends `{VENDOR_APP_URL}/{path}` where `path` is one of the nine
  * labels in api-doc/notifications/deep-links.md — with no `/dashboard` prefix,
  * because the backend does not know this app's route tree and deliberately never
  * will. Redirecting those straight to `/dashboard` drops the recipient on the

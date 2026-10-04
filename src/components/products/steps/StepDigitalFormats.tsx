@@ -146,7 +146,8 @@ export function StepDigitalFormats({
   const atLimit = formats.length >= MAX_FORMATS;
   const hasUnsaved = dirty || formats.some((f) => !f.serverId);
   const productTitle = serverData.serverProduct?.title ?? '';
-  const productCategory = serverData.serverProduct?.category ?? '';
+  // The SKU only needs a readable token — the main category gives one.
+  const productCategory = serverData.serverProduct?.categories?.[0]?.name ?? '';
   const productId = serverData.productId ?? '';
 
   return (

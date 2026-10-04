@@ -5,7 +5,7 @@ import { SettingsSection, SettingsSections } from '@/components/vendor-settings/
 import { ProductMediaUpload } from '@/components/products/ProductMediaUpload';
 import { PRODUCT_IMAGE_LIMIT } from '@/components/products/media.constants';
 import { useTranslation } from '@/i18n';
-import type { WizardState } from '@/types/product.types';
+import type { ApiFileDetail, WizardState } from '@/types/product.types';
 import { StepActions, StepError } from './StepLayout';
 
 interface StepMediaProps {
@@ -15,6 +15,11 @@ interface StepMediaProps {
   stepError: string | null;
   onSaveComplete: (updates: Partial<WizardState> & { _mediaFileIds?: string[] }) => void;
   onBack: () => void;
+  /**
+   * Photos chosen in the "Generate" popup on the previous step. They fill the
+   * gallery only while the product has none of its own saved.
+   */
+  pendingFiles?: ApiFileDetail[];
 }
 
 export function StepMedia({
@@ -24,12 +29,14 @@ export function StepMedia({
   stepError,
   onSaveComplete,
   onBack,
+  pendingFiles,
 }: StepMediaProps) {
   const { t } = useTranslation();
-  const existingFiles =
+  const savedFiles =
     serverData.serverProduct && 'files' in serverData.serverProduct
       ? serverData.serverProduct.files
       : [];
+  const existingFiles = savedFiles.length > 0 ? savedFiles : (pendingFiles ?? []);
 
   const maxFiles = PRODUCT_IMAGE_LIMIT[serverData.productType ?? 'physical'];
 

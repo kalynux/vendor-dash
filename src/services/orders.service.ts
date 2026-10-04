@@ -5,7 +5,7 @@ import { refreshPendingOrdersCount } from '@/lib/pending-orders-count';
 import type { FileRef } from '@/types/file.types';
 import type { CodLimitForce, CodLimitHold } from '@/types/cod-limits.types';
 import type { DeliveryFeeProposal } from '@/types/delivery-fee-proposals.types';
-import type { Order, OrderItem, Customer, OrderTimelineEvent, Entitlement, TimelineEventType, DisputeHold, OrderItemDelivery, OrderDeliveryTimelineEntry, VendorSettableStatus, PaymentMethod } from '@/types';
+import type { Order, OrderItem, Customer, OrderTimelineEvent, Entitlement, TimelineEventType, DisputeHold, OrderItemDelivery, OrderDeliveryTimelineEntry, VendorSettableStatus, PaymentMethod, DeliveryPayer, DeliveryPayerReason, ShipmentDeliveryFee } from '@/types';
 
 // ─── Error Handling ────────────────────────────────────────────────────────────
 
@@ -68,8 +68,8 @@ interface ApiOrderDelivery {
   shipmentId?: string;
   /** Platform-generated `ACR-YYMMDD-HHMMSS-XXXXX`; `null` only on legacy shipments. */
   trackingNumber?: string | null;
-  /** Snapshot of the product's `delivery.freeDelivery` flag at checkout time. */
-  freeDelivery?: boolean;
+  /** 2026-10-04 — this shipment's delivery money; `null` before a shipment exists. */
+  deliveryFee?: ShipmentDeliveryFee | null;
   /** Set only on `items[].delivery` when the agency declined the item's shipment; `null` otherwise. */
   rejection?: {
     reason: string;
@@ -125,6 +125,8 @@ interface ApiOrderListItem {
   createdAt: string;
   /** 2026-10-02 — a shipment of this order is held over a COD limit. */
   codLimitHeld?: boolean;
+  /** 2026-10-04 — who paid delivery; `null` on a digital order. */
+  deliveryPayer?: DeliveryPayer | null;
 }
 
 interface ApiOrderDetail {
@@ -169,9 +171,15 @@ interface ApiOrderDetail {
     base: number;
     tax: number;
     discount: number;
+    /** What the CUSTOMER paid for delivery (2026-10-04) — `0` when free for them. */
     shipping: number;
+    /** 2026-10-04 — delivery taken out of your earnings; `null` on digital / unpriced. */
+    vendorBorneDelivery?: number | null;
     total: number;
   };
+  /** 2026-10-04 — who paid delivery and why; `null` on a digital order. */
+  deliveryPayer?: DeliveryPayer | null;
+  deliveryPayerReason?: DeliveryPayerReason | null;
   totalAmount: number;
   currency: string;
   /** Order-level shipment overview (one entry per agency/shipment). Null for digital orders. */
@@ -373,7 +381,7 @@ function adaptOrderDelivery(delivery: ApiOrderDelivery): OrderItemDelivery {
     deliveryStatus: delivery.deliveryStatus,
     shipmentId: delivery.shipmentId,
     trackingNumber: delivery.trackingNumber,
-    freeDelivery: delivery.freeDelivery,
+    deliveryFee: delivery.deliveryFee ?? null,
     rejection: delivery.rejection
       ? {
           reason: delivery.rejection.reason,
@@ -437,6 +445,7 @@ function adaptListItemToOrder(item: ApiOrderListItem): Order {
     paymentMethod: adaptPaymentMethod(item.paymentMethod),
     disputeHold: adaptDisputeHold(item.dispute_hold),
     codLimitHeld: item.codLimitHeld === true,
+    deliveryPayer: item.deliveryPayer ?? null,
     fulfillmentStatus: 'unfulfilled',
     total: item.total,
     subtotal: item.subtotal,
@@ -523,6 +532,9 @@ function adaptDetailToOrder(detail: ApiOrderDetail): Order {
     subtotal: detail.priceBreakdown.base,
     tax: detail.priceBreakdown.tax,
     shipping: detail.priceBreakdown.shipping,
+    vendorBorneDelivery: detail.priceBreakdown.vendorBorneDelivery ?? null,
+    deliveryPayer: detail.deliveryPayer ?? null,
+    deliveryPayerReason: detail.deliveryPayerReason ?? null,
     discount: detail.priceBreakdown.discount,
     currency: detail.currency,
     customer,

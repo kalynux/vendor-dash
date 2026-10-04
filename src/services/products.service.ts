@@ -57,7 +57,7 @@ function adaptToListItem(p: ApiProduct): ProductListItem {
     status: p.status,
     // Only set while suspended; the reason decides what we tell the vendor.
     suspension: p.suspension ?? null,
-    category: p.category,
+    categories: p.categories ?? [],
     tags: p.tags,
     // Absent on a backend build that predates simple mode — fall back to the
     // advanced editor, which every pre-existing product belongs to anyway.

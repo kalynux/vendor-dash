@@ -117,6 +117,42 @@ export interface Order {
   codLimitHeld?: boolean;
   /** Detail only (2026-10-02): this order's delivery-fee proposals, newest first. `[]` for digital orders. */
   deliveryFeeProposals?: DeliveryFeeProposal[];
+  /**
+   * Who paid delivery (2026-10-04) — list rows and detail. `null` on a digital
+   * order; absent on older servers. `shipping` above is what the CUSTOMER paid.
+   */
+  deliveryPayer?: DeliveryPayer | null;
+  /** Detail only: why `deliveryPayer` is who it is. */
+  deliveryPayerReason?: DeliveryPayerReason | null;
+  /**
+   * Detail only: the delivery fees taken out of YOUR earnings (Σ of
+   * `deliveries[].deliveryFee.vendorBorne`). `null` on a digital order or before
+   * any fee is priced.
+   */
+  vendorBorneDelivery?: number | null;
+}
+
+/** Who paid an order's (or a shipment's) delivery — api-doc/vendor/orders.md (2026-10-04). Open for forward-compat. */
+export type DeliveryPayer = 'vendor' | 'customer' | (string & {});
+
+/** `shop_always` · `shop_threshold_met` · `shop_never` · `threshold_not_met` · `cap_fallback`. */
+export type DeliveryPayerReason =
+  | 'shop_always'
+  | 'shop_threshold_met'
+  | 'shop_never'
+  | 'threshold_not_met'
+  | 'cap_fallback'
+  | (string & {});
+
+/** `deliveries[].deliveryFee` / `items[].delivery.deliveryFee` — one shipment's delivery money. */
+export interface ShipmentDeliveryFee {
+  payer: DeliveryPayer;
+  /** What the agency is paid (the approved change, else the price posted at checkout); `null` while unpriced. */
+  fee: number | null;
+  /** What the customer paid for this shipment's delivery online. */
+  customerPaid: number;
+  /** What comes out of your earnings for it; `null` while unpriced. */
+  vendorBorne: number | null;
 }
 
 /** Chargeback freeze marker carried on an order (mirrors the API `dispute_hold` object). */
@@ -201,8 +237,8 @@ export interface OrderItemDelivery {
    * generation, hence still optional here.
    */
   trackingNumber?: string | null;
-  /** Snapshot of the product's `delivery.freeDelivery` flag at checkout time. */
-  freeDelivery?: boolean;
+  /** This shipment's delivery money (2026-10-04); `null` before a shipment exists, absent on older servers. */
+  deliveryFee?: ShipmentDeliveryFee | null;
   /** Set only on `items[].delivery` when the agency declined the item's shipment; `null` otherwise. */
   rejection?: DeliveryRejection | null;
   agent?: {

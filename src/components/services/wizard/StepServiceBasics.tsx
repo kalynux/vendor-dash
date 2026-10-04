@@ -1,5 +1,5 @@
-import { useRef } from 'react';
-import { useForm } from 'react-hook-form';
+import { useEffect, useRef } from 'react';
+import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import type { z } from 'zod';
 import { AlertCircle, X, Plus, ChevronRight, ChevronLeft } from 'lucide-react';
@@ -18,6 +18,11 @@ import {
 import {
   serviceBasicsSchema, type ServiceBasicsFormValues,
 } from '@/components/services/schemas/service.schemas';
+import { CategoryPicker } from '@/components/products/categories/CategoryPicker';
+import type { CategoryEntry } from '@/types/category.types';
+import type { ApiFileDetail } from '@/types/product.types';
+import { ListingCopyAssistant, type ListingCopyApplied } from '@/components/ai-copy/ListingCopyAssistant';
+import { SERVICE_IMAGE_LIMIT } from '@/components/services/service.constants';
 
 interface StepServiceBasicsProps {
   defaultValues: ServiceBasicsFormValues;
@@ -27,6 +32,17 @@ interface StepServiceBasicsProps {
   /** Back on the first step leaves the wizard. */
   onBack: () => void;
   mode?: 'create' | 'edit';
+  /** The vendor's "Did you mean …?" answers, handed back by the page that saved. */
+  resolvedCategories?: CategoryEntry[] | null;
+  /** Edit only — the service being edited. */
+  serviceId?: string | null;
+  /**
+   * The service's photos so far — saved ones, or those picked in the
+   * "Generate" popup. Empty → the popup asks for some.
+   */
+  photos?: ApiFileDetail[];
+  /** Photos picked in the popup; the page hands them to the photo step. */
+  onAiPhotosPicked?: (files: ApiFileDetail[]) => void;
 }
 
 export function StepServiceBasics({
@@ -36,6 +52,10 @@ export function StepServiceBasics({
   onSaveComplete,
   onBack,
   mode = 'create',
+  resolvedCategories,
+  serviceId,
+  photos,
+  onAiPhotosPicked,
 }: StepServiceBasicsProps) {
   const { t } = useTranslation();
   const m = useMessage();
@@ -43,9 +63,11 @@ export function StepServiceBasics({
 
   const {
     register,
+    control,
     handleSubmit,
     watch,
     setValue,
+    getValues,
     formState: { errors },
     // Three generics because `descriptionRich` carries a zod `.default()`, so the
     // form's input type (field optional) and its output type (field guaranteed)
@@ -55,6 +77,10 @@ export function StepServiceBasics({
     defaultValues,
   });
 
+  useEffect(() => {
+    if (resolvedCategories) setValue('categories', resolvedCategories, { shouldValidate: true });
+  }, [resolvedCategories, setValue]);
+
   const tags = watch('tags') as string[];
   const descriptionRich = watch('descriptionRich') as RichDoc;
   const titleValue = watch('title') ?? '';
@@ -63,6 +89,22 @@ export function StepServiceBasics({
   function onDescriptionChange(doc: RichDoc) {
     setValue('descriptionRich', doc, { shouldValidate: false });
     setValue('description', toPlainText(doc), { shouldValidate: true, shouldDirty: true });
+  }
+
+  function applyGenerated(applied: ListingCopyApplied) {
+    const opts = { shouldValidate: true, shouldDirty: true };
+    if (applied.title) setValue('title', applied.title, opts);
+    if (applied.categories) setValue('categories', applied.categories, opts);
+    if (applied.descriptionRich) onDescriptionChange(applied.descriptionRich);
+    if (applied.tags) {
+      // Added to the vendor's own tags, never replacing them.
+      const current = (getValues('tags') ?? []) as string[];
+      const have = new Set(current.map((tag) => tag.toLowerCase()));
+      setValue('tags', [...current, ...applied.tags.filter((tag) => !have.has(tag.toLowerCase()))], opts);
+    }
+    if (applied.seoTitle) setValue('seoTitle', applied.seoTitle, opts);
+    if (applied.seoDescription) setValue('seoDescription', applied.seoDescription, opts);
+    if (applied.photos) onAiPhotosPicked?.(applied.photos);
   }
 
   function addTag() {
@@ -121,23 +163,46 @@ export function StepServiceBasics({
 
       {/* Category */}
       <div className="space-y-1.5">
-        <Label htmlFor="category">
-          {t('services.basics.category')} <span className="text-destructive">*</span>
+        <Label htmlFor="categories">
+          {t('products.categories.label')} <span className="text-destructive">*</span>
         </Label>
-        <Input
-          id="category"
-          placeholder={t('services.basics.categoryPlaceholder')}
-          {...register('category')}
-          aria-invalid={!!errors.category}
+        <Controller
+          control={control}
+          name="categories"
+          render={({ field }) => (
+            <CategoryPicker
+              id="categories"
+              value={field.value as CategoryEntry[]}
+              onChange={field.onChange}
+              invalid={!!errors.categories}
+            />
+          )}
         />
-        {errors.category && <p className="text-xs text-destructive">{m(errors.category.message)}</p>}
+        {errors.categories && (
+          <p className="text-xs text-destructive">
+            {m(errors.categories.message ?? errors.categories.root?.message)}
+          </p>
+        )}
       </div>
 
       {/* Description */}
       <div className="space-y-1.5">
-        <Label htmlFor="description">
-          {t('services.basics.descriptionLabel')} <span className="text-destructive">*</span>
-        </Label>
+        <div className="flex items-center justify-between gap-3">
+          <Label htmlFor="description">
+            {t('services.basics.descriptionLabel')} <span className="text-destructive">*</span>
+          </Label>
+          <ListingCopyAssistant
+            target="service"
+            listingId={serviceId}
+            photoLimit={SERVICE_IMAGE_LIMIT}
+            getSnapshot={() => ({
+              title: getValues('title') ?? '',
+              categories: (getValues('categories') ?? []) as CategoryEntry[],
+              photos: photos ?? [],
+            })}
+            onApply={applyGenerated}
+          />
+        </div>
         <ChatRichTextEditor
           id="description"
           value={descriptionRich}

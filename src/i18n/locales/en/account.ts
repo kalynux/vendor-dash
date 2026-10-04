@@ -454,6 +454,152 @@ export const account = {
         languageHint: 'The language of this dashboard, and of every notification you receive — email, WhatsApp, Telegram and in-app alerts. The dashboard switches over as soon as you save.',
         languagePlaceholder: 'Select a language',
     },
+
+    /**
+     * The shop-closure request (ADR-A10). An administrator ASKS; nothing happens
+     * until the vendor agrees here. Say "close", never "delete" — product rule.
+     */
+    closure: {
+        crumb: 'Shop closure',
+        subtitle: 'An administrator asked to close your shop. Nothing happens unless you agree.',
+        loadFailed: 'We couldn’t load the request. Check your connection and try again.',
+        none: {
+            title: 'No request waiting',
+            body: 'Nobody is asking to close your shop right now. The request may have been answered, withdrawn, or run out.',
+            back: 'Back to the dashboard',
+        },
+        reasonLabel: 'Why they asked',
+        deadline: 'Answer by {{date}}. If you do nothing, the request runs out and your shop stays open.',
+        whatHappens: {
+            title: 'If you agree',
+            offline: 'Your shop goes offline and every product leaves the storefront.',
+            removed: 'Your shop name, contacts, addresses, payout details and identity documents are removed.',
+            kept: 'Your orders and money records are kept.',
+            otherAccounts: 'Anything else you use Wi-Mall for — shopping as a customer, for example — keeps working.',
+            final: 'This can’t be undone. A closed shop can’t be reopened.',
+        },
+        warnings: {
+            title: 'What you will lose',
+            plan: 'Your paid {{plan}} plan, which runs until {{date}}.',
+            planNoDate: 'The time left on your paid {{plan}} plan.',
+            credits: plural({
+                one: '{{count}} credit in your wallet.',
+                other: '{{count}} credits in your wallet.',
+            }),
+        },
+        blockers: {
+            title: 'Settle these first',
+            intro: 'Your shop can only close once nothing is still in progress.',
+            clear: 'Nothing is in the way — you can close your shop.',
+            open: 'Open',
+            items: {
+                vendor_orders_in_flight: {
+                    label: plural({
+                        one: '{{count}} order still in progress',
+                        other: '{{count}} orders still in progress',
+                    }),
+                    fix: 'Ship or cancel every order that is still open.',
+                },
+                vendor_bookings_open: {
+                    label: plural({
+                        one: '{{count}} booking still open',
+                        other: '{{count}} bookings still open',
+                    }),
+                    fix: 'Complete, cancel or settle every open booking.',
+                },
+                cod_collections_pending: {
+                    label: plural({
+                        one: '{{count}} cash-on-delivery parcel still on its way',
+                        other: '{{count}} cash-on-delivery parcels still on their way',
+                    }),
+                    fix: 'Wait until each parcel is delivered or returned.',
+                },
+                payout_request_held: {
+                    label: plural({
+                        one: '{{count}} payout still being processed',
+                        other: '{{count}} payouts still being processed',
+                    }),
+                    fix: 'Wait until it is paid or rejected.',
+                },
+                earnings_balance: {
+                    label: 'Your earnings balance is {{amount}}, not zero',
+                    labelNoAmount: 'Your earnings balance is not zero',
+                    fix: 'Withdraw your earnings until the balance is zero.',
+                },
+                earnings_allocations_held: {
+                    label: plural({
+                        one: '{{count}} payment still on hold',
+                        other: '{{count}} payments still on hold',
+                    }),
+                    fix: 'Wait for the hold period to end.',
+                },
+                agency_stock_held: {
+                    label: plural({
+                        one: '{{count}} product still stocked at an agency',
+                        other: '{{count}} products still stocked at an agency',
+                    }),
+                    fix: 'Collect the stock, or have it counted down to zero.',
+                },
+                storage_invoices_open: {
+                    label: plural({
+                        one: '{{count}} storage statement still open',
+                        other: '{{count}} storage statements still open',
+                    }),
+                    fix: 'Settle your storage statements with the agency.',
+                },
+                negotiations_open: {
+                    label: plural({
+                        one: '{{count}} price negotiation still open',
+                        other: '{{count}} price negotiations still open',
+                    }),
+                    fix: 'Wait for open haggles and agreed prices to run out.',
+                },
+                stock_requests_pending: {
+                    label: plural({
+                        one: '{{count}} stock request still waiting',
+                        other: '{{count}} stock requests still waiting',
+                    }),
+                    fix: 'Answer or withdraw every waiting stock request.',
+                },
+                other: {
+                    label: plural({
+                        one: '{{count}} other thing still in progress',
+                        other: '{{count}} other things still in progress',
+                    }),
+                    fix: 'Contact support to find out what is still open.',
+                },
+            },
+        },
+        actions: {
+            confirm: 'Close my shop',
+            decline: 'Keep my shop',
+        },
+        confirmDialog: {
+            title: 'Close your shop for good?',
+            description: 'Your shop goes offline straight away and you will be signed out. This can’t be undone.',
+            checkbox: 'I understand my shop will be closed and can’t be reopened.',
+            confirm: 'Close my shop',
+        },
+        declineDialog: {
+            title: 'Keep your shop open?',
+            description: 'The administrator will see that you said no. Your shop carries on as before.',
+            noteLabel: 'Message to the administrator (optional)',
+            notePlaceholder: 'For example: I still use this shop',
+            confirm: 'Keep my shop',
+        },
+        declined: 'Your shop stays open. The administrator has been told.',
+        blockedToast: 'Your shop can’t close yet. The list on the page shows what to settle first.',
+        banner: {
+            text: 'An administrator asked to close your shop. Answer by {{date}}.',
+            action: 'Review request',
+        },
+        closed: {
+            title: 'Your account is closed',
+            body: 'Your shop was the last thing on your Wi-Mall account, so the whole account is now closed. Your orders and payment records are kept. There is nothing left to sign in to.',
+            action: 'Go to Wi-Mall',
+        },
+        signedOut: 'Your shop is closed. Anything else you use Wi-Mall for, such as shopping as a customer, still works.',
+    },
 } as const;
 
 export default account;

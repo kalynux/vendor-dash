@@ -4,10 +4,12 @@ import { useTranslation } from '@/i18n';
 import { storefrontUrl } from '@/lib/storefront/urls';
 import { useBearerAuth } from '@/platform/env';
 import { Login } from './Login';
+import { ShopClosedNotice } from './ShopClosedNotice';
 
 export { Register } from './Register';
 export { ForgotPassword } from './ForgotPassword';
 export { ResetPassword } from './ResetPassword';
+export { AccountClosed } from './AccountClosed';
 // `ConfirmEmailChange` is GONE — the main site serves /account/confirm-email for
 // all four apps. See the note where its route used to be in App.tsx.
 
@@ -27,6 +29,7 @@ function WebLoginRedirect() {
       <div className="text-center space-y-4 max-w-sm">
         <AppLogo alt="Wi-Mall" className="w-20 h-20 mx-auto" />
         <h1 className="text-2xl font-bold">{t('auth.web.title')}</h1>
+        <ShopClosedNotice />
         <p className="text-muted-foreground text-sm">{t('auth.web.description')}</p>
         <Button asChild className="h-11 w-full">
           <a href={storefrontUrl('/login')}>{t('auth.web.goToLogin')}</a>

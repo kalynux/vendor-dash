@@ -8,6 +8,7 @@
 // product-module `ApiProductType` union, keeping the product wizard untouched.
 
 import type { RichDoc } from '@/lib/richtext';
+import type { CategoryWrite, ProductCategory } from '@/types/category.types';
 import type { ApiFileDetail, ApiVectorisationStatus } from '@/types/product.types';
 
 // ─── Service product status ───────────────────────────────────────────────────
@@ -55,7 +56,7 @@ export interface ServiceListItem {
   id: string;
   title: string;
   status: ServiceStatus;
-  category: string;
+  categories: ProductCategory[];
   tags: string[];
   firstFileUrl: string | null;
   durationMinutes: number | null;
@@ -77,7 +78,7 @@ export interface ServiceProduct {
   /** Structured description; `description` is its plain projection. See product.types.ts. */
   descriptionRich?: RichDoc | null;
   slug: string;
-  category: string;
+  categories: ProductCategory[];
   tags: string[];
   seo: { title?: string; description?: string };
   files: ApiFileDetail[];
@@ -109,7 +110,7 @@ export interface ServicesQueryParams {
 
 export interface CreateServicePayload {
   title: string;
-  category: string;
+  categories: CategoryWrite[];
   description: string;
   descriptionRich?: RichDoc | null;
   tags?: string[];
@@ -119,7 +120,7 @@ export interface CreateServicePayload {
 
 export interface UpdateServicePayload {
   title?: string;
-  category?: string;
+  categories?: CategoryWrite[];
   description?: string;
   descriptionRich?: RichDoc | null;
   tags?: string[];
@@ -392,7 +393,7 @@ export interface ApiServiceListRaw {
   title: string;
   type: string;
   status: ServiceStatus;
-  category: string;
+  categories: ProductCategory[];
   tags?: string[];
   fileIds: ApiFileDetail[];
   vectorisationEnabled?: boolean;

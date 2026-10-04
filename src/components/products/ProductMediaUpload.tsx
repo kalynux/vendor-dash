@@ -26,6 +26,12 @@ interface ProductMediaUploadProps {
   existingFiles?: ApiFileDetail[];
   /** Called whenever the ordered file list changes (add / remove / reorder). */
   onMediaChange: (orderedFileIds: string[]) => void;
+  /**
+   * Same moment as `onMediaChange`, with each photo's address too — for a
+   * caller that has to show the photos elsewhere (the description's "Generate"
+   * popup), not just save their ids.
+   */
+  onFilesChange?: (files: { id: string; url: string | null }[]) => void;
   isUploading?: boolean;
   maxFiles?: number;
   disabled?: boolean;
@@ -69,6 +75,7 @@ function fromApiFile(f: ApiFile): GalleryFile {
 export function ProductMediaUpload({
   existingFiles = [],
   onMediaChange,
+  onFilesChange,
   isUploading = false,
   maxFiles = 10,
   disabled = false,
@@ -97,6 +104,10 @@ export function ProductMediaUpload({
     seedReported.current = true;
     onMediaChange(seed.map((f) => f.id));
   }, [seed, onMediaChange]);
+
+  useEffect(() => {
+    onFilesChange?.(items.map((f) => ({ id: f.id, url: f.url })));
+  }, [items, onFilesChange]);
 
   const commit = useCallback(
     (next: GalleryFile[]) => {

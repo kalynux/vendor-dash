@@ -27,7 +27,12 @@ export interface ConnectionWithdrawalInfo {
 export interface ConnectionTerminationInfo {
   terminatedByRole: ConnectionParty;
   terminatedAt: string;
-  reason: 'unilateral' | 'reapproval_declined';
+  /**
+   * `role_closed` (2026-10-04, ADR-A10): one side closed its account and the
+   * connection ended with it — `terminatedByRole` says which. For a vendor
+   * that is always the agency: a vendor whose own shop closed is signed out.
+   */
+  reason: 'unilateral' | 'reapproval_declined' | 'role_closed';
   note: string | null;
 }
 

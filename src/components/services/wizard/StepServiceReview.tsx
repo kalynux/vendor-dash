@@ -1,3 +1,4 @@
+import { categoryNames } from '@/services/categories.service';
 import { useState } from 'react';
 import { AlertCircle, CheckCircle2, ChevronLeft, CalendarClock, Globe, Sparkles } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -137,7 +138,7 @@ export function StepServiceReview({
                   {t(SERVICE_STATUS_META[service.status]?.labelKey ?? 'services.status.draft')}
                 </span>
                 <span className="text-xs text-muted-foreground">{t('services.review.typeLabel')}</span>
-                <span className="text-xs text-muted-foreground">{service.category}</span>
+                <span className="text-xs text-muted-foreground">{categoryNames(service.categories) || t('products.categories.none')}</span>
               </div>
             </div>
           </div>

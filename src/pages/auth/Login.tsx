@@ -23,6 +23,7 @@ import {
   type BiometricLoginStatus,
 } from '@/platform/auth/biometricLogin';
 import { AuthLayout, AuthLink } from './AuthLayout';
+import { ShopClosedNotice } from './ShopClosedNotice';
 import { PasswordField } from './PasswordField';
 import { LOGIN_MODES, loginModeFor, loginSchema, type LoginFormValues, type LoginMode } from './schemas';
 
@@ -279,6 +280,7 @@ export function Login() {
       }
     >
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
+        <ShopClosedNotice />
         {/* The two ways in. `Tabs` rather than a hand-rolled toggle so the pair
             is a real radio group to a screen reader and arrow keys move between
             them — and so it looks like every other tab strip in the app. There

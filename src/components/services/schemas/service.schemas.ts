@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { TranslationKey } from '@/i18n';
 import { EMPTY_DOC, richDocSchema } from '@/lib/richtext';
+import { categoriesSchema } from '@/components/products/schemas/product.schemas';
 import {
   TITLE_MIN,
   TITLE_MAX,
@@ -119,7 +120,7 @@ export const createServiceSchema = z
       .string()
       .min(TITLE_MIN, 'services.validation.titleMin')
       .max(TITLE_MAX, 'services.validation.titleMax'),
-    category: z.string().min(1, 'services.validation.categoryRequired'),
+    categories: categoriesSchema,
     description: z.string().min(1, 'services.validation.descriptionRequired'),
     tags: z
       .array(z.string().min(1, 'services.validation.tagEmpty'))
@@ -139,7 +140,7 @@ export const serviceBasicsSchema = z.object({
     .string()
     .min(TITLE_MIN, 'services.validation.titleMin')
     .max(TITLE_MAX, 'services.validation.titleMax'),
-  category: z.string().min(1, 'services.validation.categoryRequired'),
+  categories: categoriesSchema,
   /** Plain-text projection of `descriptionRich` — see product.schemas.ts. */
   description: z.string().min(1, 'services.validation.descriptionRequired'),
   descriptionRich: richDocSchema.default(EMPTY_DOC),

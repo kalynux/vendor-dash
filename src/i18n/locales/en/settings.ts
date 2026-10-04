@@ -476,6 +476,28 @@ export const settings = {
         loadFailed: 'Could not load your cash-on-delivery terms.',
         saveFailed: 'Could not save your cash-on-delivery terms.',
     },
+    /** 2026-10-03 — who pays delivery for the whole shop (replaced the per-product switch). */
+    deliveryTerms: {
+        title: 'Delivery terms',
+        info: 'Who pays delivery on orders from your shop. Saved on its own: changing it does not ask your agencies to approve you again, and orders already placed keep the terms they were placed with.',
+        modes: {
+            always: 'Always free for customers',
+            alwaysHint: 'You pay delivery on every order.',
+            never: 'Customers pay delivery',
+            neverHint: 'The delivery fee is added to the customer’s order. It does not come out of your earnings.',
+            above: 'Free above an amount',
+            aboveHint: 'You pay delivery when the customer’s items from your shop reach the amount. Below it, the customer pays.',
+        },
+        amountLabel: 'Free delivery from',
+        amountPlaceholder: 'For example 20000',
+        amountInvalid: 'Enter a whole amount from {{min}} to {{max}}.',
+        youPayNote: 'When delivery is free for the customer, the delivery agency’s fee comes out of your earnings.',
+        smallOrderNote: 'Even with free delivery, a very small order whose delivery would cost more than 30% of it is charged to the customer instead of being refused.',
+        lastChanged: 'Last changed {{date}}',
+        saved: 'Delivery terms saved',
+        loadFailed: 'Could not load your delivery terms.',
+        saveFailed: 'Could not save your delivery terms.',
+    },
 } as const;
 
 export default settings;

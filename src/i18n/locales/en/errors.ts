@@ -360,6 +360,7 @@ export const errors = {
             'This account has been suspended. Contact support to have it reviewed.',
         AUTH_VENDOR_SUSPENDED:
             'Your shop has been suspended, so the dashboard is unavailable. Contact support to have it reviewed.',
+        AUTH_ROLE_CLOSED: 'Your shop has been closed, so the dashboard is no longer available.',
         AUTH_ADMIN_CALLER_NOT_CONFIGURED: 'That request could not be authorised.',
         AUTH_ADMIN_CALLER_TOKEN_INVALID: 'That request could not be authorised.',
         AUTH_ADMIN_CALLER_ACTOR_MISSING: 'That request could not be authorised.',
@@ -745,6 +746,13 @@ export const errors = {
         CATALOG_IMAGE_LIMIT_EXCEEDED: 'This product has reached its maximum number of images.',
         CATALOG_SHIPPING_NOT_FOUND: 'We could not find those shipping settings.',
         CATALOG_SHIPPING_ACCESS_DENIED: "You don't have access to those shipping settings.",
+
+        // ── Product categories (2026-10-04) ───────────────────────────────────
+        // SIMILAR_EXISTS normally opens the "Did you mean" dialog; this sentence
+        // is only the fallback if that dialog could not be shown.
+        CATEGORY_SIMILAR_EXISTS: 'One of your categories looks like one that already exists. Nothing was saved.',
+        CATEGORY_NAME_INVALID: 'A category name must be 2 to 60 characters, with at least one letter or number.',
+        CATEGORY_NOT_FOUND: 'One of your categories no longer exists. Remove it and pick it again from the list.',
 
         // ── Catalog: bookings & services ──────────────────────────────────────
         CATALOG_BOOKING_PRODUCT_NOT_FOUND: 'We could not find that service.',
@@ -1197,6 +1205,14 @@ export const errors = {
         ACCOUNT_CLOSURE_ORDERS_IN_FLIGHT:
             'There are still orders in progress. They have to finish first.',
 
+        // ── Shop closure requested by an administrator (ADR-A10) ─────────────
+        ROLE_CLOSURE_REQUEST_NOT_FOUND: 'There is no longer a request to close your shop.',
+        ROLE_CLOSURE_ALREADY_PENDING: 'A request to close this shop is already waiting for an answer.',
+        ROLE_CLOSURE_ROLE_NOT_HELD: 'This account doesn’t have that role.',
+        ROLE_CLOSURE_BLOCKED: 'Your shop can’t close yet. Some things still need to be settled first.',
+        ROLE_CLOSURE_REQUEST_EXPIRED: 'This request has run out or was already answered.',
+        ROLE_CLOSED: 'This shop was closed on your account and can’t be reopened.',
+
         // ── Delivery reviews ──────────────────────────────────────────────────
         REVIEW_NOT_FOUND: 'That review no longer exists.',
         REVIEW_ALREADY_EXISTS: "You've already reviewed this delivery.",
@@ -1273,8 +1289,11 @@ export const errors = {
         DELIVERY_FEE_PROPOSAL_AGENTS_NOT_ALLOWED: 'This agency does not let its agents propose a delivery fee.',
         DELIVERY_FEE_PROPOSAL_LIMIT_REACHED: 'No more delivery fee changes can be proposed for this parcel.',
         DELIVERY_FEE_PROPOSAL_NO_CHANGE: 'That is already the delivery fee.',
-        DELIVERY_FEE_PROPOSAL_VENDOR_NET_NOT_POSITIVE: 'Approving this would leave you earning nothing on this order.',
-        DELIVERY_FEE_PROPOSAL_NOT_YOURS: 'Only whoever proposed this delivery fee change can withdraw it.',
+        // Also refuses a change of agency you could not afford to cover (2026-10-04).
+        DELIVERY_FEE_PROPOSAL_VENDOR_NET_NOT_POSITIVE: 'This would leave you earning nothing on this order.',
+        // For a vendor: a change the customer answers, not you (2026-10-04).
+        DELIVERY_FEE_PROPOSAL_NOT_YOURS: 'The customer answers this delivery fee change, not you.',
+        DELIVERY_FEE_PROPOSAL_ORDER_NOT_PAID: 'This order is no longer fully paid, so its delivery money cannot change.',
         DELIVERY_FEE_PROPOSAL_STALE: 'This delivery has moved on; the fee change no longer applies.',
         DELIVERY_FEE_PROPOSAL_SETTLEMENT_CONFLICT: 'Your earnings for this order can no longer be adjusted.',
         DELIVERY_FEE_PROPOSAL_VERSION_MISMATCH: 'The agency changed this fee. Check the new amount and answer again.',

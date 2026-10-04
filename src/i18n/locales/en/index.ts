@@ -30,6 +30,7 @@ import billing from './billing';
 import settings from './settings';
 import account from './account';
 import agency from './agency';
+import aiCopy from './aiCopy';
 
 export const en = {
     auth,
@@ -53,6 +54,7 @@ export const en = {
     settings,
     account,
     agency,
+    aiCopy,
 } as const;
 
 export default en;

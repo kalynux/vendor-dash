@@ -203,7 +203,6 @@ export const orders = {
             assignedAgent: 'Assigned Agent',
             agent: 'Agent: {{name}}',
             tracking: 'Tracking: {{number}}',
-            freeDelivery: 'Free delivery',
             deliveryTimeline: 'Delivery Timeline',
         },
 
@@ -424,17 +423,47 @@ export const orders = {
         bulkRetry: plural({ one: 'Dispatch it anyway', other: 'Dispatch these {{count}} anyway' }),
     },
 
+    /** Who paid delivery and what it cost you (2026-10-04) — every figure is the API's. */
+    deliveryMoney: {
+        customerPaidLabel: 'Customer paid delivery',
+        cashToRider: 'In cash to the rider',
+        freeForCustomer: 'Free',
+        youPay: 'Free delivery — you pay {{amount}}',
+        youPayUnpriced: 'Free delivery — you pay the delivery fee',
+        youPayPart: 'You also pay {{amount}} of the delivery',
+        reason: {
+            shop_threshold_met: 'The customer reached your free-delivery amount.',
+            threshold_not_met: 'Below your free-delivery amount, so the customer paid.',
+            cap_fallback: 'Too small an order to carry the delivery fee, so the customer paid it.',
+        },
+        shipmentFee: 'Delivery fee {{amount}}',
+        shipmentCustomer: 'paid by the customer',
+        shipmentYou: 'paid by you',
+        shipmentSplit: 'customer paid {{customer}}, you pay {{you}}',
+        tagFree: 'Free delivery',
+        tagCustomer: 'Customer paid delivery',
+    },
+
     /** Delivery-fee changes an agency asks the vendor to approve (2026-10-02). */
     feeProposals: {
         title: 'Delivery fee changes',
         fromAgency: 'From {{agency}}',
         fromAgent: 'From an agent of {{agency}}',
+        fromChangeAgency: 'You moved this parcel to {{agency}}',
+        fromCombined: 'Combined delivery price from {{agency}}',
         unknownAgency: 'the delivery agency',
         blocksPickup: 'The parcel can’t be picked up until you answer.',
+        blocksPickupCustomer: 'The parcel can’t be picked up until the customer answers.',
+        customerAnswers: 'The customer pays delivery on this parcel, so they answer this change.',
+        changeAgencyExplainer: 'The new company costs more. The customer is asked to pay the difference. If they decline, you pay it.',
         changedHighlight: 'The agency changed this fee. Check the new amount.',
         edits: plural({ one: 'Changed {{count}} time', other: 'Changed {{count}} times' }),
         status: {
             pending: 'Waiting for you',
+            waitingCustomer: 'Waiting for the customer',
+            waitingCustomerPayment: 'Waiting for the customer to pay',
+            coveredByYou: 'You paid the difference',
+            customerDeclined: 'Customer declined — you pay the difference',
             approved: 'Approved',
             rejected: 'Rejected',
             withdrawn: 'Withdrawn',
@@ -446,10 +475,17 @@ export const orders = {
             other: 'Withdrawn',
         },
         rejectionNote: 'Your note: {{note}}',
+        customerNote: 'Customer’s note: {{note}}',
+        youPayMore: 'You pay {{amount}} more for delivery on this order.',
         answeredOn: 'Answered on {{date}}',
         earnings: 'Your earnings on this order: {{before}} → {{after}}',
         approve: 'Approve',
         reject: 'Reject',
+        cover: 'Cover the difference',
+        coverDialog: {
+            title: 'Pay the difference yourself?',
+            body: 'The new delivery company is paid its price and the customer pays nothing more. The difference comes out of your earnings on this order.',
+        },
         approveDialog: {
             title: 'Approve the new delivery fee?',
             earningsDown: 'Your earnings on this order go down by {{amount}}.',
@@ -466,6 +502,7 @@ export const orders = {
         toast: {
             approved: 'New delivery fee approved',
             rejected: 'Fee change rejected',
+            covered: 'You cover the delivery difference',
         },
         banner: plural({
             one: '{{count}} fee change waiting for you',

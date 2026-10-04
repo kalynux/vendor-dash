@@ -25,6 +25,9 @@ import {
 import { ActivationBlockersPanel } from '@/components/products/simple/ActivationBlockersPanel';
 import { ConvertToAdvancedDialog } from '@/components/products/simple/ConvertToAdvancedDialog';
 import { projectSimpleError } from '@/components/products/simple/simpleFormErrors';
+import { useCategoryConflicts } from '@/components/products/categories/useCategoryConflicts';
+import { fromProductCategories, toCategoryWire } from '@/services/categories.service';
+import type { CategoryEntry } from '@/types/category.types';
 import {
   toFormValues,
   toUpdatePayload,
@@ -78,6 +81,8 @@ export function SimpleProductEdit() {
   const [fieldErrors, setFieldErrors] = useState<SimpleFieldErrors | undefined>();
   const [activation, setActivation] = useState<SimpleActivationMeta | null>(null);
   const [demoted, setDemoted] = useState(false);
+  const { run: runCategorySave, dialog: categoryConflictDialog } = useCategoryConflicts();
+  const [resolvedCategories, setResolvedCategories] = useState<CategoryEntry[] | null>(null);
   const [convertOpen, setConvertOpen] = useState(false);
   /** The single variant, kept so the pickup picker can see its stock mode. */
   const [variant, setVariant] = useState<ApiVariant | null>(null);
@@ -240,7 +245,28 @@ export function SimpleProductEdit() {
     ): Promise<boolean> => {
       if (!product) return false;
       try {
-        const res = await updateSimpleProduct(product.id, payload);
+        // "Did you mean …?" re-submits this same edit — the 422 saved nothing.
+        // Only a body that carries `categories` can be asked; the rest pass
+        // straight through.
+        const outcome = await runCategorySave(
+          values.categories,
+          (categories) => {
+            const body = payload.categories
+              ? { ...payload, categories: toCategoryWire(categories) }
+              : payload;
+            return updateSimpleProduct(product.id, body);
+          },
+          setResolvedCategories,
+        );
+        if (!outcome.ok) return false;
+        const res = outcome.value;
+        // What the server stored, with its spelling ("shoes" comes back as
+        // "Shoes"). Rebasing on it keeps the next diff honest, and the chips
+        // show it too.
+        const storedCategories = res.product.categories?.length
+          ? fromProductCategories(res.product.categories)
+          : outcome.categories;
+        if (payload.categories) setResolvedCategories(storedCategories);
         // Rebase the diff on what the server actually stored — the nested
         // defaultVariant is authoritative for the variant fields (e.g. a SKU it
         // generated or normalised), so the next save can't re-send a stale one.
@@ -253,6 +279,7 @@ export function SimpleProductEdit() {
         initialValuesRef.current = saved
           ? {
               ...values,
+              categories: storedCategories,
               sku: saved.sku,
               price: saved.price,
               stock: saved.stock,
@@ -270,7 +297,7 @@ export function SimpleProductEdit() {
               bargainMaxPrice:
                 'bargain' in saved ? saved.bargain?.maxPrice : values.bargainMaxPrice,
             }
-          : values;
+          : { ...values, categories: storedCategories };
         const wasDemoted = applyResult(res, wasActive);
         if (res.stockAdjustment) {
           // Remount the form so the vendor sees the quantity the server holds,
@@ -297,7 +324,7 @@ export function SimpleProductEdit() {
         return false;
       }
     },
-    [product, applyResult, t],
+    [product, applyResult, t, runCategorySave],
   );
 
   const handleSubmit = useCallback(
@@ -377,7 +404,7 @@ export function SimpleProductEdit() {
   );
 
   // ─── Delivery ───────────────────────────────────────────────────────────────
-  // freeDelivery and pickupLocation go through the simple endpoint so the
+  // pickupLocation goes through the simple endpoint so the
   // response refreshes meta.activation; the agency id is not part of that
   // contract and uses the standard product PATCH, which stays allowed.
 
@@ -388,8 +415,8 @@ export function SimpleProductEdit() {
       setIsSubmitting(true);
       try {
         const res = await updateSimpleProduct(product.id, payload);
-        // Deliberately does not touch initialValuesRef: freeDelivery and
-        // pickupLocation are not form fields (AgencySelector owns them), so
+        // Deliberately does not touch initialValuesRef: pickupLocation is
+        // not a form field (AgencySelector owns it), so
         // rebasing the diff here would only risk drift.
         applyResult(res, wasActive);
       } catch (err: unknown) {
@@ -412,11 +439,6 @@ export function SimpleProductEdit() {
       }
     },
     [product],
-  );
-
-  const handleFreeDeliveryChange = useCallback(
-    (freeDelivery: boolean) => patchSimple({ freeDelivery }),
-    [patchSimple],
   );
 
   const handlePickupLocationChange = useCallback(
@@ -613,6 +635,7 @@ export function SimpleProductEdit() {
               // the unsaved switch, as the wizard's review step does, so turning
               // it on offers the asking price in the same save.
               showBargainField={aiSearchOn}
+              resolvedCategories={resolvedCategories}
               stockNotice={
                 pendingStockRequest ? (
                   <PendingStockRequestNotice
@@ -631,8 +654,6 @@ export function SimpleProductEdit() {
                   productAgencyId={product.delivery?.agencyId ?? null}
                   isSaving={isSubmitting || isLocked}
                   onAgencyChange={handleAgencyChange}
-                  freeDelivery={product.delivery?.freeDelivery ?? false}
-                  onFreeDeliveryChange={handleFreeDeliveryChange}
                   pickupLocation={product.delivery?.pickupLocation ?? null}
                   onPickupLocationChange={handlePickupLocationChange}
                   pickup={product.pickup ?? null}
@@ -701,6 +722,7 @@ export function SimpleProductEdit() {
           navigate(`/dashboard/product-edit/${converted.id}`, { replace: true })
         }
       />
+      {categoryConflictDialog}
     </EditorPageShell>
   );
 }

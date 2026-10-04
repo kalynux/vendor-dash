@@ -54,6 +54,16 @@ export async function approveDeliveryFeeProposal(
   await api.post(`/vendor/orders/${orderId}/delivery-fee-proposals/${proposalId}/approve`, { version });
 }
 
+/**
+ * Take a change-of-agency difference on yourself now (2026-10-04): the new
+ * company is paid its price, the customer pays nothing more, your earnings
+ * carry the difference. No body, no `version` — only offered while
+ * `availableActions` has `cover`.
+ */
+export async function coverDeliveryFeeProposal(orderId: string, proposalId: string): Promise<void> {
+  await api.post(`/vendor/orders/${orderId}/delivery-fee-proposals/${proposalId}/cover`);
+}
+
 /** Keep the original fee. Same `version` rule as approve; `note` ≤ 500 chars. */
 export async function rejectDeliveryFeeProposal(
   orderId: string,

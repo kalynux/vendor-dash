@@ -33,6 +33,7 @@ function qs(p: StockRequestListParams): string {
   push('productId', p.productId);
   push('variantId', p.variantId);
   push('direction', p.direction);
+  push('search', p.search?.trim().slice(0, 100));
   return parts.length ? `?${parts.join('&')}` : '';
 }
 

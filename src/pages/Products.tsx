@@ -1,3 +1,4 @@
+import { categoryNames } from '@/services/categories.service';
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -199,6 +200,11 @@ const VECTORISATION_META: Record<
     className: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
     Icon: XCircle,
   },
+  skipped_no_credits: {
+    labelKey: 'products.ai.noCredits',
+    className: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
+    Icon: TriangleAlert,
+  },
 };
 
 function VectorisationBadge({
@@ -210,7 +216,8 @@ function VectorisationBadge({
 }) {
   const { t } = useTranslation();
   if (!enabled) return null;
-  const meta = VECTORISATION_META[status];
+  // A state the server adds later must not take the whole page down.
+  const meta = VECTORISATION_META[status] ?? VECTORISATION_META.not_started;
   const { Icon } = meta;
   return (
     <span
@@ -941,7 +948,7 @@ export function Products() {
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold text-sm truncate">{product.title}</p>
                       <p className="text-xs text-muted-foreground mt-0.5"><TypeLabel type={product.type} /></p>
-                      <p className="text-xs text-muted-foreground mt-0.5">{product.category}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5 truncate">{categoryNames(product.categories) || t('products.categories.none')}</p>
                       <AiSearchSwitch
                         product={product}
                         onRequest={(enable) => setAiSwitchRequest({ product, enable })}
@@ -1303,7 +1310,7 @@ export function Products() {
                             <ProductThumbnail product={product} size="md" />
                             <div>
                               <p className="font-medium">{product.title}</p>
-                              <p className="text-xs text-muted-foreground">{product.category}</p>
+                              <p className="text-xs text-muted-foreground">{categoryNames(product.categories) || t('products.categories.none')}</p>
                             </div>
                           </div>
                         </td>
@@ -1546,9 +1553,17 @@ function ProductGridCard({
             />
           </div>
           <div className="mt-2 flex items-center gap-1.5 flex-wrap">
-            <Badge variant="outline" className="text-xs">
-              {product.category}
-            </Badge>
+            {product.categories.length > 0 ? (
+              product.categories.map((c) => (
+                <Badge key={c.id} variant="outline" className="text-xs">
+                  {c.name}
+                </Badge>
+              ))
+            ) : (
+              <Badge variant="outline" className="text-xs font-normal text-muted-foreground">
+                {t('products.categories.none')}
+              </Badge>
+            )}
             {product.mode === 'simple' && (
               <Badge variant="outline" className="text-xs">
                 {t('products.wizard.modeQuick')}

@@ -104,17 +104,10 @@ export const products = {
 
     /** The chat-native description editor and its WhatsApp / Telegram preview. */
     editor: {
-        // Shown inside the empty editor. It is an example rather than an
-        // instruction because vendors copy the shape of what they see, and the
-        // shape — short intro, features, specs, one practical line — is most of
-        // what makes a description read well in a chat bubble.
-        placeholder:
-            'Nike Air Max 90 — original, sizes 40 to 45 👟\n\n' +
-            'Key features:\n' +
-            '• Genuine leather upper\n' +
-            '• Air cushioning, all-day comfort\n' +
-            '• 2-year warranty\n\n' +
-            'Delivery in 48h across Douala and Yaoundé 🚚',
+        // One plain line on purpose (asked for 2026-10-04): the long worked
+        // example read as clutter, and "Generate" beside the label now writes a
+        // full, chat-shaped description on demand.
+        placeholder: 'What it is, what makes it good, and the key details.',
         hint: 'Select text, then use the toolbar. No need to type any symbols.',
 
         toolbar: {
@@ -330,7 +323,6 @@ export const products = {
         stock: 'Stock',
         lowStockThreshold: 'Low-stock threshold',
         weight: 'Weight',
-        category: 'Category',
         tags: 'Tags',
         images: 'Images',
         pickupLocation: 'Pickup location',
@@ -340,7 +332,6 @@ export const products = {
         namePlaceholder: 'e.g. Nike Air Max 90',
         descriptionHelp: 'Describe your product — materials, features, use cases…',
         descriptionRequired: 'Required — a product with no description cannot be published.',
-        categoryPlaceholder: 'e.g. Apparel, Electronics, Footwear',
         compareAtOptional: 'Optional',
         compareAtHigherHint: 'Shown struck through when higher than the price.',
         compareAtTooLowHint: 'Customers only see a discount when this is higher than the price.',
@@ -564,7 +555,6 @@ export const products = {
         basicsDescription: 'Core details about your product. You can update these later.',
         productTitle: 'Product title',
         productTitlePlaceholder: 'e.g. Classic Cotton T-Shirt',
-        categoryPlaceholder: 'e.g. Apparel, Electronics, Digital Downloads',
         modeTitle: 'How do you want to add this product?',
         modeQuick: 'Quick',
         modeQuickDescription: 'One price, one stock count. Ready in a minute.',
@@ -775,6 +765,7 @@ export const products = {
         indexing: 'Indexing…',
         ready: 'AI search ready',
         failed: 'Indexing failed',
+        noCredits: 'Not indexed — top up credits',
         enable: 'Enable AI search',
         retry: 'Retry AI search',
         disable: 'Disable AI search',
@@ -814,16 +805,9 @@ export const products = {
         defaultConnectionLost:
             'Your default agency’s connection is no longer active. Pick another agency here or update your default in Settings.',
         usingDefaultAgency: 'The system will use your default agency — {{name}}.',
-        freeDelivery: 'Free delivery',
-        freeDeliveryHint:
-            'On by default. You cover the agency fee and the customer pays nothing extra at checkout.',
-        /** Shown the moment the switch goes off — the fee moves into the price, not onto the customer. */
-        freeDeliveryOffNotice:
-            'Delivery is never billed to the customer, so we will add the agency fee to the price of every variant of this product automatically.',
-        freeDeliveryExplainerLabel: 'Why turning free delivery off raises my prices',
-        freeDeliveryExplainerTitle: 'The customer never pays delivery separately',
-        freeDeliveryExplainerBody:
-            'Wi-Mall does not charge delivery at checkout — the vendor always covers the agency fee. “Free delivery” is therefore the normal case, not a discount you fund. If you would rather the customer carry that cost, the only way to do it is to raise each variant’s price by the agency fee, which is exactly what we do when this is off. Your listed prices go up, and your product reads as more expensive next to identical listings that leave it on.',
+        /** Under the agency + pickup pickers — free delivery is a shop setting since 2026-10-03. */
+        shopTermsNote: 'Who pays delivery is set once for your whole shop.',
+        shopTermsLink: 'Delivery terms',
         pickupLabel: 'Pickup location',
         pickupDescription:
             'Where the delivery agency collects this product from. Required to publish.',
@@ -997,11 +981,37 @@ export const products = {
         useGeneratedSku: 'Use an auto-generated SKU instead',
     },
 
+    /** The 1–5 category picker, shared by every product and service editor. */
+    categories: {
+        label: 'Categories',
+        hint: 'Up to 5. The first one is the main category. Tap another one to make it the main one.',
+        placeholder: 'Search, or type a new category',
+        main: 'Main',
+        makeMain: 'Make {{name}} the main category',
+        remove: 'Remove {{name}}',
+        limitReached: 'A product can have 5 categories at most.',
+        addNew: 'Add “{{name}}” as a new category',
+        didYouMean: 'Did you mean {{name}}?',
+        searching: 'Searching…',
+        noMatch: 'No categories yet. Type one to add it.',
+        loadFailed: 'Could not load the categories. You can still type one.',
+        none: 'No category',
+        conflict: {
+            title: 'Did you mean…?',
+            description:
+                'Some of your categories look like ones that already exist. Nothing was saved yet. Pick the existing one so buyers find your product next to similar ones, or keep yours.',
+            typed: 'You typed “{{name}}”',
+            keep: 'Keep “{{name}}” as a new category',
+            confirm: 'Save',
+        },
+    },
+
     /** Field-level validation. Referenced by the zod schemas via key. */
     validation: {
         titleMin: 'Title must be at least 3 characters',
         titleMax: 'Title must be 200 characters or less',
-        categoryRequired: 'Category is required',
+        categoryRequired: 'Add at least one category',
+        categoryMax: 'A product can have 5 categories at most',
         descriptionRequired: 'Description is required',
         tagEmpty: 'Tag cannot be empty',
         tagsUnique: 'Tags must be unique',
@@ -1066,8 +1076,6 @@ export const products = {
         formatsSaved: 'Formats saved.',
         agencyUpdated: 'Delivery agency updated.',
         agencyDefault: 'Using your default delivery agency.',
-        freeDeliveryEnabled: 'Free delivery enabled.',
-        freeDeliveryDisabled: 'Free delivery disabled.',
         pickupUpdated: 'Pickup location updated.',
         publishedBang: 'Product published!',
         savedAsDraft: 'Product saved as draft.',
@@ -1091,7 +1099,6 @@ export const products = {
         formatsFailed: "We couldn't save your formats. Please try again.",
         mediaFailed: "We couldn't save your images. Please try again.",
         agencyFailed: "We couldn't update the delivery agency. Please try again.",
-        freeDeliveryFailed: "We couldn't update free delivery. Please try again.",
         pickupFailed: "We couldn't update the pickup location. Please try again.",
         draftFailed: "We couldn't save your draft. Please try again.",
         /** Ceilings are independent requests — the ones that worked stayed saved. */

@@ -25,6 +25,7 @@ import { DateRangePicker } from '@/components/features/DateRangePicker';
 import { OrderStatusBadge } from '@/components/orders/OrderStatusBadge';
 import { MobileOrderDetailSheet } from '@/components/orders/MobileOrderDetailSheet';
 import { MobilePageHeader } from '@/components/layout/MobilePageHeader';
+import { ClosureRequestBanner } from '@/components/account-closure/ClosureRequestBanner';
 import { RefreshButton } from '@/components/common/RefreshButton';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useRouter } from '@/app-context';
@@ -283,6 +284,9 @@ export function Overview() {
 
         {/* Full-bleed above means the body restores main's own gutter. */}
         <div className="space-y-4 px-6 pb-4 pt-4">
+
+        {/* Phones only — wider screens get it from the shell, above every page. */}
+        <ClosureRequestBanner />
 
         {/* Total sales card with sparkline */}
         <Card>

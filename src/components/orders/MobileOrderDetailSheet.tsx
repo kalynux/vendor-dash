@@ -55,6 +55,7 @@ import { addNote, revokeEntitlement, restoreEntitlement, fetchNote, fetchOrderBy
 import { useOrderDispatch } from '@/hooks/use-order-dispatch';
 import { CodLimitShipmentNotice } from './CodLimitShipmentNotice';
 import { DeliveryFeeProposals } from './DeliveryFeeProposals';
+import { DeliveryCostNote, DeliverySummaryRow, ShipmentFeeLine } from './DeliveryMoney';
 import { RefundDialog } from '@/components/customers/RefundDialog';
 import { REFUND_REASON_KEYS } from '@/components/customers/customer.constants';
 import { useRefundEligibility } from '@/hooks/use-refund-eligibility';
@@ -541,6 +542,7 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                             {shipment.trackingNumber && (
                               <p className="text-xs text-muted-foreground mt-0.5">{t('orders.detail.shipping.tracking', { number: shipment.trackingNumber })}</p>
                             )}
+                            <ShipmentFeeLine fee={shipment.deliveryFee} currency={order.currency} className="mt-0.5" />
                             <ShipmentReviewControl
                               className="mt-2"
                               shipmentId={shipment.shipmentId}
@@ -579,12 +581,7 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                           <span className="text-muted-foreground">{t('orders.detail.summary.tax')}</span>
                           <span>{formatCurrency(order.tax, order.currency)}</span>
                         </div>
-                        {isPhysical && (
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">{t('orders.detail.summary.shipping')}</span>
-                            <span>{order.shipping === 0 ? t('orders.detail.summary.free') : formatCurrency(order.shipping, order.currency)}</span>
-                          </div>
-                        )}
+                        {isPhysical && <DeliverySummaryRow order={order} />}
                         {order.discount > 0 && (
                           <div className="flex justify-between">
                             <span className="text-muted-foreground">{t('orders.detail.summary.discount')}</span>
@@ -595,6 +592,7 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                           <span className="font-medium">{t('orders.detail.summary.total')}</span>
                           <span className="font-bold text-base">{formatCurrency(order.total, order.currency)}</span>
                         </div>
+                        {isPhysical && <DeliveryCostNote order={order} className="pt-1" />}
                       </div>
                     </Section>
                     <div className="h-4" />
@@ -619,18 +617,11 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                           <div className="flex-1 min-w-0">
                             <p className="font-medium text-sm truncate">{item.name}</p>
                             {item.sku && <p className="text-xs text-muted-foreground">{item.sku}</p>}
-                            {(isDigital || item.delivery?.freeDelivery) && (
+                            {isDigital && (
                               <div className="flex items-center gap-1.5 mt-1">
-                                {isDigital && (
-                                  <Badge variant="outline" className="text-xs gap-1 border-violet-300 text-violet-700 bg-violet-50">
-                                    <Download className="w-2.5 h-2.5" />{t('orders.orderType.digital')}
-                                  </Badge>
-                                )}
-                                {item.delivery?.freeDelivery && (
-                                  <Badge variant="outline" className="text-xs gap-1 border-green-300 text-green-700 bg-green-50">
-                                    <Truck className="w-2.5 h-2.5" />{t('orders.detail.shipping.freeDelivery')}
-                                  </Badge>
-                                )}
+                                <Badge variant="outline" className="text-xs gap-1 border-violet-300 text-violet-700 bg-violet-50">
+                                  <Download className="w-2.5 h-2.5" />{t('orders.orderType.digital')}
+                                </Badge>
                               </div>
                             )}
                             <p className="text-xs text-muted-foreground mt-0.5">{t('orders.detail.items.qty', { count: item.quantity })}</p>

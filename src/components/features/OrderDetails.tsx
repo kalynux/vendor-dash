@@ -45,6 +45,7 @@ import { addNote, fetchNote, revokeEntitlement, restoreEntitlement, fetchOrderBy
 import { useOrderDispatch } from '@/hooks/use-order-dispatch';
 import { CodLimitShipmentNotice } from '@/components/orders/CodLimitShipmentNotice';
 import { DeliveryFeeProposals } from '@/components/orders/DeliveryFeeProposals';
+import { DeliveryCostNote, DeliverySummaryRow, ShipmentFeeLine } from '@/components/orders/DeliveryMoney';
 import { RefundDialog } from '@/components/customers/RefundDialog';
 import { REFUND_REASON_KEYS } from '@/components/customers/customer.constants';
 import { useRefundEligibility } from '@/hooks/use-refund-eligibility';
@@ -566,6 +567,7 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
                         <p className="text-muted-foreground mt-1">{t('orders.detail.shipping.tracking', { number: shipment.trackingNumber })}</p>
                       )}
                     </div>
+                    <ShipmentFeeLine fee={shipment.deliveryFee} currency={currentOrder.currency} className="col-span-2" />
                     {/* Spans both columns: the rating is about the shipment, not
                         about the agency half or the agent half it sits under. */}
                     <ShipmentReviewControl
@@ -617,12 +619,7 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
                   <span className="text-muted-foreground">{t('orders.detail.summary.tax')}</span>
                   <span className="font-medium text-foreground">{formatCurrency(currentOrder.tax)}</span>
                 </div>
-                {isPhysical && (
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">{t('orders.detail.summary.shipping')}</span>
-                    <span className="font-medium text-foreground">{currentOrder.shipping === 0 ? t('orders.detail.summary.free') : formatCurrency(currentOrder.shipping)}</span>
-                  </div>
-                )}
+                {isPhysical && <DeliverySummaryRow order={currentOrder} />}
                 {currentOrder.discount > 0 && (
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">{t('orders.detail.summary.discount')}</span>
@@ -633,6 +630,7 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
                   <span className="font-semibold text-sm text-foreground">{t('orders.detail.summary.total')}</span>
                   <span className="font-bold text-base text-primary">{formatCurrency(currentOrder.total)}</span>
                 </div>
+                {isPhysical && <DeliveryCostNote order={currentOrder} className="pt-1" />}
               </div>
             </CardContent>
           </Card>
@@ -663,18 +661,11 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
                           {item.sku && <span>•</span>}
                           <Trans i18nKey="orders.detail.items.qty" params={{ count: item.quantity }} components={[<span className="font-semibold text-foreground" />]} />
                         </div>
-                        {(isDigital || item.delivery?.freeDelivery) && (
+                        {isDigital && (
                           <div className="flex items-center gap-1.5 mt-1.5">
-                            {isDigital && (
-                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-violet-300 text-violet-700 bg-violet-50 gap-1 font-semibold">
-                                <Download className="w-2.5 h-2.5" />{t('orders.orderType.digital')}
-                              </Badge>
-                            )}
-                            {item.delivery?.freeDelivery && (
-                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-green-300 text-green-700 bg-green-50 gap-1 font-semibold">
-                                <Truck className="w-2.5 h-2.5" />{t('orders.detail.shipping.freeDelivery')}
-                              </Badge>
-                            )}
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-violet-300 text-violet-700 bg-violet-50 gap-1 font-semibold">
+                              <Download className="w-2.5 h-2.5" />{t('orders.orderType.digital')}
+                            </Badge>
                           </div>
                         )}
                       </div>

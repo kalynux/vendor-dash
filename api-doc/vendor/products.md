@@ -157,7 +157,6 @@ This is the full shape of a product object returned by all read endpoints.
 {
   "delivery": {
     "agencyId": null,
-    "freeDelivery": false,
     "pickupLocation": {
       "source": "agency_storage",
       "vendorAddressId": null,
@@ -259,7 +258,8 @@ GET /api/vendor/products
 | `type` | `"physical" \| "digital" \| "service"` | Drives placeholder icon choice and type label. |
 | `status` | `"draft" \| "active" \| "archived" \| "pending_review" \| "suspended"` | Passed to `StatusBadge`; used for client-side filtering. |
 | `mode` | `"simple" \| "advanced"` | ⚠ **Present on every row and missing from this table until 2026-09-06** (`ProductListService.ts:87`). It decides which edit route the row action opens: a `simple` product **rejects** the variant and option endpoints, so sending a row into the advanced editor is a dead end. |
-| `category` | string | Category label/badge text. |
+| `categories` | `{ id, name, slug }[]` | The product's 1–5 categories from the shared list, vendor's order (first = primary). Since 2026-10-04 — see [categories.md](./categories.md). |
+| `category` | string \| null | ⚠ **Deprecated** — `categories[0].name`. Kept for the transition. |
 | `fileIds` | `FileDetail[]` | Populated product images. Empty array when none. Each entry: `{ id, key, url, access, mimeType, size, originalName? }` — ⚠ **`access` was missing from this list until 2026-09-08**; `url` is `string \| null` and `access` is `"public" \| "authorized" \| "quota_blocked"` (`read-models/file-detail.resolver.ts:67-88`). The frontend's `ProductThumbnail` shows the first entry. |
 | `hasVariants` | boolean | Drives the "Has variants" / "Variants" badge. |
 | `vectorisationEnabled` | boolean | Vendor opt-in flag. Passed to `VectorisationBadge`. |
@@ -355,7 +355,8 @@ All products start in `draft` status. The `type` cannot be changed after creatio
 |-------|------|----------|-----------|
 | `type` | string | ✅ | `physical`, `digital`, or `service` |
 | `title` | string | ✅ | 3–200 characters |
-| `category` | string | ✅ | Non-empty string |
+| `categories` | `({ id } \| { name, confirmNew? })[]` | ✅ (or `category`) | 1–5 entries from the shared list, or typed names. A look-alike name answers `422 CATEGORY_SIMILAR_EXISTS` ("Did you mean …?") unless `confirmNew: true`. See [categories.md](./categories.md). |
+| `category` | string | ⚠ Deprecated | The old single free-text value — still accepted when `categories` is absent, treated as one `{ name }`. Never send both. |
 | `description` | string | ✅ | Non-empty string. Plain text — no markup. |
 | `descriptionRich` | object \| null | No | Structured description powering WhatsApp / Telegram formatting. `description` must be its plain-text projection — see [product-description-rich.md](./product-description-rich.md). |
 | `tags` | string[] | No | Array of unique, non-empty strings |
@@ -441,7 +442,6 @@ Partial update — only provided fields are changed. Allowed on `draft` and `act
   },
   "delivery": {
     "agencyId": "683abc1234567890abcdef01",
-    "freeDelivery": false,
     "pickupLocation": {
       "source": "vendor_address",
       "vendorAddressId": "683abc1234567890abcdef02"
@@ -458,7 +458,8 @@ Partial update — only provided fields are changed. Allowed on `draft` and `act
 | `title` | string | No | 3–200 characters |
 | `description` | string | No | Plain text — no markup. |
 | `descriptionRich` | object \| null | No | Structured description powering WhatsApp / Telegram formatting. `description` must be its plain-text projection — see [product-description-rich.md](./product-description-rich.md). |
-| `category` | string | No | Non-empty string |
+| `categories` | `({ id } \| { name, confirmNew? })[]` | No | **Full replacement** of the 1–5 categories; omit to keep them. Same rules as on create — see [categories.md](./categories.md). |
+| `category` | string | No | ⚠ Deprecated single value, treated as `categories: [{ name }]`. Never send both. |
 | `tags` | string[] | No | **Full replacement** of tags array |
 | `seoTitle` | string | No | Max 60 characters |
 | `seoDescription` | string | No | Max 160 characters |
@@ -471,9 +472,11 @@ Partial update — only provided fields are changed. Allowed on `draft` and `act
 
 | Field | Type | Notes |
 |-------|------|-------|
-| `agencyId` | string \| null | The delivery agency ObjectId this product should use instead of the vendor's default, or `null` to clear the override and fall back to the vendor's default. Either sub-field may be sent independently (merged against the existing value) — at least one of `agencyId`/`freeDelivery`/`pickupLocation` must be present. |
-| `freeDelivery` | boolean | Marketing/order flag, independent of agency resolution. |
+| `agencyId` | string \| null | The delivery agency ObjectId this product should use instead of the vendor's default, or `null` to clear the override and fall back to the vendor's default. Either sub-field may be sent independently (merged against the existing value) — at least one of `agencyId`/`pickupLocation` must be present. |
 | `pickupLocation` | object \| null | Where the resolved delivery agency should collect this product from. `null` clears it. See sub-fields below. |
+
+> [!IMPORTANT]
+> **There is no `freeDelivery` sub-field any more (2026-10-03, ADR-A11).** Free delivery is a **shop** setting — `PUT /api/vendor/profile/delivery-terms` ([profile.md](./profile.md#delivery-terms-2026-10-03-adr-a10)). `delivery` is `.strict()`, so a body still sending `freeDelivery` is a `400`, and product reads no longer return it.
 
 **`delivery.pickupLocation` sub-fields:**
 

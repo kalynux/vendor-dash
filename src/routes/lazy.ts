@@ -54,6 +54,9 @@ export const ForgotPassword = lazy(() =>
 export const ResetPassword = lazy(() =>
     import('@/pages/auth').then((m) => ({ default: m.ResetPassword })),
 );
+export const AccountClosed = lazy(() =>
+    import('@/pages/auth').then((m) => ({ default: m.AccountClosed })),
+);
 
 // ─── Onboarding ───────────────────────────────────────────────────────────────
 // The guard stays eager — it is what decides whether any of this is needed, and
@@ -108,6 +111,9 @@ export const Settings = lazy(() =>
     import('@/pages/Settings').then((m) => ({ default: m.Settings })),
 );
 export const Account = lazy(() => import('@/pages/Account').then((m) => ({ default: m.Account })));
+export const AccountClosure = lazy(() =>
+    import('@/pages/AccountClosure').then((m) => ({ default: m.AccountClosure })),
+);
 export const Transactions = lazy(() =>
     import('@/pages/Transactions').then((m) => ({ default: m.Transactions })),
 );

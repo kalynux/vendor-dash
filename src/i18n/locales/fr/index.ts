@@ -31,6 +31,7 @@ import billing from './billing';
 import settings from './settings';
 import account from './account';
 import agency from './agency';
+import aiCopy from './aiCopy';
 
 export const fr: DeepPartial<Messages> = {
     auth,
@@ -54,6 +55,7 @@ export const fr: DeepPartial<Messages> = {
     settings,
     account,
     agency,
+    aiCopy,
 };
 
 export default fr;

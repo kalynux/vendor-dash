@@ -56,6 +56,9 @@ import type {
   ApiPickupLocation,
 } from '@/types/product.types';
 import type { BasicInfoFormValues } from '@/components/products/schemas/product.schemas';
+import { useCategoryConflicts } from '@/components/products/categories/useCategoryConflicts';
+import { toCategoryWire } from '@/services/categories.service';
+import type { CategoryEntry } from '@/types/category.types';
 import type { VariantPhase1Payload, VariantPhase2Payload } from '@/components/products/variants';
 
 // ─── Step definitions ─────────────────────────────────────────────────────────
@@ -155,6 +158,10 @@ export function ProductUpload() {
   const fmt = useFormatters();
   const apiError = useApiError();
   const [state, dispatch] = useReducer(wizardReducer, INITIAL_STATE);
+  const { run: runCategorySave, dialog: categoryConflictDialog } = useCategoryConflicts();
+  const [resolvedCategories, setResolvedCategories] = useState<CategoryEntry[] | null>(null);
+  // Photos picked in the description's "Generate" popup — the photo step opens with them.
+  const [aiPhotos, setAiPhotos] = useState<ApiFileDetail[]>([]);
   // Session-local variant image overrides (persisted immediately server-side;
   // kept here so the matrix shows current images after a step remount).
   const [variantImageEdits, setVariantImageEdits] = useState<Record<string, ApiFileDetail[]>>({});
@@ -218,51 +225,42 @@ export function ProductUpload() {
       const values = updates._basicInfoValues;
       if (!values || !state.productType) return;
 
+      const productType = state.productType;
       dispatch({ type: 'SET_SAVING', value: true });
       try {
-        const product = await createProduct({
-          type: state.productType,
-          title: values.title,
-          category: values.category,
-          // Emits `description` (the plain projection) alongside
-          // `descriptionRich` — see RICH_DESCRIPTION_WIRE_ENABLED.
-          ...descriptionCreateWire(values.descriptionRich),
-          tags: values.tags,
-          seoTitle: values.seoTitle || undefined,
-          seoDescription: values.seoDescription || undefined,
-        });
-
-        // Free delivery is ON for every new physical product. `POST /products`
-        // takes no `delivery` block, so the default has to be written straight
-        // after the create — it cannot ride along.
-        //
-        // Not a promotion: the platform never bills delivery to the customer at
-        // checkout, so the vendor carries the agency fee either way, and `false`
-        // only means the fee gets folded into the price instead. Starting there
-        // would quietly make every new listing look more expensive than it is.
-        //
-        // Deliberately non-blocking — a draft that exists with the wrong default
-        // is recoverable from the review step's switch; a wizard that refuses to
-        // advance because a default could not be written is not.
-        let created = product;
-        if (state.productType === 'physical') {
-          try {
-            const { data } = await updateProduct(product.id, {
-              delivery: { freeDelivery: true },
-            });
-            created = data;
-          } catch {
-            // Left at the backend default; the review step shows the real value.
-          }
+        // A "Did you mean …?" answer re-submits this same create — the 422
+        // means nothing was written.
+        const saved = await runCategorySave(
+          values.categories,
+          (categories) =>
+            createProduct({
+              type: productType,
+              title: values.title,
+              categories: toCategoryWire(categories),
+              // Emits `description` (the plain projection) alongside
+              // `descriptionRich` — see RICH_DESCRIPTION_WIRE_ENABLED.
+              ...descriptionCreateWire(values.descriptionRich),
+              tags: values.tags,
+              seoTitle: values.seoTitle || undefined,
+              seoDescription: values.seoDescription || undefined,
+            }),
+          setResolvedCategories,
+        );
+        if (!saved.ok) {
+          dispatch({ type: 'SET_SAVING', value: false });
+          return;
         }
+        const product = saved.value;
 
-        advance({ serverProduct: created, productId: created.id });
+        // Free delivery is a shop setting since 2026-10-03 (Settings → Policies
+        // → Delivery terms) — nothing per product to write after the create.
+        advance({ serverProduct: product, productId: product.id });
       } catch (err: unknown) {
         const msg = apiError.resolve(err, { fallbackKey: 'products.errors.saveFailed' });
         dispatch({ type: 'SET_STEP_ERROR', error: msg });
       }
     },
-    [state.productType, state.currentStep, state.completedSteps],
+    [state.productType, state.currentStep, state.completedSteps, runCategorySave],
   );
 
   // ─── Media ───────────────────────────────────────────────────────────────────
@@ -643,29 +641,6 @@ export function ProductUpload() {
     [state.productId],
   );
 
-  const handleFreeDeliveryChange = useCallback(
-    async (freeDelivery: boolean) => {
-      const productId = state.productId;
-      if (!productId) return;
-      dispatch({ type: 'SET_SAVING', value: true });
-      try {
-        await updateProduct(productId, { delivery: { freeDelivery } });
-        const updated = await fetchProductById(productId);
-        dispatch({ type: 'SAVE_COMPLETE', updates: { serverProduct: updated } });
-        toast.success(
-          t(freeDelivery
-            ? 'products.toast.freeDeliveryEnabled'
-            : 'products.toast.freeDeliveryDisabled'),
-        );
-      } catch (err: unknown) {
-        const msg = apiError.resolve(err, { fallbackKey: 'products.errors.freeDeliveryFailed' });
-        dispatch({ type: 'SET_STEP_ERROR', error: msg });
-        toast.error(msg);
-      }
-    },
-    [state.productId],
-  );
-
   const handlePickupLocationChange = useCallback(
     async (pickupLocation: ApiPickupLocation | null) => {
       const productId = state.productId;
@@ -827,9 +802,19 @@ export function ProductUpload() {
       case 'type':
         return <StepProductMode onSelect={handleModeSelect} />;
       case 'basic-info':
-        return <StepBasicInfo {...sharedStepProps} onSaveComplete={handleBasicInfoSave} />;
+        return (
+          <StepBasicInfo
+            {...sharedStepProps}
+            onSaveComplete={handleBasicInfoSave}
+            resolvedCategories={resolvedCategories}
+            aiPhotos={aiPhotos}
+            onAiPhotosPicked={setAiPhotos}
+          />
+        );
       case 'media':
-        return <StepMedia {...sharedStepProps} onSaveComplete={handleMediaSave} />;
+        return (
+          <StepMedia {...sharedStepProps} onSaveComplete={handleMediaSave} pendingFiles={aiPhotos} />
+        );
       case 'options-variants':
         return state.productId ? (
           <StepVariants
@@ -856,7 +841,6 @@ export function ProductUpload() {
             onPublish={handlePublish}
             onSaveDraft={handleSaveDraft}
             onAgencyChange={handleAgencyChange}
-            onFreeDeliveryChange={handleFreeDeliveryChange}
             onPickupLocationChange={handlePickupLocationChange}
           />
         );
@@ -872,6 +856,8 @@ export function ProductUpload() {
       backTo="/dashboard/products"
       backLabel={t('products.wizard.backToProducts')}
     >
+      {categoryConflictDialog}
+
       {/* The stepper sits on the page, not in a card of its own — on a phone it
           is a single line over a progress bar (see ProductStepIndicator). */}
       {state.productType && visibleSteps.length > 0 && (

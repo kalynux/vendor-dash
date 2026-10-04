@@ -54,6 +54,11 @@ const STATUS_LABEL_KEYS: Record<ConnectionStatus, TranslationKey> = {
     terminated: 'agency.status.terminated',
 };
 
+/** Ended because the agency closed its account — `connection.ended_by_closure`. */
+function isClosedByAgency(connection: ConnectionDto): boolean {
+    return connection.status === 'terminated' && connection.termination?.reason === 'role_closed';
+}
+
 function ConnectionRowActions({
     connection,
     actions,
@@ -152,6 +157,10 @@ function ConnectionRowActions({
         }
         return <Badge variant="secondary">{t('agency.connections.awaitingAgency')}</Badge>;
     }
+
+    // The agency closed its account (ADR-A10). There is nobody left to ask, so
+    // no "Request again" — the badge already says what happened.
+    if (isClosedByAgency(connection)) return null;
 
     // rejected / withdrawn / terminated
     const key = `request:${agencyId}`;
@@ -329,7 +338,9 @@ export function ConnectionsList({
                                             {agency?.kycVerified && <VerifiedBadge kind="agency" />}
                                         </p>
                                         <Badge variant="secondary" className={cn('text-[10px] mt-0.5', STATUS_BADGE_CLASS[connection.status])}>
-                                            {t(STATUS_LABEL_KEYS[connection.status])}
+                                            {isClosedByAgency(connection)
+                                                ? t('agency.status.agencyClosed')
+                                                : t(STATUS_LABEL_KEYS[connection.status])}
                                         </Badge>
                                     </div>
                                 </div>

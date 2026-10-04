@@ -434,6 +434,27 @@ export const settings = {
         loadFailed: 'Impossible de charger vos conditions de paiement à la livraison.',
         saveFailed: 'Impossible d’enregistrer vos conditions de paiement à la livraison.',
     },
+    deliveryTerms: {
+        title: 'Conditions de livraison',
+        info: 'Qui paie la livraison des commandes de votre boutique. S’enregistre à part : la modifier ne demande pas à vos agences de vous approuver à nouveau, et les commandes déjà passées gardent leurs conditions.',
+        modes: {
+            always: 'Toujours offerte aux clients',
+            alwaysHint: 'Vous payez la livraison de chaque commande.',
+            never: 'Les clients paient la livraison',
+            neverHint: 'Les frais de livraison s’ajoutent à la commande du client. Ils ne sont pas retirés de vos gains.',
+            above: 'Offerte à partir d’un montant',
+            aboveHint: 'Vous payez la livraison quand les articles du client venant de votre boutique atteignent ce montant. En dessous, le client paie.',
+        },
+        amountLabel: 'Livraison offerte à partir de',
+        amountPlaceholder: 'Par exemple 20000',
+        amountInvalid: 'Saisissez un montant entier entre {{min}} et {{max}}.',
+        youPayNote: 'Quand la livraison est offerte au client, les frais de l’agence de livraison sont retirés de vos gains.',
+        smallOrderNote: 'Même avec la livraison offerte, une très petite commande dont la livraison coûterait plus de 30 % de son montant est facturée au client au lieu d’être refusée.',
+        lastChanged: 'Modifié le {{date}}',
+        saved: 'Conditions de livraison enregistrées',
+        loadFailed: 'Impossible de charger vos conditions de livraison.',
+        saveFailed: 'Impossible d’enregistrer vos conditions de livraison.',
+    },
 };
 
 export default settings;

@@ -4,6 +4,7 @@ import { bargainPatch, isCeilingValid } from '@/components/products/bargain';
 import { PRODUCT_IMAGE_LIMIT } from '@/components/products/media.constants';
 import { descriptionCreateWire, descriptionUpdateWire, hydrateDoc } from '@/lib/richtext';
 import type { TranslationKey } from '@/i18n';
+import { fromProductCategories, sameCategoryWire, toCategoryWire } from '@/services/categories.service';
 import type {
   ApiProductDetail,
   ApiVariant,
@@ -43,7 +44,7 @@ const optionalNonNegative = (message: TranslationKey) =>
   optionalNumber(message).refine((n) => n === undefined || n >= 0, message);
 
 // ─── Schema ───────────────────────────────────────────────────────────────────
-// Extends basicInfoSchema rather than copying it: title 3–200, category,
+// Extends basicInfoSchema rather than copying it: title 3–200, categories,
 // description, unique tags, seoTitle ≤60 and seoDescription ≤160 are already
 // exactly the simple-mode contract, and one source of truth cannot drift.
 //
@@ -133,7 +134,7 @@ export function toFormValues(
 ): SimpleProductFormValues {
   return {
     title: product.title,
-    category: product.category,
+    categories: fromProductCategories(product.categories),
     description: product.description,
     // Falls back to parsing the plain description when the backend has no rich
     // document for this product — every product predating the editor, plus
@@ -173,19 +174,13 @@ export function toCreatePayload(
     // `values.description.trim()` produced — derived from the document rather
     // than from the (now read-only) mirror the form carries.
     ...descriptionCreateWire(values.descriptionRich),
-    category: values.category.trim(),
+    categories: toCategoryWire(values.categories),
     price: values.price,
     isInfiniteStock: values.isInfiniteStock,
     fileIds: values.fileIds,
     publish,
-    // Free delivery is ON for every new product, overriding the endpoint's
-    // `false` default. It is not a promotion: the platform never bills delivery
-    // to the customer at checkout, so the vendor carries the agency fee either
-    // way, and the only thing `false` changes is that the fee gets folded into
-    // the price instead. Starting there would quietly make every new listing
-    // look more expensive than it is. The switch on the edit page is where a
-    // vendor opts out, with the consequence spelled out next to it.
-    freeDelivery: true,
+    // No `freeDelivery`: since 2026-10-03 it is a shop setting (delivery
+    // terms), and the `.strict()` endpoint refuses the key with a 400.
     // `pickupLocation` is deliberately absent: omitting it lets the backend
     // derive it, and auto-derivation never fails the call — it just declines
     // and reports why in meta.activation.pickupReason.
@@ -243,8 +238,11 @@ export function toUpdatePayload(
   // silently drop a bold-only edit.
   Object.assign(payload, descriptionUpdateWire(current.descriptionRich, initial.descriptionRich));
 
-  const category = current.category.trim();
-  if (category !== initial.category.trim()) payload.category = category;
+  // Compared as the body it would send: the list is a full replacement and its
+  // order matters (the first is the main category), so any difference resends it.
+  if (!sameCategoryWire(current.categories, initial.categories)) {
+    payload.categories = toCategoryWire(current.categories);
+  }
 
   if (!sameStringArray(current.tags, initial.tags)) payload.tags = current.tags;
 

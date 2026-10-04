@@ -17,6 +17,7 @@ import {
   CalendarClock,
   AlertTriangle,
   XCircle,
+  Store,
   type LucideIcon,
 } from 'lucide-react';
 import type {
@@ -78,6 +79,10 @@ export function notificationRoute(
       return n.aggregateId
         ? `/dashboard/product-edit/${encodeURIComponent(n.aggregateId)}`
         : '/dashboard/products';
+    case 'account':
+      // `account.closure_requested`. One open request per shop, so the id is
+      // not needed: the screen reads it from `GET /me/closure-request`.
+      return '/dashboard/account/closure';
     default:
       return '/dashboard/notifications';
   }
@@ -89,7 +94,7 @@ export function notificationRoute(
  * `notificationRoute` above covers the in-app inbox and push, where we get an
  * `aggregateType`. Email, WhatsApp and Telegram cannot carry structured data, so
  * their button is a bare URL — `{VENDOR_APP_URL}/{path}` — and `path` is one of
- * exactly eight labels (api-doc/notifications/deep-links.md). Without this,
+ * exactly nine labels (api-doc/notifications/deep-links.md). Without this,
  * `https://vendor.wi-mall.com/orders/665f…` hits App.tsx's catch-all and
  * redirects to `/dashboard`, losing the id: a silent wrong page rather than a
  * 404, which is worse.
@@ -129,6 +134,9 @@ export function routeFromNotificationPath(path: string): string | null {
       return '/dashboard/tickets';
     case 'plans':
       return '/dashboard/account/billing';
+    case 'account':
+      // Only `account/closure` exists — the shop-closure request (ADR-A10).
+      return tail === 'closure' ? '/dashboard/account/closure' : null;
     case 'settings':
       // Only `settings/storage` exists in the vocabulary. The media-storage quota
       // is rendered on Account → Billing, not under Settings — see
@@ -150,6 +158,7 @@ const AGGREGATE_ACTION_LABEL: Record<NotificationAggregateType, TranslationKey> 
   plan: 'notifications.actionLabels.plan',
   stock_request: 'notifications.actionLabels.stockRequest',
   product: 'notifications.actionLabels.product',
+  account: 'notifications.actionLabels.account',
 };
 
 /**
@@ -214,6 +223,12 @@ const TYPE_VISUALS: Record<NotificationType, Visual> = {
   'delivery_fee_proposal.edited': { Icon: CircleDollarSign, iconWrap: 'bg-amber-100 text-amber-600', dot: 'bg-amber-500' },
   // Nothing to answer any more — informational.
   'delivery_fee_proposal.withdrawn': { Icon: CircleDollarSign, iconWrap: 'bg-gray-100 text-gray-600', dot: 'bg-gray-500' },
+  // Already settled — money left your earnings; nothing to answer.
+  'delivery_fee_proposal.customer_declined': { Icon: CircleDollarSign, iconWrap: 'bg-orange-100 text-orange-600', dot: 'bg-orange-500' },
+  // Red: the shop is the subject. The vendor has to answer it within 7 days.
+  'account.closure_requested': { Icon: Store, iconWrap: 'bg-red-100 text-red-600', dot: 'bg-red-500' },
+  // Grey: the connection is already over; there is nothing to answer.
+  'connection.ended_by_closure': { Icon: Handshake, iconWrap: 'bg-gray-100 text-gray-600', dot: 'bg-gray-500' },
 };
 
 const AGGREGATE_FALLBACK: Record<NotificationAggregateType, Visual> = {
@@ -226,6 +241,7 @@ const AGGREGATE_FALLBACK: Record<NotificationAggregateType, Visual> = {
   plan: { Icon: CalendarClock, iconWrap: 'bg-amber-100 text-amber-600', dot: 'bg-amber-500' },
   stock_request: { Icon: PackageSearch, iconWrap: 'bg-amber-100 text-amber-600', dot: 'bg-amber-500' },
   product: { Icon: Package, iconWrap: 'bg-blue-100 text-blue-600', dot: 'bg-blue-500' },
+  account: { Icon: Store, iconWrap: 'bg-red-100 text-red-600', dot: 'bg-red-500' },
 };
 
 const DEFAULT_VISUAL: Visual = { Icon: Bell, iconWrap: 'bg-gray-100 text-gray-600', dot: 'bg-gray-500' };

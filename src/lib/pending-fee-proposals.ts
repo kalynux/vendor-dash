@@ -9,6 +9,11 @@ import { listDeliveryFeeProposals } from '@/services/delivery-fee-proposals.serv
  * `orderId` appears. A pending proposal blocks pickup, which is why the count
  * is worth a banner. Refreshed on mount and after every approve/reject —
  * `refreshPendingFeeProposals()` from wherever the answer was sent.
+ *
+ * Since 2026-10-04 a pending proposal is not always the vendor's to answer: on
+ * a customer-paid parcel the customer decides (`availableActions: []`), and a
+ * change-agency difference only offers an optional `cover`. Only proposals
+ * that carry `approve`/`reject` count as waiting for the vendor.
  */
 
 interface Snapshot {
@@ -27,8 +32,11 @@ export function refreshPendingFeeProposals(): Promise<void> {
   if (inFlight) return inFlight;
   inFlight = listDeliveryFeeProposals({ status: 'pending', limit: 100 })
     .then(({ data, meta }) => {
-      const orderIds = Array.from(new Set(data.map((p) => p.orderId)));
-      snapshot = { count: meta?.total ?? data.length, orderIds };
+      const yours = data.filter((p) => p.availableActions.includes('approve') || p.availableActions.includes('reject'));
+      const orderIds = Array.from(new Set(yours.map((p) => p.orderId)));
+      // Past the first 100 the total is an estimate: it drops only the ones seen to be the customer's.
+      const total = meta?.total ?? data.length;
+      snapshot = { count: Math.max(yours.length, total - (data.length - yours.length)), orderIds };
       listeners.forEach((l) => l());
     })
     // Non-fatal: the badges keep their last known value.
