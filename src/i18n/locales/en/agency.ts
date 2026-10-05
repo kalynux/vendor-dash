@@ -134,6 +134,7 @@ export const agency = {
     },
 
     browse: {
+        found: plural({ one: '{{count}} agency found', other: '{{count}} agencies found' }),
         title: 'Browse agencies',
         description: 'Find a delivery agency that covers the areas you sell to.',
         searchPlaceholder: 'Search agencies…',
@@ -150,6 +151,10 @@ export const agency = {
         emptyFiltered: 'No agencies match your search or filters.',
         emptyNone: 'No delivery agencies are available in your area yet.',
         viewDetailsFor: 'View details for {{name}}',
+        /** The document button on agency cards and connection rows — opens the agency's terms. */
+        terms: 'Terms',
+        viewTerms: 'View terms',
+        viewTermsFor: 'View the terms of {{name}}',
     },
 
     /** The browse-tab filter sheet. */
@@ -175,6 +180,12 @@ export const agency = {
     },
 
     detail: {
+        /** Who pays for returns, under "Cost paid by" — so not "Vendor bears cost" again. */
+        payer: {
+            vendor: 'You (the vendor)',
+            agency: 'The agency',
+            customer: 'The customer',
+        },
         kycVerified: 'KYC Verified',
         unverified: 'Unverified',
         headquarters: 'Headquarters',

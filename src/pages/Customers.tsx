@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Users, Tag, ChevronRight, Loader2, ShoppingBag,
 } from 'lucide-react';
@@ -62,7 +63,19 @@ export function Customers() {
   const [page, setPage] = useState(dCache?.page ?? 1);
 
   const [flags, setFlags] = useState<CustomerFlag[]>([]);
-  const [detailId, setDetailId] = useState<string | null>(null);
+  // `?view=<customerId>` opens that customer straight away — the top-bar
+  // search links here. The param is dropped once read, so a refresh or Back
+  // does not reopen it (same as Orders' `?view=`).
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [detailId, setDetailId] = useState<string | null>(() => searchParams.get('view'));
+  useEffect(() => {
+    const viewId = searchParams.get('view');
+    if (!viewId) return;
+    setDetailId(viewId);
+    const next = new URLSearchParams(searchParams);
+    next.delete('view');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
   const [flagsManagerOpen, setFlagsManagerOpen] = useState(false);
   const [filterSheetOpen, setFilterSheetOpen] = useState(false);
 

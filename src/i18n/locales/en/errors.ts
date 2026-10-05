@@ -425,7 +425,7 @@ export const errors = {
 
         // ── Refunds ───────────────────────────────────────────────────────────
         REFUND_NOT_ELIGIBLE: 'This order is not eligible for a refund.',
-        REFUND_WINDOW_EXPIRED: 'The refund window for this order has closed.',
+        REFUND_WINDOW_EXPIRED: 'The refund window for this order, counted from its delivery date, has closed.',
         REFUND_POLICY_DISABLED: 'Refunds are turned off in your return policy.',
         REFUND_AMOUNT_EXCEEDS_MAX: 'That refund is larger than what remains refundable on this order.',
         REFUND_ALREADY_FULLY_REFUNDED: 'This order has already been fully refunded.',
@@ -433,6 +433,9 @@ export const errors = {
         REFUND_ORDER_NOT_PAID: 'This order has not been paid, so there is nothing to refund.',
         REFUND_GATEWAY_FAILED: 'The payment provider could not process the refund. Please try again.',
         REFUND_GATEWAY_NOT_SUPPORTED: 'Refunds are not supported for the payment method used.',
+        /** 409 since 2026-10-05: a refund of this order is already under way. */
+        REFUND_ALREADY_OPEN:
+            'A refund of this order is already in progress. You can follow it on the order.',
         REFUND_ORDER_NOT_FOUND: 'We could not find that order.',
         REFUND_ORDER_IS_COD:
             'This order was paid in cash on delivery, so there is no payment to refund. Settle it with the customer directly.',

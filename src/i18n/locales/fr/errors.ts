@@ -313,7 +313,7 @@ export const errors = {
 
         // ── Remboursements ────────────────────────────────────────────────────
         REFUND_NOT_ELIGIBLE: "Cette commande n'est pas éligible à un remboursement.",
-        REFUND_WINDOW_EXPIRED: 'Le délai de remboursement de cette commande est écoulé.',
+        REFUND_WINDOW_EXPIRED: 'Le délai de remboursement de cette commande, compté à partir de sa livraison, est écoulé.',
         REFUND_POLICY_DISABLED: 'Les remboursements sont désactivés dans votre politique de retour.',
         REFUND_AMOUNT_EXCEEDS_MAX: 'Ce remboursement dépasse le montant encore remboursable sur cette commande.',
         REFUND_ALREADY_FULLY_REFUNDED: 'Cette commande a déjà été intégralement remboursée.',
@@ -321,6 +321,8 @@ export const errors = {
         REFUND_ORDER_NOT_PAID: "Cette commande n'a pas été payée, il n'y a donc rien à rembourser.",
         REFUND_GATEWAY_FAILED: "Le prestataire de paiement n'a pas pu traiter le remboursement. Réessayez.",
         REFUND_GATEWAY_NOT_SUPPORTED: 'Les remboursements ne sont pas pris en charge pour ce moyen de paiement.',
+        REFUND_ALREADY_OPEN:
+            'Un remboursement de cette commande est déjà en cours. Vous pouvez le suivre sur la commande.',
         REFUND_ORDER_NOT_FOUND: "Nous n'avons pas trouvé cette commande.",
         REFUND_ORDER_IS_COD:
             "Cette commande a été payée en espèces à la livraison : il n'y a aucun paiement à rembourser. Réglez cela directement avec le client.",

@@ -57,19 +57,33 @@ automatically clawed back** — that reversal is a manual/admin operation.
 
 ### Hold timing (prepaid orders & bookings)
 
+> **Changed 2026-10-05.** The hold now starts at **delivery** and lasts **3 days**. It used to
+> start at the order's *completion* (customer confirmation, or auto-confirmation 7 days after
+> delivery) and last 7 days — up to about two weeks after delivery in total.
+
 1. Money is held (`pending`) the instant the order/booking is paid.
-2. It becomes eligible to start the withdrawal countdown once the order is **completed** — the
-   customer confirms delivery/satisfaction, or, failing that, the platform **auto-confirms** it
-   **7 days** after it reaches `delivered`/`fulfilled` (`EARNINGS_AUTO_CONFIRM_DAYS`, default 7).
-3. From that completion moment, a further **7-day hold window** runs (`EARNINGS_HOLD_DAYS`,
-   default 7). A daily sweep moves matured holds from `pending` to `available`.
+2. The withdrawal countdown starts at **delivery**: when the courier finishes the order's
+   **last** parcel (a digital order: when it is paid; a booking: when the service is marked
+   completed). Every party on the order matures on that one date.
+3. From delivery, a **3-day hold window** runs (`EARNINGS_HOLD_DAYS`, default 3). A daily sweep
+   moves matured holds from `pending` to `available`. The customer's confirmation no longer
+   delays your money; it only marks the order completed.
+
+### Paused earnings
+
+Money can be **paused**: it stays in `pending` and is never released while paused. This happens
+when you cancel an order the customer had already paid, when you cancel a paid booking from the
+status menu (both also open a refund ticket for our team), when the customer disputes a card
+payment, or when our team pauses it. When the pause is lifted, the hold **continues where it
+stopped** — the paused time does not count. If the customer is refunded instead, the earnings for
+that order are reversed.
 
 ### Hold timing (COD collections)
 
-The verified delivery code **is** that shipment's customer confirmation, so there's no separate
-confirmation step. The 7-day hold window still starts when the **order** completes, not at
-collection — on a multi-shipment order, one collected shipment does not mature ahead of its
-siblings. Release is also **additionally gated on cash settlement**: your net only becomes
+The verified delivery code **is** that shipment's delivery, so there's no separate confirmation
+step. The 3-day hold window starts when the **last** parcel of the order is collected — on a
+multi-shipment order, one collected shipment does not mature ahead of its siblings. Release is
+also **additionally gated on cash settlement**: your net only becomes
 `available` once the agency has
 remitted and the platform has confirmed the physical cash for that collection (remittances settle
 oldest-first). A slow remittance chain delays your `available` balance the same way it delays the
@@ -103,6 +117,7 @@ an admin marks it paid, or returns to `available` if the admin rejects it.
     "available": 118500,
     "reserve": 0,
     "requested": 0,
+    "clawback": 0,
     "currency": "XAF",
     "payoutAllowance": null
   }
@@ -111,10 +126,27 @@ an admin marks it paid, or returns to `available` if the admin rejects it.
 
 | Field | Type | Description |
 |---|---|---|
+| `clawback` | `number` | **New 2026-10-05.** Money you owe back after a refund, not yet recovered (see below). `0` almost always. Minor currency units. |
 | `pending` | `number` | Sum of net shares from paid/collected-but-not-yet-released sources (still within the completion/hold window, or COD cash not yet settled). Minor currency units. |
 | `available` | `number` | Sum of net shares whose hold window has elapsed (and, for COD, whose cash was settled). Withdrawable via a payout request (see below). Minor currency units. |
 | `reserve` | `number` | Always `0` for vendors (see above). Minor currency units. |
 | `payoutAllowance` | `null` | **Always `null`** since 2026-09-27 — deprecated, no limit applies. See below. |
+
+### `clawback` — money you owe back after a refund
+
+**New 2026-10-05.** When a sale is refunded, your share of it is taken back:
+- still **held** → taken out of `pending`;
+- already **released** → taken out of `available`;
+- `available` too small (you already withdrew it) → the rest becomes `clawback`, a debt.
+
+A debt is paid down **automatically** by your next earnings before anything becomes `available` again, so while `clawback > 0`, `available` stays `0`. Each step appears in [`GET /api/vendor/transactions`](./transactions.md) as `earning_clawback` (out) and `earning_clawback_recovery` (internal). The platform can cancel a debt (`earning_clawback_write_off`).
+
+What a refund takes back:
+- **Your share** of the refunded amount, proportionally with the platform commission.
+- **The delivery money** the customer gets back, when your return policy says you pay return shipping (or the item was defective under *"reimbursed if defective"*).
+- **On a free-delivery (vendor-paid) order refunded after delivery**, the delivery cost already paid to the courier — couriers always keep their fee.
+
+Show it as *"Owed from refunds"* next to the balances when it is above `0`.
 
 ### `payoutAllowance` — retired, always `null`
 

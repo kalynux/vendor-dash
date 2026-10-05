@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Banknote, Building2, Check, Info, MapPin, Truck, Warehouse } from 'lucide-react';
+import { Banknote, Building2, Check, FileText, MapPin, Truck, Warehouse } from 'lucide-react';
 import { VerifiedBadge } from '@/components/common/VerifiedBadge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
@@ -130,14 +130,20 @@ export function AgencyCard({ agency, selected = false, onSelect, onInfo, rightSl
                             </div>
                         )}
 
+                        {/* The agency's terms. A document icon rather than an "i": this
+                            opens the contract the vendor agrees to, not a tooltip. On a
+                            phone the word sits beside it — there is room in the card's
+                            bottom row, and an icon alone is a guess. */}
                         {onInfo && (
                             <button
                                 type="button"
                                 onClick={onInfo}
-                                aria-label={t('agency.browse.viewDetailsFor', { name: agency.agencyName })}
-                                className="flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/20 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring md:h-auto md:w-12 md:rounded-none md:border-l md:border-border/60 tap-target"
+                                aria-label={t('agency.browse.viewTermsFor', { name: agency.agencyName })}
+                                title={t('agency.browse.viewTerms')}
+                                className="flex h-9 items-center justify-center gap-1.5 rounded-md px-2.5 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent/20 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring md:h-auto md:w-12 md:px-0 md:rounded-none md:border-l md:border-border/60 tap-target"
                             >
-                                <Info className="w-4 h-4" />
+                                <FileText className="w-4 h-4" />
+                                <span className="md:sr-only">{t('agency.browse.terms')}</span>
                             </button>
                         )}
                     </div>

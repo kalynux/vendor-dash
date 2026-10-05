@@ -60,6 +60,7 @@ import { useCategoryConflicts } from '@/components/products/categories/useCatego
 import { toCategoryWire } from '@/services/categories.service';
 import type { CategoryEntry } from '@/types/category.types';
 import type { VariantPhase1Payload, VariantPhase2Payload } from '@/components/products/variants';
+import { pickDefaultVariantId } from '@/components/products/variants/variant.payloads';
 
 // ─── Step definitions ─────────────────────────────────────────────────────────
 
@@ -387,7 +388,7 @@ export function ProductUpload() {
 
       // ── Phase 2: save variant rows ───────────────────────────────────────
       if (updates._phase2) {
-        const { toCreate, toUpdate } = updates._phase2;
+        const { toCreate, toUpdate, firstRow } = updates._phase2;
         dispatch({ type: 'SET_SAVING', value: true });
         try {
           await Promise.all(
@@ -446,19 +447,22 @@ export function ProductUpload() {
           // quantity. The pending badge is what explains the difference.
           const freshVariants = await fetchVariants(productId);
 
-          // The backend auto-sets the first variant as default when none is set
-          // yet. Mirror that locally to keep `serverProduct.defaultVariantId` in
-          // sync without an extra fetch — otherwise the Review step would
-          // falsely report "A default variant must be set" until reload.
-          const needsDefaultVariant =
-            freshVariants.length > 0 && !state.serverProduct?.defaultVariantId;
-          if (needsDefaultVariant) {
-            await setDefaultVariant(productId, freshVariants[0].id);
+          // The row on top of the table is the one shoppers see first, so it
+          // becomes the default variant. Mirrored into `serverProduct` locally
+          // rather than re-fetched — the Review step reads it, and would
+          // otherwise report "A default variant must be set" until reload.
+          const newDefaultId = pickDefaultVariantId(
+            firstRow,
+            freshVariants,
+            state.serverProduct?.defaultVariantId,
+          );
+          if (newDefaultId) {
+            await setDefaultVariant(productId, newDefaultId);
           }
 
           const patchedProduct =
-            needsDefaultVariant && state.serverProduct
-              ? { ...state.serverProduct, defaultVariantId: freshVariants[0].id }
+            newDefaultId && state.serverProduct
+              ? { ...state.serverProduct, defaultVariantId: newDefaultId }
               : null;
 
           if (queued.length) {

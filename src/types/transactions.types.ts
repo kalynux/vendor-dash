@@ -15,7 +15,15 @@ export type TransactionType =
   | 'credit_adjustment'
   | 'earning_hold'
   | 'earning_release'
-  | 'earning_reversal';
+  | 'earning_reversal'
+  | 'earning_reserve_hold'
+  | 'earning_reserve_release'
+  /** 2026-10-05 refund flow: your share of a refunded sale taken back (`out`). */
+  | 'earning_clawback'
+  /** Later earnings applied to money owed from an earlier refund (`internal`). */
+  | 'earning_clawback_recovery'
+  /** Wi-Mall cancelled part of that debt (`internal`). */
+  | 'earning_clawback_write_off';
 
 /**
  * Source status, normalized across categories:
@@ -31,7 +39,13 @@ export type TransactionStatus =
   | 'hold'
   | 'release'
   | 'reversal'
-  | 'completed';
+  | 'completed'
+  // Earnings rows carry the ledger entry type as their status.
+  | 'reserve_hold'
+  | 'reserve_release'
+  | 'clawback'
+  | 'clawback_recovery'
+  | 'clawback_write_off';
 
 /** `money` rows carry a `currency`; `credit` rows are in credit units. */
 export type TransactionUnit = 'money' | 'credit';

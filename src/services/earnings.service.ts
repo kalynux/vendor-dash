@@ -11,7 +11,8 @@ const BASE = '/vendor';
 
 export async function fetchEarningsBalance(): Promise<EarningsBalance> {
   const res = await api.get<EarningsResponse>(`${BASE}/earnings`);
-  return res.data;
+  // `clawback` arrives with the 2026-10-05 refund flow; an older server leaves it out.
+  return { ...res.data, clawback: res.data.clawback ?? 0 };
 }
 
 /** Your most recent payout request, or `null` if none was ever made. */

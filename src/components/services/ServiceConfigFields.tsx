@@ -81,7 +81,7 @@ export function ServiceConfigFields({ form }: ServiceConfigFieldsProps) {
 
       {/* Price (base rate) */}
       <Field label={t('services.config.priceLabel')} error={m(errors.price?.message)} required>
-        <Input type="number" min={0} step="0.01" placeholder="0.00" {...register('price', { valueAsNumber: true })} />
+        <Input type="number" min={0} step="0.01" placeholder="0" {...register('price', { valueAsNumber: true })} />
         <p className="mt-1 text-xs text-muted-foreground">
           {t('services.config.priceHelp', {
             duration: watch('durationMinutes') || t('common.labels.emptyValue'),

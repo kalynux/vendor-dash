@@ -151,8 +151,15 @@ export interface VariantBuilderState {
   phase: BuilderPhase;
   /** Draft options being edited. */
   options: DraftOption[];
-  /** Variant rows in the matrix table. */
+  /**
+   * Variant rows in the matrix table, in the order the vendor arranged them.
+   * The top visible row is the one shoppers see first: saving makes it the
+   * product's default variant. The server stores no other order, so the rest
+   * comes back in server order on the next load.
+   */
   matrix: VariantRow[];
+  /** The product's saved default variant — what the top row is compared against. */
+  defaultVariantServerId: string | null;
   /** Product-level SKU prefix (e.g. "TSHIRT"). */
   skuPrefix: string;
   /** Pending reconciliation result — shown in confirmation dialog. */
@@ -171,7 +178,12 @@ export interface VariantBuilderState {
 // ─── Reducer Actions ─────────────────────────────────────────────────────────
 
 export type VariantBuilderAction =
-  | { type: 'HYDRATE'; serverOptions: ApiProductOption[]; serverVariants: ApiVariant[] }
+  | {
+      type: 'HYDRATE';
+      serverOptions: ApiProductOption[];
+      serverVariants: ApiVariant[];
+      defaultVariantId: string | null;
+    }
   | { type: 'ADD_OPTION'; name: string; initialValues?: string[] }
   | { type: 'REMOVE_OPTION'; localId: string }
   | { type: 'RENAME_OPTION'; localId: string; name: string }
@@ -184,6 +196,8 @@ export type VariantBuilderAction =
   | { type: 'CONFIRM_REGENERATION' }
   | { type: 'CANCEL_REGENERATION' }
   | { type: 'SWITCH_TO_OPTIONS' }
+  | { type: 'MOVE_ROW'; localId: string; offset: -1 | 1 }
+  | { type: 'SET_DEFAULT_VARIANT_ID'; id: string | null }
   | { type: 'UPDATE_ROW'; localId: string; patch: VariantRowPatch }
   | { type: 'BULK_UPDATE_ROWS'; field: string; value: unknown }
   | { type: 'SET_ROW_ERRORS'; errors: Record<string, string> }

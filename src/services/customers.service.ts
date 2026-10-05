@@ -137,5 +137,19 @@ export async function refundOrder(
   payload: RefundOrderPayload = {},
 ): Promise<RefundResult> {
   const res = await api.post<RefundResponse>(`${BASE}/orders/${orderId}/refund`, payload);
-  return res.data;
+  const r = res.data;
+  // Until the 2026-10-05 refund flow is deployed the server answers the old shape:
+  // a finished card refund with only `refundId` and `amount`. Fill the new fields
+  // from those — nothing is worked out beyond copying them across.
+  return {
+    ...r,
+    refundRequestId: r.refundRequestId ?? r.refundId,
+    grossAmount: r.grossAmount ?? r.amount,
+    feeAmount: r.feeAmount ?? 0,
+    netAmount: r.netAmount ?? r.amount,
+    paymentChannel: r.paymentChannel ?? null,
+    channel: r.channel ?? null,
+    destinationMasked: r.destinationMasked ?? null,
+    transferFailureReason: r.transferFailureReason ?? null,
+  };
 }

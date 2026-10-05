@@ -104,6 +104,37 @@ export const orders = {
         }),
     },
 
+    export: {
+        exporting: 'Export en cours…',
+        done: plural({ one: '{{count}} commande exportée', other: '{{count}} commandes exportées' }),
+        empty: 'Aucune commande à exporter avec ces filtres.',
+        failed: 'Impossible d’exporter les commandes. Réessayez.',
+        fileName: 'commandes',
+        columns: {
+            orderNumber: 'N° de commande',
+            date: 'Date',
+            customer: 'Client',
+            email: 'E-mail',
+            type: 'Type',
+            status: 'Statut',
+            paymentStatus: 'Statut du paiement',
+            paymentMethod: 'Mode de paiement',
+            items: 'Articles',
+            subtotal: 'Sous-total',
+            shipping: 'Livraison',
+            tax: 'Taxe',
+            total: 'Total',
+            currency: 'Devise',
+        },
+    },
+
+    print: {
+        product: 'Produit',
+        quantity: 'Qté',
+        unitPrice: 'Prix unitaire',
+        amount: 'Montant',
+    },
+
     list: {
         export: 'Exporter',
         unknownCustomer: 'Client inconnu',
@@ -152,6 +183,12 @@ export const orders = {
                 one: 'Oui, annuler {{count}} commande',
                 other: 'Oui, annuler {{count}} commandes',
             }),
+            paidNotice: plural({
+                one: '{{count}} commande sélectionnée a déjà été payée. L’annuler ne rembourse pas le client automatiquement : notre équipe s’occupera du remboursement, et vos gains sur cette commande seront suspendus jusqu’à ce que ce soit réglé.',
+                other: '{{count}} commandes sélectionnées ont déjà été payées. Les annuler ne rembourse pas les clients automatiquement : notre équipe s’occupera des remboursements, et vos gains sur ces commandes seront suspendus jusqu’à ce que chacun soit réglé.',
+            }),
+            paidNoticeUnknown:
+                'Si l’une de ces commandes a déjà été payée, l’annuler ne rembourse pas le client automatiquement : notre équipe s’occupera du remboursement, et vos gains sur cette commande seront suspendus jusqu’à ce que ce soit réglé.',
         },
     },
 
@@ -297,6 +334,8 @@ export const orders = {
             placeholder: 'Tapez « {{word}} »',
             keep: 'Garder la commande',
             confirm: 'Oui, annuler la commande',
+            paidNotice:
+                'Cette commande a été payée. L’annuler ne rembourse pas le client automatiquement : notre équipe s’occupera du remboursement, et vos gains sur cette commande seront suspendus jusqu’à ce que ce soit réglé.',
         },
     },
 

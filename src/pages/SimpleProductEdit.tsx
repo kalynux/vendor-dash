@@ -495,7 +495,7 @@ export function SimpleProductEdit() {
 
   if (loadError) {
     return (
-      <div className="max-w-3xl mx-auto space-y-4">
+      <div className="max-w-6xl mx-auto space-y-4">
         <PageBackButton
           fallbackPath="/dashboard/products"
           alwaysFallback
@@ -515,7 +515,7 @@ export function SimpleProductEdit() {
   // the next save would wipe every image, since fileIds is a full replacement.
   if (!product || !initialValuesRef.current) {
     return (
-      <div className="space-y-4 max-w-3xl mx-auto">
+      <div className="space-y-4 max-w-6xl mx-auto">
         <Skeleton className="h-8 w-48" />
         <Skeleton className="h-64 w-full" />
         <Skeleton className="h-40 w-full" />

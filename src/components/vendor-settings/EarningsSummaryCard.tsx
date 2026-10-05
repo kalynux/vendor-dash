@@ -117,6 +117,9 @@ export function EarningsSummaryCard() {
               ]}
             />
           </p>
+          <p>{t('account.earnings.info.holdTiming')}</p>
+          <p>{t('account.earnings.info.paused')}</p>
+          <p>{t('account.earnings.info.refunds')}</p>
           <p>
             {t('account.earnings.info.minimum', {
               amount: fmt.currency(MIN_PAYOUT_AMOUNT, balance.currency),
@@ -140,6 +143,7 @@ export function EarningsSummaryCard() {
           <div className="rounded-lg p-0 sm:border sm:p-4">
             <p className="text-xs text-muted-foreground">{t('account.earnings.pending')}</p>
             <p className="text-2xl font-semibold">{fmt.currency(balance.pending, balance.currency)}</p>
+            <p className="text-xs text-muted-foreground">{t('account.earnings.pendingHint')}</p>
           </div>
           {balance.requested > 0 && (
             <div className="rounded-lg p-0 sm:border sm:p-4">
@@ -147,7 +151,22 @@ export function EarningsSummaryCard() {
               <p className="text-2xl font-semibold">{fmt.currency(balance.requested, balance.currency)}</p>
             </div>
           )}
+          {/* ⛔ A debt, not a balance: shown as the server sends it, never added to
+              or taken from the figures beside it (`available` is already 0 while
+              it is above 0). */}
+          {balance.clawback > 0 && (
+            <div className="rounded-lg p-0 sm:border sm:border-destructive/30 sm:p-4">
+              <p className="text-xs text-destructive">{t('account.earnings.clawback')}</p>
+              <p className="text-2xl font-semibold text-destructive">
+                {fmt.currency(balance.clawback, balance.currency)}
+              </p>
+            </div>
+          )}
         </div>
+
+        {balance.clawback > 0 && (
+          <p className="text-sm text-muted-foreground">{t('account.earnings.clawbackNote')}</p>
+        )}
 
         <div className="flex flex-wrap items-center gap-3 border-t pt-4">
           <Button onClick={onRequestPayout} disabled={!canRequest || requesting} className="gap-2">
@@ -161,7 +180,8 @@ export function EarningsSummaryCard() {
               {t(payoutOpenRequestKey(latestPayout.status))}
             </p>
           )}
-          {!hasOpenRequest && balance.available <= 0 && (
+          {/* While a refund debt is open, `available` stays 0 — say why, not "nothing yet". */}
+          {!hasOpenRequest && balance.available <= 0 && balance.clawback <= 0 && (
             <p className="text-xs text-muted-foreground">{t('account.earnings.nothingAvailable')}</p>
           )}
           {!hasOpenRequest && balance.available > 0 && belowMinimum && (

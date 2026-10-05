@@ -324,7 +324,7 @@ export function AgencyConnectionBrowser({
             <div className="flex items-center justify-between h-5">
                 {!loadingAgencies && meta && (
                     <p className="text-xs text-muted-foreground">
-                        {meta.total} {meta.total === 1 ? 'agency' : 'agencies'} found
+                        {t('agency.browse.found', { count: meta.total })}
                     </p>
                 )}
                 {loadingAgencies && <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />}

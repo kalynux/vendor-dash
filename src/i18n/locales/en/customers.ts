@@ -132,21 +132,77 @@ export const customers = {
     refund: {
         title: 'Refund {{order}}',
         fallbackOrder: 'order',
-        description: "Refunds are processed live through the payment gateway and can't be undone.",
+        description: "Wi-Mall sends the money back to the customer. Once it's sent, it can't be undone.",
         notRefundable: "This order can't be refunded",
         notEligible: 'It is not currently eligible for a refund.',
+        /** A refund of this order is already in progress (`REFUND_ALREADY_OPEN`). */
+        alreadyOpen: 'A refund of this order is already in progress',
         maxRefundable: 'Max refundable',
         remaining: 'Remaining balance',
         settlesIn: 'Refund settles in ~{{days}} days.',
         returnShipping: 'Return shipping paid by {{payer}}.',
         amount: 'Amount ({{currency}})',
         amountHelp: 'You can refund up to {{max}}. Lower it for a partial refund.',
+        /** Only under the "reimbursed if defective" return-shipping rule. */
+        itemDefective: 'The item was defective',
+        itemDefectiveHelp: 'The customer also gets their delivery money back. You pay for it.',
+        amountDefectivePlaceholder: 'Most allowed',
+        amountDefectiveHelp: 'Leave it empty to refund the most allowed, delivery included. The exact amount shows once you confirm.',
         reason: 'Reason (optional)',
-        reasonPlaceholder: 'Shared with the payment gateway and stored on the refund.',
+        reasonPlaceholder: 'Kept with the refund request.',
         submit: 'Refund',
         submitAmount: 'Refund {{amount}}',
-        fullyRefunded: 'Order fully refunded',
-        partiallyRefunded: 'Partial refund processed',
+        earningsNote: 'Your share of this amount is taken back from your earnings.',
+        /**
+         * How the money will reach the customer, said before the click. Only the
+         * rate is named — the fee itself comes from the server after the click.
+         */
+        how: {
+            autoSend: 'Sent straight away',
+            needsApproval: 'Needs approval by Wi-Mall',
+            card: 'It goes back to the customer’s card in full, with no fee.',
+            mobileMoney: 'It is sent to the mobile money number that paid. A 2% transfer fee comes off what the customer receives.',
+            cod: 'Cash on delivery: it can only be sent once the delivery company has handed this order’s cash to Wi-Mall. A 2% transfer fee comes off what the customer receives.',
+        },
+        /** After the click — the server's own figures. */
+        result: {
+            amountWithFee: 'Refund {{gross}} — the customer receives {{net}} ({{fee}} transfer fee).',
+            amountNoFee: 'Refund {{gross}} — the customer receives the full amount.',
+        },
+    },
+
+    /**
+     * Where a refund request is. ⛔ Only `completed` may say "refunded" — every
+     * other status is money still on its way.
+     */
+    refundStatus: {
+        /** Short, where the Refund button was. */
+        badge: {
+            awaiting_approval: 'Refund requested',
+            approved: 'Refund approved',
+            waiting_for_cash: 'Refund waiting for cash',
+            sending: 'Refund on its way',
+            failed: 'Refund not sent yet',
+            completed: 'Refunded',
+            rejected: 'Refund declined',
+            unknown: 'Refund in progress',
+        },
+        /** One sentence: where the money is now. */
+        note: {
+            awaiting_approval: 'Requested — Wi-Mall will approve it and send it to the customer.',
+            awaitingApprovalCod:
+                'Requested — Wi-Mall will approve it and send it once the delivery company has handed the cash to Wi-Mall.',
+            approved: 'Approved — Wi-Mall will send it to the customer.',
+            waiting_for_cash:
+                'Approved — it will be sent as soon as the delivery company has handed the cash to Wi-Mall.',
+            sending: 'Sent to the customer’s number. It should arrive shortly.',
+            sendingTo: 'Sent to the customer’s number ({{number}}). It should arrive shortly.',
+            failed: 'The transfer didn’t go through — Wi-Mall will retry.',
+            completed: 'Refunded to the customer.',
+            completedCard: 'Refunded to the customer’s card (full amount).',
+            rejected: 'Wi-Mall declined this refund.',
+            unknown: 'A refund of this order is in progress.',
+        },
     },
 
     /** Who pays return shipping, per the vendor's return policy. */
@@ -162,8 +218,9 @@ export const customers = {
         REFUND_ORDER_NOT_PAID: 'This order has not been paid, so there is nothing to refund.',
         REFUND_PAYMENT_NOT_FOUND: 'No successful payment is linked to this order.',
         REFUND_ALREADY_FULLY_REFUNDED: 'This order has already been fully refunded.',
-        REFUND_WINDOW_EXPIRED: 'The return window for this order has expired.',
+        REFUND_WINDOW_EXPIRED: 'The return window for this order, counted from its delivery date, has ended.',
         REFUND_NOT_ELIGIBLE: 'Your policy resolves the refundable amount to zero for this order.',
+        REFUND_ALREADY_OPEN: 'A refund of this order is already in progress.',
     },
 
     /** Field-level validation. Referenced by the zod schema via key. */
@@ -192,7 +249,7 @@ export const customers = {
         updateNameFailed: "We couldn't update the display name. Please try again.",
         resetNameFailed: "We couldn't reset the display name. Please try again.",
         eligibilityFailed: "We couldn't check whether this order can be refunded. Please try again.",
-        refundFailed: "We couldn't issue the refund. Please try again.",
+        refundFailed: "We couldn't request the refund. Please try again.",
     },
 } as const;
 

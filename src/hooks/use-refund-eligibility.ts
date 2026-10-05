@@ -9,7 +9,7 @@ import type { RefundEligibility, RefundReasonCode } from '@/types/customers.type
  *
  * Eligibility is not derivable on the client: it folds the vendor's return
  * policy (refunds enabled at all, full vs. a percentage, `return_window_days`
- * measured from `created_at`) together with the payment's un-refunded balance.
+ * measured from delivery) together with the payment's un-refunded balance.
  * `GET /vendor/orders/:id/refund-eligibility` never throws on ineligibility —
  * it answers `200 { eligible: false, reasonCode }` — so it is safe to ask
  * before the vendor clicks anything, and the action can be hidden instead of
@@ -18,16 +18,17 @@ import type { RefundEligibility, RefundReasonCode } from '@/types/customers.type
  * Two gates are applied before the request, so opening an order detail doesn't
  * cost a call that can only come back `false`:
  *   - the payment must be `paid` — the server refuses anything else with
- *     `REFUND_ORDER_NOT_PAID`, which is also what every cash-on-delivery order
- *     hits (a payment-rail limit, not a policy one);
+ *     `REFUND_ORDER_NOT_PAID`. Since 2026-10-05 a cash-on-delivery order whose
+ *     cash was collected counts too: card, mobile money and COD are all refundable;
  *   - the order must not be frozen by a dispute, the same `isOrderFrozen`
  *     check that already locks fulfilment on these screens.
  *
  * A failed probe leaves the action hidden: the vendor didn't ask for it, so it
- * reports nothing. What it cannot rule out is the gateway — only Stripe can
- * actually refund, and a mobile-money order fails with
- * `REFUND_GATEWAY_NOT_SUPPORTED` at submit time, which the dialog surfaces
- * through the error chain.
+ * reports nothing.
+ *
+ * While a refund is already under way the server answers `eligible: false` with
+ * `REFUND_ALREADY_OPEN` and `openRefundRequest: { id, status }` — the screens
+ * show that status where the Refund button was.
  */
 export interface RefundEligibilityState {
   /** Server verdict, or null while unknown (not asked yet, or not worth asking). */
@@ -36,6 +37,8 @@ export interface RefundEligibilityState {
   canRefund: boolean;
   /** Why not — set only when the server answered `eligible: false`. */
   reasonCode: RefundReasonCode | undefined;
+  /** The refund already under way on this order, if any (2026-10-05). */
+  openRefundRequest: RefundEligibility['openRefundRequest'];
   /**
    * Re-ask. A partial refund leaves the order `paid` but moves the balance.
    * The previous verdict stays readable until the new one lands — the dialog
@@ -78,6 +81,7 @@ export function useRefundEligibility(order: Order | null): RefundEligibilityStat
     eligibility,
     canRefund: eligibility?.eligible === true,
     reasonCode: eligibility && !eligibility.eligible ? eligibility.reasonCode : undefined,
+    openRefundRequest: eligibility?.openRefundRequest ?? null,
     refresh,
   };
 }

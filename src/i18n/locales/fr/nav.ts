@@ -57,14 +57,8 @@ export const nav = {
         searchPlaceholder: 'Rechercher des commandes, produits, clients…',
         searchResultsFor: 'Résultats pour « {{query}} »',
         recentSearches: 'Recherches récentes',
-        recentSamples: {
-            order: 'Commande n° 1001',
-            orderMeta: 'Alice Johnson · 284,97',
-            product: 'Casque Bluetooth sans fil',
-            productMeta: 'SKU : WBH-001 · 149,99',
-            customer: 'Alice Johnson',
-            store: 'Tech Gadgets Pro',
-        },
+        noResults: 'Aucun résultat pour « {{query}} ». Les commandes se cherchent par leur numéro.',
+        searchFailed: 'La recherche est indisponible pour le moment. Réessayez dans un instant.',
         notifications: 'Notifications',
         newNotifications: plural({
             one: '{{count}} nouvelle notification',

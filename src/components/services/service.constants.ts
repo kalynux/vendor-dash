@@ -226,6 +226,11 @@ export interface BookingTransition {
    * UI handling hint. `complete` routes through the Complete-Booking settlement
    * dialog (POST /bookings/:id/complete); `cancel` opens the reason dialog;
    * undefined uses the generic status-change confirm.
+   *
+   * ⛔ Every `cancelled` transition must keep `kind: 'cancel'`. That sends
+   * POST /bookings/:id/cancel, which refunds a paid booking. PATCH …/status
+   * with `cancelled` refunds nothing and, since 2026-10-05, pauses the earnings
+   * on a paid booking instead (FRONTEND-CHANGELOG-earnings-hold-and-pauses § 3).
    */
   kind?: 'complete' | 'cancel';
 }

@@ -4,7 +4,13 @@
 // module has no React context of its own. See src/i18n/README.md.
 
 import type { TranslationKey } from '@/i18n';
-import type { RefundReasonCode, CustomerSortBy, SortOrder } from '@/types/customers.types';
+import type {
+  RefundReasonCode,
+  RefundPaymentChannel,
+  RefundRequestStatus,
+  CustomerSortBy,
+  SortOrder,
+} from '@/types/customers.types';
 
 type Translate = (key: TranslationKey, params?: Record<string, string | number>) => string;
 
@@ -60,7 +66,57 @@ export const REFUND_REASON_KEYS: Record<RefundReasonCode, TranslationKey> = {
   REFUND_ALREADY_FULLY_REFUNDED: 'customers.refundReason.REFUND_ALREADY_FULLY_REFUNDED',
   REFUND_WINDOW_EXPIRED: 'customers.refundReason.REFUND_WINDOW_EXPIRED',
   REFUND_NOT_ELIGIBLE: 'customers.refundReason.REFUND_NOT_ELIGIBLE',
+  REFUND_ALREADY_OPEN: 'customers.refundReason.REFUND_ALREADY_OPEN',
 };
+
+// ─── Refund request status (2026-10-05 refund flow) ───────────────────────────────
+//
+// ⛔ Only `completed` may read as "refunded". Every other status is a refund
+// still on its way, and its wording has to say so.
+
+/** Short form, shown in place of the Refund button while a request is open. */
+const REFUND_STATUS_BADGE_KEYS: Record<RefundRequestStatus, TranslationKey> = {
+  awaiting_approval: 'customers.refundStatus.badge.awaiting_approval',
+  approved: 'customers.refundStatus.badge.approved',
+  waiting_for_cash: 'customers.refundStatus.badge.waiting_for_cash',
+  sending: 'customers.refundStatus.badge.sending',
+  failed: 'customers.refundStatus.badge.failed',
+  completed: 'customers.refundStatus.badge.completed',
+  rejected: 'customers.refundStatus.badge.rejected',
+};
+
+/** One sentence saying where the money is. Unknown statuses read as "in progress". */
+const REFUND_STATUS_NOTE_KEYS: Record<RefundRequestStatus, TranslationKey> = {
+  awaiting_approval: 'customers.refundStatus.note.awaiting_approval',
+  approved: 'customers.refundStatus.note.approved',
+  waiting_for_cash: 'customers.refundStatus.note.waiting_for_cash',
+  sending: 'customers.refundStatus.note.sending',
+  failed: 'customers.refundStatus.note.failed',
+  completed: 'customers.refundStatus.note.completed',
+  rejected: 'customers.refundStatus.note.rejected',
+};
+
+export function refundStatusBadgeKey(status: string): TranslationKey {
+  return REFUND_STATUS_BADGE_KEYS[status as RefundRequestStatus] ?? 'customers.refundStatus.badge.unknown';
+}
+
+/**
+ * The sentence for a request's status. A few statuses read differently for a
+ * card, for cash on delivery, or when the server gave the masked number.
+ */
+export function refundStatusNote(
+  status: string,
+  t: Translate,
+  opts: { channel?: RefundPaymentChannel | null; destinationMasked?: string | null } = {},
+): string {
+  if (status === 'completed' && opts.channel === 'card') return t('customers.refundStatus.note.completedCard');
+  if (status === 'sending' && opts.destinationMasked) {
+    return t('customers.refundStatus.note.sendingTo', { number: opts.destinationMasked });
+  }
+  if (status === 'awaiting_approval' && opts.channel === 'cod') return t('customers.refundStatus.note.awaitingApprovalCod');
+  const key = REFUND_STATUS_NOTE_KEYS[status as RefundRequestStatus] ?? 'customers.refundStatus.note.unknown';
+  return t(key);
+}
 
 // ─── Display helpers ──────────────────────────────────────────────────────────────
 

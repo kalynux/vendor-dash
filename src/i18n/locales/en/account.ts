@@ -372,13 +372,27 @@ export const account = {
         info: {
             balances:
                 '<0>Available</0> is what you can withdraw now. <1>Pending</1> is money from orders that haven’t cleared yet, and <2>Requested</2> is already locked into a withdrawal.',
+            /** Hold timing since 2026-10-05: 3 days from delivery (earnings.md § Hold timing). */
+            holdTiming:
+                'Money from an order becomes available 3 days after the order is delivered. A digital product counts as delivered once it is paid, and a booking once you mark it completed.',
+            paused:
+                'Some earnings may be paused while a refund or a payment dispute is handled. The days it is paused don’t count towards the 3 days.',
+            /** Refund flow 2026-10-05 (earnings.md § clawback). */
+            refunds:
+                'When a sale is refunded, your share of it is taken back — from Pending, or from Available if it was already released. If you already withdrew it, the rest is owed and your next earnings pay it off first.',
             minimum: 'The minimum withdrawal is {{amount}}.',
             autoThreshold:
                 'If your available balance reaches {{amount}}, we automatically request a payout on your behalf so your funds don’t sit unclaimed. Make sure you have a payout method saved — otherwise the automatic request can’t be created and your balance will keep growing past the threshold until you add one.',
         },
         available: 'Available',
         pending: 'Pending',
+        /** Under the Pending figure, so the timing is visible without opening the help. */
+        pendingHint: 'Ready 3 days after delivery',
         requested: 'Requested',
+        /** `clawback` > 0 — a debt, shown apart from the balances and never added to them. */
+        clawback: 'Owed from refunds',
+        clawbackNote:
+            'You owe this back from refunds of sales you had already withdrawn. Your next earnings pay it off automatically, and Available stays at 0 until it is cleared.',
         requestWithdrawal: 'Request Withdrawal',
         nothingAvailable: 'Nothing available to withdraw yet.',
         belowMinimum: 'Minimum withdrawal is {{amount}}.',

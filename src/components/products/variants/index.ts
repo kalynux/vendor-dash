@@ -47,10 +47,12 @@ export {
   buildPhase1Payload,
   buildPhase2Payload,
   computeNameUpdatesForRenames,
+  pickDefaultVariantId,
 } from './variant.payloads';
 export type {
   VariantPhase1Payload,
   VariantPhase2Payload,
+  VariantFirstRow,
   VariantCreateEntry,
   VariantUpdateEntry,
   VariantNameUpdateEntry,

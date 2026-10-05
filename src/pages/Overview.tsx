@@ -228,7 +228,6 @@ export function Overview() {
     setSelectedOrder(order);
     setOrderSheetOpen(true);
     try {
-      await new Promise(resolve => setTimeout(resolve, 2000));
       const full = await fetchOrderById(order.id);
       setSelectedOrder(full);
     } catch (err) {

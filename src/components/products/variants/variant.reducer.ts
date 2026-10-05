@@ -25,6 +25,7 @@ export const INITIAL_STATE: VariantBuilderState = {
   phase: 'options',
   options: [],
   matrix: [],
+  defaultVariantServerId: null,
   skuPrefix: '',
   pendingReconciliation: null,
   rowErrors: {},
@@ -45,7 +46,10 @@ export function variantBuilderReducer(
     // ── Hydration ──────────────────────────────────────────────────────────
     case 'HYDRATE': {
       const options = normalizeServerOptions(action.serverOptions);
-      const matrix = normalizeServerVariants(action.serverVariants, options);
+      const matrix = defaultFirst(
+        normalizeServerVariants(action.serverVariants, options),
+        action.defaultVariantId,
+      );
       const hasOptionsAndVariants = options.length > 0 && matrix.length > 0;
 
       return {
@@ -53,6 +57,7 @@ export function variantBuilderReducer(
         phase: hasOptionsAndVariants ? 'matrix' : 'options',
         options,
         matrix,
+        defaultVariantServerId: action.defaultVariantId,
         serverSnapshot: {
           options: action.serverOptions,
           variants: action.serverVariants,
@@ -260,6 +265,29 @@ export function variantBuilderReducer(
         ...state,
         phase: 'options',
       };
+    }
+
+    // ── Row Order ─────────────────────────────────────────────────────────
+
+    case 'MOVE_ROW': {
+      // Swap with the nearest *visible* neighbour — rows marked for removal
+      // stay in the array until saved, and stepping over one would look like
+      // the button did nothing.
+      const from = state.matrix.findIndex((r) => r.localId === action.localId);
+      if (from === -1) return state;
+      let to = from + action.offset;
+      while (to >= 0 && to < state.matrix.length && state.matrix[to].status === 'removed') {
+        to += action.offset;
+      }
+      if (to < 0 || to >= state.matrix.length) return state;
+
+      const matrix = [...state.matrix];
+      [matrix[from], matrix[to]] = [matrix[to], matrix[from]];
+      return { ...state, isDirty: true, matrix };
+    }
+
+    case 'SET_DEFAULT_VARIANT_ID': {
+      return { ...state, defaultVariantServerId: action.id };
     }
 
     // ── Row Mutations ─────────────────────────────────────────────────────
@@ -475,6 +503,15 @@ export function variantBuilderReducer(
   }
 }
 
+// ─── Row Order Helpers ───────────────────────────────────────────────────────
+
+/** Put the default variant first, keeping the server's order for the rest. */
+function defaultFirst(rows: VariantRow[], defaultVariantId: string | null): VariantRow[] {
+  const index = defaultVariantId ? rows.findIndex((r) => r.serverId === defaultVariantId) : -1;
+  if (index <= 0) return rows;
+  return [rows[index], ...rows.slice(0, index), ...rows.slice(index + 1)];
+}
+
 // ─── Error Helpers ───────────────────────────────────────────────────────────
 
 function clearErrorsForFields(
@@ -530,7 +567,21 @@ export function selectRowCountsByStatus(state: VariantBuilderState) {
 }
 
 export function selectHasUnsavedChanges(state: VariantBuilderState): boolean {
-  return state.matrix.some((r) => r.status === 'new' || r.status === 'modified');
+  return (
+    state.matrix.some((r) => r.status === 'new' || r.status === 'modified') ||
+    selectFirstRowChanged(state)
+  );
+}
+
+/**
+ * True when a saved variant was moved to the top but is not yet the product's
+ * default. A new row on top is not counted here — it is already an unsaved
+ * change, and saving it makes it the default.
+ */
+export function selectFirstRowChanged(state: VariantBuilderState): boolean {
+  const first = selectVisibleRows(state)[0];
+  if (!first?.serverId || first.status === 'new') return false;
+  return first.serverId !== state.defaultVariantServerId;
 }
 
 export function selectAllRowsSaved(state: VariantBuilderState): boolean {

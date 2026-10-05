@@ -8,6 +8,7 @@ import type {
   Transaction,
   TransactionCategory,
   TransactionStatus,
+  TransactionType,
 } from '@/types/transactions.types';
 
 type Translate = (key: TranslationKey, params?: Record<string, string | number>) => string;
@@ -45,7 +46,29 @@ const STATUS_META: Record<TransactionStatus, { labelKey: TranslationKey; class: 
   hold:      { labelKey: 'transactions.status.hold',      class: 'border-amber-500 text-amber-600 bg-amber-50' },
   release:   { labelKey: 'transactions.status.release',   class: 'border-green-500 text-green-600 bg-green-50' },
   reversal:  { labelKey: 'transactions.status.reversal',  class: 'border-orange-500 text-orange-600 bg-orange-50' },
+  reserve_hold:       { labelKey: 'transactions.status.reserve_hold',       class: 'border-border text-muted-foreground' },
+  reserve_release:    { labelKey: 'transactions.status.reserve_release',    class: 'border-border text-muted-foreground' },
+  clawback:           { labelKey: 'transactions.status.clawback',           class: 'border-red-500 text-red-600 bg-red-50' },
+  clawback_recovery:  { labelKey: 'transactions.status.clawback_recovery',  class: 'border-border text-muted-foreground' },
+  clawback_write_off: { labelKey: 'transactions.status.clawback_write_off', class: 'border-border text-muted-foreground' },
 };
+
+/**
+ * The 2026-10-05 refund-debt rows. The server describes them in fixed English,
+ * so they get the vendor's language here; every other row keeps the server's
+ * `description`, and an unknown type still falls back to it.
+ */
+const TYPE_LABEL_KEYS: Partial<Record<TransactionType, TranslationKey>> = {
+  earning_clawback: 'transactions.typeLabel.earning_clawback',
+  earning_clawback_recovery: 'transactions.typeLabel.earning_clawback_recovery',
+  earning_clawback_write_off: 'transactions.typeLabel.earning_clawback_write_off',
+};
+
+/** The row's title. */
+export function transactionLabel(tx: Transaction, t: Translate): string {
+  const key = TYPE_LABEL_KEYS[tx.type];
+  return key ? t(key) : tx.description;
+}
 
 export function transactionStatusMeta(
   status: TransactionStatus,

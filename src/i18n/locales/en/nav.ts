@@ -64,19 +64,8 @@ export const nav = {
         searchPlaceholder: 'Search orders, products, customers…',
         searchResultsFor: 'Search results for “{{query}}”',
         recentSearches: 'Recent searches',
-        /**
-         * Sample rows in the global-search overlay. The overlay is not wired to
-         * a real search endpoint yet; these placeholders live in the catalog so
-         * no English leaks into a French dashboard in the meantime.
-         */
-        recentSamples: {
-            order: 'Order #1001',
-            orderMeta: 'Alice Johnson · 284.97',
-            product: 'Wireless Bluetooth Headphones',
-            productMeta: 'SKU: WBH-001 · 149.99',
-            customer: 'Alice Johnson',
-            store: 'Tech Gadgets Pro',
-        },
+        noResults: 'Nothing found for “{{query}}”. Orders are found by their number.',
+        searchFailed: 'Search is unavailable right now. Try again in a moment.',
         notifications: 'Notifications',
         newNotifications: plural({
             one: '{{count}} new notification',

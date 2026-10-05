@@ -45,9 +45,8 @@ import { MobilePageHeader, type MobileHeaderAction } from './MobilePageHeader';
  *
  * Below `md` this is the standard mobile page: a full-bleed wrapper and a sticky
  * `MobilePageHeader` that owns the back arrow, the status-bar inset and the
- * action overflow sheet. On `md` and up it is the wide layout these pages
- * already had — a centred 3xl column, back above the title, actions at the top
- * right — so nothing changes on a desktop.
+ * action overflow sheet. On `md` and up it is the wide layout — a centred 6xl
+ * column (3xl until 2026-10-05), back above the title, actions at the top right.
  */
 
 export interface EditorPageAction extends MobileHeaderAction {
@@ -131,7 +130,11 @@ export function EditorPageShell({
   const menu = actions.filter((action) => !action.inline);
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6 animate-fade-in">
+    // `max-w-6xl`, not the 3xl column these pages started with: on a desktop
+    // that left wide empty bands either side while the variant table scrolled
+    // sideways inside its card. The pages' own loading and error placeholders
+    // use the same width so nothing jumps when the form arrives.
+    <div className="mx-auto max-w-6xl space-y-6 animate-fade-in">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <PageBackButton

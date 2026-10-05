@@ -351,6 +351,7 @@ export function BookingDetailSheet({ bookingId, open, onOpenChange, onChanged }:
             <AlertDialogTitle>{t('services.detail.cancelTitle')}</AlertDialogTitle>
             <AlertDialogDescription>
               {t('services.detail.cancelDescription')}
+              {booking?.paymentStatus === 'paid' && ` ${t('services.detail.cancelPaidNote')}`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <Textarea

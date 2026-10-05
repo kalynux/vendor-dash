@@ -49,6 +49,7 @@ import { DeliveryStatusBadge } from './DeliveryStatusBadge';
 import { ShipmentReviewControl } from '@/components/reviews/ShipmentReviewControl';
 import { DeliveryRejectionNotice } from './DeliveryRejectionNotice';
 import { ReassignAgencyPopover } from './ReassignAgencyPopover';
+import { PaidCancelNotice } from './PaidCancelNotice';
 import { cn } from '@/lib/utils';
 import { useOrderStore } from '@/store';
 import { addNote, revokeEntitlement, restoreEntitlement, fetchNote, fetchOrderById, getOrderErrorMessage, isOrderFrozen } from '@/services/orders.service';
@@ -57,7 +58,8 @@ import { CodLimitShipmentNotice } from './CodLimitShipmentNotice';
 import { DeliveryFeeProposals } from './DeliveryFeeProposals';
 import { DeliveryCostNote, DeliverySummaryRow, ShipmentFeeLine } from './DeliveryMoney';
 import { RefundDialog } from '@/components/customers/RefundDialog';
-import { REFUND_REASON_KEYS } from '@/components/customers/customer.constants';
+import { REFUND_REASON_KEYS, refundStatusNote } from '@/components/customers/customer.constants';
+import { RefundRequestChip } from '@/components/orders/RefundRequestChip';
 import { useRefundEligibility } from '@/hooks/use-refund-eligibility';
 import { getNextStatuses, STATUS_ACTION_KEYS, ORDER_STATUS_KEYS, canDispatchOrder } from '@/lib/orderStatus';
 import { ApiError } from '@/types/api';
@@ -277,9 +279,10 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
   };
 
   const handleRefunded = async () => {
-    // A full refund flips paymentStatus and both write a timeline entry, so the
-    // order is re-read rather than patched locally. Eligibility moves too: a
-    // partial refund leaves the order `paid` with a smaller balance.
+    // A refund request was opened. A completed one can flip paymentStatus and
+    // writes a timeline entry, so the order is re-read rather than patched
+    // locally. Eligibility moves too: while the request is open it answers
+    // `REFUND_ALREADY_OPEN`, which puts the status where the button was.
     refund.refresh();
     try {
       setOrder(await fetchOrderById(order.id));
@@ -318,7 +321,6 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
     // if (event.description) return;
     setFetchingNoteId(event.id);
     try {
-      await new Promise(res => setTimeout(res, 2000));
       const message = await fetchNote(order.id, event.noteId);
       setOrder(prev => prev ? {
         ...prev,
@@ -799,7 +801,13 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                         </div>
                       </div>
                       {/* Why the Refund action isn't offered — the vendor looks here for it. */}
-                      {refund.reasonCode && (
+                      {refund.openRefundRequest ? (
+                        <p className="mt-3 text-xs text-muted-foreground">
+                          {refundStatusNote(refund.openRefundRequest.status, t, {
+                            channel: refund.eligibility?.paymentChannel,
+                          })}
+                        </p>
+                      ) : refund.reasonCode && (
                         <p className="mt-3 text-xs text-muted-foreground">
                           {t('orders.detail.payment.refundUnavailable', {
                             reason: t(REFUND_REASON_KEYS[refund.reasonCode]),
@@ -941,6 +949,9 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                     {t('orders.actions.refund')}
                   </Button>
                 )}
+                {refund.openRefundRequest && (
+                  <RefundRequestChip status={refund.openRefundRequest.status} className="h-9 w-full" />
+                )}
                 {nextStatuses.length > 0 ? (
                   <DropdownMenu modal={false}>
                     <DropdownMenuTrigger asChild>
@@ -1061,7 +1072,11 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
         orderId={order.id}
         orderNumber={order.orderNumber}
         open={refundOpen}
-        onOpenChange={setRefundOpen}
+        onOpenChange={(o) => {
+          setRefundOpen(o);
+          // The dialog may have learnt that a refund is already open (409) — re-ask.
+          if (!o) refund.refresh();
+        }}
         onRefunded={handleRefunded}
       />
 
@@ -1137,6 +1152,9 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                     components={[<span className="font-semibold text-foreground" />]}
                   />
                 </p>
+                {order.paymentStatus === 'paid' && (
+                  <PaidCancelNotice>{t('orders.detail.cancelDialog.paidNotice')}</PaidCancelNotice>
+                )}
                 <div className="space-y-2 pt-2">
                   <label htmlFor="mobile-cancel-confirm-input" className="text-xs font-semibold text-muted-foreground block">
                     <Trans

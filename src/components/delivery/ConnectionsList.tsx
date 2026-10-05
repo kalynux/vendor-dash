@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Building2, Loader2 } from 'lucide-react';
+import { Building2, FileText, Loader2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ReasonPopover } from '@/components/common/ReasonPopover';
 import { VerifiedBadge } from '@/components/common/VerifiedBadge';
+import { AgencyDetailSheet } from '@/components/delivery/AgencyDetailSheet';
 import {
     ActiveFilterChips,
     FilterChips,
@@ -78,7 +79,7 @@ function ConnectionRowActions({
     if (connection.status === 'active') {
         const terminateKey = `terminate:${connection.id}`;
         return (
-            <div className="flex items-center gap-1.5">
+            <div className="flex flex-wrap items-center justify-end gap-1.5">
                 {isDefault ? (
                     <Badge variant="secondary" className="text-primary bg-primary/10 border-primary/20">
                         {t('agency.connections.actions.default')}
@@ -203,6 +204,8 @@ export function ConnectionsList({
     const [chip, setChip] = useState<StatusChip>('all');
     const [search, setSearch] = useState('');
     const [filtersOpen, setFiltersOpen] = useState(false);
+    /** The agency whose terms are open — same window the Browse tab opens. */
+    const [termsAgency, setTermsAgency] = useState<AgencyBrowseItemDto | null>(null);
 
     const actions = useAgencyConnectionActions({
         onChanged: (_agencyId, dto) => {
@@ -344,7 +347,10 @@ export function ConnectionsList({
                                         </Badge>
                                     </div>
                                 </div>
-                                <div className="flex flex-shrink-0 justify-end">
+                                {/* Actions, then the terms button last — the same place it
+                                    sits on Browse cards. The row wraps rather than letting
+                                    "Résilier" run past the card on a 360px phone. */}
+                                <div className="flex flex-wrap items-center justify-end gap-2">
                                     <ConnectionRowActions
                                         connection={connection}
                                         actions={actions}
@@ -352,12 +358,32 @@ export function ConnectionsList({
                                         settingDefault={settingDefaultAgencyId === connection.agencyId}
                                         onSetDefault={onSetDefault}
                                     />
+                                    {agency && (
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="sm"
+                                            className="gap-1.5 text-muted-foreground hover:text-foreground md:w-9 md:px-0"
+                                            onClick={() => setTermsAgency(agency)}
+                                            aria-label={t('agency.browse.viewTermsFor', { name: agency.agencyName })}
+                                            title={t('agency.browse.viewTerms')}
+                                        >
+                                            <FileText className="h-4 w-4" />
+                                            <span className="md:sr-only">{t('agency.browse.terms')}</span>
+                                        </Button>
+                                    )}
                                 </div>
                             </div>
                         );
                     })}
                 </div>
             )}
+
+            <AgencyDetailSheet
+                agency={termsAgency}
+                open={!!termsAgency}
+                onOpenChange={(next) => !next && setTermsAgency(null)}
+            />
         </div>
     );
 }

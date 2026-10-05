@@ -308,7 +308,10 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
                         {/* Two short number fields share a row; the unit sits in the box. */}
                         <div className="grid grid-cols-2 gap-3">
                             <Field>
-                                <FieldLabel htmlFor="return_window_days">
+                                <FieldLabel
+                                    htmlFor="return_window_days"
+                                    tip={t('settings.policies.return.windowDaysHint')}
+                                >
                                     {t('settings.policies.return.windowDays')}
                                 </FieldLabel>
                                 <UnitInput
@@ -396,6 +399,19 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
                             </Select>
                             <FieldError message={errors.return_policy?.return_shipping_payer?.message} />
                         </Field>
+
+                        {/* What a refund costs the seller (earnings.md § clawback), one tap away. */}
+                        <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                            <span>{t('settings.policies.return.refundCost.title')}</span>
+                            <InfoHint label={t('settings.policies.return.refundCost.title')}>
+                                <ul className="list-disc space-y-1 pl-4">
+                                    <li>{t('settings.policies.return.refundCost.share')}</li>
+                                    <li>{t('settings.policies.return.refundCost.delivery')}</li>
+                                    <li>{t('settings.policies.return.refundCost.freeDelivery')}</li>
+                                </ul>
+                                <p className="mt-2">{t('settings.policies.return.refundCost.debt')}</p>
+                            </InfoHint>
+                        </div>
                     </>
                 )}
 

@@ -128,9 +128,10 @@ export const customers = {
         title: 'Rembourser {{order}}',
         fallbackOrder: 'la commande',
         description:
-            'Les remboursements sont traités en direct par la passerelle de paiement et sont irréversibles.',
+            'Wi-Mall renvoie l’argent au client. Une fois envoyé, le remboursement est irréversible.',
         notRefundable: 'Cette commande ne peut pas être remboursée',
         notEligible: 'Elle n’est pas éligible à un remboursement pour le moment.',
+        alreadyOpen: 'Un remboursement de cette commande est déjà en cours',
         maxRefundable: 'Remboursement maximum',
         remaining: 'Solde restant',
         settlesIn: 'Le remboursement est réglé sous ~{{days}} jours.',
@@ -138,13 +139,56 @@ export const customers = {
         amount: 'Montant ({{currency}})',
         amountHelp:
             'Vous pouvez rembourser jusqu’à {{max}}. Réduisez ce montant pour un remboursement partiel.',
+        itemDefective: 'L’article était défectueux',
+        itemDefectiveHelp: 'Le client récupère aussi ses frais de livraison. Ils sont à votre charge.',
+        amountDefectivePlaceholder: 'Maximum autorisé',
+        amountDefectiveHelp:
+            'Laissez vide pour rembourser le maximum autorisé, livraison comprise. Le montant exact s’affiche après confirmation.',
         reason: 'Motif (facultatif)',
-        reasonPlaceholder:
-            'Transmis à la passerelle de paiement et conservé sur le remboursement.',
+        reasonPlaceholder: 'Conservé avec la demande de remboursement.',
         submit: 'Rembourser',
         submitAmount: 'Rembourser {{amount}}',
-        fullyRefunded: 'Commande intégralement remboursée',
-        partiallyRefunded: 'Remboursement partiel effectué',
+        earningsNote: 'Votre part de ce montant est reprise sur vos gains.',
+        how: {
+            autoSend: 'Envoyé immédiatement',
+            needsApproval: 'Doit être approuvé par Wi-Mall',
+            card: 'Il revient intégralement sur la carte du client, sans frais.',
+            mobileMoney:
+                'Il est envoyé au numéro mobile money qui a payé. Des frais de transfert de 2 % sont déduits de ce que reçoit le client.',
+            cod: 'Paiement à la livraison : il ne peut être envoyé qu’une fois que la société de livraison a remis l’argent de cette commande à Wi-Mall. Des frais de transfert de 2 % sont déduits de ce que reçoit le client.',
+        },
+        result: {
+            amountWithFee: 'Remboursement de {{gross}} — le client reçoit {{net}} ({{fee}} de frais de transfert).',
+            amountNoFee: 'Remboursement de {{gross}} — le client reçoit la totalité.',
+        },
+    },
+
+    refundStatus: {
+        badge: {
+            awaiting_approval: 'Remboursement demandé',
+            approved: 'Remboursement approuvé',
+            waiting_for_cash: 'Remboursement en attente de l’argent',
+            sending: 'Remboursement en route',
+            failed: 'Remboursement pas encore envoyé',
+            completed: 'Remboursée',
+            rejected: 'Remboursement refusé',
+            unknown: 'Remboursement en cours',
+        },
+        note: {
+            awaiting_approval: 'Demandé — Wi-Mall va l’approuver et l’envoyer au client.',
+            awaitingApprovalCod:
+                'Demandé — Wi-Mall va l’approuver et l’enverra dès que la société de livraison lui aura remis l’argent.',
+            approved: 'Approuvé — Wi-Mall va l’envoyer au client.',
+            waiting_for_cash:
+                'Approuvé — il sera envoyé dès que la société de livraison aura remis l’argent à Wi-Mall.',
+            sending: 'Envoyé au numéro du client. Il devrait arriver sous peu.',
+            sendingTo: 'Envoyé au numéro du client ({{number}}). Il devrait arriver sous peu.',
+            failed: 'Le transfert n’est pas passé — Wi-Mall va réessayer.',
+            completed: 'Remboursé au client.',
+            completedCard: 'Remboursé sur la carte du client (montant total).',
+            rejected: 'Wi-Mall a refusé ce remboursement.',
+            unknown: 'Un remboursement de cette commande est en cours.',
+        },
     },
 
     returnPayer: {
@@ -159,9 +203,10 @@ export const customers = {
             'Cette commande n’a pas été payée, il n’y a donc rien à rembourser.',
         REFUND_PAYMENT_NOT_FOUND: 'Aucun paiement réussi n’est lié à cette commande.',
         REFUND_ALREADY_FULLY_REFUNDED: 'Cette commande a déjà été intégralement remboursée.',
-        REFUND_WINDOW_EXPIRED: 'Le délai de retour de cette commande a expiré.',
+        REFUND_WINDOW_EXPIRED: 'Le délai de retour de cette commande, compté à partir de sa livraison, a expiré.',
         REFUND_NOT_ELIGIBLE:
             'Votre politique ramène à zéro le montant remboursable pour cette commande.',
+        REFUND_ALREADY_OPEN: 'Un remboursement de cette commande est déjà en cours.',
     },
 
     validation: {
@@ -190,7 +235,7 @@ export const customers = {
         resetNameFailed: "Nous n'avons pas pu rétablir le nom affiché. Réessayez.",
         eligibilityFailed:
             "Nous n'avons pas pu vérifier si cette commande est remboursable. Réessayez.",
-        refundFailed: "Nous n'avons pas pu effectuer le remboursement. Réessayez.",
+        refundFailed: "Nous n'avons pas pu demander le remboursement. Réessayez.",
     },
 };
 

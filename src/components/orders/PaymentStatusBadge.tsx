@@ -28,7 +28,7 @@ export function PaymentStatusBadge({ status, size = 'sm', className }: PaymentSt
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 font-medium capitalize',
+        'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 font-medium',
         size === 'xs' ? 'text-[10px]' : 'text-xs',
         config?.class ?? 'border-border text-muted-foreground bg-muted',
         className,

@@ -2,15 +2,18 @@ import type { ReactNode } from 'react';
 import { Building2, FileText } from 'lucide-react';
 import { VerifiedBadge } from '@/components/common/VerifiedBadge';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { formatAgencyAddressDetail, formatAgencyLocality } from '@/lib/agencyAddress';
 import { fileRefUrl } from '@/services/files.service';
 import { useTranslation, useFormatters, type TranslationKey } from '@/i18n';
 import type { VendorAgencyListItemDto } from '@/types/product.types';
 
+/** Just the party: the row's label already says "Cost paid by". */
 const RETURNS_PAYER_KEYS: Record<string, TranslationKey> = {
-    vendor: 'agency.returnsPayer.vendor',
-    agency: 'agency.returnsPayer.agency',
-    customer: 'agency.returnsPayer.customer',
+    vendor: 'agency.detail.payer.vendor',
+    agency: 'agency.detail.payer.agency',
+    customer: 'agency.detail.payer.customer',
 };
 
 const INSPECTOR_KEYS: Record<string, TranslationKey> = {
@@ -52,6 +55,10 @@ export interface AgencyDetailSheetProps {
 }
 
 /**
+ * A bottom sheet on a phone, a centred window from `md` up. It used to be the
+ * bottom sheet everywhere, which on a desktop slid a tall strip up from the
+ * bottom edge of a wide screen.
+ *
  * Everything an agency will hold a vendor to, read before the vendor asks to
  * connect — the request IS the vendor accepting these terms, so nothing the
  * agency charges or limits is left off. Fields that arrived on 2026-10-03 are
@@ -60,6 +67,7 @@ export interface AgencyDetailSheetProps {
 export function AgencyDetailSheet({ agency, open, onOpenChange, footerSlot }: AgencyDetailSheetProps) {
     const { t } = useTranslation();
     const fmt = useFormatters();
+    const isMobile = useIsMobile();
     if (!agency) return null;
 
     const hq = agency.headquartersAddress;
@@ -74,39 +82,32 @@ export function AgencyDetailSheet({ agency, open, onOpenChange, footerSlot }: Ag
     const fees = p?.pricing.additional_fees;
     const documents = p?.documents ?? [];
 
-    return (
-        <Sheet open={open} onOpenChange={onOpenChange}>
-            <SheetContent
-                side="bottom"
-                // Centred and narrower from `md`: a full-width strip of label/value
-                // rows on a 1280px screen puts each label a screen away from its figure.
-                className="h-[85dvh] gap-0 rounded-t-2xl p-0 pb-[env(safe-area-inset-bottom)] md:mx-auto md:max-w-xl"
-            >
-                <div className="mx-auto mb-1 mt-2 h-1 w-10 flex-shrink-0 rounded-full bg-muted" />
+    const logo = (
+        <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted">
+            {logoUrl ? (
+                <img src={logoUrl} alt="" className="h-full w-full object-cover" />
+            ) : (
+                <Building2 className="h-6 w-6 text-muted-foreground" />
+            )}
+        </div>
+    );
+    const titleContent = (
+        <>
+            <span className="truncate">{agency.agencyName}</span>
+            {agency.kycVerified && <VerifiedBadge kind="agency" />}
+        </>
+    );
+    // Verified shows as the check beside the name; only the missing check is
+    // worth a word of its own.
+    const subtitle = [hq ? formatAgencyLocality(hq) : null, agency.kycVerified ? null : t('agency.detail.unverified')]
+        .filter(Boolean)
+        .join(' · ');
+    const headerClass = 'flex-shrink-0 flex-row items-center gap-3 border-b px-4 pb-4 pr-12 text-left';
+    const titleClass = 'flex items-center gap-1 text-base leading-tight';
+    const subtitleClass = 'mt-0.5 truncate text-sm';
 
-                <SheetHeader className="flex-shrink-0 flex-row items-center gap-3 border-b px-4 pb-4 pt-2 pr-12 text-left">
-                    <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted">
-                        {logoUrl ? (
-                            <img src={logoUrl} alt="" className="h-full w-full object-cover" />
-                        ) : (
-                            <Building2 className="h-6 w-6 text-muted-foreground" />
-                        )}
-                    </div>
-                    <div className="min-w-0">
-                        <SheetTitle className="flex items-center gap-1 text-base leading-tight">
-                            <span className="truncate">{agency.agencyName}</span>
-                            {agency.kycVerified && <VerifiedBadge kind="agency" />}
-                        </SheetTitle>
-                        <SheetDescription className="mt-0.5 truncate text-sm">
-                            {/* Verified shows as the check beside the name; only the
-                                missing check is worth a word of its own. */}
-                            {[hq ? formatAgencyLocality(hq) : null, agency.kycVerified ? null : t('agency.detail.unverified')]
-                                .filter(Boolean)
-                                .join(' · ')}
-                        </SheetDescription>
-                    </div>
-                </SheetHeader>
-
+    const body = (
+        <>
                 {/* Native scrolling, not Radix's ScrollArea: that one keeps its
                     viewport at `overflow: hidden` until a scrollbar mounts, which
                     never happens on a touch screen — the lower sections could not
@@ -273,6 +274,43 @@ export function AgencyDetailSheet({ agency, open, onOpenChange, footerSlot }: Ag
                         {footerSlot}
                     </div>
                 )}
+        </>
+    );
+
+    if (!isMobile) {
+        return (
+            <Dialog open={open} onOpenChange={onOpenChange}>
+                <DialogContent className="flex max-h-[85dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-xl">
+                    <DialogHeader className={`${headerClass} pt-4`}>
+                        {logo}
+                        <div className="min-w-0">
+                            <DialogTitle className={titleClass}>{titleContent}</DialogTitle>
+                            <DialogDescription className={subtitleClass}>{subtitle}</DialogDescription>
+                        </div>
+                    </DialogHeader>
+                    {body}
+                </DialogContent>
+            </Dialog>
+        );
+    }
+
+    return (
+        <Sheet open={open} onOpenChange={onOpenChange}>
+            <SheetContent
+                side="bottom"
+                className="h-[85dvh] gap-0 rounded-t-2xl p-0 pb-[env(safe-area-inset-bottom)]"
+            >
+                <div className="mx-auto mb-1 mt-2 h-1 w-10 flex-shrink-0 rounded-full bg-muted" />
+
+                <SheetHeader className={`${headerClass} pt-2`}>
+                    {logo}
+                    <div className="min-w-0">
+                        <SheetTitle className={titleClass}>{titleContent}</SheetTitle>
+                        <SheetDescription className={subtitleClass}>{subtitle}</SheetDescription>
+                    </div>
+                </SheetHeader>
+
+                {body}
             </SheetContent>
         </Sheet>
     );

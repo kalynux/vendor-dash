@@ -73,7 +73,11 @@ export function StepVariants({
   const infiniteStockLocked =
     serverData.serverProduct?.delivery?.pickupLocation?.source === 'agency_storage';
 
-  const { state, actions, selectors } = useVariantBuilder(serverOptions, serverVariants);
+  const { state, actions, selectors } = useVariantBuilder(
+    serverOptions,
+    serverVariants,
+    serverData.serverProduct?.defaultVariantId ?? null,
+  );
 
   // Resolve each saved variant's images: session edits win over server data.
   const maxImages = VARIANT_IMAGE_LIMIT[serverData.serverProduct?.type ?? 'physical'];
@@ -164,12 +168,14 @@ export function StepVariants({
               options={state.options}
               rowErrors={state.rowErrors}
               onUpdateRow={actions.updateRow}
+              onMoveRow={actions.moveRow}
               onBulkUpdate={actions.bulkUpdateRows}
               onAutoGenerateSkus={actions.autoGenerateSkus}
               onEditOptions={actions.switchToOptions}
               onSave={handleSaveVariants}
               isSaving={isSaving}
               hasUnsavedChanges={selectors.hasUnsavedChanges}
+              firstRowChanged={selectors.firstRowChanged}
               newRowCount={selectors.newRowCount}
               modifiedRowCount={selectors.modifiedRowCount}
               persistedRowCount={selectors.persistedRowCount}
@@ -199,7 +205,9 @@ export function StepVariants({
           onClick={handleContinue}
           disabled={
             isSaving ||
-            (state.phase === 'matrix' && selectors.hasUnsavedChanges && !selectors.allRowsSaved)
+            // A new top row counts too: leaving now would drop the vendor's
+            // choice of which variant shoppers see first.
+            (state.phase === 'matrix' && selectors.hasUnsavedChanges)
           }
           className="gap-1.5"
         >

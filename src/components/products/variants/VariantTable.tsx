@@ -1,9 +1,11 @@
 // ─── Variant Table ────────────────────────────────────────────────────────────
 // Matrix table with dynamic option columns, inline editing, bulk edit, and row
 // status. Renders as a table on >= md screens and as flat stacked blocks on mobile.
+// Rows can be moved up and down: the top one is the variant shoppers see first
+// (saving makes it the product's default variant).
 
 import { useState, useCallback, type ChangeEvent } from 'react';
-import { ChevronDown, Loader2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -24,12 +26,16 @@ interface VariantTableProps {
   options: DraftOption[];
   rowErrors: Record<string, string>;
   onUpdateRow: (localId: string, patch: VariantRowPatch) => void;
+  /** Move a row one place up (-1) or down (1). */
+  onMoveRow: (localId: string, offset: -1 | 1) => void;
   onBulkUpdate: (field: string, value: unknown) => void;
   onAutoGenerateSkus: () => void;
   onEditOptions: () => void;
   onSave: () => void;
   isSaving: boolean;
   hasUnsavedChanges: boolean;
+  /** A saved variant was moved to the top and is not yet the default — one more change to save. */
+  firstRowChanged: boolean;
   newRowCount: number;
   modifiedRowCount: number;
   persistedRowCount: number;
@@ -61,12 +67,14 @@ export function VariantTable({
   options,
   rowErrors,
   onUpdateRow,
+  onMoveRow,
   onBulkUpdate,
   onAutoGenerateSkus,
   onEditOptions,
   onSave,
   isSaving,
   hasUnsavedChanges,
+  firstRowChanged,
   newRowCount,
   modifiedRowCount,
   persistedRowCount,
@@ -155,7 +163,7 @@ export function VariantTable({
                 value={bulkPrice}
                 onChange={(e) => setBulkPrice(e.target.value)}
                 className="w-full md:h-8 md:w-[100px] md:text-xs"
-                placeholder="0.00"
+                placeholder="0"
               />
             </div>
             <Button
@@ -211,13 +219,20 @@ export function VariantTable({
         <p className="text-sm text-muted-foreground">{t('products.variantTable.empty')}</p>
       )}
 
+      {rows.length > 1 && (
+        <p className="text-sm text-muted-foreground">{t('products.variantTable.firstShownHint')}</p>
+      )}
+
       {/* ── Mobile: one flat block per variant, hairlines between ─────────── */}
       {rows.length > 0 && (
         <div className="divide-y divide-border border-y border-border md:hidden">
-          {rows.map((row) => (
+          {rows.map((row, index) => (
             <VariantRowCard
               key={row.localId}
               row={row}
+              isFirst={index === 0}
+              isLast={index === rows.length - 1}
+              onMove={(offset) => onMoveRow(row.localId, offset)}
               sortedOptions={sortedOptions}
               isExpanded={expandedRows.has(row.localId)}
               onToggleExpand={() => toggleExpand(row.localId)}
@@ -242,6 +257,7 @@ export function VariantTable({
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b bg-muted/50">
+                <th className="w-px p-2" />
                 {sortedOptions.map((opt) => (
                   <th
                     key={opt.localId}
@@ -272,10 +288,13 @@ export function VariantTable({
               </tr>
             </thead>
             <tbody>
-              {rows.map((row) => (
+              {rows.map((row, index) => (
                 <VariantRowComponent
                   key={row.localId}
                   row={row}
+                  isFirst={index === 0}
+                  isLast={index === rows.length - 1}
+                  onMove={(offset) => onMoveRow(row.localId, offset)}
                   sortedOptions={sortedOptions}
                   isExpanded={expandedRows.has(row.localId)}
                   onToggleExpand={() => toggleExpand(row.localId)}
@@ -309,7 +328,7 @@ export function VariantTable({
               ? t('common.actions.saving')
               : hasUnsavedChanges
                 ? t('products.variantTable.saveChanges', {
-                    count: newRowCount + modifiedRowCount,
+                    count: newRowCount + modifiedRowCount + (firstRowChanged ? 1 : 0),
                   })
                 : t('products.variantTable.allSaved')}
           </Button>
@@ -323,6 +342,9 @@ export function VariantTable({
 
 interface VariantRowComponentProps {
   row: VariantRow;
+  isFirst: boolean;
+  isLast: boolean;
+  onMove: (offset: -1 | 1) => void;
   sortedOptions: DraftOption[];
   isExpanded: boolean;
   onToggleExpand: () => void;
@@ -338,6 +360,9 @@ interface VariantRowComponentProps {
 
 function VariantRowComponent({
   row,
+  isFirst,
+  isLast,
+  onMove,
   sortedOptions,
   isExpanded,
   onToggleExpand,
@@ -369,6 +394,9 @@ function VariantRowComponent({
           row.status === 'modified' && 'bg-amber-50/30 dark:bg-amber-950/10',
         )}
       >
+        <td className="py-1 pl-1">
+          <MoveButtons isFirst={isFirst} isLast={isLast} onMove={onMove} stacked />
+        </td>
         {sortedOptions.map((opt) => {
           const comboVal = row.combo.comboValues.find(
             (cv) => cv.optionLocalId === opt.localId,
@@ -470,7 +498,7 @@ function VariantRowComponent({
 
       {isExpanded && (
         <tr className="border-b bg-muted/20">
-          <td colSpan={sortedOptions.length + 7} className="p-4">
+          <td colSpan={sortedOptions.length + 8} className="p-4">
             <SecondaryFields
               row={row}
               onChange={handleFieldChange}
@@ -487,6 +515,9 @@ function VariantRowComponent({
 
 function VariantRowCard({
   row,
+  isFirst,
+  isLast,
+  onMove,
   sortedOptions,
   isExpanded,
   onToggleExpand,
@@ -520,7 +551,7 @@ function VariantRowCard({
   return (
     <div className="space-y-4 py-5">
       {/* Header: the combination + status */}
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex items-center justify-between gap-3">
         <p className="min-w-0 flex-1 font-medium">
           {sortedOptions
             .map((opt) =>
@@ -533,6 +564,7 @@ function VariantRowCard({
         <Badge variant="outline" className={cn('shrink-0 border-transparent text-xs', statusBadge.className)}>
           {t(statusBadge.labelKey)}
         </Badge>
+        <MoveButtons isFirst={isFirst} isLast={isLast} onMove={onMove} />
       </div>
 
       {/* Name */}
@@ -638,6 +670,58 @@ function VariantRowCard({
   );
 }
 
+// ─── Move Buttons ────────────────────────────────────────────────────────────
+
+/**
+ * Up / down arrows for one row. `stacked` is the wide table's compact column;
+ * on a phone they sit side by side at full thumb size.
+ */
+function MoveButtons({
+  isFirst,
+  isLast,
+  onMove,
+  stacked = false,
+}: {
+  isFirst: boolean;
+  isLast: boolean;
+  onMove: (offset: -1 | 1) => void;
+  stacked?: boolean;
+}) {
+  const { t } = useTranslation();
+  const buttonClass = stacked
+    ? 'tap-target h-5 w-7 rounded text-muted-foreground'
+    : '-my-2 size-11 shrink-0 text-muted-foreground';
+
+  return (
+    <div className={cn('flex shrink-0', stacked ? 'flex-col' : 'items-center')}>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className={buttonClass}
+        disabled={isFirst}
+        onClick={() => onMove(-1)}
+        aria-label={t('products.variantTable.moveUp')}
+        title={t('products.variantTable.moveUp')}
+      >
+        <ChevronUp className="h-4 w-4" />
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className={buttonClass}
+        disabled={isLast}
+        onClick={() => onMove(1)}
+        aria-label={t('products.variantTable.moveDown')}
+        title={t('products.variantTable.moveDown')}
+      >
+        <ChevronDown className="h-4 w-4" />
+      </Button>
+    </div>
+  );
+}
+
 // ─── Field Row (mobile-friendly label + control) ─────────────────────────────
 
 function FieldRow({
@@ -739,7 +823,7 @@ function SecondaryFields({
             )
           }
           className="md:h-8"
-          placeholder="0.00"
+          placeholder="0"
         />
       </div>
       {/* A warehouse holds a countable number of things, so `agency_storage` and
@@ -749,7 +833,7 @@ function SecondaryFields({
       {/* Switch rows: label left, switch right on a phone; the compact
           switch-first pairing stays in the wide table. */}
       <div className="col-span-2 space-y-1 md:col-span-1">
-        <div className="flex items-center justify-between gap-3 md:flex-row-reverse md:justify-end md:gap-2">
+        <div className="flex items-center justify-between gap-3 md:mt-4 md:h-8 md:flex-row-reverse md:justify-end md:gap-2">
           <Label className="md:text-xs">{t('products.variantTable.secondary.infiniteStock')}</Label>
           <Switch
             checked={row.isInfiniteStock}
@@ -792,7 +876,7 @@ function SecondaryFields({
               placeholder={t('products.variantTable.secondary.nonePlaceholder')}
             />
           </div>
-          <div className="col-span-2 flex items-center justify-between gap-3 md:col-span-1 md:flex-row-reverse md:justify-end md:gap-2">
+          <div className="col-span-2 flex items-center justify-between gap-3 md:col-span-1 md:mt-4 md:h-8 md:flex-row-reverse md:justify-end md:gap-2">
             <Label className="md:text-xs">{t('products.variantTable.secondary.allowOversell')}</Label>
             <Switch
               checked={row.allowOversell ?? false}

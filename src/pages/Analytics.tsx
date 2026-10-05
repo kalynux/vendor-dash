@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   Download,
+  Loader2,
   TrendingUp,
   TrendingDown,
   Users,
@@ -13,6 +14,8 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { SettingsSection } from '@/components/vendor-settings/SettingsSection';
 import { useAnalyticsStore } from '@/store';
+import { exportAnalytics } from '@/components/features/exportAnalytics';
+import { toast } from 'sonner';
 import { SalesChart } from '@/components/features/SalesChart';
 import { TopProductsList } from '@/components/features/TopProductsList';
 import { EarningsSummary } from '@/components/features/EarningsSummary';
@@ -194,6 +197,7 @@ export function Analytics() {
 
   const {
     metrics,
+    salesData,
     topProducts,
     customerMetrics,
     summary,
@@ -203,6 +207,24 @@ export function Analytics() {
     isLoading,
   } = useAnalyticsStore();
   const bookings = summary?.bookings;
+
+  const [exporting, setExporting] = useState(false);
+  /** What the page shows for the chosen period, as a spreadsheet. */
+  const handleExport = async () => {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const outcome = await exportAnalytics(
+        { metrics, salesData, topProducts, customerMetrics, summary, dateRange },
+        t,
+        fmt,
+      );
+      if (outcome === 'saved') toast.success(t('analytics.exportFile.done'));
+      else if (outcome === 'failed') toast.error(t('analytics.exportFile.failed'));
+    } finally {
+      setExporting(false);
+    }
+  };
 
   useEffect(() => {
     fetchAnalytics();
@@ -299,7 +321,10 @@ export function Analytics() {
               id: 'export',
               icon: Download,
               label: t('analytics.export'),
-              onClick: () => {/* export */ },
+              onClick: handleExport,
+              busy: exporting,
+              // Nothing to export until the figures have loaded.
+              disabled: isLoading,
             },
           ]}
           subheader={
@@ -322,9 +347,9 @@ export function Analytics() {
           </div>
           <div className="flex items-center gap-3">
             <DateRangePicker value={dateRange} onChange={setDateRange} />
-            <Button variant="outline" className="gap-2">
-              <Download className="w-4 h-4" />
-              {t('analytics.export')}
+            <Button variant="outline" className="gap-2" onClick={handleExport} disabled={exporting || isLoading}>
+              {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+              {exporting ? t('analytics.exportFile.exporting') : t('analytics.export')}
             </Button>
           </div>
         </div>
@@ -420,7 +445,7 @@ export function Analytics() {
               <dl className="space-y-3 text-sm">
                 <StatRow label={t('analytics.snapshot.customers')} value={fmt.number(customerMetrics?.total ?? 0)} />
                 <StatRow label={t('analytics.snapshot.repeatCustomers')} value={fmt.number(customerMetrics?.repeat ?? 0)} />
-                <StatRow label={t('analytics.snapshot.repeatRate')} value={`${customerMetrics?.repeatRate ?? 0}%`} />
+                <StatRow label={t('analytics.snapshot.repeatRate')} value={fmt.percent(customerMetrics?.repeatRate ?? 0, Number.isInteger(customerMetrics?.repeatRate ?? 0) ? 0 : 1)} />
                 <StatRow
                   className="border-t pt-3"
                   label={t('analytics.snapshot.bookings')}
@@ -479,7 +504,7 @@ export function Analytics() {
                 key: 'rate',
                 title: t('analytics.customers.repeatRateTitle'),
                 description: t('analytics.customers.repeatRateDescription'),
-                value: `${customerMetrics?.repeatRate ?? 0}%`,
+                value: fmt.percent(customerMetrics?.repeatRate ?? 0, Number.isInteger(customerMetrics?.repeatRate ?? 0) ? 0 : 1),
               },
             ].map((stat) => (
               <div

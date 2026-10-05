@@ -124,6 +124,7 @@ export const agency = {
     },
 
     browse: {
+        found: plural({ one: '{{count}} agence trouvée', other: '{{count}} agences trouvées' }),
         title: 'Parcourir les agences',
         description: 'Trouvez une agence de livraison qui couvre les zones où vous vendez.',
         searchPlaceholder: 'Rechercher une agence…',
@@ -140,6 +141,9 @@ export const agency = {
         emptyFiltered: 'Aucune agence ne correspond à votre recherche ou à vos filtres.',
         emptyNone: 'Aucune agence de livraison n’est encore disponible dans votre zone.',
         viewDetailsFor: 'Voir les détails de {{name}}',
+        terms: 'Conditions',
+        viewTerms: 'Voir les conditions',
+        viewTermsFor: 'Voir les conditions de {{name}}',
     },
 
     filters: {
@@ -163,6 +167,11 @@ export const agency = {
     },
 
     detail: {
+        payer: {
+            vendor: 'Vous (le vendeur)',
+            agency: 'L’agence',
+            customer: 'Le client',
+        },
         kycVerified: 'KYC vérifié',
         unverified: 'Non vérifiée',
         headquarters: 'Siège',

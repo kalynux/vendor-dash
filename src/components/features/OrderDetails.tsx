@@ -17,7 +17,6 @@ import {
   Loader2,
   AlertTriangle,
   PackageCheck,
-  Banknote,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -40,20 +39,23 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
-import { useOrderStore } from '@/store';
+import { useOrderStore, useStoreStore } from '@/store';
+import { printOrder } from '@/components/orders/printOrder';
 import { addNote, fetchNote, revokeEntitlement, restoreEntitlement, fetchOrderById, getOrderErrorMessage, isOrderFrozen } from '@/services/orders.service';
 import { useOrderDispatch } from '@/hooks/use-order-dispatch';
 import { CodLimitShipmentNotice } from '@/components/orders/CodLimitShipmentNotice';
 import { DeliveryFeeProposals } from '@/components/orders/DeliveryFeeProposals';
 import { DeliveryCostNote, DeliverySummaryRow, ShipmentFeeLine } from '@/components/orders/DeliveryMoney';
 import { RefundDialog } from '@/components/customers/RefundDialog';
-import { REFUND_REASON_KEYS } from '@/components/customers/customer.constants';
+import { REFUND_REASON_KEYS, refundStatusNote } from '@/components/customers/customer.constants';
+import { RefundRequestChip } from '@/components/orders/RefundRequestChip';
 import { useRefundEligibility } from '@/hooks/use-refund-eligibility';
 import { PaymentStatusBadge } from '@/components/orders/PaymentStatusBadge';
 import { OrderStatusBadge } from '@/components/orders/OrderStatusBadge';
 import { DeliveryStatusBadge } from '@/components/orders/DeliveryStatusBadge';
 import { DeliveryRejectionNotice } from '@/components/orders/DeliveryRejectionNotice';
 import { ReassignAgencyPopover } from '@/components/orders/ReassignAgencyPopover';
+import { PaidCancelNotice } from '@/components/orders/PaidCancelNotice';
 import { ShipmentReviewControl } from '@/components/reviews/ShipmentReviewControl';
 import { ApiError } from '@/types/api';
 import { toast } from 'sonner';
@@ -62,7 +64,7 @@ import { formatPhoneInternational } from '@/lib/phone';
 import { useProductImages } from '@/hooks/use-product-images';
 import { VerifiedBadge } from '@/components/common/VerifiedBadge';
 import { useTranslation, useFormatters, Trans } from '@/i18n';
-import type { Order, Entitlement, OrderTimelineEvent, VendorSettableStatus } from '@/types';
+import type { Address, Order, Entitlement, OrderTimelineEvent, VendorSettableStatus } from '@/types';
 import { getNextStatuses, STATUS_ACTION_KEYS, ORDER_STATUS_KEYS, canDispatchOrder } from '@/lib/orderStatus';
 
 const REASSIGNABLE_DELIVERY_STATUSES = ['pending', 'assigned', 'pending_agency_reassignment'];
@@ -96,6 +98,7 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
   const { t } = useTranslation();
   const fmt = useFormatters();
   const { updateOrderStatus } = useOrderStore();
+  const { store } = useStoreStore();
 
   // Local state for the current order (so actions can update it without refetching the page)
   const [currentOrder, setCurrentOrder] = useState<Order>(order);
@@ -222,9 +225,10 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
   };
 
   const handleRefunded = async () => {
-    // A full refund flips paymentStatus and both write a timeline entry, so the
-    // order is re-read rather than patched locally. Eligibility moves too: a
-    // partial refund leaves the order `paid` with a smaller balance.
+    // A refund request was opened. A completed one can flip paymentStatus and
+    // writes a timeline entry, so the order is re-read rather than patched
+    // locally. Eligibility moves too: while the request is open it answers
+    // `REFUND_ALREADY_OPEN`, which puts the status where the button was.
     refund.refresh();
     try {
       const updated = await fetchOrderById(currentOrder.id);
@@ -266,7 +270,6 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
     // if (event.description) return;
     setFetchingNoteId(event.id);
     try {
-      await new Promise(res => setTimeout(res, 2000));
       const message = await fetchNote(currentOrder.id, event.noteId);
       setCurrentOrder(prev => ({
         ...prev,
@@ -331,72 +334,84 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
 
   return (
     <div className="space-y-6 flex flex-col h-full min-h-0">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 flex-shrink-0">
-        <div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <h2 className="text-xl font-bold">{currentOrder.orderNumber}</h2>
-            <OrderStatusBadge status={currentOrder.status} />
-            {isDigital ? (
-              <Badge variant="outline" className="gap-1 border-violet-300 text-violet-700 bg-violet-50">
-                <Download className="w-3 h-3" />{t('orders.orderType.digital')}
-              </Badge>
-            ) : (
-              <Badge variant="outline" className="gap-1 border-blue-300 text-blue-700 bg-blue-50">
-                <Package className="w-3 h-3" />{t('orders.orderType.physical')}
-              </Badge>
+      {/* Header — the order number and its status on one line, everything else
+          about it as one plain sentence underneath, actions at the end of that
+          line. It used to be three coloured pills that wrapped onto a second
+          row, with the buttons floating beside a block they didn't line up
+          with. `pr-8` keeps the title clear of the dialog's close button. */}
+      <div className="flex-shrink-0 space-y-2">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pr-8">
+          <h2 className="text-xl font-bold">{currentOrder.orderNumber}</h2>
+          <OrderStatusBadge status={currentOrder.status} />
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+          <p className="text-sm text-muted-foreground">
+            {[
+              t('orders.detail.placedOn', { date: formatDate(currentOrder.createdAt) }),
+              t(isDigital ? 'orders.orderType.digital' : 'orders.orderType.physical'),
+              currentOrder.paymentMethod === 'cash_on_delivery'
+                ? t('orders.paymentMethod.cashOnDelivery')
+                : null,
+            ]
+              .filter(Boolean)
+              .join(' · ')}
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              onClick={() =>
+                printOrder({
+                  order: currentOrder,
+                  addressLines: currentOrder.customer.defaultAddress
+                    ? addressLines(currentOrder.customer.defaultAddress, fmt.country)
+                    : [],
+                  storeName: store?.name ?? '',
+                  t,
+                  fmt,
+                })
+              }
+            >
+              <Printer className="w-4 h-4" />
+              {t('common.actions.print')}
+            </Button>
+            {canDispatch && (
+              <Button variant="outline" size="sm" className="gap-2" disabled={dispatchLoading} onClick={handleDispatch}>
+                {dispatchLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <PackageCheck className="w-4 h-4" />}
+                {t('orders.actions.dispatchToAgency')}
+              </Button>
             )}
-            {currentOrder.paymentMethod === 'cash_on_delivery' && (
-              <Badge variant="outline" className="gap-1 border-amber-300 text-amber-700 bg-amber-50">
-                <Banknote className="w-3 h-3" />{t('orders.paymentMethod.cashOnDelivery')}
-              </Badge>
+            {refund.canRefund && (
+              <Button variant="outline" size="sm" className="gap-2" onClick={() => setRefundOpen(true)}>
+                <RotateCcw className="w-4 h-4" />
+                {t('orders.actions.refund')}
+              </Button>
+            )}
+            {refund.openRefundRequest && <RefundRequestChip status={refund.openRefundRequest.status} />}
+            {nextStatuses.length > 0 && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button size="sm" className="gap-2" disabled={statusLoading}>
+                    {statusLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+                    {t('orders.actions.updateStatus')}
+                    <ChevronDown className="w-4 h-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  {nextStatuses.map((s) => (
+                    <DropdownMenuItem
+                      key={s}
+                      onClick={() => handleStatusUpdate(s)}
+                      className={s === 'cancelled' ? 'text-destructive' : ''}
+                    >
+                      {t(STATUS_ACTION_KEYS[s])}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
           </div>
-          <p className="text-sm text-muted-foreground mt-1">
-            {t('orders.detail.placedOn', { date: formatDate(currentOrder.createdAt) })}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" className="gap-2">
-            <Printer className="w-4 h-4" />
-            {t('common.actions.print')}
-          </Button>
-          {canDispatch && (
-            <Button variant="outline" size="sm" className="gap-2" disabled={dispatchLoading} onClick={handleDispatch}>
-              {dispatchLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <PackageCheck className="w-4 h-4" />}
-              {t('orders.actions.dispatchToAgency')}
-            </Button>
-          )}
-          {refund.canRefund && (
-            <Button variant="outline" size="sm" className="gap-2" onClick={() => setRefundOpen(true)}>
-              <RotateCcw className="w-4 h-4" />
-              {t('orders.actions.refund')}
-            </Button>
-          )}
-          {nextStatuses.length > 0 ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button size="sm" className="gap-2" disabled={statusLoading}>
-                  {statusLoading && <Loader2 className="w-4 h-4 animate-spin" />}
-                  {t('orders.actions.updateStatus')}
-                  <ChevronDown className="w-4 h-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                {nextStatuses.map((s) => (
-                  <DropdownMenuItem
-                    key={s}
-                    onClick={() => handleStatusUpdate(s)}
-                    className={s === 'cancelled' ? 'text-destructive' : ''}
-                  >
-                    {t(STATUS_ACTION_KEYS[s])}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          ) : (
-            <Badge variant="outline" className="px-3 py-1">{t(ORDER_STATUS_KEYS[currentOrder.status])}</Badge>
-          )}
         </div>
       </div>
 
@@ -459,12 +474,12 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
                 </div>
                 <div className="pt-3 border-t grid grid-cols-2 gap-3">
                   <div>
-                    <p className="text-base font-bold">{currentOrder.customer.orderCount}</p>
-                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">{t('orders.detail.customer.orderCount')}</p>
+                    <p className="text-base font-semibold">{currentOrder.customer.orderCount}</p>
+                    <p className="text-xs text-muted-foreground">{t('orders.detail.customer.orderCount')}</p>
                   </div>
                   <div>
-                    <p className="text-base font-bold">{formatCurrency(currentOrder.customer.totalSpent)}</p>
-                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">{t('orders.detail.customer.totalSpent')}</p>
+                    <p className="text-base font-semibold">{formatCurrency(currentOrder.customer.totalSpent)}</p>
+                    <p className="text-xs text-muted-foreground">{t('orders.detail.customer.totalSpent')}</p>
                   </div>
                 </div>
               </CardContent>
@@ -506,12 +521,9 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
                         {currentOrder.customer.defaultAddress.firstName}{' '}
                         {currentOrder.customer.defaultAddress.lastName}
                       </p>
-                      <p>{currentOrder.customer.defaultAddress.address1}</p>
-                      <p>
-                        {currentOrder.customer.defaultAddress.city},{' '}
-                        {currentOrder.customer.defaultAddress.province}
-                      </p>
-                      <p className="font-medium text-foreground/80">{currentOrder.customer.defaultAddress.country}</p>
+                      {addressLines(currentOrder.customer.defaultAddress, fmt.country).map((line) => (
+                        <p key={line}>{line}</p>
+                      ))}
                     </div>
                   ) : (
                     <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground py-2">
@@ -859,7 +871,13 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
               </div>
 
               {/* Why the Refund action isn't offered — the vendor looks here for it. */}
-              {refund.reasonCode && (
+              {refund.openRefundRequest ? (
+                <p className="text-xs text-muted-foreground">
+                  {refundStatusNote(refund.openRefundRequest.status, t, {
+                    channel: refund.eligibility?.paymentChannel,
+                  })}
+                </p>
+              ) : refund.reasonCode && (
                 <p className="text-xs text-muted-foreground">
                   {t('orders.detail.payment.refundUnavailable', {
                     reason: t(REFUND_REASON_KEYS[refund.reasonCode]),
@@ -1008,7 +1026,11 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
         orderId={currentOrder.id}
         orderNumber={currentOrder.orderNumber}
         open={refundOpen}
-        onOpenChange={setRefundOpen}
+        onOpenChange={(o) => {
+          setRefundOpen(o);
+          // The dialog may have learnt that a refund is already open (409) — re-ask.
+          if (!o) refund.refresh();
+        }}
         onRefunded={handleRefunded}
       />
 
@@ -1085,6 +1107,9 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
                     components={[<span className="font-semibold text-foreground" />]}
                   />
                 </p>
+                {currentOrder.paymentStatus === 'paid' && (
+                  <PaidCancelNotice>{t('orders.detail.cancelDialog.paidNotice')}</PaidCancelNotice>
+                )}
                 <div className="space-y-2 pt-2">
                   <label htmlFor="details-cancel-confirm-input" className="text-xs font-semibold text-muted-foreground block">
                     <Trans
@@ -1121,4 +1146,37 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
       </Dialog>
     </div>
   );
+}
+
+/**
+ * The delivery address as display lines, without the repeats.
+ *
+ * A map-picked address arrives with the whole place in `address1` ("Yaoundé I,
+ * Communauté urbaine de Yaoundé, Mfoundi, Centre, Cameroun") *and* the same
+ * city / region / country again in their own fields, so printing every field
+ * said the city twice and ended on a bare "CM". A line is dropped when each of
+ * its parts already appears in an earlier line; the country code is shown as
+ * its name.
+ */
+function addressLines(address: Address, countryName: (code: string) => string): string[] {
+  const country = /^[A-Za-z]{2}$/.test(address.country)
+    ? countryName(address.country)
+    : address.country;
+  const candidates = [
+    address.address1,
+    address.address2,
+    [address.city, address.province].filter(Boolean).join(', '),
+    country,
+  ];
+
+  const lines: string[] = [];
+  for (const candidate of candidates) {
+    const line = candidate?.trim();
+    if (!line) continue;
+    const said = lines.join(', ').toLocaleLowerCase();
+    const parts = line.split(',').map((part) => part.trim().toLocaleLowerCase()).filter(Boolean);
+    if (parts.every((part) => said.includes(part))) continue;
+    lines.push(line);
+  }
+  return lines;
 }

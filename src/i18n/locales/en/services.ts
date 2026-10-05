@@ -327,6 +327,8 @@ export const services = {
         cancelTitle: 'Cancel this booking?',
         cancelDescription:
             "The calendar event is removed and the customer is notified. This can't be undone.",
+        /** Paid booking: this action (POST …/cancel) refunds and reverses the earnings (bookings.md § Cancel). */
+        cancelPaidNote: 'This booking has been paid, so the customer gets their money back and your earnings for it are taken back.',
         cancelReasonPlaceholder: 'Reason (optional)',
         keepBooking: 'Keep booking',
         confirmCancel: 'Cancel booking',

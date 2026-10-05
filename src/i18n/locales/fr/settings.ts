@@ -313,6 +313,7 @@ export const settings = {
             accept: 'Accepter les retours',
 
             windowDays: 'Délai de retour',
+            windowDaysHint: 'Le temps dont dispose le client pour demander un retour, compté à partir de la date de livraison. Réglez 14 et une commande livrée le 1er peut être retournée jusqu’au 15.',
 
             refundType: 'Remboursement',
             refundTypeHint: 'Ce que le client récupère sur un retour accepté. Intégral → tout le prix de l’article. Partiel → uniquement le pourcentage défini ci-dessous (80 % d’une commande de 10 000 = 8 000 rendus). Aucun → le retour est accepté mais aucun argent n’est rendu, par exemple pour les boutiques en échange seulement.',
@@ -328,6 +329,15 @@ export const settings = {
             shippingPayerCustomer: 'Client',
             shippingPayerVendor: 'Vendeur (vous)',
             shippingPayerReimbursed: 'Client (remboursé si défectueux)',
+            refundCost: {
+                title: 'Ce qu’un remboursement vous reprend',
+                share: 'Votre part de la vente remboursée.',
+                delivery:
+                    'Les frais de livraison, si vous payez le retour — ou si l’article était défectueux avec « remboursé si défectueux ».',
+                freeDelivery:
+                    'Sur une commande en livraison gratuite remboursée après livraison, les frais déjà payés au livreur.',
+                debt: 'Si vous aviez déjà retiré cet argent, le reste est dû et vos prochains gains le remboursent.',
+            },
 
             processingDays: 'Remboursé sous',
             processingDaysHint: 'Jours ouvrés entre la réception de l’article retourné et le versement de l’argent. Réglez 5 et un colis reçu un lundi est remboursé le lundi suivant — c’est cette date qui est montrée au client, prévoyez donc une marge. Maximum 30.',

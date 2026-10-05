@@ -7,6 +7,20 @@ export const analytics = {
 
     headerSubtitle: 'Suivez les performances et les tendances de votre boutique',
     export: 'Exporter',
+    exportFile: {
+        fileName: 'statistiques',
+        figure: 'Indicateur',
+        value: 'Valeur',
+        change: 'Évolution vs période précédente',
+        date: 'Date',
+        sku: 'SKU',
+        quantity: 'Quantité vendue',
+        orders: 'Commandes',
+        revenue: 'Chiffre d’affaires',
+        exporting: 'Export en cours…',
+        done: 'Rapport exporté',
+        failed: 'Impossible d’exporter le rapport. Réessayez.',
+    },
 
     earnings: {
         title: 'Gains',

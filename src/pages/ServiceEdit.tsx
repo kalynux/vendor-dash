@@ -322,7 +322,7 @@ export function ServiceEdit() {
 
   if (state.loadError) {
     return (
-      <div className="max-w-3xl mx-auto space-y-4 px-1">
+      <div className="max-w-6xl mx-auto space-y-4 px-1">
         <PageBackButton fallbackPath="/dashboard/services" label={t('services.wizard.backToServices')} />
         <div className="rounded-lg border border-dashed py-16 text-center text-sm text-muted-foreground">
           {state.loadError}
@@ -333,7 +333,7 @@ export function ServiceEdit() {
 
   if (!state.service) {
     return (
-      <div className="space-y-6 max-w-3xl mx-auto px-1">
+      <div className="space-y-6 max-w-6xl mx-auto px-1">
         <Skeleton className="h-8 w-48" />
         <Skeleton className="h-12 w-full" />
         <Skeleton className="h-64 w-full" />

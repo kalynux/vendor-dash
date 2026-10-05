@@ -207,7 +207,7 @@ export function CompleteBookingDialog({ booking, open, onOpenChange, onCompleted
               <div className="space-y-1.5">
                 <Label className="text-sm">{t('services.complete.fixedPriceLabel', { currency })}</Label>
                 <Input
-                  type="number" min={0} step="0.01" placeholder="0.00"
+                  type="number" min={0} step="0.01" placeholder="0"
                   value={fixedPrice} onChange={(e) => setFixedPrice(e.target.value)}
                 />
                 <p className="text-xs text-muted-foreground">{t('services.complete.fixedPriceHelp')}</p>

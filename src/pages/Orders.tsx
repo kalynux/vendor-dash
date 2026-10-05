@@ -7,9 +7,6 @@ import {
   Download,
   Package,
   Eye,
-  Calendar,
-  CreditCard,
-  Plus,
   Loader2,
   AlertTriangle,
   PackageCheck,
@@ -88,9 +85,11 @@ import {
 import { OrderDateRangeFilter } from '@/components/orders/OrderDateRangeFilter';
 import { toast } from 'sonner';
 import { OrderDetails } from '@/components/features/OrderDetails';
+import { exportOrders } from '@/components/orders/exportOrders';
 import { OrderStatusBadge } from '@/components/orders/OrderStatusBadge';
 import { PaymentStatusBadge } from '@/components/orders/PaymentStatusBadge';
 import { MobileOrderDetailSheet } from '@/components/orders/MobileOrderDetailSheet';
+import { PaidCancelNotice } from '@/components/orders/PaidCancelNotice';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useInfiniteList } from '@/hooks/use-infinite-list';
 import { useScrollRestoration } from '@/hooks/use-scroll-restoration';
@@ -229,6 +228,24 @@ export function Orders() {
   const [orderToCancel, setOrderToCancel] = useState<Order | null>(null);
   const [cancelConfirmationText, setCancelConfirmationText] = useState('');
   const [actionsSheetOrder, setActionsSheetOrder] = useState<Order | null>(null);
+  const [exporting, setExporting] = useState(false);
+
+  /** Every order the current filters match, as a spreadsheet — not just this page. */
+  const handleExport = async () => {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const { count, outcome } = await exportOrders(filters, t, fmt.locale);
+      if (outcome === 'empty') toast.info(t('orders.export.empty'));
+      else if (outcome === 'saved') toast.success(t('orders.export.done', { count }));
+      else if (outcome === 'failed') toast.error(t('orders.export.failed'));
+      // 'dismissed': the vendor closed the share sheet — a choice, say nothing.
+    } catch (err) {
+      toast.error(getOrderErrorMessage(err));
+    } finally {
+      setExporting(false);
+    }
+  };
 
   // Merge a filter patch into the URL and reset to page 1. Non-filter params
   // (e.g. `view`) are preserved.
@@ -380,7 +397,6 @@ export function Orders() {
     }
     setStatusLoading(status);
     try {
-      await new Promise(resolve => setTimeout(resolve, 2000));
       await updateOrderStatus(order.id, status);
       if (isMobile) infinite.reload();
       toast.success(t('orders.toast.markedAs', { status: t(ORDER_STATUS_KEYS[status]) }));
@@ -400,7 +416,6 @@ export function Orders() {
     setCancelConfirmationText('');
     setStatusLoading('cancelled');
     try {
-      await new Promise(resolve => setTimeout(resolve, 2000));
       await updateOrderStatus(order.id, 'cancelled');
       if (isMobile) infinite.reload();
       if (selectedOrder?.id === order.id) {
@@ -547,14 +562,16 @@ export function Orders() {
     return t('orders.bulk.failedMixed', { count: failed.length });
   };
 
-  const timeAgo = (dateStr: string) => {
-    const diff = Date.now() - new Date(dateStr).getTime();
-    const minutes = Math.floor(diff / 60000);
-    const hours = Math.floor(minutes / 60);
-    const days = Math.floor(hours / 24);
-    if (days > 0) return `${days}d`;
-    if (hours > 0) return `${hours}h`;
-    return `${minutes}m`;
+  /**
+   * When an order came in, compactly: the time for today's orders ("10:30"),
+   * the day for older ones ("2 oct."). It used to print "16h" / "2d" — English
+   * abbreviations in every language.
+   */
+  const placedAt = (dateStr: string) => {
+    const date = new Date(dateStr);
+    return date.toDateString() === new Date().toDateString()
+      ? fmt.time(date)
+      : fmt.date(date, 'dayMonth');
   };
 
   const handleViewDetails = async (order: Order) => {
@@ -562,7 +579,6 @@ export function Orders() {
     setIsDetailsOpen(true);
     setIsDetailLoading(true);
     try {
-      await new Promise(resolve => setTimeout(resolve, 2000));
       const full = await fetchOrderById(order.id);
       setSelectedOrder(full);
     } catch (err) {
@@ -611,6 +627,14 @@ export function Orders() {
 
   const allSelected = orders.length > 0 && selectedOrders.length === orders.length;
   const cancelWord = t('orders.detail.cancelDialog.confirmWord');
+
+  // A paid order cancelled here is not refunded and pauses the vendor's earnings,
+  // so the bulk dialog says how many are paid. The selection survives paging, so
+  // some selected orders may not be loaded — then we can only say "if any".
+  const loadedOrders = isMobile ? infinite.items : orders;
+  const selectedLoaded = loadedOrders.filter((o) => selectedOrders.includes(o.id));
+  const bulkPaidCount = selectedLoaded.filter((o) => o.paymentStatus === 'paid').length;
+  const bulkHasUnseen = selectedLoaded.length < selectedOrders.length;
 
   const codLimitDialogs = (
     <>
@@ -724,6 +748,9 @@ export function Orders() {
                   components={[<span className="font-semibold text-foreground" />]}
                 />
               </p>
+              {orderToCancel?.paymentStatus === 'paid' && (
+                <PaidCancelNotice>{t('orders.detail.cancelDialog.paidNotice')}</PaidCancelNotice>
+              )}
               <div className="space-y-2 pt-2">
                 <label htmlFor="cancel-confirm-input" className="text-xs font-semibold text-muted-foreground block">
                   <Trans
@@ -784,6 +811,13 @@ export function Orders() {
                   components={[<span className="font-semibold text-foreground" />]}
                 />
               </p>
+              {bulkPaidCount > 0 ? (
+                <PaidCancelNotice>
+                  {t('orders.list.bulkCancelDialog.paidNotice', { count: bulkPaidCount })}
+                </PaidCancelNotice>
+              ) : bulkHasUnseen ? (
+                <PaidCancelNotice>{t('orders.list.bulkCancelDialog.paidNoticeUnknown')}</PaidCancelNotice>
+              ) : null}
               <div className="space-y-2 pt-2">
                 <label htmlFor="bulk-cancel-confirm-input" className="text-xs font-semibold text-muted-foreground block">
                   <Trans
@@ -935,11 +969,14 @@ export function Orders() {
             description={t('orders.subtitle')}
             onRefresh={refreshList}
             actions={[
+              // "Create order" is hidden until vendors can create orders here —
+              // the button did nothing.
               {
-                id: 'create',
-                icon: Plus,
-                label: t('orders.list.createOrderLabel'),
-                onClick: () => {/* create order */ },
+                id: 'export',
+                icon: Download,
+                label: t('orders.list.export'),
+                onClick: handleExport,
+                busy: exporting,
               },
             ]}
             subheader={ordersSearchBar}
@@ -1009,26 +1046,27 @@ export function Orders() {
                       className="h-10 w-10 flex-shrink-0"
                     />
                     <div className="flex-1 min-w-0">
-                      <div className="flex justify-between items-center gap-2">
-                        <div className="flex items-center gap-1.5 min-w-0">
-                          <p className="font-semibold text-sm truncate">{order.orderNumber}</p>
-                          <span
-                            className={cn(
-                              'w-1.5 h-1.5 rounded-full flex-shrink-0',
-                              order.orderType === 'digital' ? 'bg-violet-500' : 'bg-blue-500',
-                            )}
-                          />
-                          <span className="text-[11px] font-medium text-muted-foreground flex-shrink-0">
-                            {t(order.orderType === 'digital' ? 'orders.orderType.digital' : 'orders.orderType.physical')}
-                          </span>
-                        </div>
-                        <p className="font-semibold text-sm flex-shrink-0">{formatCurrency(order.total, order.currency)}</p>
+                      {/* Order number and total on the first line, nothing else —
+                          the type label beside the number is what cut it to
+                          "ORD-2026-0…". Physical is the norm, so only a digital
+                          order says what it is, on the second line. */}
+                      <div className="flex justify-between items-baseline gap-2">
+                        <p className="font-semibold text-sm truncate">{order.orderNumber}</p>
+                        <p className="font-semibold text-sm flex-shrink-0 tabular-nums">{formatCurrency(order.total, order.currency)}</p>
                       </div>
-                      <div className="flex justify-between mt-0.5">
-                        <p className="text-xs text-muted-foreground">{order.customer.name}</p>
-                        <p className="text-xs text-muted-foreground">{timeAgo(order.createdAt)}</p>
+                      <div className="flex justify-between gap-2 mt-0.5 text-xs text-muted-foreground">
+                        <p className="truncate">
+                          {[
+                            order.customer.name,
+                            t('common.units.items', { count: order.items.length }),
+                            order.orderType === 'digital' ? t('orders.orderType.digital') : null,
+                          ]
+                            .filter(Boolean)
+                            .join(' · ')}
+                        </p>
+                        <p className="flex-shrink-0">{placedAt(order.createdAt)}</p>
                       </div>
-                      <div className="flex items-center justify-between mt-2">
+                      <div className="mt-2">
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <OrderStatusBadge status={order.status} size="xs" />
                           <PaymentStatusBadge status={order.paymentStatus} size="xs" />
@@ -1039,7 +1077,6 @@ export function Orders() {
                           )}
                           {rowFlags(order)}
                         </div>
-                        <p className="text-xs text-muted-foreground">{t('common.units.items', { count: order.items.length })}</p>
                       </div>
                     </div>
                     {!selectionMode && (
@@ -1162,14 +1199,11 @@ export function Orders() {
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <Button variant="outline" className="gap-2">
-            <Download className="w-4 h-4" />
-            {t('orders.list.export')}
+          <Button variant="outline" className="gap-2" onClick={handleExport} disabled={exporting}>
+            {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+            {exporting ? t('orders.export.exporting') : t('orders.list.export')}
           </Button>
-          <Button className="gap-2">
-            <Package className="w-4 h-4" />
-            {t('orders.list.createOrder')}
-          </Button>
+          {/* "Create order" hidden until vendors can create orders here — it did nothing. */}
         </div>
       </div>
 
@@ -1227,11 +1261,14 @@ export function Orders() {
             );
           })()}
 
-          <div className="overflow-x-auto">
+          {/* `relative`: the screen-reader-only "Actions" label in the last
+              header cell is absolutely positioned; without a positioned box
+              here it escaped the scroll area and made the whole page wider. */}
+          <div className="relative overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr className="border-b bg-muted/50">
-                  <th className="w-12 p-4">
+                  <th className="w-10 py-3 pl-3 pr-2">
                     <Checkbox
                       checked={allSelected}
                       onCheckedChange={(checked) => {
@@ -1243,13 +1280,17 @@ export function Orders() {
                       }}
                     />
                   </th>
-                  <th className="text-left p-4 text-sm font-medium">{t('orders.columns.order')}</th>
-                  <th className="text-left p-4 text-sm font-medium">{t('orders.columns.customer')}</th>
-                  <th className="text-left p-4 text-sm font-medium">{t('orders.columns.date')}</th>
-                  <th className="text-left p-4 text-sm font-medium">{t('orders.columns.status')}</th>
-                  <th className="text-left p-4 text-sm font-medium">{t('orders.columns.payment')}</th>
-                  <th className="text-left p-4 text-sm font-medium">{t('orders.columns.total')}</th>
-                  <th className="text-left p-4 text-sm font-medium">{t('orders.columns.actions')}</th>
+                  <th className="text-left px-2.5 py-3 text-sm font-medium">{t('orders.columns.order')}</th>
+                  <th className="text-left px-2.5 py-3 text-sm font-medium">{t('orders.columns.customer')}</th>
+                  <th className="text-left px-2.5 py-3 text-sm font-medium">{t('orders.columns.date')}</th>
+                  <th className="text-left px-2.5 py-3 text-sm font-medium">{t('orders.columns.status')}</th>
+                  <th className="text-left px-2.5 py-3 text-sm font-medium">{t('orders.columns.payment')}</th>
+                  <th className="text-right px-2.5 py-3 text-sm font-medium">{t('orders.columns.total')}</th>
+                  {/* Pinned right: below ~1280 the table is wider than its box and
+                      scrolls, and the row actions must not scroll out of reach. */}
+                  <th className="sticky right-0 w-12 bg-card py-3 pl-1 pr-3 before:pointer-events-none before:absolute before:inset-0 before:bg-muted/50 before:content-[''] after:pointer-events-none after:absolute after:inset-y-0 after:left-0 after:w-px after:bg-border after:content-['']">
+                    <span className="sr-only">{t('orders.columns.actions')}</span>
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -1287,59 +1328,50 @@ export function Orders() {
                           handleViewDetails(order);
                         }
                       }}
-                      className="border-b hover:bg-muted/50 transition-colors cursor-pointer"
+                      className="group border-b hover:bg-muted/50 transition-colors cursor-pointer"
                     >
-                      <td className="p-4" onClick={(e) => e.stopPropagation()}>
+                      <td className="py-3 pl-3 pr-2" onClick={(e) => e.stopPropagation()}>
                         <Checkbox
                           checked={selectedOrders.includes(order.id)}
                           onCheckedChange={() => toggleOrderSelection(order.id)}
                         />
                       </td>
-                      <td className="p-4">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium">{order.orderNumber}</span>
-                          {order.orderType === 'digital' ? (
-                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-violet-300 text-violet-700 bg-violet-50 gap-1">
-                              <Download className="w-2.5 h-2.5" />{t('orders.orderType.digital')}
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-blue-300 text-blue-700 bg-blue-50 gap-1">
-                              <Package className="w-2.5 h-2.5" />{t('orders.orderType.physical')}
-                            </Badge>
-                          )}
-                        </div>
-                        <div className="text-sm text-muted-foreground mt-0.5">
+                      <td className="px-2.5 py-3">
+                        <div className="whitespace-nowrap font-medium">{order.orderNumber}</div>
+                        <div className="mt-0.5 whitespace-nowrap text-sm text-muted-foreground">
+                          {t(order.orderType === 'digital' ? 'orders.orderType.digital' : 'orders.orderType.physical')}
+                          {' · '}
                           {t('common.units.items', { count: order.items.length })}
                         </div>
                       </td>
-                      <td className="p-4">
-                        <div className="flex items-center gap-3">
+                      <td className="px-2.5 py-3">
+                        <div className="flex min-w-0 items-center gap-3">
+                          {/* The avatar only from `2xl`: at 1280 those 44px were
+                              what kept Total off screen. */}
                           <CustomerAvatar
                             name={order.customer.name}
                             avatar={order.customer.avatar}
-                            className="h-8 w-8"
+                            className="hidden h-8 w-8 shrink-0 2xl:flex"
                           />
-                          <div>
-                            <div className="font-medium">{order.customer.name}</div>
-                            <div className="text-sm text-muted-foreground">
+                          {/* Capped and truncated: a long e-mail was the widest
+                              thing in the row and pushed Total off screen. */}
+                          <div className="min-w-0 max-w-[160px]">
+                            <div className="truncate font-medium">{order.customer.name}</div>
+                            <div className="truncate text-sm text-muted-foreground" title={order.customer.email}>
                               {order.customer.email}
                             </div>
                           </div>
                         </div>
                       </td>
-                      <td className="p-4">
-                        <div className="flex items-center gap-2 text-sm">
-                          <Calendar className="w-4 h-4 text-muted-foreground" />
-                          {formatDate(order.createdAt)}
-                        </div>
+                      <td className="whitespace-nowrap px-2.5 py-3 text-sm">
+                        {formatDate(order.createdAt)}
                       </td>
-                      <td className="p-4">
+                      <td className="whitespace-nowrap px-2.5 py-3">
                         <OrderStatusBadge status={order.status} />
                       </td>
-                      <td className="p-4">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <CreditCard className="w-4 h-4 text-muted-foreground" />
-                          <PaymentStatusBadge status={order.paymentStatus} />
+                      <td className="px-2.5 py-3">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <PaymentStatusBadge status={order.paymentStatus} className="whitespace-nowrap" />
                           {order.paymentMethod === 'cash_on_delivery' && (
                             <Badge variant="outline" className="gap-1 text-[10px] px-1.5 py-0 h-4 border-amber-300 text-amber-700 bg-amber-50">
                               <Banknote className="w-2.5 h-2.5" />{t('orders.paymentMethod.cashOnDeliveryShort')}
@@ -1348,13 +1380,13 @@ export function Orders() {
                           {rowFlags(order)}
                         </div>
                       </td>
-                      <td className="p-4 text-right font-medium">
+                      <td className="whitespace-nowrap px-2.5 py-3 text-right font-medium tabular-nums">
                         {formatCurrency(order.total, order.currency)}
                       </td>
-                      <td className="p-4" onClick={(e) => e.stopPropagation()}>
+                      <td className="sticky right-0 bg-card py-3 pl-1 pr-3 before:pointer-events-none before:absolute before:inset-0 before:content-[''] group-hover:before:bg-muted/50 after:pointer-events-none after:absolute after:inset-y-0 after:left-0 after:w-px after:bg-border after:content-['']" onClick={(e) => e.stopPropagation()}>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon">
+                            <Button variant="ghost" size="icon" className="relative" aria-label={t('orders.list.orderActions')}>
                               <MoreHorizontal className="w-4 h-4" />
                             </Button>
                           </DropdownMenuTrigger>
@@ -1449,12 +1481,15 @@ export function Orders() {
       {/* Order Details Dialog */}
       <Dialog open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
         <DialogContent className="sm:max-w-3xl w-full h-[80dvh] flex flex-col overflow-hidden">
-          <DialogHeader className="flex-shrink-0">
+          {/* Read by screen readers only — the order number below is the visible
+              title, and "Order details" above it said the same thing twice. */}
+          <DialogHeader className="sr-only">
             <DialogTitle>{t('orders.list.detailsTitle')}</DialogTitle>
+            <DialogDescription>{selectedOrder?.orderNumber ?? ''}</DialogDescription>
           </DialogHeader>
           {isDetailLoading ? (
-            <div className="flex items-center justify-center h-40">
-              <Loader2 className="w-10 h-10 animate-spin text-primary" />
+            <div className="flex flex-1 items-center justify-center">
+              <Loader2 className="w-8 h-8 animate-spin text-primary" />
             </div>
           ) : (
             selectedOrder && <OrderDetails order={selectedOrder} onOrderUpdated={(updated) => setSelectedOrder(updated)} />

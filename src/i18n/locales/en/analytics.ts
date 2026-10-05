@@ -7,6 +7,21 @@ export const analytics = {
 
     headerSubtitle: 'Track your store performance and insights',
     export: 'Export',
+    /** The Export button's spreadsheet. */
+    exportFile: {
+        fileName: 'analytics',
+        figure: 'Figure',
+        value: 'Value',
+        change: 'Change vs previous period',
+        date: 'Date',
+        sku: 'SKU',
+        quantity: 'Quantity sold',
+        orders: 'Orders',
+        revenue: 'Revenue',
+        exporting: 'Exporting…',
+        done: 'Report exported',
+        failed: 'Could not export the report. Try again.',
+    },
 
     /** The money summary: gross sales, each deduction, then what reached your earnings. */
     earnings: {

@@ -81,10 +81,21 @@ export interface VariantNameUpdateEntry {
   name: string;
 }
 
+/**
+ * The row the vendor put at the top of the table. A new row has no server id
+ * until it is created, so its option values identify it in the fresh list.
+ */
+export interface VariantFirstRow {
+  serverId?: string;
+  optionValueIds: string[];
+}
+
 export interface VariantPhase2Payload {
   toCreate: VariantCreateEntry[];
   toUpdate: VariantUpdateEntry[];
   nameUpdates: VariantNameUpdateEntry[];
+  /** Becomes the product's default variant — the one shoppers see first. */
+  firstRow: VariantFirstRow | null;
 }
 
 // ─── Phase 1 Builder ─────────────────────────────────────────────────────────
@@ -207,11 +218,53 @@ export function buildPhase2Payload(matrix: VariantRow[]): VariantPhase2Payload {
     })
     .filter((entry): entry is VariantUpdateEntry => entry !== null);
 
+  const first = matrix.find((r) => r.status !== 'removed');
+
   return {
     toCreate,
     toUpdate,
     nameUpdates: [], // populated by the orchestrator when renames trigger name recalc
+    firstRow: first
+      ? {
+          serverId: first.serverId,
+          optionValueIds: first.combo.comboValues
+            .map((cv) => cv.valueServerId!)
+            .filter(Boolean),
+        }
+      : null,
   };
+}
+
+// ─── Default Variant ─────────────────────────────────────────────────────────
+
+/**
+ * Which variant to make the default after a save, or `null` when it is
+ * already right.
+ *
+ * The top row of the table wins. Without one (nothing to go on), a product
+ * that has no default yet gets its first active variant — the backend only
+ * auto-assigns one on the very first create, and the Review step refuses to
+ * publish without it.
+ */
+export function pickDefaultVariantId(
+  firstRow: VariantFirstRow | null,
+  freshVariants: ApiVariant[],
+  currentDefaultId: string | null | undefined,
+): string | null {
+  const active = freshVariants.filter((v) => v.status === 'active');
+
+  let wanted: string | null = null;
+  if (firstRow?.serverId) {
+    wanted = active.find((v) => v.id === firstRow.serverId)?.id ?? null;
+  } else if (firstRow && firstRow.optionValueIds.length > 0) {
+    const key = [...firstRow.optionValueIds].sort().join('|');
+    wanted = active.find((v) => [...v.optionValueIds].sort().join('|') === key)?.id ?? null;
+  }
+  if (!wanted && !currentDefaultId) {
+    wanted = active[0]?.id ?? freshVariants[0]?.id ?? null;
+  }
+
+  return wanted && wanted !== currentDefaultId ? wanted : null;
 }
 
 // ─── Variant Name Update Helper ──────────────────────────────────────────────

@@ -8,6 +8,12 @@ export interface EarningsBalance {
   reserve: number;
   /** Earmarked for an in-flight payout request. */
   requested: number;
+  /**
+   * New 2026-10-05. Money owed back after a refund, not yet recovered — a DEBT.
+   * ⛔ Never add it into (or subtract it from) any balance: the server already
+   * keeps `available` at 0 while it is above 0. Normalised to 0 when missing.
+   */
+  clawback: number;
   currency: string;
 }
 
@@ -106,7 +112,8 @@ export interface PayoutRequest {
 
 export interface EarningsResponse {
   success: boolean;
-  data: EarningsBalance;
+  /** `clawback` is missing from a server that predates the 2026-10-05 refund flow. */
+  data: Omit<EarningsBalance, 'clawback'> & { clawback?: number };
 }
 
 export interface PayoutRequestResponse {

@@ -46,6 +46,17 @@ export const transactions = {
         hold: 'En attente de libération',
         release: 'Libérée',
         reversal: 'Annulée',
+        reserve_hold: 'Vers la réserve',
+        reserve_release: 'De la réserve',
+        clawback: 'Reprise',
+        clawback_recovery: 'Imputé',
+        clawback_write_off: 'Annulée',
+    },
+
+    typeLabel: {
+        earning_clawback: 'Repris pour un remboursement',
+        earning_clawback_recovery: 'Imputé sur la somme que vous devez',
+        earning_clawback_write_off: 'Dette annulée par Wi-Mall',
     },
 
     amount: {

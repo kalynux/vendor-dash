@@ -26,6 +26,7 @@ import {
   transactionAmount,
   isReversalTransaction,
   isInternalTransaction,
+  transactionLabel,
 } from './transactions.constants';
 
 const PAGE_LIMIT = 20;
@@ -97,7 +98,7 @@ export function TransactionsTab({ refreshKey = 0 }: { refreshKey?: number }) {
   const visibleRows = query
     ? rows.filter((tx) =>
       [
-        tx.description,
+        transactionLabel(tx, t),
         categoryLabel(tx.category, t),
         transactionStatusMeta(tx.status, t).label,
         tx.gateway ? gatewayLabel(tx.gateway) : '',
@@ -242,7 +243,7 @@ export function TransactionsTab({ refreshKey = 0 }: { refreshKey?: number }) {
                           isInternalTransaction(tx) && 'font-medium text-muted-foreground',
                         )}
                       >
-                        {tx.description}
+                        {transactionLabel(tx, t)}
                       </p>
                       <p className="mt-0.5 text-xs text-muted-foreground">
                         {fmt.date(tx.createdAt)}
@@ -319,7 +320,7 @@ export function TransactionsTab({ refreshKey = 0 }: { refreshKey?: number }) {
                                 isInternalTransaction(tx) && 'text-muted-foreground',
                               )}
                             >
-                              {tx.description}
+                              {transactionLabel(tx, t)}
                             </span>
                             <CategoryChip category={tx.category} />
                           </div>

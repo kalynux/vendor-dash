@@ -300,13 +300,23 @@ export const account = {
         info: {
             balances:
                 '<0>Disponible</0> correspond à ce que vous pouvez retirer maintenant. <1>En attente</1> correspond aux commandes non encore réglées, et <2>Demandé</2> est déjà engagé dans un retrait.',
+            holdTiming:
+                'L’argent d’une commande devient disponible 3 jours après sa livraison. Un produit numérique compte comme livré dès qu’il est payé, et une réservation dès que vous la marquez terminée.',
+            paused:
+                'Certains gains peuvent être suspendus le temps de traiter un remboursement ou une contestation de paiement. Les jours de suspension ne comptent pas dans les 3 jours.',
+            refunds:
+                'Quand une vente est remboursée, votre part est reprise — sur « En attente », ou sur « Disponible » si elle était déjà libérée. Si vous l’aviez déjà retirée, le reste est dû et vos prochains gains le remboursent en priorité.',
             minimum: 'Le retrait minimum est de {{amount}}.',
             autoThreshold:
                 'Si votre solde disponible atteint {{amount}}, nous créons automatiquement une demande de versement pour que vos fonds ne restent pas immobilisés. Veillez à enregistrer un moyen de versement — sinon la demande automatique ne peut pas être créée et votre solde continuera de croître au-delà du seuil jusqu’à ce que vous en ajoutiez un.',
         },
         available: 'Disponible',
         pending: 'En attente',
+        pendingHint: 'Disponible 3 jours après la livraison',
         requested: 'Demandé',
+        clawback: 'Dû sur remboursements',
+        clawbackNote:
+            'Vous devez ce montant suite au remboursement de ventes que vous aviez déjà retirées. Vos prochains gains le remboursent automatiquement, et « Disponible » reste à 0 jusqu’à ce qu’il soit soldé.',
         requestWithdrawal: 'Demander un retrait',
         nothingAvailable: 'Rien à retirer pour l’instant.',
         belowMinimum: 'Le retrait minimum est de {{amount}}.',

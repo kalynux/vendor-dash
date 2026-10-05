@@ -314,6 +314,7 @@ export const services = {
         cancelTitle: 'Annuler cette réservation ?',
         cancelDescription:
             'L’événement est retiré de l’agenda et le client est prévenu. C’est irréversible.',
+        cancelPaidNote: 'Cette réservation a été payée : le client récupère son argent et vos gains sur cette réservation sont annulés.',
         cancelReasonPlaceholder: 'Motif (facultatif)',
         keepBooking: 'Conserver la réservation',
         confirmCancel: 'Annuler la réservation',

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useRouter } from '@/app-context';
 import { useNotificationStore, useStoreStore } from '@/store';
@@ -7,18 +7,12 @@ import {
   Search,
   Bell,
   Plus,
-  Command,
-  X,
   ArrowRight,
-  ShoppingCart,
-  Package,
   LogOut,
   User,
   ExternalLink,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   DropdownMenu,
@@ -29,10 +23,14 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { SignOutDialog } from '@/components/layout/SignOutDialog';
+import { GlobalSearch } from '@/components/layout/GlobalSearch';
 import { QUICK_ACTIONS, type QuickAction } from '@/config/quickActions';
 import { notificationRoute, notificationVisual, notificationTimeAgo } from '@/lib/notifications.utils';
 import { storePath, storefrontUrl } from '@/lib/storefront/urls';
 import { useFormatters, useTranslation } from '@/i18n';
+
+/** "⌘K" on a Mac, "Ctrl K" everywhere else — the shortcut listens for both. */
+const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/i.test(navigator.userAgent);
 
 function initialsOf(name: string): string {
   return name
@@ -46,7 +44,6 @@ function initialsOf(name: string): string {
 
 export function Header() {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
   const [logoutOpen, setLogoutOpen] = useState(false);
   const { t } = useTranslation();
   const fmt = useFormatters();
@@ -66,6 +63,19 @@ export function Header() {
 
   const toggleSearch = () => setIsSearchOpen((v) => !v);
 
+  // ⌘K / Ctrl+K from anywhere on the dashboard — the button has always
+  // advertised it; nothing listened until now.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setIsSearchOpen((v) => !v);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   const handleQuickAction = (action: QuickAction) => {
     setIsSearchOpen(false);
     reactNavigate(
@@ -79,14 +89,6 @@ export function Header() {
   };
 
   const unreadNotifications = notifications.filter((n) => !n.isRead).slice(0, 5);
-
-  // Sample suggestions shown before the vendor types anything.
-  const recentSearches = [
-    t('nav.header.recentSamples.order'),
-    t('nav.header.recentSamples.product'),
-    t('nav.header.recentSamples.customer'),
-    t('nav.header.recentSamples.store'),
-  ];
 
   const openNotification = (n: typeof notifications[number]) => {
     markAsRead(n.id);
@@ -107,8 +109,7 @@ export function Header() {
               <Search className="w-4 h-4" />
               <span className="hidden sm:inline">{t('nav.header.search')}</span>
               <kbd className="hidden sm:inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium">
-                <Command className="w-3 h-3" />
-                <span>K</span>
+                {IS_MAC ? '⌘K' : 'Ctrl K'}
               </kbd>
             </Button>
           </div>
@@ -265,130 +266,7 @@ export function Header() {
           reason this stopped calling the `useAuth()` shim. See SignOutDialog. */}
       <SignOutDialog open={logoutOpen} onOpenChange={setLogoutOpen} />
 
-      {/* Global Search Overlay */}
-      {isSearchOpen && (
-        <div
-          className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm"
-          onClick={() => setIsSearchOpen(false)}
-        >
-          <div
-            className="absolute top-20 left-1/2 -translate-x-1/2 w-full max-w-2xl px-4"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="bg-card rounded-xl shadow-2xl border overflow-hidden">
-              {/* Search Input */}
-              <div className="flex items-center gap-3 p-4 border-b">
-                <Search className="w-5 h-5 text-muted-foreground" />
-                <Input
-                  id="global-search"
-                  placeholder={t('nav.header.searchPlaceholder')}
-                  className="flex-1 border-0 bg-transparent text-lg focus-visible:ring-0 placeholder:text-muted-foreground"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-                <kbd className="hidden sm:inline-flex h-7 select-none items-center gap-1 rounded border bg-muted px-2 font-mono text-xs font-medium">
-                  ESC
-                </kbd>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8"
-                  onClick={() => setIsSearchOpen(false)}
-                >
-                  <X className="w-4 h-4" />
-                </Button>
-              </div>
-
-              {/* Search Results */}
-              <div className="max-h-[60dvh] overflow-auto">
-                {searchQuery ? (
-                  <div className="p-4">
-                    <p className="text-sm text-muted-foreground mb-3">
-                      {t('nav.header.searchResultsFor', { query: searchQuery })}
-                    </p>
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-3 p-3 rounded-lg hover:bg-accent cursor-pointer">
-                        <ShoppingCart className="w-5 h-5 text-muted-foreground" />
-                        <div className="flex-1">
-                          <p className="font-medium">{t('nav.header.recentSamples.order')}</p>
-                          <p className="text-sm text-muted-foreground">{t('nav.header.recentSamples.orderMeta')}</p>
-                        </div>
-                        <Badge variant="secondary">{t('common.labels.order')}</Badge>
-                      </div>
-                      <div className="flex items-center gap-3 p-3 rounded-lg hover:bg-accent cursor-pointer">
-                        <Package className="w-5 h-5 text-muted-foreground" />
-                        <div className="flex-1">
-                          <p className="font-medium">{t('nav.header.recentSamples.product')}</p>
-                          <p className="text-sm text-muted-foreground">{t('nav.header.recentSamples.productMeta')}</p>
-                        </div>
-                        <Badge variant="secondary">{t('common.labels.product')}</Badge>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="p-4">
-                    {/* Quick Actions */}
-                    <div className="mb-6">
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">
-                        {t('nav.quickActions.title')}
-                      </p>
-                      <div className="grid grid-cols-2 gap-2">
-                        {QUICK_ACTIONS.map((action) => (
-                          <button
-                            key={action.id}
-                            onClick={() => handleQuickAction(action)}
-                            className="flex items-center gap-3 p-3 rounded-lg hover:bg-accent text-left transition-colors"
-                          >
-                            <action.icon className="w-4 h-4 text-muted-foreground" />
-                            <span className="text-sm">{t(action.labelKey)}</span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Recent Searches */}
-                    <div>
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">
-                        {t('nav.header.recentSearches')}
-                      </p>
-                      <div className="space-y-1">
-                        {recentSearches.map((search, index) => (
-                          <button
-                            key={index}
-                            onClick={() => setSearchQuery(search)}
-                            className="flex items-center gap-3 w-full p-2 rounded-lg hover:bg-accent text-left transition-colors"
-                          >
-                            <ArrowRight className="w-4 h-4 text-muted-foreground" />
-                            <span className="text-sm">{search}</span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Footer */}
-              <div className="flex items-center justify-between px-4 py-3 bg-muted/50 border-t text-xs text-muted-foreground">
-                <div className="flex items-center gap-4">
-                  <span className="flex items-center gap-1">
-                    <kbd className="bg-muted px-1.5 py-0.5 rounded border">↑↓</kbd>
-                    {t('nav.header.toNavigate')}
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <kbd className="bg-muted px-1.5 py-0.5 rounded border">↵</kbd>
-                    {t('nav.header.toSelect')}
-                  </span>
-                </div>
-                <span className="flex items-center gap-1">
-                  <kbd className="bg-muted px-1.5 py-0.5 rounded border">esc</kbd>
-                  {t('nav.header.toClose')}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <GlobalSearch open={isSearchOpen} onOpenChange={setIsSearchOpen} />
     </>
   );
 }

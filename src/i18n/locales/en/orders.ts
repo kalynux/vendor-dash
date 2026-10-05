@@ -103,6 +103,39 @@ export const orders = {
     },
 
     /** The Orders list page: its own toolbar, filter sheet and table. */
+    /** The Export button: every order matching the current filters, as a spreadsheet. */
+    export: {
+        exporting: 'Exporting…',
+        done: plural({ one: '{{count}} order exported', other: '{{count}} orders exported' }),
+        empty: 'No orders to export with these filters.',
+        failed: 'Could not export the orders. Try again.',
+        fileName: 'orders',
+        columns: {
+            orderNumber: 'Order number',
+            date: 'Date',
+            customer: 'Customer',
+            email: 'Email',
+            type: 'Type',
+            status: 'Status',
+            paymentStatus: 'Payment status',
+            paymentMethod: 'Payment method',
+            items: 'Items',
+            subtotal: 'Subtotal',
+            shipping: 'Delivery',
+            tax: 'Tax',
+            total: 'Total',
+            currency: 'Currency',
+        },
+    },
+
+    /** The printed order sheet's item table. */
+    print: {
+        product: 'Product',
+        quantity: 'Qty',
+        unitPrice: 'Unit price',
+        amount: 'Amount',
+    },
+
     list: {
         export: 'Export',
         unknownCustomer: 'Unknown customer',
@@ -147,6 +180,14 @@ export const orders = {
             }),
             keep: 'Keep Orders',
             confirm: plural({ one: 'Yes, Cancel {{count}} Order', other: 'Yes, Cancel {{count}} Orders' }),
+            /** Some selected orders are paid (FRONTEND-CHANGELOG-earnings-hold-and-pauses § 3). */
+            paidNotice: plural({
+                one: '{{count}} selected order has already been paid. Cancelling it will not refund the customer automatically: our team will arrange the refund, and your earnings for this order will be paused until it is resolved.',
+                other: '{{count}} selected orders have already been paid. Cancelling them will not refund the customers automatically: our team will arrange the refunds, and your earnings for these orders will be paused until each is resolved.',
+            }),
+            /** Some selected orders are on another page, so whether they are paid is unknown. */
+            paidNoticeUnknown:
+                'If any of these orders has already been paid, cancelling it will not refund the customer automatically: our team will arrange the refund, and your earnings for that order will be paused until it is resolved.',
         },
     },
 
@@ -299,6 +340,9 @@ export const orders = {
             placeholder: 'Type “{{word}}”',
             keep: 'Keep Order',
             confirm: 'Yes, Cancel Order',
+            /** `paymentStatus: 'paid'` — wording from FRONTEND-CHANGELOG-earnings-hold-and-pauses § 3. */
+            paidNotice:
+                'This order has been paid. Cancelling it will not refund the customer automatically: our team will arrange the refund, and your earnings for this order will be paused until it is resolved.',
         },
     },
 

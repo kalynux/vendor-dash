@@ -10,6 +10,7 @@ import {
   selectVisibleRows,
   selectRowCountsByStatus,
   selectHasUnsavedChanges,
+  selectFirstRowChanged,
   selectAllRowsSaved,
   selectCombinationCount,
   selectOptionsDirty,
@@ -35,6 +36,7 @@ export interface UseVariantBuilderReturn {
     confirmRegeneration: () => void;
     cancelRegeneration: () => void;
     switchToOptions: () => void;
+    moveRow: (localId: string, offset: -1 | 1) => void;
     updateRow: (localId: string, patch: VariantRowPatch) => void;
     bulkUpdateRows: (field: string, value: unknown) => void;
     autoGenerateSkus: () => void;
@@ -49,6 +51,8 @@ export interface UseVariantBuilderReturn {
     modifiedRowCount: number;
     persistedRowCount: number;
     hasUnsavedChanges: boolean;
+    /** A saved variant was moved to the top and is not yet the default. */
+    firstRowChanged: boolean;
     allRowsSaved: boolean;
     combinationCount: number;
     exceedsLimit: boolean;
@@ -63,6 +67,8 @@ export interface UseVariantBuilderReturn {
 export function useVariantBuilder(
   serverOptions: ApiProductOption[],
   serverVariants: ApiVariant[],
+  /** The product's default variant — hydration puts it on top. */
+  defaultVariantId: string | null = null,
 ): UseVariantBuilderReturn {
   const [state, dispatch] = useReducer(variantBuilderReducer, INITIAL_STATE);
 
@@ -74,11 +80,19 @@ export function useVariantBuilder(
   useEffect(() => {
     if (!hasHydrated.current) {
       hasHydrated.current = true;
-      dispatch({ type: 'HYDRATE', serverOptions, serverVariants });
+      dispatch({ type: 'HYDRATE', serverOptions, serverVariants, defaultVariantId });
     } else {
       dispatch({ type: 'SYNC_SERVER_STATE', serverOptions, serverVariants });
     }
+    // `defaultVariantId` is read here only at hydration; later changes go
+    // through the effect below. Re-running SYNC_SERVER_STATE for it would turn
+    // rows the vendor has edited but not saved back into "saved" ones.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [serverOptions, serverVariants]);
+
+  useEffect(() => {
+    if (hasHydrated.current) dispatch({ type: 'SET_DEFAULT_VARIANT_ID', id: defaultVariantId });
+  }, [defaultVariantId]);
 
   // ── Actions ─────────────────────────────────────────────────────────────
 
@@ -120,6 +134,9 @@ export function useVariantBuilder(
       switchToOptions: () =>
         dispatch({ type: 'SWITCH_TO_OPTIONS' }),
 
+      moveRow: (localId: string, offset: -1 | 1) =>
+        dispatch({ type: 'MOVE_ROW', localId, offset }),
+
       updateRow: (localId: string, patch: VariantRowPatch) =>
         dispatch({ type: 'UPDATE_ROW', localId, patch }),
 
@@ -157,6 +174,7 @@ export function useVariantBuilder(
       modifiedRowCount: modifiedCount,
       persistedRowCount: persistedCount,
       hasUnsavedChanges: selectHasUnsavedChanges(state),
+      firstRowChanged: selectFirstRowChanged(state),
       allRowsSaved: selectAllRowsSaved(state),
       combinationCount,
       exceedsLimit: combinationCount > MAX_VARIANTS,

@@ -354,6 +354,7 @@ export const settings = {
             accept: 'Accept returns',
 
             windowDays: 'Return window',
+            windowDaysHint: 'How long the customer has to ask for a return, counted from the delivery date. Set 14 and an order delivered on the 1st can be returned until the 15th.',
 
             refundType: 'Refund',
             refundTypeHint: 'What the customer gets back on an accepted return. Full → the whole item price. Partial → only the percentage you set below (80% of a 10 000 order = 8 000 back). None → the return is accepted but no money is returned, e.g. exchange-only stores.',
@@ -369,6 +370,16 @@ export const settings = {
             shippingPayerCustomer: 'Customer',
             shippingPayerVendor: 'Vendor (you)',
             shippingPayerReimbursed: 'Customer (reimbursed if defective)',
+            /** Refund flow 2026-10-05 (earnings.md § clawback): what a refund takes back from the seller. */
+            refundCost: {
+                title: 'What a refund takes back from you',
+                share: 'Your share of the refunded sale.',
+                delivery:
+                    'The delivery money, when you pay return shipping — or when the item was defective under “reimbursed if defective”.',
+                freeDelivery:
+                    'On a free-delivery order refunded after delivery, the delivery cost already paid to the courier.',
+                debt: 'If you already withdrew that money, the rest is owed and your next earnings pay it off.',
+            },
 
             processingDays: 'Refunded within',
             processingDaysHint: 'Business days between the returned item reaching you and the money going out. Set 5 and a parcel you receive on a Monday is refunded by the following Monday — that date is what the customer is shown, so pad it a little. Max 30.',
