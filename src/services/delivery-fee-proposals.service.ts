@@ -3,6 +3,8 @@ import type {
   DeliveryFeeProposal,
   DeliveryFeeProposalListMeta,
   DeliveryFeeProposalListParams,
+  EditDeliveryFeeProposalInput,
+  ProposeDeliveryFeeInput,
 } from '@/types/delivery-fee-proposals.types';
 
 // api-doc/vendor/delivery-fee-proposals.md (2026-10-02).
@@ -75,4 +77,32 @@ export async function rejectDeliveryFeeProposal(
     `/vendor/orders/${orderId}/delivery-fee-proposals/${proposalId}/reject`,
     note ? { version, note } : { version },
   );
+}
+
+// ─── Your own proposal (2026-10-14, ADR-A12) ─────────────────────────────────
+// Only on a parcel whose delivery you pay, while it is `assigned` /
+// `handing_over`. The agency answers; pickup waits for it. Like approve/reject,
+// nothing reads the reply — the caller re-reads the order.
+
+/** Propose a different fee — higher or lower — to the agency carrying this parcel. */
+export async function proposeDeliveryFee(
+  orderId: string,
+  shipmentId: string,
+  input: ProposeDeliveryFeeInput,
+): Promise<void> {
+  await api.post(`/vendor/orders/${orderId}/shipments/${shipmentId}/delivery-fee-proposals`, input);
+}
+
+/** Change your proposal while the agency has not answered. Send only what changed. */
+export async function editDeliveryFeeProposal(
+  orderId: string,
+  proposalId: string,
+  input: EditDeliveryFeeProposalInput,
+): Promise<void> {
+  await api.patch(`/vendor/orders/${orderId}/delivery-fee-proposals/${proposalId}`, input);
+}
+
+/** Take your proposal back: the fee stays and the parcel can be picked up. */
+export async function withdrawDeliveryFeeProposal(orderId: string, proposalId: string): Promise<void> {
+  await api.post(`/vendor/orders/${orderId}/delivery-fee-proposals/${proposalId}/withdraw`);
 }

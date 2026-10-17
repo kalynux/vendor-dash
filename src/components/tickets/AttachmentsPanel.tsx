@@ -17,8 +17,8 @@ import type { ApiTicketAttachment, TicketActor, VisibilityInput } from '@/types/
 import type { ApiFile } from '@/types/file.types';
 
 export function AttachmentsPanel({
-  ticketId, followers, readOnly = false,
-}: { ticketId: string; followers: TicketActor[]; readOnly?: boolean }) {
+  ticketId, followers, currentUserId, readOnly = false,
+}: { ticketId: string; followers: TicketActor[]; currentUserId?: string | null; readOnly?: boolean }) {
   const { t } = useTranslation();
   const fmt = useFormatters();
   const apiError = useApiError();
@@ -114,7 +114,7 @@ export function AttachmentsPanel({
         <ul className="space-y-2">
           {attachments.map((att) => {
             const isImage = att.mimeType.startsWith('image/');
-            const uploader = att.uploadedByActor?.name ?? t(ROLE_LABEL_KEYS[att.uploadedByRole]);
+            const uploader = att.uploadedByActor?.name || t(ROLE_LABEL_KEYS[att.uploadedByRole]);
             return (
               <li key={att.id} className="flex items-center gap-3 rounded-lg border bg-card p-2.5">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted">
@@ -190,7 +190,12 @@ export function AttachmentsPanel({
               />
             </div>
             {visibility === 'PRIVATE' && (
-              <FollowerSelect followers={followers} value={viewerIds} onChange={setViewerIds} />
+              <FollowerSelect
+                followers={followers}
+                currentUserId={currentUserId}
+                value={viewerIds}
+                onChange={setViewerIds}
+              />
             )}
           </div>
 

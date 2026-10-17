@@ -95,6 +95,10 @@ function PopoverContent({
               <div
                 className={cn(
                   className,
+                  // What makes the paragraph above true on desktop. Without it
+                  // a caller's `w-64` sized this box too, inside the shell's
+                  // own padding, and the content stuck out past the border.
+                  "md:contents",
                   "max-md:!w-full max-md:!max-w-full",
                   mobileSheetScrollArea,
                 )}

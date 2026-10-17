@@ -14,7 +14,9 @@ import type {
   TicketImportance,
   TicketEntityType,
   TicketType,
+  TicketActor,
   TicketActorRole,
+  TicketAdminSnapshot,
 } from '@/types/tickets.types';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -304,9 +306,27 @@ export const ROLE_AVATAR_CLASSES: Record<TicketActorRole, string> = {
   agency: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300',
 };
 
+/**
+ * Who opened a ticket, ready to print. An administrator — or the platform
+ * itself — comes from the snapshot: their `created_by` is only a placeholder.
+ * `name` is `null` when there is nothing better than the role to show.
+ */
+export function ticketOpener(ticket: {
+  created_by: TicketActor | null;
+  created_by_admin?: TicketAdminSnapshot | null;
+  created_by_role: TicketActorRole;
+}): { name: string | null; role: TicketActorRole } {
+  if (ticket.created_by_admin) return { name: ticket.created_by_admin.name || null, role: 'admin' };
+  return {
+    name: ticket.created_by?.name || null,
+    role: ticket.created_by?.role ?? ticket.created_by_role,
+  };
+}
+
 /** Up to two initials from a display name. */
 export function actorInitials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
+  // Letters and digits only — "Wi-Mall (automatic)" is "WA", not "W(".
+  const parts = name.trim().split(/\s+/).map((p) => p.replace(/[^\p{L}\p{N}]/gu, '')).filter(Boolean);
   if (parts.length === 0) return '?';
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();

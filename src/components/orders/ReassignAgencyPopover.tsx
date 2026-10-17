@@ -15,7 +15,12 @@ import { reassignItemDeliveryAgency, getOrderErrorMessage } from '@/services/ord
 import type { AgencyBrowseItemDto } from '@/types/agency-connection.types';
 import type { Order } from '@/types';
 import { ApiError } from '@/types/api';
-import { COD_AGENCY_LIMIT_EXCEEDED, readCodLimitDetails, type CodLimitExceededDetails } from '@/types/cod-limits.types';
+import {
+  COD_AGENCY_LIMIT_EXCEEDED,
+  COD_AGENCY_RESTRICTED,
+  readCodLimitDetails,
+  type CodLimitExceededDetails,
+} from '@/types/cod-limits.types';
 import { useApiError, useTranslation } from '@/i18n';
 import { VerifiedBadge } from '@/components/common/VerifiedBadge';
 import { CodLimitDialog } from './CodLimitDialog';
@@ -46,6 +51,8 @@ export function ReassignAgencyPopover({ orderId, itemId, currentAgencyId, curren
   const [submitting, setSubmitting] = useState(false);
   /** The destination agency is over a COD limit — confirm before forcing. */
   const [overLimit, setOverLimit] = useState<CodLimitExceededDetails | null>(null);
+  /** The agency just refused as barred from cash on delivery — said under the picker, never forced. */
+  const [restrictedId, setRestrictedId] = useState<string | null>(null);
 
   useEffect(() => {
     if (openRequest) setOpen(true);
@@ -55,6 +62,7 @@ export function ReassignAgencyPopover({ orderId, itemId, currentAgencyId, curren
     if (!open) return;
     let cancelled = false;
     setSelected(currentAgencyId ?? '');
+    setRestrictedId(null);
     setIsLoading(true);
     setLoadError(null);
     // Connected agencies only: change-agency does not check the connection
@@ -79,6 +87,18 @@ export function ReassignAgencyPopover({ orderId, itemId, currentAgencyId, curren
       toast.success(t('agency.reassign.updated'));
       setOpen(false);
     } catch (err) {
+      if (err instanceof ApiError && err.code === COD_AGENCY_RESTRICTED) {
+        // `force` does not get past this one: back to the picker for another agency.
+        setOverLimit(null);
+        if (force) {
+          // The picker was closed behind the over-limit dialog; reopening resets it.
+          toast.error(getOrderErrorMessage(err));
+          setOpen(true);
+        } else {
+          setRestrictedId(selected);
+        }
+        return;
+      }
       const details =
         !force && err instanceof ApiError && err.code === COD_AGENCY_LIMIT_EXCEEDED
           ? readCodLimitDetails(err.detailsObject)
@@ -105,7 +125,8 @@ export function ReassignAgencyPopover({ orderId, itemId, currentAgencyId, curren
             {t('agency.reassign.trigger')}
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-64 space-y-3" align="start">
+        {/* On a phone this is a bottom sheet, which strips the popup's own padding — hence `max-md:px-4`. */}
+        <PopoverContent className="w-64 space-y-3 max-md:px-4" align="start">
           <p className="text-xs font-medium">{t('agency.reassign.title')}</p>
           {isLoading ? (
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -129,10 +150,13 @@ export function ReassignAgencyPopover({ orderId, itemId, currentAgencyId, curren
               </SelectContent>
             </Select>
           )}
+          {restrictedId !== null && selected === restrictedId && (
+            <p role="alert" className="text-xs text-destructive">{t('orders.codLimit.hold.agency_restricted')}</p>
+          )}
           <Button
             size="sm"
             className="w-full h-7 text-xs"
-            disabled={!selected || selected === currentAgencyId || submitting}
+            disabled={!selected || selected === currentAgencyId || selected === restrictedId || submitting}
             onClick={() => void reassign(false)}
           >
             {submitting && <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" />}

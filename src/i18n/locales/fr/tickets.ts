@@ -3,7 +3,7 @@ import { plural } from '../../types';
 /** Tickets de support avec l'équipe de la plateforme. */
 export const tickets = {
     title: 'Tickets',
-    subtitle: 'Suivez et résolvez vos problèmes avec l’équipe Wi-Mall.',
+    subtitle: 'Vos demandes à Wi-Mall, et tous les tickets concernant vos commandes.',
 
     empty: {
         title: 'Aucun ticket',
@@ -60,7 +60,7 @@ export const tickets = {
 
     role: {
         admin: 'Admin',
-        agent: 'Agent de support',
+        agent: 'Livreur',
         vendor: 'Vendeur',
         customer: 'Client',
         agency: 'Agence',
@@ -95,6 +95,12 @@ export const tickets = {
         chipType: 'Type : {{value}}',
         chipPriority: 'Priorité : {{value}}',
         chipSort: 'Tri : {{value}}',
+        openedBy: 'Ouvert par',
+        openedByAnyone: 'Tout le monde',
+        openedByMe: 'Moi',
+        chipOpenedByMe: 'Ouverts par moi',
+        from: 'De {{name}}',
+        fromRole: 'De {{name}} ({{role}})',
         sort: {
             updated: 'Mis à jour récemment',
             created: 'Créés récemment',
@@ -178,7 +184,9 @@ export const tickets = {
         unassigned: 'Non assigné',
         cannotReassign: 'Les vendeurs ne peuvent pas réassigner les tickets.',
         noFollowers: 'Aucun abonné pour l’instant.',
-        followerLimit: 'Jusqu’à 5 abonnés non-administrateurs par ticket.',
+        openedBy: 'Ouvert par',
+        you: 'Vous',
+        roleYou: '{{role}} · vous',
         closeConfirmTitle: 'Fermer ce ticket ?',
         closeConfirmBody:
             'Fermer le ticket le marque comme résolu. Vous ne pourrez plus modifier sa priorité ni ajouter de messages ou de pièces jointes. Cette action est irréversible ici.',
@@ -217,12 +225,35 @@ export const tickets = {
         subject: 'Objet',
         type: 'Type',
         created: 'Créé le',
-        noParticipant: ' · aucun participant',
         lockedByAdmin: 'Verrouillé par un admin',
         updateFailed: 'Échec de la mise à jour du ticket',
         statusUpdateFailed: 'Échec de la mise à jour du statut',
         priorityUpdateFailed: 'Échec de la mise à jour de la priorité',
         closeFailed: 'Échec de la fermeture du ticket',
+    },
+
+    events: {
+        joined: {
+            customer: 'Le client a rejoint ce ticket',
+            vendor: 'Le vendeur a rejoint ce ticket',
+            agency: 'Une agence de livraison a rejoint ce ticket',
+            agent: 'Un livreur a rejoint ce ticket',
+            admin: 'Le support Wi-Mall a rejoint ce ticket',
+        },
+        removed: 'Une personne a été retirée de ce ticket',
+        statusChanged: 'Statut passé de {{from}} à {{to}}',
+        priorityChanged: 'Priorité passée de {{from}} à {{to}}',
+        priorityLocked: 'Le support a changé la priorité de {{from}} à {{to}}',
+        closed: 'Ticket fermé',
+        reopened: 'Le support a rouvert ce ticket',
+        assignedRole: 'Confié à : {{role}}',
+        assignedSupport: 'Transmis au support Wi-Mall',
+        takenBy: '{{name}}, du support, s’occupe maintenant de ce ticket',
+    },
+
+    orderTickets: {
+        title: 'Tickets concernant cette commande',
+        byYou: 'Ouvert par vous',
     },
 
     faq: {
@@ -252,14 +283,14 @@ export const tickets = {
         loadFailed: "Nous n'avons pas pu charger vos tickets. Réessayez.",
         createFailed: "Nous n'avons pas pu ouvrir le ticket. Réessayez.",
         replyFailed: "Nous n'avons pas pu envoyer votre réponse. Réessayez.",
-        editNotCreator: 'Seul le créateur du ticket peut modifier ces informations.',
         noParticipantForRole:
             'Aucun participant avec ce rôle ne figure sur ce ticket pour être mis en attente.',
         statusNotAllowed: 'Ce changement de statut n’est pas autorisé depuis l’état actuel.',
         priorityLocked:
             'La priorité est verrouillée par un administrateur et ne peut pas être modifiée.',
         closeNotAllowed:
-            'Seuls le créateur du ticket ou un administrateur peuvent fermer ce ticket.',
+            'Seule la personne qui a ouvert ce ticket, ou le support, peut le fermer.',
+        accessLost: 'Vous ne faites plus partie de ce ticket ; il ne peut pas être ouvert.',
         loadDetailFailed: "Nous n'avons pas pu charger ce ticket. Réessayez.",
     },
 
@@ -284,7 +315,8 @@ export const tickets = {
     },
 
     followers: {
-        everyone: 'Tout le monde (administrateurs uniquement)',
+        everyone: 'Vous et le support uniquement',
+        none: 'Personne d’autre sur ce ticket',
         count: plural({ one: '{{count}} abonné', other: '{{count}} abonnés' }),
     },
 

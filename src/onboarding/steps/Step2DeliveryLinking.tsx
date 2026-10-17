@@ -6,6 +6,7 @@ import { OnboardingLayout } from '@/onboarding/OnboardingLayout';
 import { useOnboarding } from '@/onboarding/store/onboarding.store';
 import { AgencyConnectionBrowser } from '@/components/delivery/AgencyConnectionBrowser';
 import { Button } from '@/components/ui/button';
+import { InfoHint } from '@/components/ui/info-hint';
 import { cn } from '@/lib/utils';
 import { useTranslation, useApiError } from '@/i18n';
 
@@ -107,15 +108,17 @@ function PhysicalDeliveryPanel() {
     const { t } = useTranslation();
     return (
         <div className="mt-4 space-y-3">
-            <div className="rounded-xl border border-border bg-muted/40 p-4">
+            <div className="flex min-h-5 items-center gap-1">
                 <p className="text-sm font-semibold">
                     {t('onboarding.deliveryLinking.headStartTitle')}
                 </p>
-                <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                <InfoHint label={t('onboarding.deliveryLinking.headStartTitle')} align="start">
                     {t('onboarding.deliveryLinking.headStartDescription')}
-                </p>
+                </InfoHint>
             </div>
-            <AgencyConnectionBrowser listHeightClass="h-[38vh] min-h-[160px]" />
+            {/* The onboarding column is phone-wide on a desktop too, so the cards
+                keep their phone layout rather than squeezing into one row. */}
+            <AgencyConnectionBrowser listHeightClass="h-[38vh] min-h-[160px]" stackedCards />
         </div>
     );
 }

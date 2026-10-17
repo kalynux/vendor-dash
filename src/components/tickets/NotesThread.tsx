@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Loader2, Lock, Globe, Send, Info } from 'lucide-react';
+import { Loader2, Lock, Globe, Send } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -10,12 +10,32 @@ import { fetchNotes, createNote } from '@/services/tickets.service';
 import { ActorAvatar } from '@/components/tickets/ActorAvatar';
 import { FollowerSelect } from '@/components/tickets/FollowerSelect';
 import { ROLE_LABEL_KEYS, relativeTime, NOTE_MAX_LENGTH } from '@/components/tickets/ticket.constants';
+import { describeSystemNote } from '@/components/tickets/systemNote';
+import { ApiError } from '@/types/api';
 import { useApiError, useFormatters, useTranslation } from '@/i18n';
 import type { ApiTicketNote, TicketActor, NoteVisibility } from '@/types/tickets.types';
 
+interface NotesThreadProps {
+  ticketId: string;
+  followers: TicketActor[];
+  currentUserId?: string | null;
+  readOnly?: boolean;
+  /**
+   * Bump after anything that makes the server write an event on the ticket (a
+   * status or priority change), so the new line shows without reopening.
+   */
+  refreshKey?: number;
+  /**
+   * The server refused a note with "access denied". That is either us (removed
+   * from the ticket) or a chosen recipient (removed since the picker was built),
+   * and the code is the same for both — the parent re-reads the ticket to tell.
+   */
+  onForbidden?: (err: unknown) => void;
+}
+
 export function NotesThread({
-  ticketId, followers, readOnly = false,
-}: { ticketId: string; followers: TicketActor[]; readOnly?: boolean }) {
+  ticketId, followers, currentUserId, readOnly = false, refreshKey = 0, onForbidden,
+}: NotesThreadProps) {
   const { t } = useTranslation();
   const fmt = useFormatters();
   const apiError = useApiError();
@@ -27,19 +47,39 @@ export function NotesThread({
   const [submitting, setSubmitting] = useState(false);
   const listEndRef = useRef<HTMLDivElement>(null);
 
+  // A different ticket shows the skeleton; the same ticket (a `refreshKey` bump)
+  // is re-read quietly behind the rows already on screen.
+  const loadedTicket = useRef<string | null>(null);
   useEffect(() => {
     let active = true;
-    setLoading(true);
+    const quiet = loadedTicket.current === ticketId;
+    if (!quiet) setLoading(true);
     fetchNotes(ticketId)
-      .then((data) => active && setNotes(data))
+      .then((data) => {
+        if (!active) return;
+        loadedTicket.current = ticketId;
+        setNotes(data);
+      })
       .catch((err) => {
-        if (active) apiError.toast(err, { fallbackKey: 'tickets.detail.notesLoadFailed' });
+        if (active && !quiet) apiError.toast(err, { fallbackKey: 'tickets.detail.notesLoadFailed' });
       })
       .finally(() => active && setLoading(false));
     return () => {
       active = false;
     };
-  }, [ticketId]);
+  }, [ticketId, refreshKey]);
+
+  // A recipient who has since left the ticket can no longer be addressed.
+  useEffect(() => {
+    setViewerIds((ids) => {
+      const kept = ids.filter((id) => followers.some((f) => f.user_id === id));
+      return kept.length === ids.length ? ids : kept;
+    });
+  }, [followers]);
+
+  // Events (someone joined, a status change) sit on the same timeline but are
+  // not part of the conversation, so they are not counted as messages.
+  const messageCount = notes.filter((n) => !n.is_system_note).length;
 
   async function handleSend() {
     const trimmed = message.trim();
@@ -59,7 +99,11 @@ export function NotesThread({
       setMessage('');
       requestAnimationFrame(() => listEndRef.current?.scrollIntoView({ behavior: 'smooth' }));
     } catch (err) {
-      apiError.toast(err, { fallbackKey: 'tickets.detail.noteFailed' });
+      if (onForbidden && err instanceof ApiError && err.code === 'TICKET_ACCESS_DENIED') {
+        onForbidden(err);
+      } else {
+        apiError.toast(err, { fallbackKey: 'tickets.detail.noteFailed' });
+      }
     } finally {
       setSubmitting(false);
     }
@@ -69,9 +113,9 @@ export function NotesThread({
     <section className="space-y-4">
       <div className="flex items-center gap-2">
         <h3 className="text-sm font-semibold">{t('tickets.detail.conversation')}</h3>
-        {!loading && notes.length > 0 && (
+        {!loading && messageCount > 0 && (
           <span className="text-xs text-muted-foreground">
-            {t('tickets.detail.noteCount', { count: notes.length })}
+            {t('tickets.detail.noteCount', { count: messageCount })}
           </span>
         )}
       </div>
@@ -88,11 +132,16 @@ export function NotesThread({
       ) : (
         <ul className="space-y-4">
           {notes.map((note) => (note.is_system_note ? (
-            <li key={note._id} className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
-              <Info className="h-3.5 w-3.5" />
-              <span>{note.content}</span>
-              <span>·</span>
-              <span>{relativeTime(note.created_at, t, fmt.date)}</span>
+            // An event, not a message: a dot in the avatar column, one quiet line.
+            <li key={note._id} className="flex items-center gap-3 text-xs text-muted-foreground">
+              <span className="flex w-8 shrink-0 justify-center" aria-hidden>
+                <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40" />
+              </span>
+              <span className="min-w-0">
+                {describeSystemNote(note.content, t)}
+                <span className="mx-1.5">·</span>
+                {relativeTime(note.created_at, t, fmt.date)}
+              </span>
             </li>
           ) : (
             <li key={note._id} className="flex gap-3">
@@ -100,7 +149,7 @@ export function NotesThread({
               <div className="min-w-0 flex-1 space-y-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-sm font-medium">
-                    {note.author?.name ?? t(ROLE_LABEL_KEYS[note.author_role])}
+                    {note.author?.name || t(ROLE_LABEL_KEYS[note.author_role])}
                   </span>
                   <Badge
                     variant="secondary"
@@ -175,7 +224,12 @@ export function NotesThread({
           {visibility === 'private' && (
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs text-muted-foreground">{t('tickets.detail.visibleTo')}</span>
-              <FollowerSelect followers={followers} value={viewerIds} onChange={setViewerIds} />
+              <FollowerSelect
+                followers={followers}
+                currentUserId={currentUserId}
+                value={viewerIds}
+                onChange={setViewerIds}
+              />
             </div>
           )}
         </div>

@@ -27,6 +27,8 @@ import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useInfiniteList } from '@/hooks/use-infinite-list';
 import { useScrollRestoration } from '@/hooks/use-scroll-restoration';
+import { useCurrentUserId } from '@/hooks/use-current-user-id';
+import { useRefreshOnFocus } from '@/hooks/use-refresh-on-focus';
 import { getListCache, setListCache } from '@/lib/listCache';
 import { MobilePageHeader } from '@/components/layout/MobilePageHeader';
 import { RefreshButton } from '@/components/common/RefreshButton';
@@ -38,6 +40,7 @@ import {
   STATUS_LABEL_KEYS, STATUS_BADGE_CLASSES, STATUS_DOT_CLASSES, STATUS_TABS,
   PRIORITY_LABEL_KEYS, PRIORITY_BADGE_CLASSES, PRIORITY_DOT_CLASSES, TICKET_PRIORITIES,
   TICKET_TYPE_GROUPS, ticketTypeKey, getTypeVisual, shortTicketRef, relativeTime,
+  ROLE_LABEL_KEYS, ticketOpener,
 } from '@/components/tickets/ticket.constants';
 import { fetchTickets } from '@/services/tickets.service';
 import { useApiError, useFormatters, useTranslation, type TranslationKey } from '@/i18n';
@@ -73,6 +76,7 @@ interface TicketsDesktopCache {
   statusFilter: TicketStatus | null;
   priorityFilter: UpdatablePriority | '';
   typeFilter: TicketType | '';
+  mineOnly?: boolean;
   sort: SortKey;
   page: number;
 }
@@ -95,6 +99,11 @@ export function Tickets() {
   const [statusFilter, setStatusFilter] = useState<TicketStatus | null>(dCache?.statusFilter ?? null);
   const [priorityFilter, setPriorityFilter] = useState<UpdatablePriority | ''>(dCache?.priorityFilter ?? '');
   const [typeFilter, setTypeFilter] = useState<TicketType | ''>(dCache?.typeFilter ?? '');
+  // The list holds every ticket about the vendor's orders, whoever opened it —
+  // this narrows it back to the ones they opened themselves.
+  const [mineOnly, setMineOnly] = useState(dCache?.mineOnly ?? false);
+  const currentUserId = useCurrentUserId();
+  const createdByUserId = mineOnly && currentUserId ? currentUserId : undefined;
   const [sort, setSort] = useState<SortKey>(dCache?.sort ?? 'updated');
   const [page, setPage] = useState(dCache?.page ?? 1);
 
@@ -122,24 +131,41 @@ export function Tickets() {
   }, [location.state, location.pathname, reactNavigate]);
   const sortConfig = useMemo(() => SORT_OPTIONS.find((s) => s.value === sort)!, [sort]);
 
+  // Bumped by every load so a slower, older answer can't overwrite a newer one.
+  const loadSeq = useRef(0);
   const load = useCallback(
     async (params: TicketsQueryParams) => {
+      const seq = ++loadSeq.current;
       setLoading(true);
       setError(null);
       try {
         const result = await fetchTickets({ limit: PAGE_LIMIT, ...params });
+        if (seq !== loadSeq.current) return;
         setTickets(result.data);
         setMeta(result.meta);
       } catch (err) {
+        if (seq !== loadSeq.current) return;
         setError(apiError.resolve(err, { fallbackKey: 'tickets.errors.loadFailed' }));
         setTickets([]);
         setMeta(null);
       } finally {
-        setLoading(false);
+        if (seq === loadSeq.current) setLoading(false);
       }
     },
     [apiError],
   );
+
+  // Same request, but the rows on screen stay put until the new ones arrive —
+  // no skeleton, and a failure leaves the list as it was.
+  const loadQuietly = useCallback(async (params: TicketsQueryParams) => {
+    const seq = ++loadSeq.current;
+    const result = await fetchTickets({ limit: PAGE_LIMIT, ...params });
+    if (seq !== loadSeq.current) return;
+    setTickets(result.data);
+    setMeta(result.meta);
+    setError(null);
+    setLoading(false);
+  }, []);
 
   // Debounce the raw search box; reset to page 1 on change. Skip the first run
   // so a restored search box doesn't reset paging / trigger a refetch on return.
@@ -165,10 +191,11 @@ export function Tickets() {
     status: statusFilter || undefined,
     priority: priorityFilter || undefined,
     type: typeFilter || undefined,
+    createdByUserId,
     sortBy: sortConfig.sortBy,
     sortOrder: sortConfig.sortOrder,
     page,
-  }), [debouncedSearch, statusFilter, priorityFilter, typeFilter, sortConfig, page]);
+  }), [debouncedSearch, statusFilter, priorityFilter, typeFilter, createdByUserId, sortConfig, page]);
 
   // Desktop uses page-based pagination; mobile uses infinite scroll below.
   // Skip the first load if we restored a cached list (no reload on return).
@@ -177,7 +204,12 @@ export function Tickets() {
     if (isMobile) return;
     if (!desktopInit.current) {
       desktopInit.current = true;
-      if (dCache) return;
+      if (dCache) {
+        // Restored from the cache: show it at once, then check for tickets that
+        // arrived meanwhile — nothing announces a new one.
+        void loadQuietly(queryParams).catch(() => {});
+        return;
+      }
     }
     load(queryParams);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -188,13 +220,14 @@ export function Tickets() {
     if (isMobile) return;
     setListCache<TicketsDesktopCache>(TICKETS_DESKTOP_KEY, {
       tickets, meta, searchQuery, debouncedSearch,
-      statusFilter, priorityFilter, typeFilter, sort, page,
+      statusFilter, priorityFilter, typeFilter, mineOnly, sort, page,
     });
-  }, [isMobile, tickets, meta, searchQuery, debouncedSearch, statusFilter, priorityFilter, typeFilter, sort, page]);
+  }, [isMobile, tickets, meta, searchQuery, debouncedSearch, statusFilter, priorityFilter, typeFilter, mineOnly, sort, page]);
 
   useScrollRestoration('tickets');
 
   const refresh = useCallback(() => load(queryParams), [load, queryParams]);
+  const refreshQuietly = useCallback(() => loadQuietly(queryParams), [loadQuietly, queryParams]);
 
   // ── Mobile infinite scroll ──────────────────────────────────────────────────
   const fetchTicketsPage = useCallback(
@@ -204,6 +237,7 @@ export function Tickets() {
         status: statusFilter || undefined,
         priority: priorityFilter || undefined,
         type: typeFilter || undefined,
+        createdByUserId,
         sortBy: sortConfig.sortBy,
         sortOrder: sortConfig.sortOrder,
         page: pageArg,
@@ -213,15 +247,17 @@ export function Tickets() {
         total: r.meta.total,
         totalPages: r.meta.totalPages,
       })),
-    [debouncedSearch, statusFilter, priorityFilter, typeFilter, sortConfig],
+    [debouncedSearch, statusFilter, priorityFilter, typeFilter, createdByUserId, sortConfig],
   );
 
   const infinite = useInfiniteList<ApiTicketListItem>({
     fetchPage: fetchTicketsPage,
     rowHeight: 92,
     enabled: isMobile,
-    deps: [debouncedSearch, statusFilter, priorityFilter, typeFilter, sort],
+    deps: [debouncedSearch, statusFilter, priorityFilter, typeFilter, createdByUserId, sort],
     cacheKey: 'tickets',
+    // Coming back to this screen re-reads the list behind the cached rows.
+    revalidateOnRestore: true,
   });
 
   const reloadList = useCallback(() => {
@@ -229,25 +265,35 @@ export function Tickets() {
     else { setPage(1); refresh(); }
   }, [isMobile, infinite, refresh]);
 
-  // The header's refresh icon: same page and filters, support replies pulled in.
-  const refreshList = () => (isMobile ? infinite.refresh() : refresh());
+  // The header's refresh icon: same page and filters, new tickets and replies
+  // pulled in, rows swapped in place.
+  const refreshList = () => (isMobile ? infinite.refresh() : refreshQuietly());
+
+  // A ticket someone else opens about one of the vendor's orders lands in this
+  // list with no notification, so the list re-reads itself whenever the vendor
+  // comes back to the screen. Failures are silent — the rows shown still stand.
+  useRefreshOnFocus(() => {
+    void Promise.resolve(refreshList()).catch(() => {});
+  });
 
   function clearFilters() {
     setStatusFilter(null);
     setPriorityFilter('');
     setTypeFilter('');
+    setMineOnly(false);
     setSearchQuery('');
     setPage(1);
   }
 
   const hasActiveQuery =
-    !!statusFilter || !!priorityFilter || !!typeFilter || searchQuery.trim().length > 0;
+    !!statusFilter || !!priorityFilter || !!typeFilter || mineOnly || searchQuery.trim().length > 0;
 
   // ── Shared search + filter UI (desktop layout and mobile subheader) ─────────
   const activeFilterCount =
     (statusFilter ? 1 : 0) +
     (priorityFilter ? 1 : 0) +
     (typeFilter ? 1 : 0) +
+    (mineOnly ? 1 : 0) +
     (sort !== SORT_OPTIONS[0].value ? 1 : 0);
 
   const activeChips: ActiveFilterChip[] = [];
@@ -270,6 +316,13 @@ export function Tickets() {
       key: 'priority',
       label: t('tickets.list.chipPriority', { value: t(PRIORITY_LABEL_KEYS[priorityFilter]) }),
       onRemove: () => { setPriorityFilter(''); setPage(1); },
+    });
+  }
+  if (mineOnly) {
+    activeChips.push({
+      key: 'mine',
+      label: t('tickets.list.chipOpenedByMe'),
+      onRemove: () => { setMineOnly(false); setPage(1); },
     });
   }
   if (sort !== SORT_OPTIONS[0].value) {
@@ -313,6 +366,18 @@ export function Tickets() {
           allLabel={t('tickets.list.anyStatus')}
         />
       </FilterSection>
+
+      {/* Hidden until we know who is signed in — the filter is their id. */}
+      {currentUserId && (
+        <FilterSection title={t('tickets.list.openedBy')}>
+          <FilterChips
+            options={[{ value: 'me' as const, labelKey: 'tickets.list.openedByMe' as const }]}
+            value={mineOnly ? 'me' : undefined}
+            onChange={(v) => { setMineOnly(v === 'me'); setPage(1); }}
+            allLabel={t('tickets.list.openedByAnyone')}
+          />
+        </FilterSection>
+      )}
 
       <FilterSection title={t('tickets.columns.priority')}>
         <FilterChips
@@ -414,6 +479,7 @@ export function Tickets() {
         open={!!detailId}
         onOpenChange={(open) => { if (!open) setDetailId(null); }}
         onUpdated={reloadList}
+        onAccessLost={() => { void Promise.resolve(refreshList()).catch(() => {}); }}
       />
       <FaqSheet open={faqOpen} onOpenChange={setFaqOpen} />
     </>
@@ -609,7 +675,13 @@ function EntityChip({ entity, entityType }: { entity: TicketEntityRef | null; en
 }
 
 function TicketIdentity({ t }: { t: ApiTicketListItem }) {
+  const { t: translate } = useTranslation();
+  const currentUserId = useCurrentUserId();
   const { Icon, className } = getTypeVisual(t.type);
+  // Say who it is from only when it is not the vendor's own ticket.
+  const fromSomeoneElse = !!currentUserId && t.created_by_user_id !== currentUserId;
+  const opener = ticketOpener(t);
+  const roleLabel = translate(ROLE_LABEL_KEYS[opener.role]);
   return (
     <div className="flex items-start gap-3">
       <div className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-lg', className)}>
@@ -622,6 +694,14 @@ function TicketIdentity({ t }: { t: ApiTicketListItem }) {
           <span>·</span>
           <EntityChip entity={t.entity} entityType={t.entity_type} />
         </div>
+        {fromSomeoneElse && (
+          <p className="mt-1 truncate text-xs text-muted-foreground">
+            {/* An administrator's "role" adds nothing beside "Wi-Mall (automatic)". */}
+            {opener.name && opener.role !== 'admin'
+              ? translate('tickets.list.fromRole', { name: opener.name, role: roleLabel })
+              : translate('tickets.list.from', { name: opener.name ?? roleLabel })}
+          </p>
+        )}
       </div>
     </div>
   );

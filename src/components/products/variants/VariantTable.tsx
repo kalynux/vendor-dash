@@ -223,9 +223,11 @@ export function VariantTable({
         <p className="text-sm text-muted-foreground">{t('products.variantTable.firstShownHint')}</p>
       )}
 
-      {/* ── Mobile: one flat block per variant, hairlines between ─────────── */}
+      {/* ── Mobile: one flat block per variant, a grey band between ───────── */}
+      {/* `-mx-4` cancels the page's 16px phone gutter (`ProductFormBody`) so the
+          bands run edge to edge; each block puts the gutter back itself. */}
       {rows.length > 0 && (
-        <div className="divide-y divide-border border-y border-border md:hidden">
+        <div className="-mx-4 md:hidden">
           {rows.map((row, index) => (
             <VariantRowCard
               key={row.localId}
@@ -248,6 +250,7 @@ export function VariantTable({
               infiniteStockLocked={infiniteStockLocked}
             />
           ))}
+          <VariantBand />
         </div>
       )}
 
@@ -549,125 +552,144 @@ function VariantRowCard({
   // tinted card per variant was a box inside a box. The combination is the
   // heading; the row's state is the word beside it.
   return (
-    <div className="space-y-4 py-5">
-      {/* Header: the combination + status */}
-      <div className="flex items-center justify-between gap-3">
-        <p className="min-w-0 flex-1 font-medium">
-          {sortedOptions
-            .map((opt) =>
-              row.combo.comboValues.find((cv) => cv.optionLocalId === opt.localId)
-                ?.displayValue,
-            )
-            .filter(Boolean)
-            .join(' / ')}
-        </p>
-        <Badge variant="outline" className={cn('shrink-0 border-transparent text-xs', statusBadge.className)}>
-          {t(statusBadge.labelKey)}
-        </Badge>
-        <MoveButtons isFirst={isFirst} isLast={isLast} onMove={onMove} />
-      </div>
+    <div>
+      <VariantBand />
+      <div className="space-y-4 px-4 py-5">
+        {/* Header: the combination + status */}
+        <div className="flex items-center justify-between gap-3">
+          <p className="min-w-0 flex-1 text-base font-semibold">
+            {sortedOptions
+              .map((opt) =>
+                row.combo.comboValues.find((cv) => cv.optionLocalId === opt.localId)
+                  ?.displayValue,
+              )
+              .filter(Boolean)
+              .join(' / ')}
+          </p>
+          <Badge variant="outline" className={cn('shrink-0 border-transparent text-xs', statusBadge.className)}>
+            {t(statusBadge.labelKey)}
+          </Badge>
+          <MoveButtons isFirst={isFirst} isLast={isLast} onMove={onMove} />
+        </div>
 
-      {/* Name */}
-      <FieldRow label={t('products.columns.name')} error={nameError}>
-        <CellInput
-          value={row.name}
-          error={nameError}
-          onChange={(v) => handleFieldChange('name', v)}
-          fullWidth
-        />
-      </FieldRow>
-
-      {/* SKU */}
-      <FieldRow label={t('products.columns.sku')} error={skuError}>
-        <CellInput
-          value={row.sku}
-          error={skuError}
-          onChange={(v) => handleFieldChange('sku', v)}
-          mono
-          fullWidth
-        />
-      </FieldRow>
-
-      {/* Price + Stock side by side */}
-      <div className="grid grid-cols-2 gap-3">
-        <FieldRow label={t('products.columns.price')} error={priceError}>
+        {/* Name */}
+        <FieldRow label={t('products.columns.name')} error={nameError}>
           <CellInput
-            type="number"
-            value={String(row.price)}
-            error={priceError}
-            onChange={(v) => handleFieldChange('price', parseFloat(v) || 0)}
-            min={0}
-            step="0.01"
+            value={row.name}
+            error={nameError}
+            onChange={(v) => handleFieldChange('name', v)}
             fullWidth
           />
         </FieldRow>
-        <FieldRow label={t('products.columns.stock')} error={stockError}>
-          {row.isInfiniteStock ? (
-            <div className="flex h-11 items-center rounded-md border border-input bg-muted/40 px-3 text-sm text-muted-foreground">
-              {t('products.variantTable.unlimited')}
-            </div>
-          ) : (
+
+        {/* SKU */}
+        <FieldRow label={t('products.columns.sku')} error={skuError}>
+          <CellInput
+            value={row.sku}
+            error={skuError}
+            onChange={(v) => handleFieldChange('sku', v)}
+            mono
+            fullWidth
+          />
+        </FieldRow>
+
+        {/* Price + Stock side by side */}
+        <div className="grid grid-cols-2 gap-3">
+          <FieldRow label={t('products.columns.price')} error={priceError}>
             <CellInput
               type="number"
-              value={String(row.stock)}
-              error={stockError}
-              onChange={(v) => handleFieldChange('stock', parseInt(v, 10) || 0)}
+              value={String(row.price)}
+              error={priceError}
+              onChange={(v) => handleFieldChange('price', parseFloat(v) || 0)}
               min={0}
+              step="0.01"
               fullWidth
             />
-          )}
-          {pendingStock && (
-            <PendingStockBadge
-              currentStock={row.stock}
-              pending={pendingStock}
-              className="mt-1"
-            />
-          )}
-        </FieldRow>
-      </div>
-
-      {/* Images */}
-      <FieldRow label={t('products.columns.images')}>
-        <VariantImageStack
-          productId={productId}
-          variantId={row.serverId}
-          files={files}
-          maxImages={maxImages}
-          onChange={onImagesChange}
-        />
-      </FieldRow>
-
-      {/* Expand toggle */}
-      <button
-        type="button"
-        onClick={onToggleExpand}
-        aria-expanded={isExpanded}
-        className="tap-target inline-flex items-center gap-1 rounded-sm text-sm font-medium text-primary hover:underline"
-      >
-        <span>
-          {t(isExpanded
-            ? 'products.variantTable.hideDetails'
-            : 'products.variantTable.moreDetails')}
-        </span>
-        <ChevronDown
-          className={cn(
-            'h-3.5 w-3.5 text-muted-foreground transition-transform duration-200',
-            isExpanded && 'rotate-180',
-          )}
-        />
-      </button>
-
-      {isExpanded && (
-        <div className="pt-1">
-          <SecondaryFields
-            row={row}
-            onChange={handleFieldChange}
-            infiniteStockLocked={infiniteStockLocked}
-          />
+          </FieldRow>
+          <FieldRow label={t('products.columns.stock')} error={stockError}>
+            {row.isInfiniteStock ? (
+              <div className="flex h-11 items-center rounded-md border border-input bg-muted/40 px-3 text-sm text-muted-foreground">
+                {t('products.variantTable.unlimited')}
+              </div>
+            ) : (
+              <CellInput
+                type="number"
+                value={String(row.stock)}
+                error={stockError}
+                onChange={(v) => handleFieldChange('stock', parseInt(v, 10) || 0)}
+                min={0}
+                fullWidth
+              />
+            )}
+            {pendingStock && (
+              <PendingStockBadge
+                currentStock={row.stock}
+                pending={pendingStock}
+                className="mt-1"
+              />
+            )}
+          </FieldRow>
         </div>
-      )}
+
+        {/* Images */}
+        <FieldRow label={t('products.columns.images')}>
+          <VariantImageStack
+            productId={productId}
+            variantId={row.serverId}
+            files={files}
+            maxImages={maxImages}
+            onChange={onImagesChange}
+          />
+        </FieldRow>
+
+        {/* Expand toggle */}
+        <button
+          type="button"
+          onClick={onToggleExpand}
+          aria-expanded={isExpanded}
+          className="tap-target inline-flex items-center gap-1 rounded-sm text-sm font-medium text-primary hover:underline"
+        >
+          <span>
+            {t(isExpanded
+              ? 'products.variantTable.hideDetails'
+              : 'products.variantTable.moreDetails')}
+          </span>
+          <ChevronDown
+            className={cn(
+              'h-3.5 w-3.5 text-muted-foreground transition-transform duration-200',
+              isExpanded && 'rotate-180',
+            )}
+          />
+        </button>
+
+        {isExpanded && (
+          <div className="pt-1">
+            <SecondaryFields
+              row={row}
+              onChange={handleFieldChange}
+              infiniteStockLocked={infiniteStockLocked}
+            />
+          </div>
+        )}
+      </div>
     </div>
   );
+}
+
+// ─── Variant Band (mobile) ───────────────────────────────────────────────────
+
+/**
+ * The break between two variants on a phone: a grey strip across the full
+ * width of the screen.
+ *
+ * ⚠ Not a hairline, on purpose. Every field in a variant already draws a 1px
+ * line in the border colour, so a 1px rule in that same colour between two
+ * variants was lost among them — the list read as one long form, and it was not
+ * clear which variant a field belonged to. A strip is a different *shape* from
+ * a field edge, which is what makes it read as "a new variant starts here".
+ */
+function VariantBand() {
+  return <div aria-hidden className="h-3 border-y border-border bg-border/60" />;
 }
 
 // ─── Move Buttons ────────────────────────────────────────────────────────────

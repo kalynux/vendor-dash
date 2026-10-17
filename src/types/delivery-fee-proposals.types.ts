@@ -8,6 +8,10 @@
 // difference the vendor may `cover` at once. Shapes not in the doc were read
 // from the backend's `delivery-fee-proposal.dto.ts`.
 //
+// Since 2026-10-14 (ADR-A12) the PAYER may propose too: the vendor on a
+// vendor-paid parcel (`proposedBy.role: 'vendor'`, `approver: 'agency'`,
+// `origin: 'payer'`), and the customer on a customer-paid one (read-only here).
+//
 // Amounts are XAF "minor units" — whole francs, never divided by 100.
 //
 // Enums are kept open with `string & {}`: an unknown value renders read-only
@@ -15,17 +19,24 @@
 
 export type DeliveryFeeProposalStatus = 'pending' | 'approved' | 'rejected' | 'withdrawn' | (string & {});
 
-export type DeliveryFeeProposalAction = 'approve' | 'reject' | 'cover' | (string & {});
+/** `withdraw` / `edit` are on your own proposal (2026-10-14) while the agency has not answered. */
+export type DeliveryFeeProposalAction = 'approve' | 'reject' | 'cover' | 'withdraw' | 'edit' | (string & {});
 
-/** Who answers: `vendor` (vendor-paid), `customer` (a rise on a customer-paid parcel), `none` (a cut, applied at once). */
-export type DeliveryFeeProposalApprover = 'vendor' | 'customer' | 'none' | (string & {});
+/**
+ * Who answers: `vendor` (vendor-paid), `customer` (a rise on a customer-paid parcel), `none` (a cut,
+ * applied at once), `agency` (the payer — you or the customer — proposed; the agency answers).
+ */
+export type DeliveryFeeProposalApprover = 'vendor' | 'customer' | 'none' | 'agency' | (string & {});
 
-/** `agency` (the agency or its agent asked) · `change_agency` (you moved the parcel) · `combined_request`. */
-export type DeliveryFeeProposalOrigin = 'agency' | 'change_agency' | 'combined_request' | (string & {});
+/**
+ * `agency` (the agency or its agent asked) · `change_agency` (you moved the parcel) ·
+ * `combined_request` · `payer` (you or the customer proposed, 2026-10-14).
+ */
+export type DeliveryFeeProposalOrigin = 'agency' | 'change_agency' | 'combined_request' | 'payer' | (string & {});
 
 export interface DeliveryFeeProposer {
-  /** `system` raised a `change_agency` difference. */
-  role: 'agency' | 'agent' | 'system' | (string & {});
+  /** `system` raised a `change_agency` difference; `vendor` / `customer` = a payer proposal (2026-10-14). */
+  role: 'agency' | 'agent' | 'system' | 'vendor' | 'customer' | (string & {});
   userId: string | null;
   agentId: string | null;
 }
@@ -55,6 +66,13 @@ export interface DeliveryFeeProposal {
   customerApproval?: { approvedAt: string; version: number } | null;
   topup?: { amount: number; status: 'awaiting_payment' | 'paid' | (string & {}); paidAt: string | null } | null;
   combinedRequestId?: string | null;
+  /** 2026-10-14 — who on the agency side accepted a payer proposal, and when; `null` until then. */
+  payerAcceptance?: {
+    role: 'agency' | 'agent' | (string & {});
+    agentId: string | null;
+    version: number;
+    at: string;
+  } | null;
   currency: string;
   feeBefore: number;
   proposedFee: number;
@@ -93,6 +111,22 @@ export interface DeliveryFeeProposal {
   availableActions: DeliveryFeeProposalAction[];
   createdAt: string;
   updatedAt: string;
+}
+
+/** `POST /vendor/orders/:id/shipments/:shipmentId/delivery-fee-proposals` (2026-10-14). */
+export interface ProposeDeliveryFeeInput {
+  /** Whole francs, ≥ 0. */
+  proposedFee: number;
+  /** 3–500 characters, counted after trimming. */
+  reason: string;
+}
+
+/** `PATCH …/delivery-fee-proposals/:proposalId` — at least one of fee / reason. */
+export interface EditDeliveryFeeProposalInput {
+  proposedFee?: number;
+  reason?: string;
+  /** The one on screen; a stale one is refused with `409 DELIVERY_FEE_PROPOSAL_VERSION_MISMATCH`. */
+  version?: number;
 }
 
 export interface DeliveryFeeProposalListParams {

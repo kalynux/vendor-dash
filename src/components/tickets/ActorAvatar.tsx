@@ -9,14 +9,19 @@ interface ActorAvatarProps {
   actor: TicketActor | null;
   /** Fallback role when actor is null (e.g. unresolved reference). */
   role?: TicketActorRole;
+  /**
+   * Name to draw the initials from instead of the actor's — for an
+   * administrator, whose real name lives in a snapshot beside the actor.
+   */
+  name?: string | null;
   className?: string;
 }
 
 /** Avatar that shows the actor photo, falling back to role-tinted initials. */
-export function ActorAvatar({ actor, role, className }: ActorAvatarProps) {
+export function ActorAvatar({ actor, role, name: nameOverride, className }: ActorAvatarProps) {
   const { t } = useTranslation();
   const effectiveRole = actor?.role ?? role ?? 'vendor';
-  const name = actor?.name ?? t(ROLE_LABEL_KEYS[effectiveRole]);
+  const name = nameOverride || actor?.name || t(ROLE_LABEL_KEYS[effectiveRole]);
   const avatarUrl = fileRefUrl(actor?.avatar);
   return (
     <Avatar className={cn('h-8 w-8', className)}>

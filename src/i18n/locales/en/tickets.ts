@@ -3,7 +3,7 @@ import { plural } from '../../types';
 /** Support tickets with the platform team. */
 export const tickets = {
     title: 'Tickets',
-    subtitle: 'Track and resolve issues with the Wi-Mall team.',
+    subtitle: 'Your requests to Wi-Mall, and every ticket about one of your orders.',
 
     empty: {
         title: 'No tickets yet',
@@ -63,10 +63,13 @@ export const tickets = {
         OTHER: 'Other',
     },
 
-    /** Who wrote a message. */
+    /**
+     * Who someone is on a ticket. `agent` is the delivery agent on the order,
+     * not a support agent — support staff are `admin`.
+     */
     role: {
         admin: 'Admin',
-        agent: 'Support Agent',
+        agent: 'Delivery agent',
         vendor: 'Vendor',
         customer: 'Customer',
         agency: 'Agency',
@@ -102,6 +105,13 @@ export const tickets = {
         chipType: 'Type: {{value}}',
         chipPriority: 'Priority: {{value}}',
         chipSort: 'Sort: {{value}}',
+        /** The list also holds tickets other people opened about the vendor's orders. */
+        openedBy: 'Opened by',
+        openedByAnyone: 'Anyone',
+        openedByMe: 'Me',
+        chipOpenedByMe: 'Opened by me',
+        from: 'From {{name}}',
+        fromRole: 'From {{name}} ({{role}})',
         sort: {
             updated: 'Recently updated',
             created: 'Recently created',
@@ -178,7 +188,9 @@ export const tickets = {
         unassigned: 'Unassigned',
         cannotReassign: 'Vendors can’t reassign tickets.',
         noFollowers: 'No followers yet.',
-        followerLimit: 'Up to 5 non-admin followers per ticket.',
+        openedBy: 'Opened by',
+        you: 'You',
+        roleYou: '{{role}} · you',
         closeConfirmTitle: 'Close this ticket?',
         closeConfirmBody:
             'Closing the ticket marks it as resolved. You won’t be able to change its priority or add new messages or attachments afterwards. This can’t be undone from here.',
@@ -214,12 +226,41 @@ export const tickets = {
         subject: 'Subject',
         type: 'Type',
         created: 'Created',
-        noParticipant: ' · no participant',
         lockedByAdmin: 'Locked by admin',
         updateFailed: 'Failed to update ticket',
         statusUpdateFailed: 'Failed to update status',
         priorityUpdateFailed: 'Failed to update priority',
         closeFailed: 'Failed to close ticket',
+    },
+
+    /**
+     * Lines the ticket writes about itself in the conversation — who joined, a
+     * status change. The server sends them as fixed English sentences;
+     * `components/tickets/systemNote.ts` maps each one here.
+     */
+    events: {
+        joined: {
+            customer: 'The customer joined this ticket',
+            vendor: 'The vendor joined this ticket',
+            agency: 'A delivery agency joined this ticket',
+            agent: 'A delivery agent joined this ticket',
+            admin: 'Wi-Mall support joined this ticket',
+        },
+        removed: 'Someone was removed from this ticket',
+        statusChanged: 'Status changed from {{from}} to {{to}}',
+        priorityChanged: 'Priority changed from {{from}} to {{to}}',
+        priorityLocked: 'Support changed the priority from {{from}} to {{to}}',
+        closed: 'Ticket closed',
+        reopened: 'Support reopened this ticket',
+        assignedRole: 'Assigned to: {{role}}',
+        assignedSupport: 'Handed to Wi-Mall support',
+        takenBy: '{{name}} from support is now handling this ticket',
+    },
+
+    /** "Tickets about this order", on the order screen. */
+    orderTickets: {
+        title: 'Tickets about this order',
+        byYou: 'Opened by you',
     },
 
     /** The read-only FAQ drawer. */
@@ -250,11 +291,12 @@ export const tickets = {
         loadFailed: "We couldn't load your tickets. Please try again.",
         createFailed: "We couldn't open the ticket. Please try again.",
         replyFailed: "We couldn't send your reply. Please try again.",
-        editNotCreator: 'Only the ticket creator can edit these details.',
         noParticipantForRole: 'No participant with that role is on this ticket to wait on.',
         statusNotAllowed: 'That status change isn’t allowed from the current state.',
         priorityLocked: 'Priority is locked by an admin and cannot be changed.',
-        closeNotAllowed: 'Only the ticket creator or an admin can close this ticket.',
+        closeNotAllowed: 'Only the person who opened this ticket, or support, can close it.',
+        /** An administrator took the vendor off the ticket; the link or row is stale. */
+        accessLost: 'You are no longer on this ticket, so it can’t be opened.',
         loadDetailFailed: "We couldn't load this ticket. Please try again.",
     },
 
@@ -284,7 +326,9 @@ export const tickets = {
     },
 
     followers: {
-        everyone: 'Everyone (admins only)',
+        /** A private item with nobody picked: the author and support still see it. */
+        everyone: 'Only you and support',
+        none: 'No one else on this ticket',
         count: plural({ one: '{{count}} follower', other: '{{count}} followers' }),
     },
 

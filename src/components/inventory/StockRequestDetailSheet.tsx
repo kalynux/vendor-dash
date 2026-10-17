@@ -130,7 +130,7 @@ export function StockRequestDetailSheet({
           </SheetDescription>
         </SheetHeader>
 
-        <SheetBody className="space-y-5">
+        <SheetBody className="space-y-5 p-4">
           {loading && (
             <div className="space-y-2">
               <Skeleton className="h-20 w-full" />

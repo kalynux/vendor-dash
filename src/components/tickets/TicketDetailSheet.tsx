@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Loader2, Lock, Pencil, X, Check, CircleSlash, Info, XCircle,
 } from 'lucide-react';
@@ -23,22 +23,24 @@ import { cn } from '@/lib/utils';
 import { NotesThread } from '@/components/tickets/NotesThread';
 import { AttachmentsPanel } from '@/components/tickets/AttachmentsPanel';
 import { ActorAvatar } from '@/components/tickets/ActorAvatar';
+import { VerifiedBadge } from '@/components/common/VerifiedBadge';
 import {
   STATUS_LABEL_KEYS, STATUS_BADGE_CLASSES, STATUS_DOT_CLASSES, TICKET_STATUSES,
   PRIORITY_LABEL_KEYS, PRIORITY_BADGE_CLASSES, PRIORITY_DOT_CLASSES, TICKET_PRIORITIES,
   IMPORTANCE_LABEL_KEYS, IMPORTANCE_BADGE_CLASSES, WAITING_STATUS_ROLE,
   ticketTypeKey, ROLE_LABEL_KEYS, getTypeVisual, shortTicketRef, relativeTime,
-  DESCRIPTION_UPDATE_MAX,
+  DESCRIPTION_UPDATE_MAX, ticketOpener,
 } from '@/components/tickets/ticket.constants';
 import { responsiveSheetProps } from '@/components/ui/responsive-sheet';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useCurrentUserId } from '@/hooks/use-current-user-id';
 import {
   fetchTicketById, updateTicket, updateTicketStatus, updateTicketPriority, closeTicket,
 } from '@/services/tickets.service';
 import { ApiError } from '@/types/api';
-import { useApiError, useFormatters, useMessage, useTranslation } from '@/i18n';
+import { useApiError, useFormatters, useMessage, useTranslation, type TranslationKey } from '@/i18n';
 import type {
-  ApiTicketDetail, ApiTicketMutation, TicketStatus, TicketActorRole, UpdatablePriority,
+  ApiTicketDetail, ApiTicketMutation, TicketActor, TicketStatus, UpdatablePriority,
 } from '@/types/tickets.types';
 
 interface TicketDetailSheetProps {
@@ -47,9 +49,21 @@ interface TicketDetailSheetProps {
   onOpenChange: (open: boolean) => void;
   /** Called after any mutation so the list can refresh. */
   onUpdated: (ticket: ApiTicketMutation) => void;
+  /**
+   * The vendor is no longer on this ticket (an administrator removed them), so
+   * it has also left their list — the list should re-read itself.
+   */
+  onAccessLost?: () => void;
 }
 
-export function TicketDetailSheet({ ticketId, open, onOpenChange, onUpdated }: TicketDetailSheetProps) {
+/** `403 TICKET_ACCESS_DENIED` — on a read, it means "you are not on this ticket". */
+function isAccessDenied(err: unknown): boolean {
+  return err instanceof ApiError && err.code === 'TICKET_ACCESS_DENIED';
+}
+
+export function TicketDetailSheet({
+  ticketId, open, onOpenChange, onUpdated, onAccessLost,
+}: TicketDetailSheetProps) {
   const { t } = useTranslation();
   const m = useMessage();
   const fmt = useFormatters();
@@ -67,6 +81,24 @@ export function TicketDetailSheet({ ticketId, open, onOpenChange, onUpdated }: T
   const [priorityBusy, setPriorityBusy] = useState(false);
   const [closing, setClosing] = useState(false);
   const [confirmCloseOpen, setConfirmCloseOpen] = useState(false);
+  /** Bumped after each change so the conversation picks up the event it caused. */
+  const [activity, setActivity] = useState(0);
+
+  const currentUserId = useCurrentUserId();
+  const onAccessLostRef = useRef(onAccessLost);
+  useEffect(() => {
+    onAccessLostRef.current = onAccessLost;
+  });
+
+  // The ticket was there and now is not ours to read: say so instead of the
+  // generic "couldn't load", and let the list drop the row.
+  const showAccessLost = useCallback(() => {
+    setTicket(null);
+    setEditing(false);
+    setConfirmCloseOpen(false);
+    setError('tickets.errors.accessLost');
+    onAccessLostRef.current?.();
+  }, []);
 
   const isMobile = useIsMobile();
   const sheet = responsiveSheetProps(isMobile, 'sm:max-w-2xl lg:max-w-4xl');
@@ -86,7 +118,10 @@ export function TicketDetailSheet({ ticketId, open, onOpenChange, onUpdated }: T
         setDraftDescription(data.description);
       })
       .catch((err) => {
-        if (active) setError(apiError.resolve(err, { fallbackKey: 'tickets.errors.loadDetailFailed' }));
+        if (!active) return;
+        // Reached from a stale row or link after being removed from the ticket.
+        if (isAccessDenied(err)) showAccessLost();
+        else setError(apiError.resolve(err, { fallbackKey: 'tickets.errors.loadDetailFailed' }));
       })
       .finally(() => active && setLoading(false));
     return () => {
@@ -96,7 +131,26 @@ export function TicketDetailSheet({ ticketId, open, onOpenChange, onUpdated }: T
 
   function applyUpdate(patch: ApiTicketMutation) {
     setTicket((prev) => (prev ? { ...prev, ...patch } : prev));
+    setActivity((n) => n + 1);
     onUpdated(patch);
+  }
+
+  /**
+   * A write was refused with "access denied". On this ticket that has two
+   * possible causes the code does not distinguish — we were removed from it, or
+   * a recipient picked for a private note was — so re-read the ticket: a refusal
+   * there means the first, a fresh follower list fixes the second.
+   */
+  async function handleForbidden(err: unknown, fallbackKey: TranslationKey) {
+    if (!ticket) return;
+    try {
+      const fresh = await fetchTicketById(ticket._id);
+      setTicket(fresh);
+      apiError.toast(err, { fallbackKey });
+    } catch (reloadErr) {
+      if (isAccessDenied(reloadErr)) showAccessLost();
+      else apiError.toast(err, { fallbackKey });
+    }
   }
 
   async function saveEdit() {
@@ -111,8 +165,8 @@ export function TicketDetailSheet({ ticketId, open, onOpenChange, onUpdated }: T
       setEditing(false);
       toast.success(t('tickets.toast.updated'));
     } catch (err) {
-      if (err instanceof ApiError && err.isForbidden) {
-        toast.error(t('tickets.errors.editNotCreator'));
+      if (isAccessDenied(err)) {
+        await handleForbidden(err, 'tickets.detail.updateFailed');
       } else {
         apiError.toast(err, { fallbackKey: 'tickets.detail.updateFailed' });
       }
@@ -129,7 +183,10 @@ export function TicketDetailSheet({ ticketId, open, onOpenChange, onUpdated }: T
       applyUpdate(updated);
       toast.success(t('tickets.toast.statusUpdated'));
     } catch (err) {
-      if (err instanceof ApiError && err.code === 'TICKET_WAITING_TARGET_NOT_PARTICIPANT') {
+      if (isAccessDenied(err)) {
+        await handleForbidden(err, 'tickets.detail.statusUpdateFailed');
+      } else if (err instanceof ApiError && err.code === 'TICKET_WAITING_TARGET_NOT_PARTICIPANT') {
+        // The follower list on screen was stale — that party is not on the ticket.
         toast.error(t('tickets.errors.noParticipantForRole'));
       } else if (err instanceof ApiError && err.isValidation) {
         toast.error(t('tickets.errors.statusNotAllowed'));
@@ -149,7 +206,9 @@ export function TicketDetailSheet({ ticketId, open, onOpenChange, onUpdated }: T
       applyUpdate(updated);
       toast.success(t('tickets.toast.priorityUpdated'));
     } catch (err) {
-      if (err instanceof ApiError && err.code === 'PRIORITY_LOCKED') {
+      if (isAccessDenied(err)) {
+        await handleForbidden(err, 'tickets.detail.priorityUpdateFailed');
+      } else if (err instanceof ApiError && err.code === 'TICKET_PRIORITY_LOCKED') {
         toast.error(t('tickets.errors.priorityLocked'));
       } else {
         apiError.toast(err, { fallbackKey: 'tickets.detail.priorityUpdateFailed' });
@@ -179,20 +238,37 @@ export function TicketDetailSheet({ ticketId, open, onOpenChange, onUpdated }: T
   }
 
   const isClosed = ticket?.status === 'closed';
-  const assignee = ticket?.assigned_admin ?? ticket?.assigned_to ?? null;
   const TypeIcon = ticket ? getTypeVisual(ticket.type).Icon : null;
 
-  // Roles present on the ticket — a `waiting_on_<role>` status is only allowed
-  // when a participant with that role exists (admin is always allowed).
-  const participantRoles = useMemo(() => {
-    const roles = new Set<TicketActorRole>();
-    if (!ticket) return roles;
-    roles.add(ticket.created_by_role);
-    if (ticket.assigned_to?.role) roles.add(ticket.assigned_to.role);
-    if (ticket.assigned_admin?.role) roles.add(ticket.assigned_admin.role);
-    ticket.followers.forEach((f) => roles.add(f.role));
-    return roles;
-  }, [ticket]);
+  // The vendor now follows tickets other people opened about their orders — a
+  // customer's complaint, an agency's delivery problem, a platform notice.
+  // Closing one is the opener's call (the server refuses anyone else), and so
+  // is rewording what they wrote.
+  const isMine = !!ticket && !!currentUserId && ticket.created_by_user_id === currentUserId;
+  const opener = ticket ? ticketOpener(ticket) : null;
+
+  // The statuses on offer. "Waiting on <someone>" needs that someone on the
+  // ticket, and the server decides that from `followers` alone (support is
+  // always reachable). The current status stays listed so the control can show it.
+  const statusOptions = useMemo(() => {
+    if (!ticket) return [];
+    const roles = new Set(ticket.followers.map((f) => f.role));
+    return TICKET_STATUSES.filter((s) => {
+      if (s === ticket.status) return true;
+      if (s === 'closed') return isMine;
+      const role = WAITING_STATUS_ROLE[s];
+      return !role || role === 'admin' || roles.has(role);
+    });
+  }, [ticket, isMine]);
+
+  // An administrator on the list is only an id here — their name is in the
+  // snapshot, when they are the one who opened the ticket.
+  function followerName(f: TicketActor): string {
+    if (f.role === 'admin' && ticket?.created_by_admin && f.user_id === ticket.created_by_user_id) {
+      return ticket.created_by_admin.name;
+    }
+    return f.name || t(ROLE_LABEL_KEYS[f.role]);
+  }
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -214,7 +290,7 @@ export function TicketDetailSheet({ ticketId, open, onOpenChange, onUpdated }: T
             </SheetTitle>
           )}
 
-          {ticket && !isClosed && (
+          {ticket && !isClosed && isMine && (
             <button
               type="button"
               onClick={() => setEditing((e) => !e)}
@@ -293,9 +369,21 @@ export function TicketDetailSheet({ ticketId, open, onOpenChange, onUpdated }: T
                   )}
                 </section>
 
-                <AttachmentsPanel ticketId={ticket._id} followers={ticket.followers} readOnly={isClosed} />
+                <AttachmentsPanel
+                  ticketId={ticket._id}
+                  followers={ticket.followers}
+                  currentUserId={currentUserId}
+                  readOnly={isClosed}
+                />
 
-                <NotesThread ticketId={ticket._id} followers={ticket.followers} readOnly={isClosed} />
+                <NotesThread
+                  ticketId={ticket._id}
+                  followers={ticket.followers}
+                  currentUserId={currentUserId}
+                  readOnly={isClosed}
+                  refreshKey={activity}
+                  onForbidden={(err) => void handleForbidden(err, 'tickets.detail.noteFailed')}
+                />
               </div>
 
               {/* Sidebar */}
@@ -316,20 +404,9 @@ export function TicketDetailSheet({ ticketId, open, onOpenChange, onUpdated }: T
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {TICKET_STATUSES.map((s) => {
-                        const role = WAITING_STATUS_ROLE[s];
-                        const blocked = !!role && role !== 'admin' && !participantRoles.has(role);
-                        return (
-                          <SelectItem key={s} value={s} disabled={blocked}>
-                            {t(STATUS_LABEL_KEYS[s])}
-                            {blocked && (
-                              <span className="text-muted-foreground">
-                                {t('tickets.detail.noParticipant')}
-                              </span>
-                            )}
-                          </SelectItem>
-                        );
-                      })}
+                      {statusOptions.map((s) => (
+                        <SelectItem key={s} value={s}>{t(STATUS_LABEL_KEYS[s])}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </SidebarSection>
@@ -368,6 +445,24 @@ export function TicketDetailSheet({ ticketId, open, onOpenChange, onUpdated }: T
                 </div>
 
                 <div className="space-y-3 border-t pt-4">
+                  {opener && (
+                    <InfoRow label={t('tickets.detail.openedBy')}>
+                      {isMine ? (
+                        t('tickets.detail.you')
+                      ) : (
+                        <span className="block">
+                          <span className="block truncate">
+                            {opener.name ?? t(ROLE_LABEL_KEYS[opener.role])}
+                          </span>
+                          {opener.name && (
+                            <span className="block text-xs font-normal text-muted-foreground">
+                              {t(ROLE_LABEL_KEYS[opener.role])}
+                            </span>
+                          )}
+                        </span>
+                      )}
+                    </InfoRow>
+                  )}
                   <InfoRow label={t('tickets.detail.type')}>
                     <span className="inline-flex items-center gap-1.5">
                       {TypeIcon && <TypeIcon className="h-3.5 w-3.5 text-muted-foreground" />}
@@ -394,12 +489,27 @@ export function TicketDetailSheet({ ticketId, open, onOpenChange, onUpdated }: T
 
                 {/* Assigned to */}
                 <SidebarSection label={t('tickets.detail.assignedTo')} className="border-t pt-4">
-                  {assignee ? (
+                  {ticket.assigned_admin ? (
+                    // An administrator: a name and a job title, no account or role.
                     <div className="flex items-center gap-2.5">
-                      <ActorAvatar actor={assignee} />
+                      <ActorAvatar actor={null} role="admin" name={ticket.assigned_admin.name} />
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-medium">{assignee.name}</p>
-                        <p className="text-xs text-muted-foreground">{t(ROLE_LABEL_KEYS[assignee.role])}</p>
+                        <p className="truncate text-sm font-medium">{ticket.assigned_admin.name}</p>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {ticket.assigned_admin.job_title || t(ROLE_LABEL_KEYS.admin)}
+                        </p>
+                      </div>
+                    </div>
+                  ) : ticket.assigned_to ? (
+                    <div className="flex items-center gap-2.5">
+                      <ActorAvatar actor={ticket.assigned_to} />
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">
+                          {ticket.assigned_to.name || t(ROLE_LABEL_KEYS[ticket.assigned_to.role])}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {t(ROLE_LABEL_KEYS[ticket.assigned_to.role])}
+                        </p>
                       </div>
                     </div>
                   ) : (
@@ -417,18 +527,27 @@ export function TicketDetailSheet({ ticketId, open, onOpenChange, onUpdated }: T
                     {ticket.followers.length === 0 ? (
                       <li className="text-sm text-muted-foreground">{t('tickets.detail.noFollowers')}</li>
                     ) : (
-                      ticket.followers.map((f) => (
-                        <li key={f.user_id} className="flex items-center gap-2.5">
-                          <ActorAvatar actor={f} className="h-7 w-7" />
-                          <div className="min-w-0">
-                            <p className="truncate text-sm">{f.name}</p>
-                            <p className="text-xs text-muted-foreground">{t(ROLE_LABEL_KEYS[f.role])}</p>
-                          </div>
-                        </li>
-                      ))
+                      ticket.followers.map((f) => {
+                        const name = followerName(f);
+                        return (
+                          <li key={f.user_id} className="flex items-center gap-2.5">
+                            <ActorAvatar actor={f} name={name} className="h-7 w-7" />
+                            <div className="min-w-0">
+                              <p className="flex items-center gap-1 text-sm">
+                                <span className="truncate">{name}</span>
+                                {f.role === 'agent' && f.verified && <VerifiedBadge kind="agent" />}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {f.user_id === currentUserId
+                                  ? t('tickets.detail.roleYou', { role: t(ROLE_LABEL_KEYS[f.role]) })
+                                  : t(ROLE_LABEL_KEYS[f.role])}
+                              </p>
+                            </div>
+                          </li>
+                        );
+                      })
                     )}
                   </ul>
-                  <p className="mt-2 text-xs text-muted-foreground">{t('tickets.detail.followerLimit')}</p>
                 </SidebarSection>
 
                 {/* Timeline meta */}
@@ -445,7 +564,8 @@ export function TicketDetailSheet({ ticketId, open, onOpenChange, onUpdated }: T
           ) : null}
         </SheetBody>
 
-        {ticket && !isClosed && (
+        {/* Only the person who opened a ticket may close it. */}
+        {ticket && !isClosed && isMine && (
           <SheetFooter className="border-t">
             <Button
               variant="outline"

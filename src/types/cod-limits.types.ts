@@ -18,16 +18,28 @@ export interface CodTerms {
 export const MAX_CASH_PER_AGENCY_LIMIT = 100_000_000;
 
 /**
- * Which cap a hand-off would pass. Kept open with `string`: a kind this build
- * doesn't know must fall back to neutral copy, never crash.
+ * Why a COD hand-off is held or refused. The first two are caps the vendor may
+ * pass on purpose; `agency_restricted` (2026-10-10) is not a cap — an
+ * administrator switched cash on delivery off for that agency. Kept open with
+ * `string`: a kind this build doesn't know must fall back to neutral copy,
+ * never crash.
  */
-export type CodLimitKind = 'agency_limit' | 'vendor_terms' | (string & {});
+export type CodLimitKind = 'agency_limit' | 'vendor_terms' | 'agency_restricted' | (string & {});
+
+/**
+ * Only the two caps can be passed with `force: true`. A restricted agency, or
+ * a kind this build doesn't know, leaves one way out: another agency.
+ */
+export function codLimitCanForce(kind: CodLimitKind): boolean {
+  return kind === 'agency_limit' || kind === 'vendor_terms';
+}
 
 /** `items[].delivery.codLimitHold` / `deliveries[].codLimitHold` — auto-dispatch held this shipment. */
 export interface CodLimitHold {
   kind: CodLimitKind;
   currentExposure: number;
   additionalAmount: number;
+  /** `0` for `agency_restricted` — the three amounts mean nothing there, never render them. */
   limit: number;
   evaluatedAt: string;
 }
@@ -55,6 +67,18 @@ export interface CodLimitExceededDetails {
 }
 
 export const COD_AGENCY_LIMIT_EXCEEDED = 'COD_AGENCY_LIMIT_EXCEEDED';
+
+/**
+ * `422` on dispatch, bulk dispatch and change-agency (2026-10-10): the agency
+ * is barred from cash on delivery. ⛔ `force: true` does not get past it —
+ * never retry, send the vendor to another agency.
+ */
+export const COD_AGENCY_RESTRICTED = 'COD_AGENCY_RESTRICTED';
+
+/** The barred agency in a `COD_AGENCY_RESTRICTED`'s `details`; `''` when the shape isn't the documented one. */
+export function readCodRestrictedAgencyId(raw: Record<string, unknown> | undefined): string {
+  return typeof raw?.agencyId === 'string' ? raw.agencyId : '';
+}
 
 /** Read the 422's `details` defensively; `null` when the shape isn't the documented one. */
 export function readCodLimitDetails(raw: Record<string, unknown> | undefined): CodLimitExceededDetails | null {

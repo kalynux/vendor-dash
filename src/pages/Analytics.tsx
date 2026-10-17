@@ -13,7 +13,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { SettingsSection } from '@/components/vendor-settings/SettingsSection';
-import { useAnalyticsStore } from '@/store';
+import { useAnalyticsStore, useStoreStore } from '@/store';
 import { exportAnalytics } from '@/components/features/exportAnalytics';
 import { toast } from 'sonner';
 import { SalesChart } from '@/components/features/SalesChart';
@@ -207,6 +207,7 @@ export function Analytics() {
     isLoading,
   } = useAnalyticsStore();
   const bookings = summary?.bookings;
+  const { store } = useStoreStore();
 
   const [exporting, setExporting] = useState(false);
   /** What the page shows for the chosen period, as a spreadsheet. */
@@ -218,6 +219,7 @@ export function Analytics() {
         { metrics, salesData, topProducts, customerMetrics, summary, dateRange },
         t,
         fmt,
+        store?.name,
       );
       if (outcome === 'saved') toast.success(t('analytics.exportFile.done'));
       else if (outcome === 'failed') toast.error(t('analytics.exportFile.failed'));

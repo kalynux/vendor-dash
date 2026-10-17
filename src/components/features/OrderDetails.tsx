@@ -45,6 +45,8 @@ import { addNote, fetchNote, revokeEntitlement, restoreEntitlement, fetchOrderBy
 import { useOrderDispatch } from '@/hooks/use-order-dispatch';
 import { CodLimitShipmentNotice } from '@/components/orders/CodLimitShipmentNotice';
 import { DeliveryFeeProposals } from '@/components/orders/DeliveryFeeProposals';
+import { ProposeDeliveryFeeButton } from '@/components/orders/ProposeDeliveryFee';
+import { OrderTickets } from '@/components/orders/OrderTickets';
 import { DeliveryCostNote, DeliverySummaryRow, ShipmentFeeLine } from '@/components/orders/DeliveryMoney';
 import { RefundDialog } from '@/components/customers/RefundDialog';
 import { REFUND_REASON_KEYS, refundStatusNote } from '@/components/customers/customer.constants';
@@ -191,19 +193,22 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
     }
   };
 
+  /** Open the change-agency picker on an item that agency still carries — from a COD dialog or a hold card. */
+  const openReassignFor = (agencyId?: string) => {
+    const movable = currentOrder.items.filter(
+      (item) => item.delivery?.deliveryStatus && REASSIGNABLE_DELIVERY_STATUSES.includes(item.delivery.deliveryStatus),
+    );
+    const target = movable.find((item) => item.delivery?.agencyId === agencyId) ?? movable[0];
+    setActiveTab('items');
+    if (target) setReassignRequest({ itemId: target.id, n: Date.now() });
+  };
+
   const { dispatch: handleDispatch, dispatching: dispatchLoading, dialog: codLimitDialog } = useOrderDispatch(currentOrder, {
     onDispatched: (updated) => {
       setCurrentOrder(updated);
       onOrderUpdated?.(updated);
     },
-    onChooseAnotherAgency: (agencyId) => {
-      const movable = currentOrder.items.filter(
-        (item) => item.delivery?.deliveryStatus && REASSIGNABLE_DELIVERY_STATUSES.includes(item.delivery.deliveryStatus),
-      );
-      const target = movable.find((item) => item.delivery?.agencyId === agencyId) ?? movable[0];
-      setActiveTab('items');
-      if (target) setReassignRequest({ itemId: target.id, n: Date.now() });
-    },
+    onChooseAnotherAgency: openReassignFor,
   });
 
   // The picker's trigger sits in the Items tab — bring it into view once it mounts.
@@ -580,6 +585,12 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
                       )}
                     </div>
                     <ShipmentFeeLine fee={shipment.deliveryFee} currency={currentOrder.currency} className="col-span-2" />
+                    <ProposeDeliveryFeeButton
+                      order={currentOrder}
+                      shipment={shipment}
+                      onChanged={reloadOrder}
+                      className="col-span-2"
+                    />
                     {/* Spans both columns: the rating is about the shipment, not
                         about the agency half or the agent half it sits under. */}
                     <ShipmentReviewControl
@@ -595,6 +606,7 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
                           shipment={shipment}
                           currency={currentOrder.currency}
                           onDispatchAnyway={canDispatch ? handleDispatch : undefined}
+                          onChangeAgency={() => openReassignFor(shipment.agencyId)}
                           dispatching={dispatchLoading}
                         />
                       </div>
@@ -613,6 +625,9 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
               className="rounded-xl border bg-card p-4"
             />
           )}
+
+          {/* Tickets about this order — shown only when there are some. */}
+          <OrderTickets orderId={currentOrder.id} className="rounded-xl border bg-card p-4" />
 
           {/* Order Summary */}
           <Card className="gap-3">

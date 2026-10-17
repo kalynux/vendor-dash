@@ -119,7 +119,7 @@ export async function closeTicket(id: string): Promise<ApiTicketMutation> {
 
 export async function fetchNotes(ticketId: string): Promise<ApiTicketNote[]> {
   const res = await api.get<NotesListResponse>(`${BASE}/${ticketId}/notes`);
-  return res.data;
+  return res.data.map(normalizeId);
 }
 
 export async function createNote(
@@ -127,7 +127,7 @@ export async function createNote(
   payload: CreateNotePayload,
 ): Promise<ApiTicketNote> {
   const res = await api.post<NoteMutationResponse>(`${BASE}/${ticketId}/notes`, payload);
-  return res.data;
+  return normalizeId(res.data);
 }
 
 // ─── Attachments ──────────────────────────────────────────────────────────────

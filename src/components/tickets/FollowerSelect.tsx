@@ -10,19 +10,25 @@ import type { TicketActor } from '@/types/tickets.types';
 
 interface FollowerSelectProps {
   followers: TicketActor[];
+  /** The signed-in person — the author always sees their own private item. */
+  currentUserId?: string | null;
   value: string[];
   onChange: (userIds: string[]) => void;
   disabled?: boolean;
 }
 
 /**
- * Picks which followers may see a PRIVATE note/attachment. Per the API, admins
- * are auto-included on private items, so only **non-admin** followers are
- * offered as explicit viewers.
+ * Picks which followers may see a PRIVATE note/attachment — built from the
+ * ticket's own `followers`, so on an order ticket it offers the customer, the
+ * agency and the agent. Admins and the author are included by the API on every
+ * private item, so neither is offered as an explicit viewer.
  */
-export function FollowerSelect({ followers, value, onChange, disabled }: FollowerSelectProps) {
+export function FollowerSelect({ followers, currentUserId, value, onChange, disabled }: FollowerSelectProps) {
   const { t } = useTranslation();
-  const options = useMemo(() => followers.filter((f) => f.role !== 'admin'), [followers]);
+  const options = useMemo(
+    () => followers.filter((f) => f.role !== 'admin' && f.user_id !== currentUserId),
+    [followers, currentUserId],
+  );
   const selected = useMemo(() => new Set(value), [value]);
 
   function toggle(userId: string) {
@@ -48,7 +54,7 @@ export function FollowerSelect({ followers, value, onChange, disabled }: Followe
         >
           <span className="inline-flex items-center gap-1.5">
             <Users className="h-3.5 w-3.5" />
-            {options.length === 0 ? 'No followers to add' : label}
+            {options.length === 0 ? t('tickets.followers.none') : label}
           </span>
           <ChevronDown className="h-3.5 w-3.5 opacity-60" />
         </Button>
@@ -69,7 +75,7 @@ export function FollowerSelect({ followers, value, onChange, disabled }: Followe
                 >
                   <ActorAvatar actor={f} className="h-6 w-6" />
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate">{f.name}</span>
+                    <span className="block truncate">{f.name || t(ROLE_LABEL_KEYS[f.role])}</span>
                     <span className="block text-xs text-muted-foreground">{t(ROLE_LABEL_KEYS[f.role])}</span>
                   </span>
                   <span

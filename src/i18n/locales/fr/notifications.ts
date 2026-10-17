@@ -178,7 +178,7 @@ export const notifications = {
                 'Lorsqu’une commande est retenue car une agence a atteint une limite de paiement à la livraison',
             deliveryFeeProposals: 'Changements de frais de livraison',
             deliveryFeeProposalsHint:
-                'Lorsqu’une agence demande à changer des frais de livraison, modifie ou retire sa demande, ou qu’un client refuse de payer des frais plus élevés après votre changement de société de livraison',
+                'Lorsqu’une agence demande à changer des frais de livraison, modifie ou retire sa demande, répond à des frais que vous avez proposés, ou qu’un client refuse de payer des frais plus élevés après votre changement de société de livraison',
             planUpdates: 'Mises à jour de formule',
             planUpdatesHint: 'Lorsque votre formule approche de son expiration ou a expiré',
         },

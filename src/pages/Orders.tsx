@@ -47,7 +47,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { useOrderStore } from '@/store';
+import { useOrderStore, useStoreStore } from '@/store';
 import {
   fetchOrders as apiFetchOrders,
   dispatchOrder,
@@ -58,10 +58,11 @@ import {
   type BulkActionFailure,
 } from '@/services/orders.service';
 import { CodLimitDialog } from '@/components/orders/CodLimitDialog';
+import { CodAgencyRestrictedDialog } from '@/components/orders/CodAgencyRestrictedDialog';
 import { usePendingFeeProposals } from '@/lib/pending-fee-proposals';
 import { DeliveryPayerTag } from '@/components/orders/DeliveryMoney';
 import { ApiError } from '@/types/api';
-import { COD_AGENCY_LIMIT_EXCEEDED, readCodLimitDetails, type CodLimitExceededDetails } from '@/types/cod-limits.types';
+import { COD_AGENCY_LIMIT_EXCEEDED, COD_AGENCY_RESTRICTED, readCodLimitDetails, type CodLimitExceededDetails } from '@/types/cod-limits.types';
 import {
   getNextStatuses,
   STATUS_ACTION_KEYS,
@@ -208,6 +209,7 @@ export function Orders() {
   const { t, tDynamic, hasKey } = useTranslation();
   const fmt = useFormatters();
   const { orders, selectedOrders, isLoading, pagination, fetchOrders, fetchOrderById, toggleOrderSelection, selectAllOrders, updateOrderStatus } = useOrderStore();
+  const { store } = useStoreStore();
   const [searchParams, setSearchParams] = useSearchParams();
   const isMobile = useIsMobile();
 
@@ -235,7 +237,7 @@ export function Orders() {
     if (exporting) return;
     setExporting(true);
     try {
-      const { count, outcome } = await exportOrders(filters, t, fmt.locale);
+      const { count, outcome } = await exportOrders(filters, t, store?.name);
       if (outcome === 'empty') toast.info(t('orders.export.empty'));
       else if (outcome === 'saved') toast.success(t('orders.export.done', { count }));
       else if (outcome === 'failed') toast.error(t('orders.export.failed'));
@@ -288,6 +290,10 @@ export function Orders() {
   const [rowOverLimit, setRowOverLimit] = useState<{ order: Order; details: CodLimitExceededDetails } | null>(null);
   /** Bulk dispatch: ids refused over a COD limit, offered for a forced retry. */
   const [codRetryIds, setCodRetryIds] = useState<string[]>([]);
+  /** A row's single dispatch went to an agency barred from cash on delivery — no forcing, only another agency. */
+  const [rowRestricted, setRowRestricted] = useState<Order | null>(null);
+  /** Bulk dispatch: ids refused because their agency is barred from cash on delivery. Never retried. */
+  const [codRestrictedIds, setCodRestrictedIds] = useState<string[]>([]);
   const pendingFees = usePendingFeeProposals();
   const pendingFeeOrderIds = useMemo(() => new Set(pendingFees.orderIds), [pendingFees.orderIds]);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -440,6 +446,12 @@ export function Orders() {
       else fetchOrders(query);
       toast.success(t('orders.toast.dispatched'));
     } catch (err) {
+      if (err instanceof ApiError && err.code === COD_AGENCY_RESTRICTED) {
+        // `force` does not get past this one — never retried.
+        setRowOverLimit(null);
+        setRowRestricted(order);
+        return;
+      }
       const details =
         !force && err instanceof ApiError && err.code === COD_AGENCY_LIMIT_EXCEEDED
           ? readCodLimitDetails(err.detailsObject)
@@ -504,6 +516,20 @@ export function Orders() {
   };
 
   /**
+   * Sort a bulk dispatch's refusals. Orders whose agency is barred from cash on
+   * delivery get their own dialog and are never retried; orders over a COD
+   * limit are offered a forced retry (first pass only); the rest is a toast.
+   */
+  const reportBulkDispatchFailures = (failed: BulkActionFailure[], offerForce: boolean) => {
+    const restricted = failed.filter((f) => f.code === COD_AGENCY_RESTRICTED);
+    const overLimit = offerForce ? failed.filter((f) => f.code === COD_AGENCY_LIMIT_EXCEEDED) : [];
+    const otherFailures = failed.filter((f) => !restricted.includes(f) && !overLimit.includes(f));
+    if (otherFailures.length > 0) toast.error(summarizeBulkFailures(otherFailures));
+    setCodRestrictedIds(restricted.map((f) => f.orderId));
+    setCodRetryIds(overLimit.map((f) => f.orderId));
+  };
+
+  /**
    * `force` covers EVERY order in a request, so a forced retry sends only the
    * ids that failed over a COD limit — never the original batch.
    */
@@ -512,10 +538,7 @@ export function Orders() {
     try {
       const { succeeded, failed } = await bulkDispatchOrders(selectedOrders);
       toast.success(t('orders.bulk.dispatched', { count: succeeded.length }));
-      const overLimit = failed.filter((f) => f.code === COD_AGENCY_LIMIT_EXCEEDED);
-      const otherFailures = failed.filter((f) => f.code !== COD_AGENCY_LIMIT_EXCEEDED);
-      if (otherFailures.length > 0) toast.error(summarizeBulkFailures(otherFailures));
-      setCodRetryIds(overLimit.map((f) => f.orderId));
+      reportBulkDispatchFailures(failed, true);
       selectAllOrders([]);
       refreshAfterBulkAction();
     } catch (err) {
@@ -531,8 +554,7 @@ export function Orders() {
     try {
       const { succeeded, failed } = await bulkDispatchOrders(ids, { force: true });
       toast.success(t('orders.bulk.dispatched', { count: succeeded.length }));
-      if (failed.length > 0) toast.error(summarizeBulkFailures(failed));
-      setCodRetryIds([]);
+      reportBulkDispatchFailures(failed, false);
       refreshAfterBulkAction();
     } catch (err) {
       toast.error(getOrderErrorMessage(err));
@@ -636,6 +658,21 @@ export function Orders() {
   const bulkPaidCount = selectedLoaded.filter((o) => o.paymentStatus === 'paid').length;
   const bulkHasUnseen = selectedLoaded.length < selectedOrders.length;
 
+  // Changing agency is per item, on the order's own screen.
+  const openOrderToChangeAgency = (id: string) => {
+    setRowOverLimit(null);
+    setRowRestricted(null);
+    setCodRestrictedIds([]);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set('view', id);
+      return next;
+    });
+  };
+
+  // Orders refused for a barred agency, by number where the row is loaded (the selection survives paging).
+  const codRestrictedOrders = loadedOrders.filter((o) => codRestrictedIds.includes(o.id));
+
   const codLimitDialogs = (
     <>
       <CodLimitDialog
@@ -645,22 +682,49 @@ export function Orders() {
         forcing={statusLoading === 'dispatch'}
         onForce={() => rowOverLimit && void handleDispatch(rowOverLimit.order, true)}
         onClose={() => setRowOverLimit(null)}
-        onChooseAnotherAgency={
-          rowOverLimit
-            ? () => {
-                // Changing agency is per item, on the order's own screen.
-                const id = rowOverLimit.order.id;
-                setRowOverLimit(null);
-                setSearchParams((prev) => {
-                  const next = new URLSearchParams(prev);
-                  next.set('view', id);
-                  return next;
-                });
-              }
-            : undefined
-        }
+        onChooseAnotherAgency={rowOverLimit ? () => openOrderToChangeAgency(rowOverLimit.order.id) : undefined}
       />
-      <Dialog open={codRetryIds.length > 0} onOpenChange={(open) => !open && !bulkActionLoading && setCodRetryIds([])}>
+      <CodAgencyRestrictedDialog
+        open={rowRestricted !== null}
+        onClose={() => setRowRestricted(null)}
+        onChooseAnotherAgency={rowRestricted ? () => openOrderToChangeAgency(rowRestricted.id) : undefined}
+      />
+      {/* Bulk: orders whose agency is barred from cash on delivery. No retry — open each and change its agency. */}
+      <Dialog open={codRestrictedIds.length > 0} onOpenChange={(open) => !open && setCodRestrictedIds([])}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t('orders.codLimit.bulkRestrictedTitle', { count: codRestrictedIds.length })}</DialogTitle>
+            <DialogDescription className="space-y-2 pt-2" asChild>
+              <div>
+                <p className="text-foreground">{t('orders.codLimit.bulkRestricted', { count: codRestrictedIds.length })}</p>
+                {codRestrictedOrders.length > 0 && (
+                  <ul className="divide-y rounded-md border">
+                    {codRestrictedOrders.map((o) => (
+                      <li key={o.id}>
+                        <button
+                          type="button"
+                          className="flex min-h-11 w-full items-center justify-between gap-3 px-3 text-left text-sm font-medium text-foreground hover:bg-muted/50"
+                          onClick={() => openOrderToChangeAgency(o.id)}
+                        >
+                          <span className="truncate">{o.orderNumber}</span>
+                          <span className="flex-shrink-0 text-xs font-normal text-primary">{t('orders.codLimit.changeAgency')}</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCodRestrictedIds([])}>
+              {t('common.actions.close')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {/* Waits for the barred-agency dialog above, so the two never stack. */}
+      <Dialog open={codRetryIds.length > 0 && codRestrictedIds.length === 0} onOpenChange={(open) => !open && !bulkActionLoading && setCodRetryIds([])}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>{t('orders.codLimit.title.unknown')}</DialogTitle>

@@ -17,10 +17,17 @@ export interface AgencyCardProps {
     onInfo?: () => void;
     /** Custom content (e.g. connection-status action buttons) rendered at the right of the card. */
     rightSlot?: ReactNode;
+    /**
+     * Keep the phone layout — actions on their own row under the body — at every
+     * screen width. For a column that stays phone-narrow on a desktop too
+     * (onboarding's is 480px), where actions beside the body squeeze the address
+     * down to its first few letters.
+     */
+    stacked?: boolean;
 }
 
 /** Presentational agency card — logo, name, KYC badge, HQ, coverage chips. */
-export function AgencyCard({ agency, selected = false, onSelect, onInfo, rightSlot }: AgencyCardProps) {
+export function AgencyCard({ agency, selected = false, onSelect, onInfo, rightSlot, stacked = false }: AgencyCardProps) {
     const { t } = useTranslation();
     const fmt = useFormatters();
     const hq = agency.headquartersAddress;
@@ -108,7 +115,7 @@ export function AgencyCard({ agency, selected = false, onSelect, onInfo, rightSl
                 they need ~150px of fixed width ("Approve"+"Reject", "Set as default"),
                 which a phone-width card can't spare — they used to be pushed out of the
                 card and clipped, taking the info button with them. */}
-            <div className="flex flex-col md:flex-row md:items-stretch">
+            <div className={cn('flex flex-col', !stacked && 'md:flex-row md:items-stretch')}>
                 {onSelect ? (
                     <button
                         type="button"
@@ -123,9 +130,14 @@ export function AgencyCard({ agency, selected = false, onSelect, onInfo, rightSl
                 )}
 
                 {(rightSlot || onInfo) && (
-                    <div className="flex flex-wrap items-center justify-end gap-1.5 flex-shrink-0 border-t border-border/60 px-4 py-2.5 md:flex-nowrap md:items-stretch md:gap-0 md:border-t-0 md:px-0 md:py-0">
+                    <div
+                        className={cn(
+                            'flex flex-wrap items-center justify-end gap-1.5 flex-shrink-0 border-t border-border/60 px-4 py-2.5',
+                            !stacked && 'md:flex-nowrap md:items-stretch md:gap-0 md:border-t-0 md:px-0 md:py-0',
+                        )}
+                    >
                         {rightSlot && (
-                            <div className="flex items-center justify-center gap-1.5 md:border-l md:border-border/60 md:px-3">
+                            <div className={cn('flex items-center justify-center gap-1.5', !stacked && 'md:border-l md:border-border/60 md:px-3')}>
                                 {rightSlot}
                             </div>
                         )}
@@ -140,10 +152,13 @@ export function AgencyCard({ agency, selected = false, onSelect, onInfo, rightSl
                                 onClick={onInfo}
                                 aria-label={t('agency.browse.viewTermsFor', { name: agency.agencyName })}
                                 title={t('agency.browse.viewTerms')}
-                                className="flex h-9 items-center justify-center gap-1.5 rounded-md px-2.5 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent/20 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring md:h-auto md:w-12 md:px-0 md:rounded-none md:border-l md:border-border/60 tap-target"
+                                className={cn(
+                                    'flex h-9 items-center justify-center gap-1.5 rounded-md px-2.5 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent/20 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring tap-target',
+                                    !stacked && 'md:h-auto md:w-12 md:px-0 md:rounded-none md:border-l md:border-border/60',
+                                )}
                             >
                                 <FileText className="w-4 h-4" />
-                                <span className="md:sr-only">{t('agency.browse.terms')}</span>
+                                <span className={cn(!stacked && 'md:sr-only')}>{t('agency.browse.terms')}</span>
                             </button>
                         )}
                     </div>

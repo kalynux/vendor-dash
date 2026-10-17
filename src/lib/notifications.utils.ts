@@ -225,6 +225,9 @@ const TYPE_VISUALS: Record<NotificationType, Visual> = {
   'delivery_fee_proposal.withdrawn': { Icon: CircleDollarSign, iconWrap: 'bg-gray-100 text-gray-600', dot: 'bg-gray-500' },
   // Already settled — money left your earnings; nothing to answer.
   'delivery_fee_proposal.customer_declined': { Icon: CircleDollarSign, iconWrap: 'bg-orange-100 text-orange-600', dot: 'bg-orange-500' },
+  // The agency's answer to a fee you proposed — nothing left to do either way.
+  'delivery_fee_proposal.agency_approved': { Icon: CircleDollarSign, iconWrap: 'bg-green-100 text-green-600', dot: 'bg-green-500' },
+  'delivery_fee_proposal.agency_rejected': { Icon: CircleDollarSign, iconWrap: 'bg-gray-100 text-gray-600', dot: 'bg-gray-500' },
   // Red: the shop is the subject. The vendor has to answer it within 7 days.
   'account.closure_requested': { Icon: Store, iconWrap: 'bg-red-100 text-red-600', dot: 'bg-red-500' },
   // Grey: the connection is already over; there is nothing to answer.

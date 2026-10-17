@@ -1284,6 +1284,8 @@ export const errors = {
         // 2026-10-02 — COD limits and delivery-fee proposals.
         COD_VENDOR_NOT_ACCEPTED: 'A shop in this order does not accept cash on delivery.',
         COD_AGENCY_LIMIT_EXCEEDED: 'This delivery agency is already holding as much cash on delivery as it may.',
+        // 2026-10-10 — an administrator barred the agency from cash on delivery. No reason is sent; never invent one.
+        COD_AGENCY_RESTRICTED: 'This agency cannot take cash-on-delivery shipments at the moment. Choose another agency.',
         SHIPMENT_DELIVERY_FEE_PENDING: 'This parcel cannot be picked up until the delivery fee change is answered.',
         DELIVERY_FEE_PROPOSAL_NOT_FOUND: 'This delivery fee change could no longer be found.',
         DELIVERY_FEE_PROPOSAL_ALREADY_PENDING: 'A delivery fee change is already waiting for this parcel.',
@@ -1292,6 +1294,8 @@ export const errors = {
         DELIVERY_FEE_PROPOSAL_AGENTS_NOT_ALLOWED: 'This agency does not let its agents propose a delivery fee.',
         DELIVERY_FEE_PROPOSAL_LIMIT_REACHED: 'No more delivery fee changes can be proposed for this parcel.',
         DELIVERY_FEE_PROPOSAL_NO_CHANGE: 'That is already the delivery fee.',
+        // 2026-10-14 — only the one who pays a parcel's delivery may propose its fee.
+        DELIVERY_FEE_PROPOSAL_NOT_PAYER: 'The customer pays delivery on this parcel, so you can’t propose its fee.',
         // Also refuses a change of agency you could not afford to cover (2026-10-04).
         DELIVERY_FEE_PROPOSAL_VENDOR_NET_NOT_POSITIVE: 'This would leave you earning nothing on this order.',
         // For a vendor: a change the customer answers, not you (2026-10-04).

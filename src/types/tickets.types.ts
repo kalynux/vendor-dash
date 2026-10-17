@@ -84,6 +84,24 @@ export interface TicketActor {
    * resolved. (Previously a bare `avatar_url` string.)
    */
   avatar: FileRef | null;
+  /**
+   * The platform's verdict on this person's documents — the blue check. Sent for
+   * `vendor` and `agent` actors only; absent for everyone else.
+   */
+  verified?: boolean;
+}
+
+/**
+ * An administrator as a ticket follower is allowed to see them — NOT a
+ * `TicketActor`. Administrators live in another service, so there is no
+ * `user_id` or `role` here, and `avatar_url` is reserved (always `null`).
+ * Used for `assigned_admin` and `created_by_admin`.
+ */
+export interface TicketAdminSnapshot {
+  name: string;
+  job_title: string | null;
+  department: string | null;
+  avatar_url: string | null;
 }
 
 /** Display-ready summary of the related entity (order/product/booking/…). */
@@ -112,11 +130,21 @@ export interface ApiTicketListItem {
   entity: TicketEntityRef | null;
   created_by_user_id: string;
   created_by_role: TicketActorRole;
+  /**
+   * Often NOT the signed-in vendor since 2026-10-09: the vendor follows every
+   * ticket about one of their orders, whoever opened it.
+   */
   created_by: TicketActor | null;
+  /**
+   * Set when an administrator — or the platform itself ("Wi-Mall (automatic)") —
+   * opened the ticket. `created_by` is then a placeholder with `role: 'admin'`;
+   * render the person from this block.
+   */
+  created_by_admin?: TicketAdminSnapshot | null;
   assigned_to_role: TicketActorRole | null;
   assigned_to: TicketActor | null;
-  assigned_admin_id: string | null;
-  assigned_admin: TicketActor | null;
+  /** The administrator handling the ticket; `null` until one takes it. */
+  assigned_admin: TicketAdminSnapshot | null;
   priority_locked: boolean;
   createdAt: string;
   updatedAt: string;
@@ -133,7 +161,9 @@ export interface ApiTicketDetail extends ApiTicketListItem {
 export type ApiTicketMutation = Partial<ApiTicketDetail> & { _id?: string; id?: string };
 
 export interface ApiTicketNote {
+  /** Canonical id; service normalizes `_id ?? id`. */
   _id: string;
+  id?: string;
   ticket_id: string;
   content: string;
   visibility: NoteVisibility;
@@ -324,6 +354,10 @@ export interface TicketsQueryParams {
   priority?: UpdatablePriority;
   type?: TicketType;
   entityType?: TicketEntityType;
+  /** With `entityType` — the tickets about one order, product, … */
+  entityId?: string;
+  /** Only the tickets this user opened (a `users` id — the signed-in vendor's own). */
+  createdByUserId?: string;
   q?: string;
   page?: number;
   limit?: number;

@@ -2,11 +2,13 @@ import { AlertTriangle, Loader2, ShieldAlert } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useFormatters, useTranslation, type TranslationKey } from '@/i18n';
+import { codLimitCanForce } from '@/types/cod-limits.types';
 import type { OrderItemDelivery } from '@/types';
 
 const HOLD_KEYS: Record<string, TranslationKey> = {
   agency_limit: 'orders.codLimit.hold.agency_limit',
   vendor_terms: 'orders.codLimit.hold.vendor_terms',
+  agency_restricted: 'orders.codLimit.hold.agency_restricted',
 };
 
 interface CodLimitShipmentNoticeProps {
@@ -14,6 +16,8 @@ interface CodLimitShipmentNoticeProps {
   currency: string;
   /** Dispatch the order again with `force: true`. Absent → no button. */
   onDispatchAnyway?: () => void;
+  /** Open the change-agency picker for this shipment — the only way out of a hold `force` can't pass. */
+  onChangeAgency?: () => void;
   dispatching?: boolean;
   size?: 'sm' | 'xs';
 }
@@ -23,11 +27,15 @@ interface CodLimitShipmentNoticeProps {
  * (`codLimitHold`), an audit line when it went out over a limit
  * (`codLimitForce`). Copy comes from `kind` — the order timeline's sentence
  * always blames the agency, even when the vendor's own terms held it.
+ *
+ * A hold `force` can't pass (`agency_restricted`, or a kind this build
+ * doesn't know) never offers "Dispatch anyway" — only "Change agency".
  */
 export function CodLimitShipmentNotice({
   shipment,
   currency,
   onDispatchAnyway,
+  onChangeAgency,
   dispatching = false,
   size = 'sm',
 }: CodLimitShipmentNoticeProps) {
@@ -37,6 +45,9 @@ export function CodLimitShipmentNotice({
   if (!hold && !force) return null;
 
   const text = size === 'xs' ? 'text-[11px]' : 'text-xs';
+  const canForce = hold ? codLimitCanForce(hold.kind) : false;
+  // A restricted agency has no amounts (`limit` is 0); an unknown kind shows them only if it sent a limit.
+  const showNumbers = hold ? canForce || (hold.kind !== 'agency_restricted' && hold.limit > 0) : false;
 
   return (
     <>
@@ -46,18 +57,25 @@ export function CodLimitShipmentNotice({
             <AlertTriangle className="mt-px w-3.5 h-3.5 flex-shrink-0" />
             {t(HOLD_KEYS[hold.kind] ?? 'orders.codLimit.hold.unknown')}
           </p>
-          <p>
-            {t('orders.codLimit.holdNumbers', {
-              current: fmt.currency(hold.currentExposure, currency),
-              added: fmt.currency(hold.additionalAmount, currency),
-              limit: fmt.currency(hold.limit, currency),
-            })}
-          </p>
-          <p className="text-amber-800/80">{t('orders.codLimit.holdNoRetry')}</p>
-          {onDispatchAnyway && (
+          {showNumbers && (
+            <p>
+              {t('orders.codLimit.holdNumbers', {
+                current: fmt.currency(hold.currentExposure, currency),
+                added: fmt.currency(hold.additionalAmount, currency),
+                limit: fmt.currency(hold.limit, currency),
+              })}
+            </p>
+          )}
+          {canForce && <p className="text-amber-800/80">{t('orders.codLimit.holdNoRetry')}</p>}
+          {canForce && onDispatchAnyway && (
             <Button size="sm" variant="outline" className="mt-1 h-7 gap-1.5 bg-background text-xs" disabled={dispatching} onClick={onDispatchAnyway}>
               {dispatching && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
               {t('orders.codLimit.dispatchAnyway')}
+            </Button>
+          )}
+          {!canForce && onChangeAgency && (
+            <Button size="sm" variant="outline" className="mt-1 h-7 bg-background text-xs" onClick={onChangeAgency}>
+              {t('orders.codLimit.changeAgency')}
             </Button>
           )}
         </div>

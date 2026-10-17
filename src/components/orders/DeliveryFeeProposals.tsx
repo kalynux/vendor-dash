@@ -19,22 +19,25 @@ import {
   approveDeliveryFeeProposal,
   coverDeliveryFeeProposal,
   rejectDeliveryFeeProposal,
+  withdrawDeliveryFeeProposal,
 } from '@/services/delivery-fee-proposals.service';
 import { getOrderErrorMessage } from '@/services/orders.service';
 import { ApiError } from '@/types/api';
 import { useFormatters, useTranslation, type TranslationKey } from '@/i18n';
 import type { Order } from '@/types';
 import type { DeliveryFeeProposal } from '@/types/delivery-fee-proposals.types';
+import { DeliveryFeeProposalFormDialog, type DeliveryFeeProposalFormTarget } from './ProposeDeliveryFee';
 
 /** Anchor for "scroll to the fee changes" (notifications land on the order). */
 const FEE_PROPOSALS_ANCHOR = 'delivery-fee-proposals';
 
 const NOTE_MAX = 500;
 
-const TOAST_KEYS: Record<'approve' | 'reject' | 'cover', TranslationKey> = {
+const TOAST_KEYS: Record<'approve' | 'reject' | 'cover' | 'withdraw', TranslationKey> = {
   approve: 'orders.feeProposals.toast.approved',
   reject: 'orders.feeProposals.toast.rejected',
   cover: 'orders.feeProposals.toast.covered',
+  withdraw: 'orders.feeProposals.toast.withdrawn',
 };
 
 const STATUS_KEYS: Record<string, TranslationKey> = {
@@ -64,7 +67,25 @@ function answeredByCustomer(p: DeliveryFeeProposal): boolean {
   return p.origin === 'change_agency' || p.approver === 'customer' || p.approver === 'none';
 }
 
+/**
+ * Since 2026-10-14 the PAYER may propose and the agency answers — the vendor
+ * on a vendor-paid parcel, the customer on a customer-paid one (read-only here).
+ */
+function isPayerProposal(p: DeliveryFeeProposal): boolean {
+  return p.origin === 'payer' || p.approver === 'agency';
+}
+
 function statusKey(p: DeliveryFeeProposal): TranslationKey {
+  if (isPayerProposal(p)) {
+    if (p.status === 'pending') {
+      // A customer's higher fee the agency accepted, waiting for the customer's online top-up.
+      return p.payerAcceptance && p.topup?.status === 'awaiting_payment'
+        ? 'orders.feeProposals.status.waitingCustomerPayment'
+        : 'orders.feeProposals.status.waitingAgency';
+    }
+    if (p.status === 'approved') return 'orders.feeProposals.status.acceptedByAgency';
+    if (p.status === 'rejected') return 'orders.feeProposals.status.declinedByAgency';
+  }
   if (p.status === 'pending' && answeredByCustomer(p)) {
     return p.customerApproval && p.topup?.status === 'awaiting_payment'
       ? 'orders.feeProposals.status.waitingCustomerPayment'
@@ -83,6 +104,8 @@ function statusKey(p: DeliveryFeeProposal): TranslationKey {
 function titleKey(p: DeliveryFeeProposal): TranslationKey {
   if (p.origin === 'change_agency') return 'orders.feeProposals.fromChangeAgency';
   if (p.origin === 'combined_request') return 'orders.feeProposals.fromCombined';
+  if (p.proposedBy.role === 'vendor') return 'orders.feeProposals.fromYou';
+  if (p.proposedBy.role === 'customer') return 'orders.feeProposals.fromCustomer';
   return p.proposedBy.role === 'agent' ? 'orders.feeProposals.fromAgent' : 'orders.feeProposals.fromAgency';
 }
 
@@ -103,10 +126,10 @@ interface DeliveryFeeProposalsProps {
 }
 
 /**
- * Delivery-fee changes an agency (or its agent) proposed on this order's
- * shipments. Pending ones first — a pending proposal blocks pickup. Buttons
- * come from `availableActions` only, and every answer sends back the
- * `version` that was on screen.
+ * Delivery-fee changes on this order's shipments — proposed by an agency (or
+ * its agent), by you, or by the customer. Pending ones first — a pending
+ * proposal blocks pickup. Buttons come from `availableActions` only, and every
+ * answer sends back the `version` that was on screen.
  */
 export function DeliveryFeeProposals({ order, onChanged, className }: DeliveryFeeProposalsProps) {
   const { t } = useTranslation();
@@ -116,6 +139,8 @@ export function DeliveryFeeProposals({ order, onChanged, className }: DeliveryFe
   const [approving, setApproving] = useState<DeliveryFeeProposal | null>(null);
   const [rejecting, setRejecting] = useState<DeliveryFeeProposal | null>(null);
   const [covering, setCovering] = useState<DeliveryFeeProposal | null>(null);
+  const [withdrawing, setWithdrawing] = useState<DeliveryFeeProposal | null>(null);
+  const [editing, setEditing] = useState<DeliveryFeeProposalFormTarget | null>(null);
   const [note, setNote] = useState('');
   const [submitting, setSubmitting] = useState(false);
   /** The proposal the agency changed under the vendor — called out after the reload. */
@@ -135,19 +160,22 @@ export function DeliveryFeeProposals({ order, onChanged, className }: DeliveryFe
 
   const money = (amount: number, currency: string) => fmt.currency(amount, currency);
 
-  const answer = async (proposal: DeliveryFeeProposal, action: 'approve' | 'reject' | 'cover') => {
+  const answer = async (proposal: DeliveryFeeProposal, action: 'approve' | 'reject' | 'cover' | 'withdraw') => {
     setSubmitting(true);
     try {
       if (action === 'approve') {
         await approveDeliveryFeeProposal(proposal.orderId, proposal.id, proposal.version);
       } else if (action === 'reject') {
         await rejectDeliveryFeeProposal(proposal.orderId, proposal.id, proposal.version, note.trim() || undefined);
-      } else {
+      } else if (action === 'cover') {
         await coverDeliveryFeeProposal(proposal.orderId, proposal.id);
+      } else {
+        await withdrawDeliveryFeeProposal(proposal.orderId, proposal.id);
       }
       setApproving(null);
       setRejecting(null);
       setCovering(null);
+      setWithdrawing(null);
       setChangedId(null);
       toast.success(t(TOAST_KEYS[action]));
       void refreshPendingFeeProposals();
@@ -156,9 +184,10 @@ export function DeliveryFeeProposals({ order, onChanged, className }: DeliveryFe
       setApproving(null);
       setRejecting(null);
       setCovering(null);
+      setWithdrawing(null);
       toast.error(getOrderErrorMessage(err));
       if (err instanceof ApiError && RELOAD_CODES.has(err.code)) {
-        if (err.code === 'DELIVERY_FEE_PROPOSAL_VERSION_MISMATCH') setChangedId(proposal.id);
+        if (err.code === 'DELIVERY_FEE_PROPOSAL_VERSION_MISMATCH' && action !== 'withdraw') setChangedId(proposal.id);
         void refreshPendingFeeProposals();
         await onChanged().catch(() => {});
       }
@@ -182,11 +211,22 @@ export function DeliveryFeeProposals({ order, onChanged, className }: DeliveryFe
         const canApprove = p.availableActions.includes('approve');
         const canReject = p.availableActions.includes('reject');
         const canCover = p.availableActions.includes('cover');
+        const canEdit = p.availableActions.includes('edit');
+        const canWithdraw = p.availableActions.includes('withdraw');
         const customerSide = answeredByCustomer(p);
+        const payerSide = isPayerProposal(p);
+        const agency = agencyName(p.agencyId);
         const statusLabel = t(statusKey(p));
         const app = p.application;
+        const accepted = p.payerAcceptance;
         // `covered_by_vendor` is a machine note, not something anyone typed.
         const showNote = p.rejectionNote && p.origin !== 'change_agency';
+        const noteKey: TranslationKey =
+          p.respondedBy?.role === 'customer'
+            ? 'orders.feeProposals.customerNote'
+            : p.respondedBy?.role === 'agency' || p.respondedBy?.role === 'agent'
+              ? 'orders.feeProposals.agencyNote'
+              : 'orders.feeProposals.rejectionNote';
 
         return (
           <div
@@ -199,7 +239,7 @@ export function DeliveryFeeProposals({ order, onChanged, className }: DeliveryFe
           >
             <div className="flex items-start justify-between gap-2">
               <p className="font-medium text-foreground">
-                {t(titleKey(p), { agency: agencyName(p.agencyId) })}
+                {t(titleKey(p), { agency })}
               </p>
               <Badge variant="outline" className={cn('shrink-0 text-[10px]', STATUS_STYLES[p.status])}>
                 {statusLabel}
@@ -216,7 +256,10 @@ export function DeliveryFeeProposals({ order, onChanged, className }: DeliveryFe
             {changedId === p.id && (
               <p className="font-medium text-amber-800">{t('orders.feeProposals.changedHighlight')}</p>
             )}
-            {isPending && (
+            {isPending && payerSide && !accepted && (
+              <p className="text-amber-800">{t('orders.feeProposals.blocksPickupAgency', { agency })}</p>
+            )}
+            {isPending && !payerSide && (
               <p className="text-amber-800">
                 {t(customerSide ? 'orders.feeProposals.blocksPickupCustomer' : 'orders.feeProposals.blocksPickup')}
               </p>
@@ -254,12 +297,18 @@ export function DeliveryFeeProposals({ order, onChanged, className }: DeliveryFe
 
             {showNote && (
               <p className="text-muted-foreground">
-                {t(p.respondedBy?.role === 'customer' ? 'orders.feeProposals.customerNote' : 'orders.feeProposals.rejectionNote', {
-                  note: p.rejectionNote,
+                {t(noteKey, { note: p.rejectionNote, agency })}
+              </p>
+            )}
+            {accepted && (
+              <p className="text-muted-foreground">
+                {t(accepted.role === 'agent' ? 'orders.feeProposals.acceptedByAgent' : 'orders.feeProposals.acceptedBy', {
+                  agency,
+                  date: fmt.dateTime(accepted.at),
                 })}
               </p>
             )}
-            {!isPending && p.respondedBy?.at && (
+            {!isPending && !accepted && p.respondedBy?.at && (
               <p className="text-muted-foreground">{t('orders.feeProposals.answeredOn', { date: fmt.dateTime(p.respondedBy.at) })}</p>
             )}
             {p.status === 'approved' && app && app.vendorAllocationBefore !== null && app.vendorAllocationAfter !== null && (
@@ -307,9 +356,63 @@ export function DeliveryFeeProposals({ order, onChanged, className }: DeliveryFe
                 )}
               </div>
             )}
+
+            {(canEdit || canWithdraw) && (
+              <div className="flex flex-wrap gap-2 pt-1">
+                {canEdit && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 bg-background"
+                    disabled={submitting}
+                    onClick={() => setEditing({ mode: 'edit', proposal: p, agencyName: agency })}
+                  >
+                    {t('orders.feeProposals.edit')}
+                  </Button>
+                )}
+                {canWithdraw && (
+                  <Button size="sm" variant="outline" className="h-8 bg-background" disabled={submitting} onClick={() => setWithdrawing(p)}>
+                    {t('orders.feeProposals.withdraw')}
+                  </Button>
+                )}
+              </div>
+            )}
           </div>
         );
       })}
+
+      {/* Edit your own proposal while the agency has not answered. */}
+      <DeliveryFeeProposalFormDialog
+        target={editing}
+        currency={order.currency}
+        onClose={() => setEditing(null)}
+        onChanged={onChanged}
+      />
+
+      {/* Withdraw your own proposal — the fee stays and pickup can go ahead. */}
+      <Dialog open={withdrawing !== null} onOpenChange={(open) => !open && !submitting && setWithdrawing(null)}>
+        <DialogContent className="sm:max-w-md">
+          {withdrawing && (
+            <>
+              <DialogHeader>
+                <DialogTitle>{t('orders.feeProposals.withdrawDialog.title')}</DialogTitle>
+                <DialogDescription>
+                  {t('orders.feeProposals.withdrawDialog.body', { fee: money(withdrawing.feeBefore, withdrawing.currency) })}
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter className="gap-2 sm:gap-2">
+                <Button variant="outline" onClick={() => setWithdrawing(null)} disabled={submitting}>
+                  {t('common.actions.cancel')}
+                </Button>
+                <Button onClick={() => void answer(withdrawing, 'withdraw')} disabled={submitting} className="gap-2">
+                  {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
+                  {t('orders.feeProposals.withdraw')}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Approve — states what it does to the vendor's money. */}
       <Dialog open={approving !== null} onOpenChange={(open) => !open && !submitting && setApproving(null)}>

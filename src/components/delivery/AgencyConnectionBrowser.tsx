@@ -197,6 +197,8 @@ export interface AgencyConnectionBrowserProps {
      * page is awkward to drive by touch.
      */
     scrollable?: boolean;
+    /** Cards keep their phone layout at every width — see `AgencyCard`'s `stacked`. */
+    stackedCards?: boolean;
 }
 
 /** Search + filter + paginated agency list, each card driven by its connection state. */
@@ -204,6 +206,7 @@ export function AgencyConnectionBrowser({
     onConnectionChange,
     listHeightClass = 'h-[42vh] min-h-[160px]',
     scrollable = true,
+    stackedCards = false,
 }: AgencyConnectionBrowserProps) {
     const { t } = useTranslation();
     const apiError = useApiError();
@@ -366,6 +369,7 @@ export function AgencyConnectionBrowser({
                             <AgencyCard
                                 key={agency.id}
                                 agency={agency}
+                                stacked={stackedCards}
                                 onInfo={() => setDetailAgency(agency)}
                                 rightSlot={
                                     <ConnectionActionSlot agency={agency} actions={actions} onConnectionChange={onConnectionChange} />
@@ -374,7 +378,16 @@ export function AgencyConnectionBrowser({
                         ))}
                     </div>
                 );
-                return scrollable ? <ScrollArea className={listHeightClass}>{list}</ScrollArea> : list;
+                // Radix wraps the list in a `display: table` box, which grows to fit
+                // its content rather than the scroll window — a card whose address
+                // doesn't wrap then pushed its buttons out past the right edge and
+                // got clipped. As a block it takes the window's width and the
+                // address truncates instead.
+                return scrollable ? (
+                    <ScrollArea className={cn(listHeightClass, '[&>[data-slot=scroll-area-viewport]>div]:!block')}>
+                        {list}
+                    </ScrollArea>
+                ) : list;
             })()}
 
             {meta && meta.totalPages > 1 && (

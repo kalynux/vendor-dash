@@ -119,6 +119,10 @@ export type NotificationType =
   // the customer declined the difference — it comes out of your earnings. Same
   // `deliveryFeeProposals` preference, links `orders/{orderId}`.
   | 'delivery_fee_proposal.customer_declined'
+  // 2026-10-14 (ADR-A12). The agency answered a fee YOU proposed: accepted (it
+  // already applies) or declined (the fee stays). Same preference and link.
+  | 'delivery_fee_proposal.agency_approved'
+  | 'delivery_fee_proposal.agency_rejected'
   // 2026-10-04 (ADR-A10). An administrator asked to close this shop; nothing
   // happens until the vendor confirms. `aggregateType` is `account`,
   // `aggregateId` the request id. No preference can mute it.

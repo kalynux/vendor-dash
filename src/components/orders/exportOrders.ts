@@ -1,9 +1,8 @@
 import { fetchOrders } from '@/services/orders.service';
 import { orderFiltersToQuery, type OrderFilters } from '@/lib/orderFilters';
 import { ORDER_STATUS_KEYS, PAYMENT_METHOD_FILTER_OPTIONS, PAYMENT_STATUS_FILTER_OPTIONS } from '@/lib/orderStatus';
-import { csvBlob, csvDate, csvDateTime, type CsvCell } from '@/lib/csv';
+import { exportFileName, isoDay, spreadsheetBlob, type SheetCell } from '@/lib/spreadsheet';
 import { saveBlob, type SaveOutcome } from '@/platform/filesystem';
-import type { Locale } from '@/i18n/config';
 import type { TranslationKey, useTranslation } from '@/i18n';
 import type { Order } from '@/types';
 
@@ -19,7 +18,7 @@ type Translate = ReturnType<typeof useTranslation>['t'];
 
 /**
  * Every order the list is currently filtered to — not just the page on screen —
- * as a spreadsheet. There is no server-side export, so the pages are walked
+ * as an Excel workbook. There is no server-side export, so the pages are walked
  * here and the file is built in the browser.
  *
  * Returns how many orders went into the file alongside the save outcome, so the
@@ -28,7 +27,7 @@ type Translate = ReturnType<typeof useTranslation>['t'];
 export async function exportOrders(
   filters: OrderFilters,
   t: Translate,
-  locale: Locale,
+  storeName: string | null | undefined,
 ): Promise<{ count: number; outcome: SaveOutcome | 'empty' }> {
   const orders: Order[] = [];
   for (let page = 1; page <= MAX_PAGES; page += 1) {
@@ -43,7 +42,7 @@ export async function exportOrders(
     return option ? t(option.labelKey) : value;
   };
 
-  const rows: CsvCell[][] = [
+  const rows: SheetCell[][] = [
     [
       t('orders.export.columns.orderNumber'),
       t('orders.export.columns.date'),
@@ -62,7 +61,7 @@ export async function exportOrders(
     ],
     ...orders.map((o) => [
       o.orderNumber,
-      csvDateTime(o.createdAt),
+      new Date(o.createdAt),
       o.customer.name,
       o.customer.email,
       t(o.orderType === 'digital' ? 'orders.orderType.digital' : 'orders.orderType.physical'),
@@ -79,8 +78,8 @@ export async function exportOrders(
   ];
 
   const outcome = await saveBlob({
-    blob: csvBlob(rows, locale),
-    fileName: `${t('orders.export.fileName')}-${csvDate(new Date())}.csv`,
+    blob: await spreadsheetBlob({ name: t('orders.title'), rows, table: true }),
+    fileName: exportFileName(storeName, t('orders.export.fileName'), isoDay(new Date())),
   });
   return { count: orders.length, outcome };
 }

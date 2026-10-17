@@ -29,6 +29,8 @@ export const ORDER_ERROR_LABELS: Record<string, string> = {
   ORDER_ITEM_NOT_REASSIGNABLE: "This item has already been dispatched and can't be reassigned to a different agency.",
   // dispatch / bulk dispatch / change-agency over a COD cash limit (2026-10-02) — resend with `force: true`
   COD_AGENCY_LIMIT_EXCEEDED: 'This delivery agency is already holding as much cash on delivery as it may.',
+  // same three calls, agency barred from cash on delivery (2026-10-10) — ⛔ never resend with `force`, change agency
+  COD_AGENCY_RESTRICTED: 'This agency cannot take cash-on-delivery shipments at the moment. Choose another agency.',
   // entitlements (revoke/restore)
   DIGITAL_ENTITLEMENT_NOT_FOUND: 'This entitlement could no longer be found.',
   DIGITAL_ENTITLEMENT_ALREADY_REVOKED: 'This entitlement has already been revoked.',
