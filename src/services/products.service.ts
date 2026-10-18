@@ -20,6 +20,8 @@ import type {
   ArchiveResponse,
   BulkArchiveResult,
   BulkArchiveResponse,
+  PermanentDeleteResult,
+  PermanentDeleteResponse,
   DefaultVariantResponse,
   CreateProductPayload,
   UpdateProductPayload,
@@ -228,6 +230,22 @@ export async function bulkUpdateProductStatus(
   status: Extract<ApiProductStatus, 'active' | 'draft' | 'archived'>,
 ): Promise<BulkArchiveResult> {
   return runBulk('/vendor/products/bulk/status', productIds, { status });
+}
+
+/**
+ * Deletes an archived, never-sold product for good: DELETE
+ * /vendor/products/:id/permanent. Not the archive call — that is
+ * `DELETE /vendor/products/:id`, which still archives.
+ *
+ * The body is required and strict: anything but `{ confirm: true }` is a 400.
+ * A refusal is `422 CATALOG_PRODUCT_DELETE_BLOCKED`; read it with
+ * `readDeleteBlockers`. There is no bulk version on the backend.
+ */
+export async function deleteProductPermanently(id: string): Promise<PermanentDeleteResult> {
+  const res = await api.delete<PermanentDeleteResponse>(`/vendor/products/${id}/permanent`, {
+    confirm: true,
+  });
+  return res.data;
 }
 
 export async function duplicateProduct(id: string): Promise<ApiProduct> {
@@ -583,6 +601,14 @@ export async function setVectorisationEnabled(
       res.message ?? 'AI search could not be updated.',
     );
   }
+  return res.data;
+}
+
+/** Read-only snapshot — what the lists poll while a row shows "Indexing…". */
+export async function getVectorisationStatus(productId: string): Promise<VectorisationStatusDto> {
+  const res = await api.get<{ success: true; data: VectorisationStatusDto }>(
+    `/vendor/products/${productId}/vectorisation/status`,
+  );
   return res.data;
 }
 

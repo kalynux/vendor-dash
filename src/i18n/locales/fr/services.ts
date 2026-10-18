@@ -114,6 +114,9 @@ export const services = {
         disabled: 'Recherche IA désactivée',
         retryQueued: 'Relance de la recherche IA planifiée',
         updateFailed: 'La recherche IA n’a pas pu être mise à jour.',
+        nowReady: '« {{name}} » est maintenant dans la recherche IA.',
+        nowFailed: 'Échec de l’indexation de « {{name}} ». Vous pouvez la relancer depuis son menu.',
+        nowNoCredits: '« {{name}} » n’a pas été indexé — crédits insuffisants.',
         toggleLabel: 'Activer la vectorisation IA',
         toggleHelp:
             'Une fois activée, si le service est complet et actif, ses données sont envoyées pour ' +

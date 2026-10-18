@@ -184,6 +184,21 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const patchProduct = useCallback((id: string, updates: Partial<ProductListItem>) => {
+    setProducts(prev => prev.map(p => (p.id === id ? { ...p, ...updates } : p)));
+  }, []);
+
+  // The count is decided outside the updater: StrictMode runs updaters twice.
+  const productsRef = useRef(products);
+  productsRef.current = products;
+  const removeProduct = useCallback((id: string) => {
+    if (productsRef.current.some(p => p.id === id)) {
+      setProductPagination(meta => (meta ? { ...meta, total: Math.max(0, meta.total - 1) } : meta));
+    }
+    setProducts(prev => prev.filter(p => p.id !== id));
+    setSelectedProducts(prev => prev.filter(pid => pid !== id));
+  }, []);
+
   const toggleProductSelection = useCallback((id: string) => {
     setSelectedProducts(prev =>
       prev.includes(id) ? prev.filter(pid => pid !== id) : [...prev, id]
@@ -414,6 +429,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           createProduct,
           updateProduct,
           deleteProduct,
+          patchProduct,
+          removeProduct,
           toggleProductSelection,
           selectAllProducts,
           clearSelection: clearProductSelection

@@ -178,6 +178,13 @@ export const errors = {
                 'The negotiation window no longer matches the price. Reload the product and set the ceiling again.',
         },
 
+        /** Deleting an archived product for good. */
+        productDelete: {
+            CATALOG_PRODUCT_NOT_FOUND: 'This product was already deleted.',
+            CATALOG_PRODUCT_VECTORISATION_PENDING:
+                'This product is being indexed for AI search. Try again in a moment.',
+        },
+
         /** Assigning a delivery agency or pickup location to a product. */
         delivery: {
             CATALOG_PRODUCT_INVALID_PICKUP_LOCATION:
@@ -660,6 +667,8 @@ export const errors = {
         CATALOG_PRODUCT_INVALID_PICKUP_LOCATION: 'That pickup location is no longer one of your addresses.',
         CATALOG_PRODUCT_VECTORISATION_PENDING: 'This product is still being indexed for search. Try again shortly.',
         CATALOG_PRODUCT_VECTORISATION_NOT_ELIGIBLE: 'This product cannot be indexed for search.',
+        /** `details.blockers[]` carries every reason — render them (productDeleteBlockers.ts). */
+        CATALOG_PRODUCT_DELETE_BLOCKED: 'This product can’t be deleted permanently. It can stay archived.',
         CATALOG_PRODUCT_SIMPLE_MODE_LOCKED:
             'This is a simple product. Convert it to an advanced product to use options and multiple variants.',
         CATALOG_PRODUCT_NOT_SIMPLE_MODE: 'This is an advanced product and cannot be edited as a simple one.',

@@ -168,6 +168,8 @@ export function ProductPreview() {
     // it is the one transition that gets a button of its own.
     primaryIntent: product?.status === 'active' ? undefined : 'activate',
     onChanged: refresh,
+    // Replace, so Back does not return to a page for a product that is gone.
+    onDeleted: () => navigate('/dashboard/products', { replace: true }),
   });
 
   if (loading && !product) {
@@ -222,6 +224,8 @@ export function ProductPreview() {
       label: t('products.share.action'),
       onClick: () => setShareOpen(true),
     },
+    // Last on purpose: it cannot be undone.
+    ...(status.deleteAction ? [status.deleteAction] : []),
   ];
 
   return (

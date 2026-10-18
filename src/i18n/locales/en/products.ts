@@ -16,6 +16,9 @@ export const products = {
         placeholder: 'Search products…',
         filterTitle: 'Filter products',
         applyLabel: 'Show products',
+        hideArchived: 'Hide archived products',
+        /** The removable chip shown while archived products are let back in. */
+        archivedShown: 'Archived shown',
     },
 
     columns: {
@@ -672,6 +675,43 @@ export const products = {
         confirm: 'Yes, Archive',
     },
 
+    /**
+     * Deleting an archived product for good. `reasons` are keyed by the backend's
+     * `details.blockers[].reason`; the English is the changelog's source copy.
+     */
+    permanentDelete: {
+        action: 'Delete permanently',
+        title: 'Delete permanently?',
+        description: '<0>{{name}}</0> and its pictures will be deleted. You can’t undo this.',
+        sharedPictures: 'A picture you also use on another product is kept.',
+        confirm: 'Delete permanently',
+        done: '“{{name}}” was deleted.',
+        failed: 'We couldn’t delete this product. Please try again.',
+        blockedTitle: 'This can’t be deleted',
+        blockedKeep:
+            '<0>{{name}}</0> has to stay archived. Archived products are already hidden from shoppers.',
+        blockedLater: '<0>{{name}}</0> can’t be deleted right now.',
+        reasons: {
+            not_archived: 'Archive this product before deleting it permanently.',
+            has_orders:
+                'This product has been ordered. A product that has been sold can only be archived, never deleted.',
+            has_bookings:
+                'This service has been booked. A booked service can only be archived, never deleted.',
+            has_digital_purchases:
+                'Customers have bought this download. It must stay available to them, so it can only be archived.',
+            has_reviews:
+                'This product has reviews. A reviewed product can only be archived, never deleted.',
+            checkout_in_progress:
+                'A customer is checking out with this product right now. Try again in about 30 minutes.',
+            negotiation_in_progress:
+                'A customer is negotiating a price for this product, or holds an agreed price not yet used. Try again once it expires.',
+            agency_stock_counted:
+                'A delivery agency has recorded stock of this product in its warehouse, so it can only be archived.',
+            stock_request_pending:
+                'A stock change request for this product is waiting for an answer. Withdraw it or wait for the agency to answer.',
+        },
+    },
+
     /** The quick (simple-mode) editor. */
     simple: {
         createTitle: 'New product',
@@ -779,6 +819,10 @@ export const products = {
         editLocked: 'Edit (locked — indexing)',
         editLockedToast: 'Editing is locked while AI indexing is in progress.',
         indexingToast: 'Product is being indexed, please try again later',
+        /** When a row that was "Indexing…" finishes while the list is open. */
+        nowReady: '“{{name}}” is now in AI search.',
+        nowFailed: 'Indexing failed for “{{name}}”. You can retry it from its menu.',
+        nowNoCredits: '“{{name}}” was not indexed — not enough credits.',
         /** The switch on a product card, and the confirmation it opens. */
         switchLabel: 'AI search',
         confirmEnableTitle: 'Turn on AI search?',

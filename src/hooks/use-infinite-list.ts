@@ -66,6 +66,30 @@ export interface UseInfiniteListResult<T> {
    * (the rows already shown stay), so the caller can say so.
    */
   refresh: () => Promise<void>;
+  /**
+   * Rewrite rows already on screen without refetching, e.g. to swap in one
+   * row's new state after an action. Return the same object to leave a row alone.
+   */
+  updateItems: (mapper: (item: T) => T) => void;
+  /** Drop rows that no longer exist, and take them off `total`. */
+  removeItems: (predicate: (item: T) => boolean) => void;
+}
+
+/**
+ * Drop rows from a list that is not on screen, so it does not show them when
+ * it is restored. A no-op when nothing is cached under `cacheKey`.
+ */
+export function removeCachedItems<T>(cacheKey: string, predicate: (item: T) => boolean): void {
+  const cached = getListCache<CachedList<T>>(cacheKey);
+  if (!cached) return;
+  const items = cached.items.filter((item) => !predicate(item));
+  const removed = cached.items.length - items.length;
+  if (removed === 0) return;
+  setListCache<CachedList<T>>(cacheKey, {
+    ...cached,
+    items,
+    total: Math.max(0, cached.total - removed),
+  });
 }
 
 /**
@@ -182,6 +206,21 @@ export function useInfiniteList<T>({
     await revalidate(pageForRefresh.current, { rethrow: true });
   }, [enabled, revalidate]);
 
+  const updateItems = React.useCallback((mapper: (item: T) => T) => {
+    setItems((prev) => prev.map(mapper));
+  }, []);
+
+  // Counted outside the updater: StrictMode runs updaters twice, which would
+  // take the rows off `total` twice.
+  const itemsRef = React.useRef(items);
+  itemsRef.current = items;
+  const removeItems = React.useCallback((predicate: (item: T) => boolean) => {
+    const removed = itemsRef.current.filter(predicate).length;
+    if (removed === 0) return;
+    setItems((prev) => prev.filter((item) => !predicate(item)));
+    setTotal((n) => Math.max(0, n - removed));
+  }, []);
+
   // Reset + load whenever deps (filters/search) or enabled/limit change.
   // On the first enabled run, skip the fetch if we hydrated from cache.
   const didInit = React.useRef(false);
@@ -258,5 +297,7 @@ export function useInfiniteList<T>({
     sentinelRef,
     reload,
     refresh,
+    updateItems,
+    removeItems,
   };
 }

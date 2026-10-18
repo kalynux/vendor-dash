@@ -117,6 +117,10 @@ export const services = {
         disabled: 'AI search disabled',
         retryQueued: 'AI search retry queued',
         updateFailed: 'AI search could not be updated.',
+        /** When a row that was "Indexing…" finishes while the list is open. */
+        nowReady: '“{{name}}” is now in AI search.',
+        nowFailed: 'Indexing failed for “{{name}}”. You can retry it from its menu.',
+        nowNoCredits: '“{{name}}” was not indexed — not enough credits.',
         toggleLabel: 'Enable AI vectorisation',
         toggleHelp:
             'When enabled and the service is complete and active, service data is sent for ' +

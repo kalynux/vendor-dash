@@ -404,6 +404,12 @@ export interface ProductListMeta {
 export interface ProductsQueryParams {
   type?: ApiProductType;
   status?: ApiProductStatus;
+  /**
+   * Leave this status out, in the server's query — `meta.total` and the page
+   * size reflect it. The server takes a comma-separated list; only one is needed
+   * here. An unknown value is a 400, never ignored.
+   */
+  excludeStatus?: ApiProductStatus;
   q?: string;
   sortBy?: 'createdAt' | 'updatedAt' | 'title';
   sortOrder?: 'asc' | 'desc';
@@ -834,6 +840,19 @@ export interface BulkArchiveResult {
 export interface BulkArchiveResponse {
   success: boolean;
   data: Omit<BulkArchiveResult, 'errors'> & { errors?: BulkRowError[] };
+  message?: string;
+}
+
+/** `DELETE /vendor/products/:id/permanent` → 200. */
+export interface PermanentDeleteResult {
+  productId: string;
+  /** Pictures and files deleted with it. One shared with another product is kept. */
+  deletedFileCount: number;
+}
+
+export interface PermanentDeleteResponse {
+  success: boolean;
+  data: PermanentDeleteResult;
   message?: string;
 }
 

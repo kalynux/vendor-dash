@@ -54,6 +54,10 @@ export interface ProductState {
   createProduct: (product: Partial<Product>) => Promise<void>;
   updateProduct: (id: string, updates: Partial<Product>) => Promise<void>;
   deleteProduct: (id: string) => Promise<void>;
+  /** Change one row on screen in place, without refetching the page. */
+  patchProduct: (id: string, updates: Partial<ProductListItem>) => void;
+  /** Drop a row that no longer exists on the server, and take it off the count. */
+  removeProduct: (id: string) => void;
   toggleProductSelection: (id: string) => void;
   selectAllProducts: (ids: string[]) => void;
   clearSelection: () => void;

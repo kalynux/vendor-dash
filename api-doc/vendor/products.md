@@ -735,6 +735,9 @@ DELETE /api/vendor/products/:id
 
 Soft delete — sets status to `archived`. Data is preserved. Product is hidden from customers immediately.
 
+> ⚠ Despite the `DELETE` verb, this route **archives** and always will. To remove a product
+> for good, use [Delete Product Permanently](#delete-product-permanently).
+
 **Response `200`:**
 
 ```json
@@ -743,6 +746,81 @@ Soft delete — sets status to `archived`. Data is preserved. Product is hidden 
   "message": "Product archived successfully"
 }
 ```
+
+---
+
+### Delete Product Permanently
+
+```http
+DELETE /api/vendor/products/:id/permanent
+Content-Type: application/json
+
+{ "confirm": true }
+```
+
+Removes the product **immediately and irreversibly**: the product, its variants, options,
+shipping and service settings, availability rules and digital files. It also disappears from
+every customer's cart, wishlist and recently-viewed list, and from AI search. Pictures that
+nothing else uses are deleted too. There is no restore and no retention period.
+
+**Only an archived product that was never sold can be deleted.** A product that has ever been
+ordered, booked, downloaded or reviewed can only stay archived (already hidden from every
+shopper), because orders, downloads, bookings and reviews still refer to it.
+
+The body is required and strict: `confirm` must be the boolean `true`, and any other key is a
+`400`.
+
+**Response `200`:**
+
+```json
+{
+  "success": true,
+  "data": { "productId": "665f…", "deletedFileCount": 4 },
+  "message": "Product deleted permanently"
+}
+```
+
+`deletedFileCount` counts the files deleted with the product. A picture the vendor also used
+on another product (for example, one created with Duplicate) is kept, and not counted.
+
+**Refused: `422 CATALOG_PRODUCT_DELETE_BLOCKED`.** `details.blockers` lists **every** reason
+at once, each with an English `message` written for the vendor. Translate by `reason` (a
+closed set, below) and use `message` only as the fallback for an unknown `reason`:
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "CATALOG_PRODUCT_DELETE_BLOCKED",
+    "statusCode": 422,
+    "category": "business_rule",
+    "message": "This product cannot be deleted permanently. The reasons are listed in the details",
+    "details": {
+      "productId": "665f…",
+      "blockers": [
+        { "reason": "not_archived", "message": "Archive this product before deleting it permanently." },
+        { "reason": "has_orders", "count": 3, "message": "This product has been ordered. A product that has been sold can only be archived, never deleted." }
+      ]
+    }
+  }
+}
+```
+
+| `reason` | Meaning | What the vendor can do |
+|---|---|---|
+| `not_archived` | Status is not `archived` (no `count`) | Archive it first. A `suspended` product cannot be archived, so it cannot be deleted |
+| `has_orders` | On at least one order, of any status, ever | Nothing — keep it archived |
+| `has_bookings` | A service with at least one booking, ever | Nothing — keep it archived |
+| `has_digital_purchases` | Customers own this download | Nothing — keep it archived |
+| `has_reviews` | Has at least one review (hidden or deleted ones count too) | Nothing — keep it archived |
+| `checkout_in_progress` | A customer holds it at checkout | Retry in about 30 minutes |
+| `negotiation_in_progress` | A haggling session is open, or an agreed price is unspent | Retry once it expires |
+| `agency_stock_counted` | A delivery agency has recorded warehouse stock of it | Nothing — keep it archived |
+| `stock_request_pending` | A stock change request awaits an answer | Withdraw it, or wait for the agency |
+
+Other errors: `400 VALIDATION_ERROR` (body missing or not exactly `{ "confirm": true }`),
+`404 CATALOG_PRODUCT_NOT_FOUND` (not yours, or already deleted),
+`409 CATALOG_PRODUCT_VECTORISATION_PENDING` (AI-search indexing in progress — retry shortly).
 
 ---
 

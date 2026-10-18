@@ -18,7 +18,7 @@ import {
   SearchFilterBar,
 } from '@/components/filters';
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle,
@@ -33,8 +33,10 @@ import {
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useInfiniteList } from '@/hooks/use-infinite-list';
+import { useIndexingWatch } from '@/hooks/use-indexing-watch';
 import { useTranslation, useApiError, type TranslationKey } from '@/i18n';
 import { ServiceStatusBadge } from '@/components/services/StatusBadges';
+import { PermanentDeleteDialog } from '@/components/products/PermanentDeleteDialog';
 import {
   formatDuration, BOOKING_MODE_LABEL_KEYS, SERVICE_STATUS_TRANSITIONS,
   type ServiceStatusTransition,
@@ -42,7 +44,7 @@ import {
 import {
   fetchServices, changeServiceStatus, setVectorisationEnabled, retryVectorisation,
 } from '@/services/services.service';
-import type { ApiVectorisationStatus } from '@/types/product.types';
+import type { ApiVectorisationStatus, VectorisationStatusDto } from '@/types/product.types';
 import type {
   ServiceListItem, ServiceListMeta, ServicesQueryParams, ServiceStatus,
 } from '@/types/services.types';
@@ -165,9 +167,13 @@ interface ServiceActionsMenuProps {
   onEdit: () => void;
   onStatusTransition: (t: ServiceStatusTransition) => void;
   onVectorisation: (action: VectorisationAction) => void;
+  /** Shown on archived services only. */
+  onDeletePermanently: () => void;
 }
 
-function ServiceActionsMenu({ service, onEdit, onStatusTransition, onVectorisation }: ServiceActionsMenuProps) {
+function ServiceActionsMenu({
+  service, onEdit, onStatusTransition, onVectorisation, onDeletePermanently,
+}: ServiceActionsMenuProps) {
   const { t } = useTranslation();
   const transitions = SERVICE_STATUS_TRANSITIONS[service.status] ?? [];
   const nonDestructive = transitions.filter((t) => !t.destructive);
@@ -241,6 +247,19 @@ function ServiceActionsMenu({ service, onEdit, onStatusTransition, onVectorisati
             <Trash2 className="mr-2 h-4 w-4" />
             {t(archive.labelKey)}
           </DropdownMenuItem>
+        )}
+
+        {service.status === 'archived' && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={onDeletePermanently}
+              className="text-destructive focus:text-destructive"
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              {t('products.permanentDelete.action')}
+            </DropdownMenuItem>
+          </>
         )}
       </DropdownMenuContent>
     </DropdownMenu>
@@ -354,6 +373,8 @@ export function ServicesListPanel({ onOpenDetail, onCreate, reloadToken, calenda
 
   // Mobile per-row actions live in a bottom sheet (desktop keeps the dropdown).
   const [actionsSheetService, setActionsSheetService] = useState<ServiceListItem | null>(null);
+  /** Archived services only — deleting for good, not archiving. */
+  const [serviceToErase, setServiceToErase] = useState<ServiceListItem | null>(null);
 
   // Debounce search.
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -471,6 +492,34 @@ export function ServicesListPanel({ onOpenDetail, onCreate, reloadToken, calenda
     setPendingTransition(null);
   }, [pendingTransition, applyTransition]);
 
+  /** Swap a service's AI-search state into its row on both lists. */
+  const { updateItems: updateMobileServices } = infinite;
+  const applyIndexingSnapshot = useCallback(
+    ({ productId, vectorisationEnabled, vectorisationStatus }: VectorisationStatusDto) => {
+      const updates = { vectorisationEnabled, vectorisationStatus };
+      const patch = (s: ServiceListItem) => (s.id === productId ? { ...s, ...updates } : s);
+      setServices((prev) => prev.map(patch));
+      updateMobileServices(patch);
+    },
+    [updateMobileServices],
+  );
+
+  // "Indexing…" rows update themselves when the server finishes.
+  useIndexingWatch(isMobile ? infinite.items : services, (snapshot, row) => {
+    applyIndexingSnapshot(snapshot);
+    if (!snapshot.vectorisationEnabled) return;
+    const name = row?.title ?? '';
+    if (snapshot.vectorisationStatus === 'completed') {
+      toast.success(t('services.vectorisation.nowReady', { name }));
+    } else if (snapshot.vectorisationStatus === 'failed') {
+      toast.error(t('services.vectorisation.nowFailed', { name }));
+    } else if (snapshot.vectorisationStatus === 'skipped_no_credits') {
+      toast.warning(t('services.vectorisation.nowNoCredits', { name }));
+    }
+  });
+
+  // The reply carries the new state, so only that row changes — a refetch
+  // would reset the phone list to its first page.
   const handleVectorisation = useCallback(async (service: ServiceListItem, action: VectorisationAction) => {
     if (service.vectorisationStatus === 'pending') {
       toast.error(t('services.vectorisation.busyToast'));
@@ -478,24 +527,23 @@ export function ServicesListPanel({ onOpenDetail, onCreate, reloadToken, calenda
     }
     try {
       if (action === 'retry') {
-        await retryVectorisation(service.id);
+        applyIndexingSnapshot(await retryVectorisation(service.id));
         toast.success(t('services.vectorisation.retryQueued'));
       } else {
-        await setVectorisationEnabled(service.id, action === 'enable');
+        applyIndexingSnapshot(await setVectorisationEnabled(service.id, action === 'enable'));
         toast.success(
           action === 'enable'
             ? t('services.vectorisation.enabled')
             : t('services.vectorisation.disabled'),
         );
       }
-      refetch();
     } catch (err) {
       apiError.toast(err, {
         context: 'service',
         fallbackKey: 'services.vectorisation.updateFailed',
       });
     }
-  }, [refetch, t, apiError]);
+  }, [applyIndexingSnapshot, t, apiError]);
 
   const renderActions = (service: ServiceListItem) => (
     <ServiceActionsMenu
@@ -503,6 +551,23 @@ export function ServicesListPanel({ onOpenDetail, onCreate, reloadToken, calenda
       onEdit={() => openService(service)}
       onStatusTransition={(t) => requestTransition(service, t)}
       onVectorisation={(action) => handleVectorisation(service, action)}
+      onDeletePermanently={() => setServiceToErase(service)}
+    />
+  );
+
+  // Off both lists in place — a refetch would reset the phone list's scroll.
+  const { removeItems: removeMobileServices } = infinite;
+  const eraseDialog = (
+    <PermanentDeleteDialog
+      target={serviceToErase}
+      onClose={() => setServiceToErase(null)}
+      onDeleted={(id) => {
+        if (services.some((s) => s.id === id)) {
+          setMeta((m) => (m ? { ...m, total: Math.max(0, m.total - 1) } : m));
+        }
+        setServices((prev) => prev.filter((s) => s.id !== id));
+        removeMobileServices((s) => s.id === id);
+      }}
     />
   );
 
@@ -801,6 +866,16 @@ export function ServicesListPanel({ onOpenDetail, onCreate, reloadToken, calenda
                     onClick={() => { close(); requestTransition(s, archive); }}
                   />
                 )}
+                {s.status === 'archived' && (
+                  <div className="mt-2 flex flex-col border-t pt-2">
+                    <ServiceSheetActionButton
+                      icon={<Trash2 className="h-5 w-5" />}
+                      label={t('products.permanentDelete.action')}
+                      destructive
+                      onClick={() => { close(); setServiceToErase(s); }}
+                    />
+                  </div>
+                )}
               </div>
             </>
           );
@@ -836,6 +911,7 @@ export function ServicesListPanel({ onOpenDetail, onCreate, reloadToken, calenda
           </div>
         )}
         {confirmDialog}
+        {eraseDialog}
         {actionsSheet}
         {filterSheet}
       </div>
@@ -889,6 +965,7 @@ export function ServicesListPanel({ onOpenDetail, onCreate, reloadToken, calenda
         </>
       )}
       {confirmDialog}
+      {eraseDialog}
     </div>
   );
 }

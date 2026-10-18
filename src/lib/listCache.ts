@@ -16,3 +16,17 @@ export function setListCache<T>(key: string, value: T): void {
 export function clearListCache(key: string): void {
   cache.delete(key);
 }
+
+/** The media library's saved lists: the phone's infinite list, and the desktop page. */
+export const MEDIA_LIST_CACHE_KEY = 'media';
+export const MEDIA_DESKTOP_CACHE_KEY = 'media-desktop';
+
+/**
+ * Forget the media library's saved lists after files were deleted elsewhere
+ * (deleting a product deletes its pictures), so it loads fresh next time —
+ * storage usage included, since that figure comes with the file list.
+ */
+export function forgetMediaLists(): void {
+  clearListCache(MEDIA_LIST_CACHE_KEY);
+  clearListCache(MEDIA_DESKTOP_CACHE_KEY);
+}

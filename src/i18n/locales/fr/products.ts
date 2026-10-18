@@ -16,6 +16,8 @@ export const products = {
         placeholder: 'Rechercher des produits…',
         filterTitle: 'Filtrer les produits',
         applyLabel: 'Afficher les produits',
+        hideArchived: 'Masquer les produits archivés',
+        archivedShown: 'Archivés affichés',
     },
 
     columns: {
@@ -604,6 +606,39 @@ export const products = {
         confirm: 'Oui, archiver',
     },
 
+    permanentDelete: {
+        action: 'Supprimer définitivement',
+        title: 'Supprimer définitivement ?',
+        description: '<0>{{name}}</0> et ses images seront supprimés. Cette action est irréversible.',
+        sharedPictures: 'Une image que vous utilisez aussi sur un autre produit est conservée.',
+        confirm: 'Supprimer définitivement',
+        done: '« {{name}} » a été supprimé.',
+        failed: 'Impossible de supprimer ce produit. Veuillez réessayer.',
+        blockedTitle: 'Suppression impossible',
+        blockedKeep:
+            '<0>{{name}}</0> doit rester archivé. Un produit archivé est déjà caché aux clients.',
+        blockedLater: '<0>{{name}}</0> ne peut pas être supprimé pour le moment.',
+        reasons: {
+            not_archived: 'Archivez ce produit avant de le supprimer définitivement.',
+            has_orders:
+                'Ce produit a déjà été commandé. Un produit vendu peut seulement être archivé, jamais supprimé.',
+            has_bookings:
+                'Ce service a déjà été réservé. Un service réservé peut seulement être archivé, jamais supprimé.',
+            has_digital_purchases:
+                'Des clients ont acheté ce téléchargement. Il doit rester disponible pour eux, il peut donc seulement être archivé.',
+            has_reviews:
+                'Ce produit a reçu des avis. Un produit avec des avis peut seulement être archivé, jamais supprimé.',
+            checkout_in_progress:
+                'Un client est en train de payer ce produit. Réessayez dans environ 30 minutes.',
+            negotiation_in_progress:
+                'Un client négocie le prix de ce produit, ou détient un prix convenu pas encore utilisé. Réessayez une fois qu’il aura expiré.',
+            agency_stock_counted:
+                'Une agence de livraison a enregistré du stock de ce produit dans son entrepôt, il peut donc seulement être archivé.',
+            stock_request_pending:
+                'Une demande de modification de stock pour ce produit attend une réponse. Retirez-la ou attendez la réponse de l’agence.',
+        },
+    },
+
     simple: {
         createTitle: 'Nouveau produit',
         createSubtitle:
@@ -704,6 +739,9 @@ export const products = {
         editLocked: 'Modifier (verrouillé — indexation)',
         editLockedToast: 'La modification est verrouillée pendant l’indexation IA.',
         indexingToast: 'Le produit est en cours d’indexation, réessayez plus tard',
+        nowReady: '« {{name}} » est maintenant dans la recherche IA.',
+        nowFailed: 'Échec de l’indexation de « {{name}} ». Vous pouvez la relancer depuis son menu.',
+        nowNoCredits: '« {{name}} » n’a pas été indexé — crédits insuffisants.',
         switchLabel: 'Recherche IA',
         confirmEnableTitle: 'Activer la recherche IA ?',
         confirmEnableBody:

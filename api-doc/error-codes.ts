@@ -986,6 +986,7 @@ export const ERROR_CODES = Object.freeze({
     CATALOG_PRODUCT_AGENCY_STORAGE_INFINITE_STOCK: 'CATALOG_PRODUCT_AGENCY_STORAGE_INFINITE_STOCK',
     CATALOG_PRODUCT_VECTORISATION_PENDING: 'CATALOG_PRODUCT_VECTORISATION_PENDING',
     CATALOG_PRODUCT_VECTORISATION_NOT_ELIGIBLE: 'CATALOG_PRODUCT_VECTORISATION_NOT_ELIGIBLE',
+    CATALOG_PRODUCT_DELETE_BLOCKED: 'CATALOG_PRODUCT_DELETE_BLOCKED',
     // Authoring mode (see product.model.ts ProductMode). A `simple` product is
     // locked to exactly one variant and zero options; the advanced endpoints
     // refuse it, and the simple endpoints refuse an advanced product.

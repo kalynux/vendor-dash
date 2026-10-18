@@ -1,5 +1,7 @@
 import { useCallback, useState, type ReactNode } from 'react';
+import { Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { PermanentDeleteDialog } from '@/components/products/PermanentDeleteDialog';
 import {
   ACTIVATION_ERROR_KEYS,
   STATUS_TRANSITIONS,
@@ -60,6 +62,11 @@ interface ProductStatusActionsOptions {
   onChanged: () => void;
   /** The one transition worth a labelled button on a wide screen. */
   primaryIntent?: StatusTransitionIntent;
+  /**
+   * After a permanent delete — the page should leave, since the product is
+   * gone. Without it, no delete action is offered.
+   */
+  onDeleted?: () => void;
 }
 
 export function useProductStatusActions({
@@ -69,12 +76,22 @@ export function useProductStatusActions({
   status,
   onChanged,
   primaryIntent,
-}: ProductStatusActionsOptions): { actions: PreviewAction[]; dialog: ReactNode } {
+  onDeleted,
+}: ProductStatusActionsOptions): {
+  actions: PreviewAction[];
+  /**
+   * "Delete permanently", archived products only. Separate from `actions` so
+   * the page can put it last, away from "Restore to draft".
+   */
+  deleteAction: PreviewAction | null;
+  dialog: ReactNode;
+} {
   const { t } = useTranslation();
   const apiError = useApiError();
   const showAgencyBlocker = useAgencyBlockerToast();
   const [pending, setPending] = useState<PendingStatusTransition | null>(null);
   const [busy, setBusy] = useState(false);
+  const [eraseOpen, setEraseOpen] = useState(false);
 
   const request = useCallback(
     async (transition: StatusTransition) => {
@@ -136,16 +153,38 @@ export function useProductStatusActions({
     ...(transition.intent === primaryIntent ? { emphasis: 'primary' as const } : {}),
   }));
 
+  const deleteAction: PreviewAction | null =
+    status === 'archived' && onDeleted
+      ? {
+          id: 'delete-permanently',
+          icon: Trash2,
+          label: t('products.permanentDelete.action'),
+          onClick: () => setEraseOpen(true),
+          disabled: busy,
+          destructive: true,
+        }
+      : null;
+
   return {
     actions,
+    deleteAction,
     dialog: (
-      <StatusTransitionDialog
-        productTitle={productTitle}
-        pending={pending}
-        busy={busy}
-        onCancel={() => setPending(null)}
-        onConfirm={() => void confirm()}
-      />
+      <>
+        <StatusTransitionDialog
+          productTitle={productTitle}
+          pending={pending}
+          busy={busy}
+          onCancel={() => setPending(null)}
+          onConfirm={() => void confirm()}
+        />
+        {onDeleted && (
+          <PermanentDeleteDialog
+            target={eraseOpen ? { id: productId, title: productTitle } : null}
+            onClose={() => setEraseOpen(false)}
+            onDeleted={onDeleted}
+          />
+        )}
+      </>
     ),
   };
 }

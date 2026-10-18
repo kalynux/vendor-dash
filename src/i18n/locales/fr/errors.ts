@@ -111,6 +111,12 @@ export const errors = {
                 'La fenêtre de négociation ne correspond plus au prix. Rechargez le produit et redéfinissez le plafond.',
         },
 
+        productDelete: {
+            CATALOG_PRODUCT_NOT_FOUND: 'Ce produit a déjà été supprimé.',
+            CATALOG_PRODUCT_VECTORISATION_PENDING:
+                'Ce produit est en cours d’indexation pour la recherche IA. Réessayez dans un instant.',
+        },
+
         delivery: {
             CATALOG_PRODUCT_INVALID_PICKUP_LOCATION:
                 "Ce point de retrait n'est pas valide pour l'agence de livraison assignée, ou son adresse professionnelle n'existe plus.",
@@ -544,6 +550,7 @@ export const errors = {
         CATALOG_PRODUCT_INVALID_PICKUP_LOCATION: "Ce point de retrait ne fait plus partie de vos adresses.",
         CATALOG_PRODUCT_VECTORISATION_PENDING: "Ce produit est encore en cours d'indexation. Réessayez sous peu.",
         CATALOG_PRODUCT_VECTORISATION_NOT_ELIGIBLE: 'Ce produit ne peut pas être indexé pour la recherche.',
+        CATALOG_PRODUCT_DELETE_BLOCKED: 'Ce produit ne peut pas être supprimé définitivement. Il peut rester archivé.',
         CATALOG_PRODUCT_SIMPLE_MODE_LOCKED:
             'Ceci est un produit simple. Convertissez-le en produit avancé pour utiliser des options et plusieurs variantes.',
         CATALOG_PRODUCT_NOT_SIMPLE_MODE: "Ceci est un produit avancé et ne peut pas être modifié comme un produit simple.",

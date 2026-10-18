@@ -37,6 +37,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
@@ -67,6 +68,7 @@ import { useProductStore } from '@/store';
 import { useRouter } from '@/app-context';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useInfiniteList } from '@/hooks/use-infinite-list';
+import { useIndexingWatch } from '@/hooks/use-indexing-watch';
 import { useScrollRestoration } from '@/hooks/use-scroll-restoration';
 import { getListCache, setListCache } from '@/lib/listCache';
 import { MobilePageHeader } from '@/components/layout/MobilePageHeader';
@@ -74,6 +76,7 @@ import { RefreshButton } from '@/components/common/RefreshButton';
 import { MobileListFooter } from '@/components/layout/MobileListFooter';
 import { ConvertToAdvancedDialog } from '@/components/products/simple/ConvertToAdvancedDialog';
 import { ShareProductDialog } from '@/components/products/ShareProductDialog';
+import { PermanentDeleteDialog } from '@/components/products/PermanentDeleteDialog';
 import { useOpenPreview } from '@/components/preview';
 import {
   fetchProducts as apiFetchProducts,
@@ -94,6 +97,8 @@ import type {
   ProductListItem,
   ApiVectorisationStatus,
   BulkArchiveResult,
+  ProductsQueryParams,
+  VectorisationStatusDto,
 } from '@/types/product.types';
 import { cn } from '@/lib/utils';
 import { Trans, useApiError, useTranslation, type TranslationKey } from '@/i18n';
@@ -106,6 +111,14 @@ const STATUS_OPTIONS: { value: string; labelKey: TranslationKey }[] = [
   { value: 'pending_review', labelKey: 'products.status.pendingReview' },
   { value: 'suspended', labelKey: 'products.status.suspended' },
 ];
+
+/**
+ * The "Hide archived products" filter as request params. The server leaves the
+ * rows out in its query, so pages come back full and the counts match.
+ */
+function archivedScope(hide: boolean): ProductsQueryParams {
+  return hide ? { excludeStatus: 'archived' } : {};
+}
 
 const STATUS_TRANSITION_META: Record<
   StatusTransitionIntent,
@@ -244,11 +257,12 @@ export function Products() {
     selectedProducts,
     isLoading,
     pagination,
-    fetchProducts,
+    fetchProducts: fetchStoreProducts,
     toggleProductSelection,
     selectAllProducts,
     clearSelection,
     deleteProduct,
+    patchProduct,
   } = useProductStore();
   const { navigate: legacyNavigate } = useRouter();
   const navigate = useNavigate();
@@ -270,9 +284,18 @@ export function Products() {
     setListCache(PRODUCTS_VIEW_KEY, mode);
   }, []);
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
+  /** On by default; every list request on this page carries it. */
+  const [hideArchived, setHideArchived] = useState(true);
+  const fetchProducts = useCallback(
+    (params: ProductsQueryParams = {}, opts?: { silent?: boolean }) =>
+      fetchStoreProducts({ ...archivedScope(hideArchived), ...params }, opts),
+    [fetchStoreProducts, hideArchived],
+  );
   const [filterSheetOpen, setFilterSheetOpen] = useState(false);
   const [actionsSheetProduct, setActionsSheetProduct] = useState<ProductListItem | null>(null);
   const [productToDelete, setProductToDelete] = useState<ProductListItem | null>(null);
+  /** Archived products only — deleting for good, not archiving. */
+  const [productToErase, setProductToErase] = useState<ProductListItem | null>(null);
   const [productToConvert, setProductToConvert] = useState<ProductListItem | null>(null);
   // Just the id — the dialog fetches the detail it needs, since a list row does
   // not carry the slug, description or price a chat message is built from.
@@ -352,19 +375,24 @@ export function Products() {
   // Mobile infinite scroll
   const fetchProductsPage = useCallback(
     (page: number, limit: number) =>
-      apiFetchProducts({ page, limit, q: debouncedSearch || undefined }).then((r) => ({
+      apiFetchProducts({
+        ...archivedScope(hideArchived),
+        page,
+        limit,
+        q: debouncedSearch || undefined,
+      }).then((r) => ({
         items: r.data,
         total: r.meta.total,
         totalPages: r.meta.totalPages,
       })),
-    [debouncedSearch],
+    [debouncedSearch, hideArchived],
   );
 
   const infinite = useInfiniteList<ProductListItem>({
     fetchPage: fetchProductsPage,
     rowHeight: 84,
     enabled: isMobile,
-    deps: [debouncedSearch],
+    deps: [debouncedSearch, hideArchived],
     cacheKey: 'products',
     revalidateOnRestore: true,
   });
@@ -572,25 +600,51 @@ export function Products() {
   } | null>(null);
   const [aiSwitchBusy, setAiSwitchBusy] = useState(false);
 
+  /** Swap a product's AI-search state into its row on both lists. */
+  const { updateItems: updateMobileProducts, removeItems: removeMobileProducts } = infinite;
+  const applyIndexingSnapshot = useCallback(
+    ({ productId, vectorisationEnabled, vectorisationStatus }: VectorisationStatusDto) => {
+      const updates = { vectorisationEnabled, vectorisationStatus };
+      patchProduct(productId, updates);
+      updateMobileProducts((p) => (p.id === productId ? { ...p, ...updates } : p));
+    },
+    [patchProduct, updateMobileProducts],
+  );
+
+  // "Indexing…" rows update themselves when the server finishes.
+  useIndexingWatch(isMobile ? infinite.items : products, (snapshot, row) => {
+    applyIndexingSnapshot(snapshot);
+    if (!snapshot.vectorisationEnabled) return;
+    const name = row?.title ?? '';
+    if (snapshot.vectorisationStatus === 'completed') {
+      toast.success(t('products.ai.nowReady', { name }));
+    } else if (snapshot.vectorisationStatus === 'failed') {
+      toast.error(t('products.ai.nowFailed', { name }));
+    } else if (snapshot.vectorisationStatus === 'skipped_no_credits') {
+      toast.warning(t('products.ai.nowNoCredits', { name }));
+    }
+  });
+
+  // The reply carries the new state, so only that row changes — a full reload
+  // would jump back to page one and reset the phone list's scroll.
   const handleVectorisationAction = useCallback(
     async (id: string, action: 'enable' | 'disable' | 'retry') => {
       try {
         if (action === 'enable') {
-          await setVectorisationEnabled(id, true);
+          applyIndexingSnapshot(await setVectorisationEnabled(id, true));
           toast.success(t('products.ai.enabled'));
         } else if (action === 'disable') {
-          await setVectorisationEnabled(id, false);
+          applyIndexingSnapshot(await setVectorisationEnabled(id, false));
           toast.success(t('products.ai.disabled'));
         } else {
-          await retryVectorisation(id);
+          applyIndexingSnapshot(await retryVectorisation(id));
           toast.success(t('products.ai.retryQueued'));
         }
-        reloadList();
       } catch (err: unknown) {
         toast.error(apiError.resolve(err, { fallbackKey: 'products.ai.updateFailed' }));
       }
     },
-    [reloadList, t, apiError],
+    [applyIndexingSnapshot, t, apiError],
   );
 
   const confirmAiSwitch = useCallback(async () => {
@@ -607,11 +661,36 @@ export function Products() {
     }
   }, [aiSwitchRequest, handleVectorisationAction]);
 
-  const toggleStatusFilter = useCallback((status: string) => {
-    setStatusFilter((prev) =>
-      prev.includes(status) ? prev.filter((s) => s !== status) : [...prev, status],
-    );
-  }, []);
+  // Desktop refetches here; the phone list refetches through its `deps`.
+  const changeHideArchived = useCallback(
+    (hide: boolean) => {
+      setHideArchived(hide);
+      // Hiding archived while the "Archived" chip is on would empty the list.
+      if (hide) setStatusFilter((prev) => prev.filter((s) => s !== 'archived'));
+      if (!isMobile) {
+        fetchStoreProducts({ ...archivedScope(hide), q: debouncedSearch || undefined });
+      }
+    },
+    [isMobile, fetchStoreProducts, debouncedSearch],
+  );
+
+  const toggleStatusFilter = useCallback(
+    (status: string) => {
+      // Asking for archived products means showing them.
+      if (status === 'archived' && hideArchived && !statusFilter.includes(status)) {
+        changeHideArchived(false);
+      }
+      setStatusFilter((prev) =>
+        prev.includes(status) ? prev.filter((s) => s !== status) : [...prev, status],
+      );
+    },
+    [hideArchived, statusFilter, changeHideArchived],
+  );
+
+  const clearFilters = useCallback(() => {
+    setStatusFilter([]);
+    if (!hideArchived) changeHideArchived(true);
+  }, [hideArchived, changeHideArchived]);
 
   // Service products live in their own Services tab — exclude them here so they
   // don't appear under Products. (Minor: server pagination counts still include
@@ -631,7 +710,8 @@ export function Products() {
   );
 
   // ── Filter sheet plumbing (shared by desktop + mobile) ──────────────────────
-  const activeFilterCount = statusFilter.length;
+  // Hiding archived is the default, so only turning it off counts as a filter.
+  const activeFilterCount = statusFilter.length + (hideArchived ? 0 : 1);
 
   const productFilterSheet = (
     <FilterSheet
@@ -639,10 +719,20 @@ export function Products() {
       onOpenChange={setFilterSheetOpen}
       title={t('products.search.filterTitle')}
       activeCount={activeFilterCount}
-      onClear={() => setStatusFilter([])}
+      onClear={clearFilters}
       applyLabel={t('products.search.applyLabel')}
     >
       <FilterSection title={t('products.columns.status')}>
+        <div className="flex min-h-11 items-center justify-between gap-3">
+          <label htmlFor="products-hide-archived" className="text-sm">
+            {t('products.search.hideArchived')}
+          </label>
+          <Switch
+            id="products-hide-archived"
+            checked={hideArchived}
+            onCheckedChange={changeHideArchived}
+          />
+        </div>
         <FilterMultiChips
           options={STATUS_OPTIONS}
           values={statusFilter}
@@ -654,15 +744,24 @@ export function Products() {
 
   const productFilterChips = (
     <ActiveFilterChips
-      chips={statusFilter.map((value) => {
-        const labelKey = STATUS_OPTIONS.find((o) => o.value === value)?.labelKey;
-        return {
-          key: value,
-          label: labelKey ? t(labelKey) : value,
-          onRemove: () => toggleStatusFilter(value),
-        };
-      })}
-      onClearAll={() => setStatusFilter([])}
+      chips={[
+        ...(hideArchived
+          ? []
+          : [{
+              key: 'archived-shown',
+              label: t('products.search.archivedShown'),
+              onRemove: () => changeHideArchived(true),
+            }]),
+        ...statusFilter.map((value) => {
+          const labelKey = STATUS_OPTIONS.find((o) => o.value === value)?.labelKey;
+          return {
+            key: value,
+            label: labelKey ? t(labelKey) : value,
+            onRemove: () => toggleStatusFilter(value),
+          };
+        }),
+      ]}
+      onClearAll={clearFilters}
     />
   );
 
@@ -818,6 +917,16 @@ export function Products() {
       onOpenChange={(open) => {
         if (!open) setProductToShare(null);
       }}
+    />
+  );
+
+  // The dialog already took the row out of the store (desktop); the phone list
+  // keeps its own rows.
+  const eraseDialog = (
+    <PermanentDeleteDialog
+      target={productToErase}
+      onClose={() => setProductToErase(null)}
+      onDeleted={(id) => removeMobileProducts((p) => p.id === id)}
     />
   );
 
@@ -1097,6 +1206,16 @@ export function Products() {
                         }}
                       />
                     )}
+                    {p.status === 'archived' && (
+                      <div className="mt-2 flex flex-col border-t pt-2">
+                        <SheetActionButton
+                          icon={<Trash2 className="w-5 h-5" />}
+                          label={t('products.permanentDelete.action')}
+                          destructive
+                          onClick={() => { close(); setProductToErase(p); }}
+                        />
+                      </div>
+                    )}
                   </div>
                 </>
               );
@@ -1105,6 +1224,7 @@ export function Products() {
         </Sheet>
 
         {archiveDialog}
+        {eraseDialog}
         {transitionDialog}
         {aiSwitchDialog}
         {convertDialog}
@@ -1255,6 +1375,7 @@ export function Products() {
                   onConvertToAdvanced={() => setProductToConvert(product)}
                   onPreview={() => openPreview(`/preview/product/${product.id}`)}
                   onShare={() => setProductToShare(product.id)}
+                  onDeletePermanently={() => setProductToErase(product)}
                 />
               ))}
         </div>
@@ -1353,6 +1474,7 @@ export function Products() {
                             onConvertToAdvanced={() => setProductToConvert(product)}
                             onPreview={() => openPreview(`/preview/product/${product.id}`)}
                             onShare={() => setProductToShare(product.id)}
+                            onDeletePermanently={() => setProductToErase(product)}
                           />
                         </td>
                       </tr>
@@ -1364,6 +1486,7 @@ export function Products() {
       )}
 
       {archiveDialog}
+      {eraseDialog}
       {transitionDialog}
       {aiSwitchDialog}
       {convertDialog}
@@ -1482,6 +1605,7 @@ interface ProductGridCardProps {
   onStatusTransition: (transition: StatusTransition) => void;
   onConvertToAdvanced: () => void;
   onShare: () => void;
+  onDeletePermanently: () => void;
 }
 
 function ProductGridCard({
@@ -1495,6 +1619,7 @@ function ProductGridCard({
   onStatusTransition,
   onConvertToAdvanced,
   onShare,
+  onDeletePermanently,
 }: ProductGridCardProps) {
   const { t } = useTranslation();
   return (
@@ -1555,6 +1680,7 @@ function ProductGridCard({
               onStatusTransition={onStatusTransition}
               onConvertToAdvanced={onConvertToAdvanced}
               onShare={onShare}
+              onDeletePermanently={onDeletePermanently}
             />
           </div>
           <div className="mt-2 flex items-center gap-1.5 flex-wrap">
@@ -1595,6 +1721,8 @@ interface ProductActionsMenuProps {
   onStatusTransition: (transition: StatusTransition) => void;
   onConvertToAdvanced: () => void;
   onShare: () => void;
+  /** Shown on archived products only. */
+  onDeletePermanently: () => void;
 }
 
 function ProductActionsMenu({
@@ -1605,6 +1733,7 @@ function ProductActionsMenu({
   onStatusTransition,
   onConvertToAdvanced,
   onShare,
+  onDeletePermanently,
 }: ProductActionsMenuProps) {
   const { t } = useTranslation();
   const editLocked = product.vectorisationStatus === 'pending';
@@ -1703,6 +1832,16 @@ function ProductActionsMenu({
               <Trash2 className="w-4 h-4 mr-2" />
               {t(archiveTransition.labelKey)}
             </DropdownMenuItem>
+          )}
+
+          {product.status === 'archived' && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={onDeletePermanently} className="text-destructive">
+                <Trash2 className="w-4 h-4 mr-2" />
+                {t('products.permanentDelete.action')}
+              </DropdownMenuItem>
+            </>
           )}
         </DropdownMenuContent>
       </DropdownMenu>

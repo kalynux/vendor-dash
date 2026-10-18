@@ -88,7 +88,12 @@ import { getUploadErrorMessage } from '@/lib/uploadErrors';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useInfiniteList } from '@/hooks/use-infinite-list';
 import { useScrollRestoration } from '@/hooks/use-scroll-restoration';
-import { getListCache, setListCache } from '@/lib/listCache';
+import {
+  getListCache,
+  setListCache,
+  MEDIA_DESKTOP_CACHE_KEY,
+  MEDIA_LIST_CACHE_KEY,
+} from '@/lib/listCache';
 import { MobilePageHeader } from '@/components/layout/MobilePageHeader';
 import { MobileListFooter } from '@/components/layout/MobileListFooter';
 import { useTranslation, useApiError, useFormatters, type TranslationKey } from '@/i18n';
@@ -446,7 +451,7 @@ function FilePreview({ file }: { file: ApiFile }) {
 
 // Desktop list-state cache so returning to the Media tab restores what was
 // loaded instead of refetching.
-const MEDIA_DESKTOP_KEY = 'media-desktop';
+const MEDIA_DESKTOP_KEY = MEDIA_DESKTOP_CACHE_KEY;
 interface MediaDesktopCache {
   files: ApiFile[];
   pagination: FilePagination | null;
@@ -601,7 +606,7 @@ export function MediaGallery() {
     rowHeight: 140,
     enabled: isMobile,
     deps: [activeCategory, provider],
-    cacheKey: 'media',
+    cacheKey: MEDIA_LIST_CACHE_KEY,
   });
 
   // Single source of truth for the rendered list (mobile accumulates pages).

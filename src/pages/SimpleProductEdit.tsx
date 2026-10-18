@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
-import { AlertCircle, Eye, Wand2, Copy } from 'lucide-react';
+import { AlertCircle, Eye, Wand2, Copy, Trash2 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -24,6 +24,7 @@ import {
 } from '@/components/products/simple/SimpleProductForm';
 import { ActivationBlockersPanel } from '@/components/products/simple/ActivationBlockersPanel';
 import { ConvertToAdvancedDialog } from '@/components/products/simple/ConvertToAdvancedDialog';
+import { PermanentDeleteDialog } from '@/components/products/PermanentDeleteDialog';
 import { projectSimpleError } from '@/components/products/simple/simpleFormErrors';
 import { useCategoryConflicts } from '@/components/products/categories/useCategoryConflicts';
 import { useAgencyBlockerToast } from '@/components/products/useAgencyBlockerToast';
@@ -90,6 +91,7 @@ export function SimpleProductEdit() {
   const { run: runCategorySave, dialog: categoryConflictDialog } = useCategoryConflicts();
   const [resolvedCategories, setResolvedCategories] = useState<CategoryEntry[] | null>(null);
   const [convertOpen, setConvertOpen] = useState(false);
+  const [eraseOpen, setEraseOpen] = useState(false);
   /** The single variant, kept so the pickup picker can see its stock mode. */
   const [variant, setVariant] = useState<ApiVariant | null>(null);
   /** The live (possibly unsaved) value of the unlimited-stock switch. */
@@ -576,6 +578,18 @@ export function SimpleProductEdit() {
           onClick: () => void handleStatusTransition(transition.target),
           destructive: transition.destructive,
         })),
+        // Last, apart from "Restore to draft": it cannot be undone.
+        ...(productStatus === 'archived'
+          ? [
+              {
+                id: 'delete-permanently',
+                icon: Trash2,
+                label: t('products.permanentDelete.action'),
+                onClick: () => setEraseOpen(true),
+                destructive: true,
+              },
+            ]
+          : []),
       ]}
     >
       <ProductFormBody className="space-y-4 md:space-y-6">
@@ -743,6 +757,12 @@ export function SimpleProductEdit() {
         onConverted={(converted) =>
           navigate(`/dashboard/product-edit/${converted.id}`, { replace: true })
         }
+      />
+      <PermanentDeleteDialog
+        target={eraseOpen ? { id: product.id, title: product.title } : null}
+        onClose={() => setEraseOpen(false)}
+        // Replace, so Back does not return to the editor of a product that is gone.
+        onDeleted={() => navigate('/dashboard/products', { replace: true })}
       />
       {categoryConflictDialog}
     </EditorPageShell>
