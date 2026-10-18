@@ -97,6 +97,7 @@ import type {
 } from '@/types/product.types';
 import { cn } from '@/lib/utils';
 import { Trans, useApiError, useTranslation, type TranslationKey } from '@/i18n';
+import { useAgencyBlockerToast } from '@/components/products/useAgencyBlockerToast';
 
 const STATUS_OPTIONS: { value: string; labelKey: TranslationKey }[] = [
   { value: 'active', labelKey: 'products.status.active' },
@@ -237,6 +238,7 @@ const PRODUCTS_VIEW_KEY = 'products-view-mode';
 export function Products() {
   const { t } = useTranslation();
   const apiError = useApiError();
+  const showAgencyBlocker = useAgencyBlockerToast();
   const {
     products,
     selectedProducts,
@@ -549,16 +551,19 @@ export function Products() {
       setTransitionState(null);
       reloadList();
     } catch (err: unknown) {
-      const activationKey =
-        err instanceof ApiError ? ACTIVATION_ERROR_KEYS[err.code] : undefined;
-      toast.error(
-        activationKey
-          ? t(activationKey)
-          : apiError.resolve(err, { fallbackKey: 'products.errors.statusChangeFailed' }),
-      );
+      // The delivery agency refusal says which agency problem, with its fix.
+      if (!showAgencyBlocker(err, product)) {
+        const activationKey =
+          err instanceof ApiError ? ACTIVATION_ERROR_KEYS[err.code] : undefined;
+        toast.error(
+          activationKey
+            ? t(activationKey)
+            : apiError.resolve(err, { fallbackKey: 'products.errors.statusChangeFailed' }),
+        );
+      }
       setTransitionState(null);
     }
-  }, [transitionState, reloadList, t, apiError]);
+  }, [transitionState, reloadList, t, apiError, showAgencyBlocker]);
 
   /** The card switch's pending question: nothing is sent until it is confirmed. */
   const [aiSwitchRequest, setAiSwitchRequest] = useState<{

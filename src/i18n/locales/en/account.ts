@@ -259,7 +259,7 @@ export const account = {
         codeLabel: 'Six-digit code',
         codePlaceholder: '123456',
         codeSentTo: 'We sent a code on WhatsApp to {{phone}}.',
-        codeExpires: 'It expires {{when}}.',
+        codeExpires: 'The code expires {{when}}.',
         /**
          * `completesPendingChange: true` — confirming here swaps the identifier.
          * The second sentence is the backend moving the account's WhatsApp link
@@ -293,6 +293,7 @@ export const account = {
         contactSupport: 'Contact support',
 
         pendingTarget: 'Waiting to switch to {{target}}',
+        pendingPhoneTitle: 'New number: {{target}}',
         pendingExpires: 'Expires {{when}}.',
         pendingExpired: 'This request has expired. Cancel it and start again.',
 

@@ -47,6 +47,7 @@ import {
   suspensionNoticeKey,
   isPlanQuotaSuspension,
 } from '@/services/products.service';
+import { agencyBlockerTextFromError } from '@/lib/agencyBlocker';
 import { clearedCeilings, type BargainCeilingEdit } from '@/components/products/bargain';
 import { fetchStockRequests } from '@/services/stockRequests.service';
 import type { PendingStockInfo } from '@/components/inventory/PendingStockBadge';
@@ -871,11 +872,15 @@ export function ProductEdit() {
         if (err && typeof err === 'object' && 'code' in err) {
           const code = (err as { code: string }).code;
           const activationKey = ACTIVATION_ERROR_KEYS[code];
+          // Which delivery agency problem it is — the agency picker is on this step.
+          const agencyBlocker = agencyBlockerTextFromError(err, t);
           dispatch({
             type: 'SET_STEP_ERROR',
-            error: activationKey
-              ? t(activationKey)
-              : apiError.resolve(err, { fallbackKey: 'products.errors.publishFailed' }),
+            error: agencyBlocker
+              ? agencyBlocker
+              : activationKey
+                ? t(activationKey)
+                : apiError.resolve(err, { fallbackKey: 'products.errors.publishFailed' }),
           });
         } else {
           dispatch({

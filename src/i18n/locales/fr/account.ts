@@ -222,7 +222,7 @@ export const account = {
         codeLabel: 'Code à six chiffres',
         codePlaceholder: '123456',
         codeSentTo: 'Nous avons envoyé un code sur WhatsApp au {{phone}}.',
-        codeExpires: 'Il expire {{when}}.',
+        codeExpires: 'Le code expire {{when}}.',
         codeCompletesChange:
             'En le saisissant, votre numéro de connexion devient le nouveau. Si WhatsApp était lié à votre ancien numéro, le lien passe aussi au nouveau.',
         codeVerifiesCurrent: 'En le saisissant, vous confirmez le numéro déjà associé à votre compte.',
@@ -241,6 +241,7 @@ export const account = {
         contactSupport: 'Contacter le support',
 
         pendingTarget: 'En attente de passage à {{target}}',
+        pendingPhoneTitle: 'Nouveau numéro : {{target}}',
         pendingExpires: 'Expire {{when}}.',
         pendingExpired: 'Cette demande a expiré. Annulez-la et recommencez.',
 

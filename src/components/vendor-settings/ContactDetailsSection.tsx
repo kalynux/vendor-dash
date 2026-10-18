@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { BadgeCheck, Loader2, MessageCircle, Phone } from 'lucide-react';
+import { BadgeCheck, Loader2, Mail, MessageCircle } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
+import { InfoHint } from '@/components/ui/info-hint';
 import { SettingsSection } from '@/components/vendor-settings/SettingsSection';
 import { PhoneInput } from '@/components/phone';
 import { formatPhoneInternational, isValidPhone, phoneErrorKey } from '@/lib/phone';
@@ -351,6 +352,39 @@ export function ContactDetailsSection() {
   const canVerify = !state.pendingPhone && !phoneVerified && hasVerifiableNumber && !codeOpen;
   const cooldownLeft = resendAt === null ? 0 : Math.max(0, Math.ceil((resendAt - now) / 1000));
   const sending = busy === 'send-code';
+  const phoneBlockOpen = !!state.pendingPhone || codeOpen;
+  const completesChange = !!(verification?.completesPendingChange || state.pendingPhone);
+  const maskedCodeTarget = codeTarget ?? verification?.phoneMasked ?? '';
+
+  const closeCode = () => {
+    setCodeOpen(false);
+    setCode('');
+    setCodeError(null);
+    setAttemptsLeft(null);
+    setDeliveryError(null);
+    setDeliveryFailures(0);
+  };
+
+  const deliveryAlert = (
+    <Alert>
+      <MessageCircle className="size-4" />
+      <AlertDescription className="space-y-2">
+        <p>{deliveryError}</p>
+        {deliveryFailures > 1 && (
+          <>
+            <p>{t('account.contact.deliverySupportHint')}</p>
+            <div className="pt-1">
+              <Button asChild variant="outline" size="sm">
+                <Link to="/dashboard/tickets" state={{ create: true }}>
+                  {t('account.contact.contactSupport')}
+                </Link>
+              </Button>
+            </div>
+          </>
+        )}
+      </AlertDescription>
+    </Alert>
+  );
 
   return (
     <SettingsSection
@@ -481,165 +515,181 @@ export function ContactDetailsSection() {
           <p className="text-xs text-muted-foreground">{t('account.contact.verifyPrompt')}</p>
         )}
 
-        {state.pendingPhone && (
-          <PendingBanner
-            pending={state.pendingPhone}
-            noticeKey="account.contact.phonePendingNotice"
-            busy={busy === 'cancel-phone'}
-            onCancel={() => void cancelPhone()}
-            action={
-              !codeOpen && (
-                <Button size="sm" disabled={sending} onClick={() => void sendCode()}>
-                  {sending && <Loader2 className="size-4 animate-spin" />}
-                  {t('account.contact.sendCode')}
-                </Button>
-              )
-            }
-          />
-        )}
-
         {/*
           WhatsApp refused the send on every route. The doc's contract: say it is
           temporary, let them try again, and offer support if it keeps happening —
           never "message the bot first", which used to make things worse.
 
           No retry button of its own: whichever button sent the code (Verify on
-          the row, Send code on the pending banner, Send a new code on the code
-          panel) is still on screen and is the retry — a second one here would
-          read as a different action. A code sent earlier still works; a failed
-          resend leaves it untouched on the server.
+          the row, Send code / Send a new code in the block below) is still on
+          screen and is the retry — a second one here would read as a different
+          action. A code sent earlier still works; a failed resend leaves it
+          untouched on the server.
 
           Neutral, not destructive-red: the doc frames this as temporary, and a red
           box reads as "the platform is broken".
         */}
-        {deliveryError && (
-          <Alert>
-            <MessageCircle className="size-4" />
-            <AlertDescription className="space-y-2">
-              <p>{deliveryError}</p>
-              {deliveryFailures > 1 && (
-                <>
-                  <p>{t('account.contact.deliverySupportHint')}</p>
-                  <div className="pt-1">
-                    <Button asChild variant="outline" size="sm">
-                      <Link to="/dashboard/tickets" state={{ create: true }}>
-                        {t('account.contact.contactSupport')}
-                      </Link>
-                    </Button>
-                  </div>
-                </>
-              )}
-            </AlertDescription>
-          </Alert>
-        )}
+        {deliveryError && !phoneBlockOpen && deliveryAlert}
 
-        {codeOpen && (
-          <div className="space-y-3 rounded-lg border border-border p-4">
+        {/*
+          One block for the whole job — the pending change AND the code that
+          completes it. These used to be two boxes, each with its own cancel
+          ("Cancel change" and "Cancel"), which read as two different tasks.
+          While a change is pending the only way out is cancelling the change;
+          leaving the page keeps it for later.
+
+          Boxed from `md` only — on phones forms carry no box (settings rule).
+        */}
+        {phoneBlockOpen && (
+          <div className="space-y-4 md:rounded-lg md:border md:border-border md:p-4">
             <div className="space-y-1">
-              <p className="text-sm font-medium text-foreground">
-                {t('account.contact.codeSentTo', {
-                  phone: codeTarget ?? verification?.phoneMasked ?? '',
-                })}
-              </p>
-              {/*
-                🔴 `completesPendingChange` is the field that decides this copy.
-                True: the code proves the NEW number and spending it swaps the
-                account's identifier. False: it only proves the number already on
-                the account. Backwards, it tells a vendor their sign-in number is
-                about to move when it is not.
-              */}
-              <p className="text-xs text-muted-foreground">
-                {verification?.completesPendingChange || state.pendingPhone
-                  ? t('account.contact.codeCompletesChange')
-                  : t('account.contact.codeVerifiesCurrent')}
-                {codeExpiresAt !== null && (
+              <div className="flex items-center gap-1">
+                <p className="text-sm font-medium text-foreground">
+                  {state.pendingPhone
+                    ? t('account.contact.pendingPhoneTitle', {
+                        target: formatPhoneInternational(state.pendingPhone.target),
+                      })
+                    : t('account.contact.codeSentTo', { phone: maskedCodeTarget })}
+                </p>
+                {codeOpen && (
+                  <InfoHint align="start">
+                    {/*
+                      🔴 `completesPendingChange` is the field that decides this
+                      copy. True: the code proves the NEW number and spending it
+                      swaps the account's identifier. False: it only proves the
+                      number already on the account. Backwards, it tells a vendor
+                      their sign-in number is about to move when it is not.
+                    */}
+                    {completesChange && <>{t('account.contact.codeCompletesChange')} </>}
+                    {t('account.contact.codeDeliveryHint')}
+                  </InfoHint>
+                )}
+              </div>
+              <p className="text-sm text-muted-foreground">
+                {state.pendingPhone ? (
                   <>
-                    {' '}
-                    {t('account.contact.codeExpires', {
-                      when: fmt.relativeTime(codeExpiresAt),
-                    })}
+                    {codeOpen && (
+                      <>
+                        {t('account.contact.codeSentTo', { phone: maskedCodeTarget })}{' '}
+                      </>
+                    )}
+                    {t('account.contact.phonePendingNotice')}
                   </>
+                ) : (
+                  t('account.contact.codeVerifiesCurrent')
                 )}
               </p>
+              {state.pendingPhone && !codeOpen && (
+                <PendingExpiry expiresAt={state.pendingPhone.expiresAt} />
+              )}
             </div>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="phone-code" className="text-xs text-muted-foreground">
-                {t('account.contact.codeLabel')}
-              </Label>
-              <Input
-                id="phone-code"
-                value={code}
-                onChange={(e) => {
-                  // The field only ever holds a code, so non-digits are dropped
-                  // as they are typed rather than rejected on submit.
-                  setCode(e.target.value.replace(/[^0-9]/g, '').slice(0, CODE_LENGTH));
-                  setCodeError(null);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key !== 'Enter' || code.length !== CODE_LENGTH || busy !== null) return;
-                  e.preventDefault();
-                  void submitCode();
-                }}
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                autoFocus
-                maxLength={CODE_LENGTH}
-                placeholder={t('account.contact.codePlaceholder')}
-                aria-invalid={!!codeError}
-                aria-describedby={codeError ? 'phone-code-error' : undefined}
-                disabled={busy === 'confirm-code'}
-                className="text-center text-lg tracking-[0.4em]"
-              />
-            </div>
+            {codeOpen && (
+              <div className="space-y-1.5">
+                <Label htmlFor="phone-code" className="text-xs text-muted-foreground">
+                  {t('account.contact.codeLabel')}
+                </Label>
+                <Input
+                  id="phone-code"
+                  value={code}
+                  onChange={(e) => {
+                    // The field only ever holds a code, so non-digits are dropped
+                    // as they are typed rather than rejected on submit.
+                    setCode(e.target.value.replace(/[^0-9]/g, '').slice(0, CODE_LENGTH));
+                    setCodeError(null);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key !== 'Enter' || code.length !== CODE_LENGTH || busy !== null) return;
+                    e.preventDefault();
+                    void submitCode();
+                  }}
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  autoFocus
+                  maxLength={CODE_LENGTH}
+                  placeholder={t('account.contact.codePlaceholder')}
+                  aria-invalid={!!codeError}
+                  aria-describedby={codeError ? 'phone-code-error' : undefined}
+                  disabled={busy === 'confirm-code'}
+                  // Sized to six digits, not the row: full width with a centred
+                  // placeholder, it read as already filled in.
+                  className="max-w-[12rem] text-center text-lg tracking-[0.4em] placeholder:text-muted-foreground/40"
+                />
 
-            {codeError && (
-              <p id="phone-code-error" className="text-sm text-destructive" role="alert">
-                {codeError}
-                {/* Only when the backend actually said so — an invented number
-                    here is worse than none. */}
-                {attemptsLeft !== null && (
-                  <>{' '}{t('account.contact.attemptsLeft', { count: attemptsLeft })}</>
+                {codeError && (
+                  <p id="phone-code-error" className="text-sm text-destructive" role="alert">
+                    {codeError}
+                    {/* Only when the backend actually said so — an invented number
+                        here is worse than none. */}
+                    {attemptsLeft !== null && (
+                      <>{' '}{t('account.contact.attemptsLeft', { count: attemptsLeft })}</>
+                    )}
+                  </p>
                 )}
-              </p>
+
+                {/* Expiry and resend on one quiet line: resending is the fallback,
+                    not a peer of Verify, so it is a link rather than another button. */}
+                <div className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+                  {codeExpiresAt !== null && (
+                    <span>
+                      {t('account.contact.codeExpires', {
+                        when: fmt.relativeTime(codeExpiresAt),
+                      })}
+                    </span>
+                  )}
+                  {cooldownLeft > 0 ? (
+                    <span>{t('account.contact.resendIn', { seconds: cooldownLeft })}</span>
+                  ) : (
+                    <Button
+                      variant="link"
+                      size="sm"
+                      className="h-auto p-0 text-xs"
+                      disabled={sending}
+                      onClick={() => void sendCode()}
+                    >
+                      {sending && <Loader2 className="size-3.5 animate-spin" />}
+                      {t('account.contact.resendCode')}
+                    </Button>
+                  )}
+                </div>
+              </div>
             )}
 
-            <p className="text-xs text-muted-foreground">{t('account.contact.codeDeliveryHint')}</p>
+            {deliveryError && deliveryAlert}
 
-            <div className="flex flex-wrap gap-2">
-              <Button
-                size="sm"
-                disabled={code.length !== CODE_LENGTH || busy === 'confirm-code'}
-                onClick={() => void submitCode()}
-              >
-                {busy === 'confirm-code' && <Loader2 className="size-4 animate-spin" />}
-                {t('account.contact.submitCode')}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={cooldownLeft > 0 || sending}
-                onClick={() => void sendCode()}
-              >
-                {sending && <Loader2 className="size-4 animate-spin" />}
-                {cooldownLeft > 0
-                  ? t('account.contact.resendIn', { seconds: cooldownLeft })
-                  : t('account.contact.resendCode')}
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setCodeOpen(false);
-                  setCode('');
-                  setCodeError(null);
-                  setAttemptsLeft(null);
-                  setDeliveryError(null);
-                  setDeliveryFailures(0);
-                }}
-              >
-                {t('common.actions.cancel')}
-              </Button>
+            {/* Phones: stacked, full width, 44px — the same shape as the password
+                button below it, and an easy thumb target. */}
+            <div className="flex flex-wrap gap-2 max-md:flex-col [&>button]:max-md:h-11 [&>button]:max-md:w-full">
+              {codeOpen ? (
+                <Button
+                  size="sm"
+                  disabled={code.length !== CODE_LENGTH || busy === 'confirm-code'}
+                  onClick={() => void submitCode()}
+                >
+                  {busy === 'confirm-code' && <Loader2 className="size-4 animate-spin" />}
+                  {t('account.contact.submitCode')}
+                </Button>
+              ) : (
+                <Button size="sm" disabled={sending} onClick={() => void sendCode()}>
+                  {sending && <Loader2 className="size-4 animate-spin" />}
+                  {t('account.contact.sendCode')}
+                </Button>
+              )}
+              {state.pendingPhone ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={busy === 'cancel-phone'}
+                  onClick={() => void cancelPhone()}
+                >
+                  {busy === 'cancel-phone' && <Loader2 className="size-4 animate-spin" />}
+                  {t('account.contact.cancelChange')}
+                </Button>
+              ) : (
+                <Button variant="ghost" size="sm" onClick={closeCode}>
+                  {t('common.actions.cancel')}
+                </Button>
+              )}
             </div>
           </div>
         )}
@@ -688,14 +738,36 @@ function PendingBanner({
   noticeKey,
   onCancel,
   busy,
-  action,
 }: {
   pending: PendingContactChange;
   noticeKey: Parameters<ReturnType<typeof useTranslation>['t']>[0];
   onCancel: () => void;
   busy: boolean;
-  action?: React.ReactNode;
 }) {
+  const { t } = useTranslation();
+
+  return (
+    <Alert>
+      <Mail className="size-4" />
+      <AlertDescription className="space-y-2">
+        <p className="text-sm font-medium text-foreground">
+          {t('account.contact.pendingTarget', { target: pending.target })}
+        </p>
+        <p>{t(noticeKey)}</p>
+        <PendingExpiry expiresAt={pending.expiresAt} />
+        <div className="flex flex-wrap gap-2 pt-1">
+          <Button variant="outline" size="sm" onClick={onCancel} disabled={busy}>
+            {busy && <Loader2 className="size-4 animate-spin" />}
+            {t('account.contact.cancelChange')}
+          </Button>
+        </div>
+      </AlertDescription>
+    </Alert>
+  );
+}
+
+/** "Expires in 24 hours", or "this request has expired" once it has. */
+function PendingExpiry({ expiresAt }: { expiresAt: string }) {
   const { t } = useTranslation();
   const fmt = useFormatters();
   /**
@@ -710,34 +782,16 @@ function PendingBanner({
    */
   const [expired, setExpired] = useState(false);
   useEffect(() => {
-    const deadline = new Date(pending.expiresAt).getTime();
+    const deadline = new Date(expiresAt).getTime();
     const id = window.setInterval(() => setExpired(Date.now() >= deadline), 30_000);
     return () => window.clearInterval(id);
-  }, [pending.expiresAt]);
+  }, [expiresAt]);
 
   return (
-    <Alert>
-      <Phone className="size-4" />
-      <AlertDescription className="space-y-2">
-        <p className="text-sm font-medium text-foreground">
-          {t('account.contact.pendingTarget', { target: pending.target })}
-        </p>
-        <p>{t(noticeKey)}</p>
-        <p className="text-xs">
-          {expired
-            ? t('account.contact.pendingExpired')
-            : t('account.contact.pendingExpires', {
-                when: fmt.relativeTime(pending.expiresAt),
-              })}
-        </p>
-        <div className="flex flex-wrap gap-2 pt-1">
-          {action}
-          <Button variant="outline" size="sm" onClick={onCancel} disabled={busy}>
-            {busy && <Loader2 className="size-4 animate-spin" />}
-            {t('account.contact.cancelChange')}
-          </Button>
-        </div>
-      </AlertDescription>
-    </Alert>
+    <p className="text-xs text-muted-foreground">
+      {expired
+        ? t('account.contact.pendingExpired')
+        : t('account.contact.pendingExpires', { when: fmt.relativeTime(expiresAt) })}
+    </p>
   );
 }

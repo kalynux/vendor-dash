@@ -9,6 +9,7 @@ import { FilterSheet, SearchFilterBar } from '@/components/filters';
 import { cn } from '@/lib/utils';
 import { AgencyCard, AgencyCardSkeleton } from '@/components/delivery/AgencyCard';
 import { AgencyDetailSheet } from '@/components/delivery/AgencyDetailSheet';
+import { PendingAgencyApproveNote } from '@/components/delivery/CounterpartyStatus';
 import { AgencyFiltersPanel } from '@/components/delivery/AgencyFiltersPanel';
 import { countActiveAgencyFilters, INITIAL_AGENCY_FILTERS, type AgencyFilters } from '@/components/delivery/agencyFilters';
 import { useAgencyConnectionActions } from '@/hooks/useAgencyConnectionActions';
@@ -128,42 +129,47 @@ function ConnectionActionSlot({
         const approveKey = `approve:${connection.id}`;
         const rejectKey = `reject:${connection.id}`;
         return (
-            <div className="flex items-center gap-1.5">
-                <Button
-                    size="sm"
-                    disabled={actions.pendingKey === approveKey}
-                    onClick={() => actions.approve(agency.id, connection.id).then(handleChange)}
-                >
-                    {actions.pendingKey === approveKey ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : t('agency.connections.actions.approve')}
-                </Button>
-                <Popover open={rejectOpen} onOpenChange={setRejectOpen}>
-                    <PopoverTrigger asChild>
-                        <Button size="sm" variant="outline">{t('agency.connections.actions.reject')}</Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-64 space-y-2" align="end">
-                        <p className="text-xs font-medium">{t('agency.browse.rejectTitle')}</p>
-                        <Textarea
-                            placeholder={t('agency.browse.reasonPlaceholder')}
-                            value={rejectReason}
-                            onChange={(e) => setRejectReason(e.target.value)}
-                            className="text-xs min-h-16"
-                        />
-                        <Button
-                            size="sm"
-                            variant="destructive"
-                            className="w-full"
-                            disabled={actions.pendingKey === rejectKey}
-                            onClick={() =>
-                                actions.reject(agency.id, connection.id, rejectReason || undefined).then((dto) => {
-                                    handleChange(dto);
-                                    if (dto) setRejectOpen(false);
-                                })
-                            }
-                        >
-                            {actions.pendingKey === rejectKey ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : t('agency.connections.actions.confirmReject')}
-                        </Button>
-                    </PopoverContent>
-                </Popover>
+            // Browse no longer lists agencies that haven't activated, so the note
+            // shows only for one that slipped back after the list loaded.
+            <div className="flex flex-col items-end gap-1.5">
+                <PendingAgencyApproveNote status={detail.counterpartyStatus} className="max-w-64 text-right" />
+                <div className="flex items-center gap-1.5">
+                    <Button
+                        size="sm"
+                        disabled={actions.pendingKey === approveKey}
+                        onClick={() => actions.approve(agency.id, connection.id).then(handleChange)}
+                    >
+                        {actions.pendingKey === approveKey ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : t('agency.connections.actions.approve')}
+                    </Button>
+                    <Popover open={rejectOpen} onOpenChange={setRejectOpen}>
+                        <PopoverTrigger asChild>
+                            <Button size="sm" variant="outline">{t('agency.connections.actions.reject')}</Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-64 space-y-2" align="end">
+                            <p className="text-xs font-medium">{t('agency.browse.rejectTitle')}</p>
+                            <Textarea
+                                placeholder={t('agency.browse.reasonPlaceholder')}
+                                value={rejectReason}
+                                onChange={(e) => setRejectReason(e.target.value)}
+                                className="text-xs min-h-16"
+                            />
+                            <Button
+                                size="sm"
+                                variant="destructive"
+                                className="w-full"
+                                disabled={actions.pendingKey === rejectKey}
+                                onClick={() =>
+                                    actions.reject(agency.id, connection.id, rejectReason || undefined).then((dto) => {
+                                        handleChange(dto);
+                                        if (dto) setRejectOpen(false);
+                                    })
+                                }
+                            >
+                                {actions.pendingKey === rejectKey ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : t('agency.connections.actions.confirmReject')}
+                            </Button>
+                        </PopoverContent>
+                    </Popover>
+                </div>
             </div>
         );
     }
@@ -351,6 +357,11 @@ export function AgencyConnectionBrowser({
                         {activeFilterCount > 0 || appliedSearch
                             ? t('agency.browse.emptyFiltered')
                             : t('agency.browse.emptyNone')}
+                    </p>
+                    {/* The server leaves out agencies still activating (2026-10-18) —
+                        say so, or a vendor looking for one they know thinks it's gone. */}
+                    <p className="mx-auto mt-1 max-w-xs text-xs text-muted-foreground">
+                        {t('agency.browse.emptyActivatingNote')}
                     </p>
                     {(activeFilterCount > 0 || appliedSearch) && (
                         <button

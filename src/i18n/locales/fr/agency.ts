@@ -73,11 +73,11 @@ export const agency = {
     page: {
         currentDefault: 'Agence par défaut actuelle',
         noDefault:
-            'Aucune agence de livraison définie. Votre première connexion approuvée devient ' +
-            'automatiquement l’agence par défaut — les vendeurs de services peuvent laisser ce champ vide.',
+            'Aucune agence de livraison définie. Votre première connexion approuvée avec une agence ' +
+            'active devient automatiquement l’agence par défaut — les vendeurs de services peuvent laisser ce champ vide.',
         connectionsTitle: 'Vos connexions',
         connectionsHint:
-            'Votre première connexion active devient l’agence par défaut automatiquement — ' +
+            'Votre première connexion avec une agence active devient l’agence par défaut automatiquement — ' +
             'changez-la à tout moment avec « Définir par défaut » ci-dessous.',
         browseTitle: 'Rechercher une agence et demander une connexion',
     },
@@ -93,7 +93,8 @@ export const agency = {
         chipHistory: 'Historique',
         statusChip: 'Statut : {{value}}',
         applyLabel: 'Afficher les connexions',
-        unnamedAgency: 'Agence {{ref}}',
+        unnamedAgency: 'Agence',
+        termsUnavailable: 'Les conditions de cette agence ne peuvent pas être affichées pour le moment.',
 
         actions: {
             default: 'Par défaut',
@@ -106,6 +107,43 @@ export const agency = {
             approve: 'Approuver',
             reapprove: 'Réapprouver',
             requestAgain: 'Redemander',
+        },
+    },
+
+    /** L’état du compte de l’AGENCE sur une connexion (`counterpartyStatus`). */
+    counterparty: {
+        notActiveYet: 'Pas encore active',
+        inactive: 'Inactive',
+        approveWarning:
+            'Vous pouvez approuver, mais cette agence ne pourra pas livrer vos produits tant qu’elle n’aura pas terminé l’activation de son compte.',
+        noDefaultAfterApprove:
+            'Cette agence n’est pas encore active, elle n’a donc pas été choisie comme agence de livraison par défaut. ' +
+            'Choisissez une agence active par défaut pour pouvoir publier vos produits.',
+        chooseDefault: 'Choisir une agence par défaut',
+    },
+
+    /** `{{agency}}` vaut « (Nom) » précédé d’une espace, ou rien. */
+    publishBlocker: {
+        noDefault: 'Vous n’avez pas encore choisi d’agence de livraison par défaut.',
+        pendingDefault:
+            'Votre agence de livraison par défaut{{agency}} n’a pas encore terminé l’activation de son compte. ' +
+            'Vous pourrez publier dès que ce sera fait, ou choisir une autre agence.',
+        pendingProduct:
+            'L’agence de livraison de ce produit{{agency}} n’a pas encore terminé l’activation de son compte. ' +
+            'Vous pourrez publier dès que ce sera fait, ou choisir une autre agence.',
+        inactiveDefault: 'Votre agence de livraison par défaut{{agency}} n’est plus active. Choisissez une autre agence.',
+        inactiveProduct: 'L’agence de livraison de ce produit{{agency}} n’est plus active. Choisissez une autre agence.',
+        notFoundDefault: 'Votre agence de livraison par défaut{{agency}} n’existe plus. Choisissez une autre agence.',
+        notFoundProduct: 'L’agence de livraison de ce produit{{agency}} n’existe plus. Choisissez une autre agence.',
+        connectionDefault:
+            'Votre connexion avec votre agence de livraison par défaut n’est pas encore approuvée, ou doit être approuvée à nouveau.',
+        connectionProduct:
+            'Votre connexion avec l’agence de livraison de ce produit n’est pas encore approuvée, ou doit être approuvée à nouveau.',
+        actions: {
+            chooseDefault: 'Choisir une agence par défaut',
+            chooseAnother: 'Choisir une autre agence',
+            openConnection: 'Ouvrir la connexion',
+            chooseAgency: 'Choisir une agence de livraison',
         },
     },
 
@@ -140,6 +178,7 @@ export const agency = {
         applyLabel: 'Afficher les agences',
         emptyFiltered: 'Aucune agence ne correspond à votre recherche ou à vos filtres.',
         emptyNone: 'Aucune agence de livraison n’est encore disponible dans votre zone.',
+        emptyActivatingNote: 'Une agence apparaît ici dès que son compte est actif.',
         viewDetailsFor: 'Voir les détails de {{name}}',
         terms: 'Conditions',
         viewTerms: 'Voir les conditions',

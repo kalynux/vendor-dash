@@ -38,6 +38,13 @@ const PRIMARY_DEPOT = '__primary__';
 
 interface AgencySelectorProps {
   productId: string | null;
+  /**
+   * True on a create page, where there is no product yet: the choices are held
+   * by the page and sent with the create, so the pickers stay usable without a
+   * `productId`. Off by default — the wizard's review step passes a null id
+   * while the product is still being written, and must stay locked then.
+   */
+  deferred?: boolean;
   productAgencyId: string | null;
   isSaving: boolean;
   onAgencyChange: (agencyId: string | null) => void | Promise<void>;
@@ -72,6 +79,7 @@ interface AgencySelectorProps {
 
 export function AgencySelector({
   productId,
+  deferred = false,
   productAgencyId,
   isSaving,
   onAgencyChange,
@@ -92,6 +100,8 @@ export function AgencySelector({
     useState<VendorAgencyListItemDto | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  // Nothing to write to yet, and nothing held for a later write either.
+  const locked = !productId && !deferred;
 
   useEffect(() => {
     let cancelled = false;
@@ -257,7 +267,7 @@ export function AgencySelector({
   const vendorAddressMissing = pickup?.source === 'vendor_address' && !pickup.address;
 
   async function handleChange(value: string) {
-    if (!productId) return;
+    if (locked) return;
     try {
       if (value === 'default') {
         await onAgencyChange(null);
@@ -270,7 +280,7 @@ export function AgencySelector({
   }
 
   async function savePickupLocation(next: ApiPickupLocation) {
-    if (!productId) return;
+    if (locked) return;
     setPickupSaving(true);
     try {
       await onPickupLocationChange(next);
@@ -356,7 +366,7 @@ export function AgencySelector({
             <Select
               value={selectValue}
               onValueChange={handleChange}
-              disabled={isSaving || !productId}
+              disabled={isSaving || locked}
             >
               <SelectTrigger id={agencyFieldId} className="w-full" data-size="default">
                 <SelectValue placeholder={t('products.delivery.agencyPlaceholder')} />
@@ -412,7 +422,7 @@ export function AgencySelector({
               <Select
                 value={localSource}
                 onValueChange={handleSourceChange}
-                disabled={isSaving || pickupSaving || !productId}
+                disabled={isSaving || pickupSaving || locked}
               >
                 <SelectTrigger id={pickupFieldId} className="w-full" data-size="default">
                   <SelectValue placeholder={t('products.delivery.pickupPlaceholder')} />
@@ -466,7 +476,7 @@ export function AgencySelector({
                   <Select
                     value={localAddressId}
                     onValueChange={handleAddressChange}
-                    disabled={isSaving || pickupSaving || !productId}
+                    disabled={isSaving || pickupSaving || locked}
                   >
                     <SelectTrigger
                       className="w-full"
@@ -517,7 +527,7 @@ export function AgencySelector({
                       <Select
                         value={localDepotId}
                         onValueChange={handleDepotChange}
-                        disabled={isSaving || pickupSaving || !productId}
+                        disabled={isSaving || pickupSaving || locked}
                       >
                         <SelectTrigger
                           className="w-full"

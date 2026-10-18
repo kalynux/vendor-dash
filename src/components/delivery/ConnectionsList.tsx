@@ -1,10 +1,17 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Building2, FileText, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ReasonPopover } from '@/components/common/ReasonPopover';
 import { VerifiedBadge } from '@/components/common/VerifiedBadge';
 import { AgencyDetailSheet } from '@/components/delivery/AgencyDetailSheet';
+import {
+    CounterpartyLogo,
+    CounterpartyStatusBadge,
+    PendingAgencyApproveNote,
+} from '@/components/delivery/CounterpartyStatus';
+import { counterpartyName } from '@/components/delivery/counterparty';
 import {
     ActiveFilterChips,
     FilterChips,
@@ -15,7 +22,6 @@ import {
 import { cn } from '@/lib/utils';
 import { useAgencyConnectionActions } from '@/hooks/useAgencyConnectionActions';
 import { listAgencyConnections, resolveAgencyDisplayForConnections } from '@/services/agency-connections.service';
-import { fileRefUrl } from '@/services/files.service';
 import type { AgencyBrowseItemDto, ConnectionDto, ConnectionStatus } from '@/types/agency-connection.types';
 import { useApiError, useTranslation, type TranslationKey } from '@/i18n';
 
@@ -198,7 +204,6 @@ export function ConnectionsList({
     const { t } = useTranslation();
     const apiError = useApiError();
     const [connections, setConnections] = useState<ConnectionDto[]>([]);
-    const [agencyDisplay, setAgencyDisplay] = useState<Map<string, AgencyBrowseItemDto>>(new Map());
     const [isLoading, setIsLoading] = useState(true);
     const [loadError, setLoadError] = useState<string | null>(null);
     const [chip, setChip] = useState<StatusChip>('all');
@@ -206,6 +211,44 @@ export function ConnectionsList({
     const [filtersOpen, setFiltersOpen] = useState(false);
     /** The agency whose terms are open — same window the Browse tab opens. */
     const [termsAgency, setTermsAgency] = useState<AgencyBrowseItemDto | null>(null);
+    /** The connection whose terms are being looked up. */
+    const [termsLoadingId, setTermsLoadingId] = useState<string | null>(null);
+    // Terms found once stay found — the scan below is several requests.
+    const termsCache = useRef(new Map<string, AgencyBrowseItemDto>());
+
+    const nameOf = useCallback(
+        (connection: ConnectionDto) => counterpartyName(connection) ?? t('agency.connections.unnamedAgency'),
+        [t],
+    );
+
+    // A connection carries the agency's name and logo but not its terms, and
+    // there is no "one agency by id" endpoint — so the terms still come from
+    // the agency search. Only on tap, though: the rows no longer need it.
+    const openTerms = useCallback(
+        async (connection: ConnectionDto) => {
+            const cached = termsCache.current.get(connection.agencyId);
+            if (cached) {
+                setTermsAgency(cached);
+                return;
+            }
+            setTermsLoadingId(connection.id);
+            try {
+                const { resolved } = await resolveAgencyDisplayForConnections([connection]);
+                const agency = resolved.get(connection.agencyId);
+                if (agency) {
+                    termsCache.current.set(connection.agencyId, agency);
+                    setTermsAgency(agency);
+                } else {
+                    toast.error(t('agency.connections.termsUnavailable'));
+                }
+            } catch (err) {
+                toast.error(apiError.resolve(err, { fallbackKey: 'agency.connections.termsUnavailable' }));
+            } finally {
+                setTermsLoadingId(null);
+            }
+        },
+        [apiError, t],
+    );
 
     const actions = useAgencyConnectionActions({
         onChanged: (_agencyId, dto) => {
@@ -235,8 +278,6 @@ export function ConnectionsList({
                 page += 1;
             }
             setConnections(all);
-            const { resolved } = await resolveAgencyDisplayForConnections(all);
-            setAgencyDisplay(resolved);
         } catch (err) {
             setLoadError(apiError.resolve(err, { fallbackKey: 'agency.errors.loadConnectionsFailed' }));
         } finally {
@@ -253,7 +294,7 @@ export function ConnectionsList({
     const filtered = connections.filter((c) => {
         if (!matchesChip(c.status, chip)) return false;
         if (!query) return true;
-        return (agencyDisplay.get(c.agencyId)?.agencyName ?? '').toLowerCase().includes(query);
+        return (counterpartyName(c) ?? '').toLowerCase().includes(query);
     });
 
     const activeFilterCount = chip === 'all' ? 0 : 1;
@@ -315,8 +356,14 @@ export function ConnectionsList({
             ) : (
                 <div className="space-y-2">
                     {filtered.map((connection) => {
-                        const agency = agencyDisplay.get(connection.agencyId);
-                        const logoUrl = fileRefUrl(agency?.logo);
+                        const name = nameOf(connection);
+                        // Terms come from the agency search, which lists active
+                        // agencies only — so no button for one that isn't (and for
+                        // an older server that doesn't say, try and see).
+                        const hasTerms =
+                            connection.counterpartyStatus === 'active' ||
+                            connection.counterpartyStatus === undefined;
+                        const termsLoading = termsLoadingId === connection.id;
                         return (
                             <div
                                 key={connection.id}
@@ -326,25 +373,36 @@ export function ConnectionsList({
                                 className="flex flex-col gap-3 rounded-xl border border-border p-3 md:flex-row md:items-center md:justify-between"
                             >
                                 <div className="flex items-center gap-3 min-w-0">
-                                    <div className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center flex-shrink-0 overflow-hidden">
-                                        {logoUrl ? (
-                                            <img src={logoUrl} alt={agency?.agencyName} className="w-full h-full object-cover" />
-                                        ) : (
-                                            <Building2 className="w-4 h-4 text-muted-foreground" />
-                                        )}
-                                    </div>
+                                    <CounterpartyLogo connection={connection} name={name} />
                                     <div className="min-w-0">
                                         <p className="flex items-center gap-1 text-sm font-medium">
-                                            <span className="truncate">
-                                                {agency?.agencyName ?? t('agency.connections.unnamedAgency', { ref: connection.agencyId.slice(-6) })}
-                                            </span>
-                                            {agency?.kycVerified && <VerifiedBadge kind="agency" />}
+                                            <span className="truncate">{name}</span>
+                                            {connection.counterpartyProfile?.kycVerified && <VerifiedBadge kind="agency" />}
                                         </p>
-                                        <Badge variant="secondary" className={cn('text-[10px] mt-0.5', STATUS_BADGE_CLASS[connection.status])}>
-                                            {isClosedByAgency(connection)
-                                                ? t('agency.status.agencyClosed')
-                                                : t(STATUS_LABEL_KEYS[connection.status])}
-                                        </Badge>
+                                        <div className="mt-0.5 flex flex-wrap items-center gap-1">
+                                            <Badge variant="secondary" className={cn('text-[10px]', STATUS_BADGE_CLASS[connection.status])}>
+                                                {isClosedByAgency(connection)
+                                                    ? t('agency.status.agencyClosed')
+                                                    : t(STATUS_LABEL_KEYS[connection.status])}
+                                            </Badge>
+                                            {/* The agency's own account, not the connection's.
+                                                A closed agency already says so above. */}
+                                            {!isClosedByAgency(connection) && (
+                                                <CounterpartyStatusBadge
+                                                    status={connection.counterpartyStatus}
+                                                    className="text-[10px]"
+                                                />
+                                            )}
+                                        </div>
+                                        {/* Sits just above the buttons on a phone and just
+                                            left of them on a wide screen — next to Approve
+                                            either way. */}
+                                        {connection.status === 'pending' && connection.requesterRole === 'agency' && (
+                                            <PendingAgencyApproveNote
+                                                status={connection.counterpartyStatus}
+                                                className="mt-1.5"
+                                            />
+                                        )}
                                     </div>
                                 </div>
                                 {/* Actions, then the terms button last — the same place it
@@ -358,17 +416,22 @@ export function ConnectionsList({
                                         settingDefault={settingDefaultAgencyId === connection.agencyId}
                                         onSetDefault={onSetDefault}
                                     />
-                                    {agency && (
+                                    {hasTerms && (
                                         <Button
                                             type="button"
                                             variant="ghost"
                                             size="sm"
                                             className="gap-1.5 text-muted-foreground hover:text-foreground md:w-9 md:px-0"
-                                            onClick={() => setTermsAgency(agency)}
-                                            aria-label={t('agency.browse.viewTermsFor', { name: agency.agencyName })}
+                                            disabled={termsLoading}
+                                            onClick={() => void openTerms(connection)}
+                                            aria-label={t('agency.browse.viewTermsFor', { name })}
                                             title={t('agency.browse.viewTerms')}
                                         >
-                                            <FileText className="h-4 w-4" />
+                                            {termsLoading ? (
+                                                <Loader2 className="h-4 w-4 animate-spin" />
+                                            ) : (
+                                                <FileText className="h-4 w-4" />
+                                            )}
                                             <span className="md:sr-only">{t('agency.browse.terms')}</span>
                                         </Button>
                                     )}

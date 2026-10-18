@@ -193,6 +193,10 @@ export const errors = {
                 'This product is not eligible for AI search indexing. It must be active, have indexing enabled, and have a title, description and category.',
             CONNECTION_NOT_ACTIVE:
                 'You need an active, approved connection with this agency before you can assign it. Send or check your connection request first.',
+            // Choosing a pickup place while no agency applies — the one refusal of
+            // this code that never says which agency problem it is.
+            CATALOG_PRODUCT_NO_DELIVERY_AGENCY:
+                'Set a delivery agency first, then choose where it picks the product up.',
         },
 
         /**

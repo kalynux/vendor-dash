@@ -625,8 +625,7 @@ export const products = {
         readOnlyPendingReview:
             'Ce produit attend une validation et reste en lecture seule jusqu’à la fin de la modération.',
         imageNotYours: 'L’une de ces images ne vous appartient pas.',
-        saveDraftInstead: 'Enregistrer en brouillon à la place',
-        nothingToSave: 'Rien à enregistrer.',
+        upToDate: 'Votre produit est à jour.',
         aiSearchTitle: 'Recherche IA',
         aiSearchDescription:
             'Indexez ce produit pour que les clients le trouvent via la recherche IA. S’applique une fois le produit actif et complet.',
@@ -722,6 +721,7 @@ export const products = {
         agencyDescription:
             'L’agence qui traitera les commandes de ce produit. Seules les agences avec une connexion active peuvent être attribuées.',
         agencyPlaceholder: 'Sélectionnez une agence',
+        thisProduct: 'ce produit',
         agencyDefaultNamed: 'Utiliser mon agence par défaut — {{name}}',
         loadingAgencies: 'Chargement des agences…',
         loadAgenciesFailed: 'Impossible de charger les agences de livraison.',

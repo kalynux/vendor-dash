@@ -122,6 +122,8 @@ export const errors = {
                 "Ce produit n'est pas éligible à l'indexation pour la recherche IA. Il doit être actif, avoir l'indexation activée, et disposer d'un titre, d'une description et d'une catégorie.",
             CONNECTION_NOT_ACTIVE:
                 "Vous avez besoin d'une connexion active et approuvée avec cette agence avant de pouvoir l'assigner. Envoyez ou vérifiez d'abord votre demande de connexion.",
+            CATALOG_PRODUCT_NO_DELIVERY_AGENCY:
+                "Choisissez d'abord une agence de livraison, puis l'endroit où elle récupère le produit.",
         },
 
         stockRequest: {

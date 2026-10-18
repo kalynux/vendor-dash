@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { AlertCircle, Eye, Wand2, Copy } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -26,6 +26,7 @@ import { ActivationBlockersPanel } from '@/components/products/simple/Activation
 import { ConvertToAdvancedDialog } from '@/components/products/simple/ConvertToAdvancedDialog';
 import { projectSimpleError } from '@/components/products/simple/simpleFormErrors';
 import { useCategoryConflicts } from '@/components/products/categories/useCategoryConflicts';
+import { useAgencyBlockerToast } from '@/components/products/useAgencyBlockerToast';
 import { fromProductCategories, toCategoryWire } from '@/services/categories.service';
 import type { CategoryEntry } from '@/types/category.types';
 import {
@@ -67,6 +68,7 @@ import type { StockRequestDto } from '@/types/stock-requests.types';
 export function SimpleProductEdit() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const openPreview = useOpenPreview();
 
   const { t } = useTranslation();
@@ -79,7 +81,11 @@ export function SimpleProductEdit() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<SimpleFieldErrors | undefined>();
-  const [activation, setActivation] = useState<SimpleActivationMeta | null>(null);
+  // Seeded by the create page when Publish could not go through: the product
+  // was saved as a draft, and the vendor lands here with the to-do list on top.
+  const [activation, setActivation] = useState<SimpleActivationMeta | null>(
+    () => (location.state as { activation?: SimpleActivationMeta } | null)?.activation ?? null,
+  );
   const [demoted, setDemoted] = useState(false);
   const { run: runCategorySave, dialog: categoryConflictDialog } = useCategoryConflicts();
   const [resolvedCategories, setResolvedCategories] = useState<CategoryEntry[] | null>(null);
@@ -109,6 +115,14 @@ export function SimpleProductEdit() {
   const initialValuesRef = useRef<SimpleProductFormValues | null>(null);
 
   const goToList = useCallback(() => navigate('/dashboard/products'), [navigate]);
+
+  // Where "Choose another agency" lands when the blocked agency is this
+  // product's own one rather than the shop's default.
+  const deliverySectionRef = useRef<HTMLElement>(null);
+  const showProductAgency = useCallback(() => {
+    deliverySectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, []);
+  const showAgencyBlocker = useAgencyBlockerToast();
 
   // ─── Load ───────────────────────────────────────────────────────────────────
 
@@ -339,7 +353,7 @@ export function SimpleProductEdit() {
       const aiSearchChanged = aiSearchOn !== (product.vectorisationEnabled ?? false);
 
       if (!hasContentWrite && !aiSearchChanged) {
-        toast.info(t('products.simple.nothingToSave'));
+        toast.info(t('products.simple.upToDate'));
         return;
       }
 
@@ -470,10 +484,13 @@ export function SimpleProductEdit() {
           }),
         );
       } catch (err: unknown) {
-        toast.error(getSimpleProductErrorMessage(err));
+        // A refused Publish over the delivery agency names the problem and its fix.
+        if (!showAgencyBlocker(err, product, showProductAgency)) {
+          toast.error(getSimpleProductErrorMessage(err));
+        }
       }
     },
-    [product],
+    [product, showAgencyBlocker, showProductAgency],
   );
 
   const handleDuplicate = useCallback(async () => {
@@ -609,6 +626,7 @@ export function SimpleProductEdit() {
                 onRetryPublish={handleRetryPublish}
                 onPickupLocationChosen={handlePickupLocationChosen}
                 onDone={goToList}
+                onShowProductAgency={showProductAgency}
               />
             </div>
           )}
@@ -648,7 +666,11 @@ export function SimpleProductEdit() {
             >
               {/* Sections, not loose markup: these land as direct children of the
                   form's section stack, which draws the separators between them. */}
-              <SettingsSection title={t('products.delivery.title')} contentClassName="space-y-6">
+              <SettingsSection
+                ref={deliverySectionRef}
+                title={t('products.delivery.title')}
+                contentClassName="space-y-6"
+              >
                 <AgencySelector
                   productId={product.id}
                   productAgencyId={product.delivery?.agencyId ?? null}

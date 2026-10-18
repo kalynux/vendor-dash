@@ -633,8 +633,8 @@ export const products = {
             one: 'Resolve {{count}} issue to publish.',
             other: 'Resolve {{count}} issues to publish.',
         }),
-        // A blocker whose code this app has no copy for. The English original is
-        // deliberately not shown in its place.
+        // A blocker whose code this app has no copy for AND that arrived without
+        // a message — otherwise the server's own (English) message is shown.
         unknown: 'Something else still needs fixing before this product can go live.',
         done: 'Done, back to products',
         retryPublish: 'Try publishing again',
@@ -690,8 +690,8 @@ export const products = {
         readOnlyArchived: 'Archived products are read-only. Restore it to draft to make changes.',
         readOnlyPendingReview: 'This product is awaiting review and is read-only until moderation completes.',
         imageNotYours: 'One of these images is not yours.',
-        saveDraftInstead: 'Save as draft instead',
-        nothingToSave: 'Nothing to save.',
+        /** Save pressed with no changes. */
+        upToDate: 'Your product is up to date.',
         aiSearchTitle: 'AI search',
         aiSearchDescription:
             'Index this product so customers can find it through AI search. Applies once the product is active and complete.',
@@ -798,6 +798,8 @@ export const products = {
         agencyDescription:
             'The agency that will fulfill orders for this product. Only agencies with an active connection can be assigned.',
         agencyPlaceholder: 'Select an agency',
+        /** Stands in for a SKU in the agency-storage sentences before the product exists. */
+        thisProduct: 'this product',
         agencyDefaultNamed: 'Use my default — {{name}}',
         loadingAgencies: 'Loading agencies…',
         loadAgenciesFailed: 'Could not load delivery agencies.',

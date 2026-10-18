@@ -1,6 +1,7 @@
 // Agency Connections — contract-based vendor↔agency delivery relationship.
 // See api-doc/vendor/agency-connections.md.
 
+import type { FileRef } from '@/types/file.types';
 import type { VendorAgencyListItemDto } from '@/types/product.types';
 
 export type ConnectionStatus =
@@ -52,8 +53,35 @@ export interface ConnectionDto {
   rejection: ConnectionRejectionInfo | null;
   withdrawal: ConnectionWithdrawalInfo | null;
   termination: ConnectionTerminationInfo | null;
+  /**
+   * 2026-10-18: the AGENCY's own account status (not the connection's).
+   * `pending_verification` = it has not finished activating: approving is
+   * still allowed, but it cannot carry physical products and never becomes
+   * the default automatically. `null` = the agency record no longer exists.
+   * Optional only because a backend build before that date omits it — treat
+   * `undefined` as "unknown" and show nothing.
+   */
+  counterpartyStatus?: CounterpartyStatus | null;
+  /**
+   * 2026-10-18: the agency's display fields — name the row from THIS, never
+   * from `/browse` or `/delivery-agencies` (both list `active` agencies only,
+   * so a row for one still activating would go nameless). `null` = the agency
+   * record no longer exists; optional for the same reason as above.
+   */
+  counterpartyProfile?: CounterpartyProfile | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export type CounterpartyStatus = 'active' | 'pending_verification' | 'inactive';
+
+export interface CounterpartyProfile {
+  /** The agency's Magazin name — `''` when it has no Magazin yet. */
+  businessName: string;
+  displayName: string | null;
+  /** The Magazin logo. */
+  logo: FileRef | null;
+  kycVerified: boolean;
 }
 
 /** Thin connection annotation nested on each `GET .../browse` agency result. */

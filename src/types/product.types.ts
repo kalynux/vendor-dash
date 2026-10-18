@@ -557,6 +557,12 @@ export interface SimpleProductUpdatePayload {
 export interface ActivationBlocker {
   code: string;
   message: string;
+  /**
+   * Per-code extras. Since 2026-10-18 `CATALOG_PRODUCT_NO_DELIVERY_AGENCY`
+   * carries `{ reason, scope, agencyId?, agencyName? }` — read it with
+   * `readAgencyBlockerDetails` (`@/lib/agencyBlocker`), never the message.
+   */
+  details?: Record<string, unknown>;
 }
 
 /** Why the backend did (or did not) persist a pickup location. */

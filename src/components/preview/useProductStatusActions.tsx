@@ -11,7 +11,8 @@ import {
 import { ApiError } from '@/types/api';
 import { STATUS_INTENT_ICON } from '@/components/products/statusIntentIcons';
 import { useApiError, useTranslation, type TranslationKey } from '@/i18n';
-import type { ApiProductStatus } from '@/types/product.types';
+import type { ApiProductStatus, ProductMode } from '@/types/product.types';
+import { useAgencyBlockerToast } from '@/components/products/useAgencyBlockerToast';
 import type { PreviewAction } from './PreviewBanner';
 import {
   StatusTransitionDialog,
@@ -52,6 +53,8 @@ const STATUS_LABEL_KEYS: Record<ApiProductStatus, TranslationKey> = {
 interface ProductStatusActionsOptions {
   productId: string;
   productTitle: string;
+  /** Picks the editor the "choose another agency" button opens. */
+  productMode?: ProductMode;
   status: ApiProductStatus;
   /** Called after the status actually changed, so the caller can refetch. */
   onChanged: () => void;
@@ -62,12 +65,14 @@ interface ProductStatusActionsOptions {
 export function useProductStatusActions({
   productId,
   productTitle,
+  productMode,
   status,
   onChanged,
   primaryIntent,
 }: ProductStatusActionsOptions): { actions: PreviewAction[]; dialog: ReactNode } {
   const { t } = useTranslation();
   const apiError = useApiError();
+  const showAgencyBlocker = useAgencyBlockerToast();
   const [pending, setPending] = useState<PendingStatusTransition | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -106,17 +111,20 @@ export function useProductStatusActions({
     } catch (err) {
       // Activation failures carry their own codes with actionable copy; only
       // fall back to the generic resolver when the code is not one of them.
-      const activationKey = err instanceof ApiError ? ACTIVATION_ERROR_KEYS[err.code] : undefined;
-      toast.error(
-        activationKey
-          ? t(activationKey)
-          : apiError.resolve(err, { fallbackKey: 'products.errors.statusChangeFailed' }),
-      );
+      // The delivery agency one also says which agency problem, with its fix.
+      if (!showAgencyBlocker(err, { id: productId, mode: productMode })) {
+        const activationKey = err instanceof ApiError ? ACTIVATION_ERROR_KEYS[err.code] : undefined;
+        toast.error(
+          activationKey
+            ? t(activationKey)
+            : apiError.resolve(err, { fallbackKey: 'products.errors.statusChangeFailed' }),
+        );
+      }
       setPending(null);
     } finally {
       setBusy(false);
     }
-  }, [pending, productId, productTitle, onChanged, t, apiError]);
+  }, [pending, productId, productTitle, productMode, onChanged, t, apiError, showAgencyBlocker]);
 
   const actions: PreviewAction[] = (STATUS_TRANSITIONS[status] ?? []).map((transition) => ({
     id: `status-${transition.intent}`,

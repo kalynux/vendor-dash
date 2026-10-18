@@ -81,12 +81,12 @@ export const agency = {
     page: {
         currentDefault: 'Current default',
         noDefault:
-            'No delivery agency set. Your first approved connection automatically becomes your ' +
-            'default — service-only vendors can leave this empty.',
+            'No delivery agency set. Your first approved connection with an active agency ' +
+            'becomes your default automatically — service-only vendors can leave this empty.',
         connectionsTitle: 'Your connections',
         connectionsHint:
-            'Your first active connection becomes the default automatically — switch it at any ' +
-            'time with "Set as default" below.',
+            'Your first connection with an active agency becomes the default automatically — ' +
+            'switch it at any time with "Set as default" below.',
         browseTitle: 'Search agencies & request a connection',
     },
 
@@ -101,8 +101,10 @@ export const agency = {
         chipHistory: 'History',
         statusChip: 'Status: {{value}}',
         applyLabel: 'Show connections',
-        /** Falls back to the last 6 characters of the id when the name is unknown. */
-        unnamedAgency: 'Agency {{ref}}',
+        /** A connection whose agency has neither a shop name nor a display name. */
+        unnamedAgency: 'Agency',
+        /** The Terms button found nothing — only active agencies are searchable. */
+        termsUnavailable: "This agency's terms can't be shown right now.",
 
         actions: {
             default: 'Default',
@@ -115,6 +117,46 @@ export const agency = {
             approve: 'Approve',
             reapprove: 'Reapprove',
             requestAgain: 'Request again',
+        },
+    },
+
+    /** The AGENCY's own account state on a connection (`counterpartyStatus`). */
+    counterparty: {
+        notActiveYet: 'Not active yet',
+        inactive: 'Inactive',
+        approveWarning:
+            "You can approve, but this agency can't deliver your products until it finishes activating its account.",
+        noDefaultAfterApprove:
+            "This agency isn't active yet, so it wasn't made your default delivery agency. " +
+            'Choose an active agency as your default so your products can be published.',
+        chooseDefault: 'Choose a default agency',
+    },
+
+    /**
+     * The publish checklist's delivery agency line, one per `details.reason`.
+     * `{{agency}}` is " (Name)" or empty, so each sentence reads either way.
+     */
+    publishBlocker: {
+        noDefault: "You haven't chosen a default delivery agency yet.",
+        pendingDefault:
+            "Your default delivery agency{{agency}} hasn't finished activating its account yet. " +
+            'You can publish once it does, or choose another agency.',
+        pendingProduct:
+            "This product's delivery agency{{agency}} hasn't finished activating its account yet. " +
+            'You can publish once it does, or choose another agency.',
+        inactiveDefault: 'Your default delivery agency{{agency}} is no longer active. Choose another agency.',
+        inactiveProduct: "This product's delivery agency{{agency}} is no longer active. Choose another agency.",
+        notFoundDefault: 'Your default delivery agency{{agency}} no longer exists. Choose another agency.',
+        notFoundProduct: "This product's delivery agency{{agency}} no longer exists. Choose another agency.",
+        connectionDefault:
+            "Your connection with your default delivery agency isn't approved yet, or needs approving again.",
+        connectionProduct:
+            "Your connection with this product's delivery agency isn't approved yet, or needs approving again.",
+        actions: {
+            chooseDefault: 'Choose a default agency',
+            chooseAnother: 'Choose another agency',
+            openConnection: 'Open the connection',
+            chooseAgency: 'Choose a delivery agency',
         },
     },
 
@@ -150,6 +192,8 @@ export const agency = {
         applyLabel: 'Show agencies',
         emptyFiltered: 'No agencies match your search or filters.',
         emptyNone: 'No delivery agencies are available in your area yet.',
+        /** Under both empty states: the list leaves out agencies still activating. */
+        emptyActivatingNote: 'An agency appears here once its account is active.',
         viewDetailsFor: 'View details for {{name}}',
         /** The document button on agency cards and connection rows — opens the agency's terms. */
         terms: 'Terms',

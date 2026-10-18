@@ -419,6 +419,11 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
                     version: currentVersion,
                 });
                 const nextVersion = res.data?.version ?? currentVersion + 1;
+                // Since 2026-10-18 the save itself can activate the account (verified
+                // phone + a display name), and the response's `status` already says
+                // so. Taken from the response, unlike the fields below — it is not
+                // something we sent.
+                const nextStatus = typeof res.data?.status === 'string' ? res.data.status : undefined;
                 // Addresses are the exception to "apply what we sent": a new
                 // one only gets its id from the server, and the product pickup
                 // pickers skip any address without one.
@@ -449,6 +454,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
                             ...(writePatch.policies !== undefined ? { policies: writePatch.policies } : {}),
                             ...(writePatch.displayName !== undefined ? { display_name: writePatch.displayName } : {}),
                             ...(writePatch.phone !== undefined ? { phone: writePatch.phone } : {}),
+                            ...(nextStatus !== undefined ? { status: nextStatus } : {}),
                             version: nextVersion,
                         },
                     };

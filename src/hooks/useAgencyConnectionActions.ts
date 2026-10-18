@@ -1,5 +1,9 @@
 import { useCallback, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
+import { useTranslation } from '@/i18n';
+import { DEFAULT_AGENCY_SETTING_PATH } from '@/lib/agencyBlocker';
+import { fetchDefaultDeliveryAgency } from '@/services/agencies.service';
 import {
     approveAgencyConnection,
     getAgencyConnectionErrorMessage,
@@ -21,6 +25,9 @@ export interface UseAgencyConnectionActionsOptions {
  * browser and the Settings connections list so the flow isn't duplicated.
  */
 export function useAgencyConnectionActions({ onChanged }: UseAgencyConnectionActionsOptions = {}) {
+    const { t } = useTranslation();
+    const navigate = useNavigate();
+    const location = useLocation();
     const [pendingKey, setPendingKey] = useState<string | null>(null);
 
     const run = useCallback(
@@ -52,10 +59,49 @@ export function useAgencyConnectionActions({ onChanged }: UseAgencyConnectionAct
         [run],
     );
 
+    // Since 2026-10-18 the first approval becomes the default only when the agency
+    // is `active`. Approving one that isn't leaves the vendor with no default —
+    // every physical product then stays a draft — so say so and point at the
+    // setting. Only asked when the agency isn't active: the usual first approval
+    // still fills the default by itself.
+    const promptForDefaultIfMissing = useCallback(
+        async (dto: ConnectionDto) => {
+            if (dto.status !== 'active') return;
+            if (!dto.counterpartyStatus || dto.counterpartyStatus === 'active') return;
+            try {
+                if (await fetchDefaultDeliveryAgency()) return;
+            } catch {
+                return; // best-effort — the publish checklist says it too
+            }
+            const onConnectionsTab = location.pathname === DEFAULT_AGENCY_SETTING_PATH;
+            toast.info(t('agency.counterparty.noDefaultAfterApprove'), {
+                duration: 10000,
+                // Already on the tab that holds "Set as default": the sentence is enough.
+                ...(onConnectionsTab
+                    ? {}
+                    : {
+                          action: {
+                              label: t('agency.counterparty.chooseDefault'),
+                              onClick: () => navigate(DEFAULT_AGENCY_SETTING_PATH),
+                          },
+                      }),
+            });
+        },
+        [location.pathname, navigate, t],
+    );
+
     const approve = useCallback(
-        (agencyId: string, connectionId: string) =>
-            run(`approve:${connectionId}`, agencyId, () => approveAgencyConnection(connectionId), 'Connection approved.'),
-        [run],
+        async (agencyId: string, connectionId: string) => {
+            const dto = await run(
+                `approve:${connectionId}`,
+                agencyId,
+                () => approveAgencyConnection(connectionId),
+                'Connection approved.',
+            );
+            if (dto) void promptForDefaultIfMissing(dto);
+            return dto;
+        },
+        [run, promptForDefaultIfMissing],
     );
 
     const reject = useCallback(

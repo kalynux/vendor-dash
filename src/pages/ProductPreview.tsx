@@ -162,6 +162,7 @@ export function ProductPreview() {
   const status = useProductStatusActions({
     productId: product?.id ?? '',
     productTitle: product?.title ?? '',
+    productMode: product?.mode,
     status: product?.status ?? 'draft',
     // Publishing is why a vendor opens a preview of something unpublished, so
     // it is the one transition that gets a button of its own.

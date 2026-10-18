@@ -119,9 +119,12 @@ export async function terminateAgencyConnection(id: string, note?: string): Prom
 }
 
 // ─── Cross-reference helpers ────────────────────────────────────────────────────
-// `ConnectionDto` only carries `agencyId` — never a display name/logo — and there is
-// no "fetch agencies by id" endpoint. To show a connected agency's details, we cross
-// reference the authoritative connection list against the paginated browse listing.
+// Since 2026-10-18 a `ConnectionDto` names its agency itself (`counterpartyProfile`:
+// name, logo, KYC) — name a connection row from that, NOT from here: the browse
+// listing holds `active` agencies only, so a row for one still activating would go
+// nameless. What a connection still lacks is the agency's full listing (policies,
+// pickup/storage, HQ), and there is no "fetch agencies by id" endpoint — so for that
+// we cross reference the connection list against the paginated browse listing.
 
 const DEFAULT_MAX_BROWSE_PAGES = 6; // ~300 agencies scanned at the browse endpoint's max page size (50)
 const BROWSE_PAGE_LIMIT = 50;
