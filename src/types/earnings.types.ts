@@ -108,7 +108,107 @@ export interface PayoutRequest {
   resolvedAt?: string | null;
 }
 
+// ─── Why money was taken back (2026-10-22) ─────────────────────────────────────
+// Mirrors api-doc/vendor/earnings.md § "Why money was taken back" and
+// api-doc/admin/agency-claims.md (the party shape).
+
+/**
+ * `refund_clawback` took money from you · `clawback_recovery` new earnings paid
+ * off a refund debt · `write_off` Wi-Mall forgave a debt. Typed `string` on the
+ * row: the wire can carry a kind this build does not know.
+ */
+export type EarningsAdjustmentKind = 'refund_clawback' | 'clawback_recovery' | 'write_off';
+
+/**
+ * The closed vocabulary of the server's `adjustment-explanations.ts`. `null` on
+ * rows written before 2026-10-22 — and on every `clawback_recovery` row, which
+ * the server writes without one.
+ */
+export type AdjustmentReasonCode =
+  | 'refund_share'
+  | 'refund_beyond_share'
+  | 'refund_delivery_fault'
+  | 'dispute_share'
+  | 'dispute_payin_fee'
+  | 'damage_claim';
+
+export interface EarningsTakenFrom {
+  pending: number;
+  reserve: number;
+  available: number;
+  /**
+   * ⛔ Means "now owed" ONLY on a `refund_clawback` row. A `clawback_recovery`
+   * row also fills it — there it is the debt that was paid OFF.
+   */
+  debt: number;
+}
+
+export interface EarningsAdjustment {
+  id: string;
+  kind: EarningsAdjustmentKind | (string & {});
+  amount: number;
+  currency: string;
+  takenFrom: EarningsTakenFrom;
+  /** The part of `amount` that is fees (seller-cancel fees, a lost dispute's payment fee). */
+  feeAmount: number;
+  reasonCode: AdjustmentReasonCode | (string & {}) | null;
+  /** The numbers and dates the sentence uses — see `adjustmentSentence`. */
+  reasonParams: Record<string, unknown> | null;
+  /** The server's English sentence. Shown only when this build cannot word the row itself. */
+  explanation: string;
+  refundRequestId: string | null;
+  agencyClaimId: string | null;
+  sourceType: string | null;
+  sourceId: string | null;
+  createdAt: string;
+}
+
+/**
+ * A damage claim an administrator charged an agency for one of your parcels;
+ * `amount` is credited to you. ⚠ Its `explanation` is worded for the AGENCY
+ * ("your investigation fee…was charged") — never show it to the vendor.
+ */
+export interface VendorAgencyClaim {
+  id: string;
+  kind: 'damage' | (string & {});
+  shipmentId: string;
+  orderId: string;
+  orderNumber: string | null;
+  trackingNumber: string | null;
+  itemCount: number;
+  maxPerItem: number;
+  cap: number;
+  amount: number;
+  investigationFee: number;
+  currency: string;
+  deliveredAt: string;
+  raisedAt: string;
+  windowDays: number;
+  reasonCode: string;
+  reasonParams: Record<string, unknown>;
+  explanation: string;
+  createdAt: string;
+}
+
+export interface EarningsPageMeta {
+  total: number;
+  page: number;
+  limit: number;
+  pages: number;
+}
+
+export interface EarningsPage<T> {
+  items: T[];
+  meta: EarningsPageMeta;
+}
+
 // ─── Response envelopes ────────────────────────────────────────────────────────
+
+export interface EarningsListResponse<T> {
+  success: boolean;
+  data: T[];
+  meta: EarningsPageMeta;
+}
 
 export interface EarningsResponse {
   success: boolean;

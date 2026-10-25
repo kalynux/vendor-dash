@@ -72,6 +72,23 @@ const UNAVAILABLE: Partial<Record<ApiProductStatus, { notice: TranslationKey; he
   },
 };
 
+// A service is a product with `type: "service"` and shares this page; only the
+// wording differs. `suspended` keeps the product text.
+const SERVICE_UNAVAILABLE: Partial<Record<ApiProductStatus, { notice: TranslationKey; help: TranslationKey }>> = {
+  draft: {
+    notice: 'services.preview.unavailable.draft',
+    help: 'services.preview.unavailable.helpDraft',
+  },
+  pending_review: {
+    notice: 'services.preview.unavailable.pendingReview',
+    help: 'services.preview.unavailable.helpPendingReview',
+  },
+  archived: {
+    notice: 'services.preview.unavailable.archived',
+    help: 'services.preview.unavailable.helpArchived',
+  },
+};
+
 const STATUS_LABEL_KEYS: Record<ApiProductStatus, TranslationKey> = {
   active: 'products.status.active',
   draft: 'products.status.draft',
@@ -114,6 +131,8 @@ export function ProductPreview() {
   }, [load]);
 
   const isLive = product?.status === 'active';
+  // `ApiProductType` predates services; the server sends `"service"` for them.
+  const isService = (product?.type as string | undefined) === 'service';
 
   /**
    * The customer address, or `null` when there is no page behind it.
@@ -140,23 +159,26 @@ export function ProductPreview() {
 
   // Back to whichever surface opened this preview — either editor, the products
   // list, or the products list for a vendor who deep-linked straight in.
-  const goBack = usePreviewBack('/dashboard/products');
+  const listPath = isService ? '/dashboard/services' : '/dashboard/products';
+  const goBack = usePreviewBack(listPath);
 
   const edit = useCallback(() => {
     if (!product) return;
     navigate(
-      product.mode === 'simple'
-        ? `/dashboard/product-edit/${product.id}/simple`
-        : `/dashboard/product-edit/${product.id}`,
+      isService
+        ? `/dashboard/service-edit/${product.id}`
+        : product.mode === 'simple'
+          ? `/dashboard/product-edit/${product.id}/simple`
+          : `/dashboard/product-edit/${product.id}`,
     );
-  }, [navigate, product]);
+  }, [navigate, product, isService]);
 
   // Both are hooks, so they run before the early returns below — with nothing
   // loaded they produce a link nobody can press and an empty transition list,
   // neither of which is ever rendered.
   const linkActions = usePreviewLinkActions({
     url: publicUrl,
-    unavailableReason: t('products.preview.linkUnavailable'),
+    unavailableReason: t(isService ? 'services.preview.linkUnavailable' : 'products.preview.linkUnavailable'),
   });
 
   const status = useProductStatusActions({
@@ -169,7 +191,7 @@ export function ProductPreview() {
     primaryIntent: product?.status === 'active' ? undefined : 'activate',
     onChanged: refresh,
     // Replace, so Back does not return to a page for a product that is gone.
-    onDeleted: () => navigate('/dashboard/products', { replace: true }),
+    onDeleted: () => navigate(listPath, { replace: true }),
   });
 
   if (loading && !product) {
@@ -196,13 +218,15 @@ export function ProductPreview() {
   // `suspended` is the one status whose "why" is not knowable from the status
   // alone: the reason decides both the explanation and whether the vendor can do
   // anything about it. Everything else keeps its single per-status help text.
-  const unavailable = UNAVAILABLE[product.status]
+  const unavailableCopy =
+    (isService ? SERVICE_UNAVAILABLE[product.status] : undefined) ?? UNAVAILABLE[product.status];
+  const unavailable = unavailableCopy
     ? {
-        ...UNAVAILABLE[product.status]!,
+        ...unavailableCopy,
         help:
           product.status === 'suspended'
             ? suspensionNoticeKey(product.suspension, 'products.preview.unavailable.helpSuspended')
-            : UNAVAILABLE[product.status]!.help,
+            : unavailableCopy.help,
       }
     : undefined;
 
@@ -260,6 +284,7 @@ export function ProductPreview() {
       <ShareProductDialog
         productId={shareOpen ? product.id : null}
         onOpenChange={(open) => setShareOpen(open)}
+        title={isService ? t('services.share.title') : undefined}
       />
 
       {/* The confirmation behind the status actions above. It belongs to the

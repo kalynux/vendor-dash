@@ -67,9 +67,12 @@ import {
   requiresOtpStep,
   unavailableProviderOffered,
   saveStripeResume,
+  readStripeResume,
   clearStripeResume,
   type StripeResumeKind,
 } from './billing.constants';
+import { isNative } from '@/platform/env';
+import { cardReturnUrl } from '@/platform/purchases';
 
 type Phase = 'form' | 'card' | 'otp' | 'processing' | 'success' | 'failed' | 'timeout';
 
@@ -307,13 +310,22 @@ export function PaymentDialog({
     pollDeadline.current = Date.now() + PAYMENT_POLL_TIMEOUT_MS;
     stopPolling();
     pollTimer.current = setInterval(async () => {
-      if (Date.now() > pollDeadline.current) {
+      // Ask once more before giving up: in the app, timers stall while the
+      // vendor is in the system browser at their bank, so the first tick after
+      // they come back is often already past the deadline — with the answer.
+      const pastDeadline = Date.now() > pollDeadline.current;
+      const giveUp = () => {
+        if (!pastDeadline) return;
         stopPolling();
         setPhase('timeout');
-        return;
-      }
+      };
       try {
         const { status } = await verify(id);
+        if (status === 'paid' || status === 'failed' || status === 'reversed') {
+          // Settled here, so the billing tab's resume check has nothing left to
+          // do for this payment (it would toast it a second time).
+          if (readStripeResume()?.id === id) clearStripeResume();
+        }
         if (status === 'paid') {
           stopPolling();
           setPhase('success');
@@ -322,10 +334,13 @@ export function PaymentDialog({
         } else if (status === 'failed' || status === 'reversed') {
           stopPolling();
           setPhase('failed');
+        } else {
+          // still pending → keep polling, unless time is up
+          giveUp();
         }
-        // still pending → keep polling
       } catch {
         // transient verify error (e.g. not yet registered at gateway) — keep polling
+        giveUp();
       }
     }, PAYMENT_POLL_INTERVAL_MS);
   }
@@ -602,10 +617,19 @@ export function PaymentDialog({
     saveStripeResume(paymentKind, stripeInit.id);
 
     try {
-      const returnUrl = window.location.href;
-      const outcome = await cardRef.current!.confirm(returnUrl);
+      const outcome = await cardRef.current!.confirm(cardReturnUrl());
 
       if (outcome.status === 'redirecting') {
+        if (isNative) {
+          // The bank page opened in the system browser and this WebView stayed
+          // put, so nothing will reload it — poll from here instead. The marker
+          // stays as a fallback in case the vendor closes this dialog meanwhile.
+          setInstructionMsg(t('billing.checkout.redirectPrompt'));
+          setPhase('processing');
+          setSubmitting(false);
+          startPolling(stripeInit.id);
+          return;
+        }
         // Stripe is navigating to the bank — leave the marker, the page will unload.
         setInstructionMsg(t('billing.checkout.redirectingToBank'));
         return;

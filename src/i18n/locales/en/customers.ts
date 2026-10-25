@@ -160,13 +160,13 @@ export const customers = {
         how: {
             autoSend: 'Sent straight away',
             needsApproval: 'Needs approval by Wi-Mall',
-            card: 'It goes back to the customer’s card in full, with no fee.',
-            mobileMoney: 'It is sent to the mobile money number that paid. A 2% transfer fee comes off what the customer receives.',
+            card: 'It goes back to the customer’s card. The 2% payment fee the card provider kept comes off what the customer receives.',
+            mobileMoney: 'It is sent to the mobile money number that paid. The 2% payment fee and a 2% transfer fee come off what the customer receives.',
             cod: 'Cash on delivery: it can only be sent once the delivery company has handed this order’s cash to Wi-Mall. A 2% transfer fee comes off what the customer receives.',
         },
         /** After the click — the server's own figures. */
         result: {
-            amountWithFee: 'Refund {{gross}} — the customer receives {{net}} ({{fee}} transfer fee).',
+            amountWithFee: 'Refund {{gross}} — the customer receives {{net}} ({{fee}} in fees).',
             amountNoFee: 'Refund {{gross}} — the customer receives the full amount.',
         },
     },

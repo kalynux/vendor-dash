@@ -185,6 +185,7 @@ function FileThumb({ file }: { file: ApiFile }) {
         src={url}
         alt={file.originalName ?? 'File'}
         loading="lazy"
+        decoding="async"
         className="h-full w-full object-cover"
         draggable={false}
       />
@@ -201,7 +202,7 @@ function FileThumb({ file }: { file: ApiFile }) {
           className="h-full w-full object-cover"
         />
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-          <span className="rounded-full bg-black/55 p-1.5 text-white backdrop-blur-sm">
+          <span className="rounded-full bg-black/55 p-1.5 text-white">
             <Play className="h-4 w-4" />
           </span>
         </div>
@@ -219,6 +220,11 @@ function FileThumb({ file }: { file: ApiFile }) {
 
 // Always-visible checkbox so users can tell at a glance what's selectable and
 // what's already selected (and, in single-select, that they must unselect first).
+//
+// ⚠ No `backdrop-blur` here (or on anything else repeated per tile). Every
+// blurred element is its own GPU layer; two dozen of them inside a sheet that
+// is sliding in starved the Android WebView — photos drew half-way, the rest of
+// the sheet stayed white, and only these boxes showed, as grey dots.
 function SelectionBox({ checked }: { checked: boolean }) {
   return (
     <span
@@ -226,7 +232,7 @@ function SelectionBox({ checked }: { checked: boolean }) {
         'flex h-5 w-5 items-center justify-center rounded-md border-2 transition-colors',
         checked
           ? 'border-primary bg-primary text-primary-foreground'
-          : 'border-white/90 bg-black/30 text-transparent backdrop-blur-sm',
+          : 'border-white/90 bg-black/40 text-transparent',
       )}
     >
       <Check className="h-3.5 w-3.5" />
@@ -298,22 +304,28 @@ export function MediaPicker({
     [page, search, effectiveCategory, filters, sortBy, sortOrder],
   );
 
+  // The newest request wins: a slow earlier reply must not land on top of it.
+  const requestSeq = useRef(0);
   const fetchFiles = useCallback(async () => {
+    const seq = ++requestSeq.current;
     setIsLoading(true);
     try {
       const res = await listFiles(query);
+      if (seq !== requestSeq.current) return;
       setFiles(res.files);
       setPagination(res.pagination);
     } catch (err) {
+      if (seq !== requestSeq.current) return;
       apiError.toast(err, { fallbackKey: 'media.errors.loadFailed' });
     } finally {
-      setIsLoading(false);
+      if (seq === requestSeq.current) setIsLoading(false);
     }
   }, [query, apiError]);
 
   // Reset everything when the picker opens. The type filter is *seeded* from the
   // accepted kinds (a single accepted kind pre-selects it) but stays changeable so
   // the user can browse other types — selecting an out-of-type file is rejected.
+  const resetPendingRef = useRef(false);
   useEffect(() => {
     if (open) {
       setSelected({});
@@ -325,6 +337,11 @@ export function MediaPicker({
         category: acceptedTypes.length === 1 ? acceptedTypes[0] : 'all',
       });
       setPage(1);
+      // Last opening's files must not show under this opening's filters.
+      setFiles([]);
+      setPagination(null);
+      setIsLoading(true);
+      resetPendingRef.current = true;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -341,7 +358,16 @@ export function MediaPicker({
   }, [search, effectiveCategory, filters.minMB, filters.maxMB, filters.createdAfter, filters.createdBefore, filters.sort]);
 
   useEffect(() => {
-    if (open) fetchFiles();
+    if (!open) return;
+    // The reset above always re-renders with a new `filters` object, which runs
+    // this again with the right query. Fetching now would load the previous
+    // opening's query first — two loads, and the grid redrawn twice while the
+    // sheet is still sliding in.
+    if (resetPendingRef.current) {
+      resetPendingRef.current = false;
+      return;
+    }
+    fetchFiles();
   }, [open, fetchFiles]);
 
   // ─── Upload (button + drag-and-drop) ──────────────────────────────────────────
@@ -621,8 +647,16 @@ export function MediaPicker({
       )}
 
       {/* Content */}
-      <div className="flex-1 overflow-auto p-4 sm:p-6">
-        {isLoading ? (
+      <div
+        className={cn(
+          'flex-1 overflow-auto overscroll-contain p-4 transition-opacity sm:p-6',
+          // A reload (filter, page, upload) keeps the photos on screen, dimmed,
+          // instead of swapping them for placeholders and decoding them again.
+          isLoading && visibleFiles.length > 0 && 'opacity-60',
+        )}
+        aria-busy={isLoading}
+      >
+        {isLoading && visibleFiles.length === 0 ? (
           viewMode === 'grid' ? (
             <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 sm:gap-4 lg:grid-cols-5">
               {Array.from({ length: 10 }).map((_, i) => (

@@ -314,6 +314,7 @@ export const settings = {
 
             windowDays: 'Délai de retour',
             windowDaysHint: 'Le temps dont dispose le client pour demander un retour, compté à partir de la date de livraison. Réglez 14 et une commande livrée le 1er peut être retournée jusqu’au 15.',
+            protectionNote: 'Wi-Mall règle les problèmes des clients pendant les 3 premiers jours suivant la livraison. Passé ce délai, votre délai de retour est votre propre engagement : vous gérez le retour et le remboursement avec le client.',
 
             refundType: 'Remboursement',
             refundTypeHint: 'Ce que le client récupère sur un retour accepté. Intégral → tout le prix de l’article. Partiel → uniquement le pourcentage défini ci-dessous (80 % d’une commande de 10 000 = 8 000 rendus). Aucun → le retour est accepté mais aucun argent n’est rendu, par exemple pour les boutiques en échange seulement.',

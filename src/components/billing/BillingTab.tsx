@@ -29,7 +29,8 @@ import type {
   PaymentStatus,
 } from '@/types/billing.types';
 import type { StorageUsage } from '@/types/file.types';
-import { purchasesEnabled } from '@/platform/purchases';
+import { App } from '@capacitor/app';
+import { isNative } from '@/platform/env';
 import { CurrentPlanCard } from './CurrentPlanCard';
 import { StorageUsageCard } from './StorageUsageCard';
 import { CreditWalletCard } from './CreditWalletCard';
@@ -122,15 +123,29 @@ export function BillingTab() {
     load();
   }, [load]);
 
-  // Resume a Stripe card payment that left the SPA for 3-D Secure. On return we
+  // The payment dialog polls on its own while it is open; the resume check below
+  // must not run alongside it, or one payment would toast twice.
+  const paymentOpenRef = useRef(paymentOpen);
+  useEffect(() => {
+    paymentOpenRef.current = paymentOpen;
+  }, [paymentOpen]);
+
+  // Resume a Stripe card payment that left for a bank redirect. On return we
   // re-verify the purchase for immediate feedback; the Stripe webhook is the
   // authoritative finalizer, so the plan/credits apply server-side regardless.
+  //
+  // Browser: the page unloaded, so this runs on mount. App: the WebView never
+  // unloads — the bank page opened in the system browser — so it also runs when
+  // the app comes back to the foreground, in case the vendor closed the dialog
+  // while they were away.
   useEffect(() => {
-    const marker = readStripeResume();
-    if (!marker) return;
-    clearStripeResume();
     let cancelled = false;
-    (async () => {
+
+    const resume = async () => {
+      if (paymentOpenRef.current) return;
+      const marker = readStripeResume();
+      if (!marker) return;
+      clearStripeResume();
       const verify = marker.kind === 'plan' ? verifyPlanPurchase : verifyTopup;
       // Poll a few times — the webhook usually finalizes within seconds of return.
       for (let i = 0; i < 5 && !cancelled; i++) {
@@ -159,9 +174,15 @@ export function BillingTab() {
       if (!cancelled) {
         toast.info(t('billing.checkout.resumePending'));
       }
-    })();
+    };
+
+    void resume();
+    const listener = isNative
+      ? App.addListener('resume', () => void resume())
+      : null;
     return () => {
       cancelled = true;
+      void listener?.then((l) => l.remove());
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -194,12 +215,7 @@ export function BillingTab() {
     plansRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, []);
 
-  // Both openers are guarded as well as their buttons being hidden (P5.2). The
-  // buttons are the door; this is the lock — a future caller that reaches for
-  // one of these from somewhere new fails closed rather than opening a checkout
-  // the store has not been told about.
   function openPlanPurchase(plan: PricingPlan) {
-    if (!purchasesEnabled) return;
     setPayment({
       title: t('billing.plans.switchTo', { name: plan.name }),
       summary: t('billing.plans.planSummary', { name: plan.name }),
@@ -215,7 +231,6 @@ export function BillingTab() {
   }
 
   function openPackPurchase(pack: CreditPack) {
-    if (!purchasesEnabled) return;
     setPayment({
       title: t('billing.credits.buyTitle'),
       summary: t('billing.credits.packCredits', { credits: fmt.number(pack.credits) }),
@@ -281,7 +296,7 @@ export function BillingTab() {
         <BillingSettingsCard />
       </SettingsSections>
 
-      {purchasesEnabled && payment && (
+      {payment && (
         <PaymentDialog
           open={paymentOpen}
           onOpenChange={setPaymentOpen}

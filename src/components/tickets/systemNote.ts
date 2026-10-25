@@ -62,6 +62,14 @@ export function describeSystemNote(content: string, t: Translate): string {
   if (text === 'Ticket closed') return t('tickets.events.closed');
   if (text === 'Ticket reopened by admin') return t('tickets.events.reopened');
 
+  // `HOLD_NOTE_PAUSED` / `HOLD_NOTE_RELEASED` (2026-10-10, Wi-Mall protection).
+  if (text === 'The earnings for this purchase are on hold while this request is open.') {
+    return t('tickets.events.earningsHeld');
+  }
+  if (text === 'This request no longer holds the earnings for this purchase.') {
+    return t('tickets.events.earningsReleased');
+  }
+
   // "Assigned to vendor (User ID: 66f…)" — the id is the server's, never shown.
   if ((m = text.match(/^Assigned to (\w+) \(User ID: [0-9a-f]+\)$/i)) && has(ROLE_LABEL_KEYS, m[1])) {
     return t('tickets.events.assignedRole', { role: t(ROLE_LABEL_KEYS[m[1] as TicketActorRole]) });

@@ -346,6 +346,9 @@ export function PoliciesFields({ formId, defaultValues, defaultEnabled, onSubmit
                         </div>
                         <FieldError message={errors.return_policy?.return_window_days?.message} />
                         <FieldError message={errors.return_policy?.refund_processing_days?.message} />
+                        {/* Visible on purpose (FRONTEND-CHANGELOG-wi-mall-protection § 5): past
+                            Wi-Mall's 3 days, the window is the seller's own commitment. */}
+                        <p className="text-xs text-muted-foreground">{t('settings.policies.return.protectionNote')}</p>
 
                         <Field>
                             <FieldLabel tip={t('settings.policies.return.refundTypeHint')}>

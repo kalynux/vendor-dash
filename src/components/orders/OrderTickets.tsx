@@ -8,6 +8,7 @@ import { fetchTickets } from '@/services/tickets.service';
 import {
   ROLE_LABEL_KEYS, STATUS_BADGE_CLASSES, STATUS_LABEL_KEYS, ticketOpener,
 } from '@/components/tickets/ticket.constants';
+import { EarningsHoldBadge } from '@/components/tickets/EarningsHoldBadge';
 import { useTranslation } from '@/i18n';
 import type { ApiTicketListItem } from '@/types/tickets.types';
 
@@ -72,6 +73,8 @@ export function OrderTickets({ orderId, className }: { orderId: string; classNam
                         ? t('tickets.list.fromRole', { name: opener.name, role: roleLabel })
                         : t('tickets.list.from', { name: opener.name ?? roleLabel })}
                   </span>
+                  {/* Under the subject, not beside the status: the row has no room for two badges on a phone. */}
+                  {ticket.holds_earnings && <EarningsHoldBadge className="mt-1" />}
                 </span>
                 <Badge className={cn('shrink-0 border-0 font-medium', STATUS_BADGE_CLASSES[ticket.status])}>
                   {t(STATUS_LABEL_KEYS[ticket.status])}

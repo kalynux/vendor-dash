@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Loader2, Lock, Pencil, X, Check, CircleSlash, Info, XCircle,
+  Loader2, Lock, Pencil, X, Check, CircleSlash, CirclePause, Info, XCircle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -23,6 +23,7 @@ import { cn } from '@/lib/utils';
 import { NotesThread } from '@/components/tickets/NotesThread';
 import { AttachmentsPanel } from '@/components/tickets/AttachmentsPanel';
 import { ActorAvatar } from '@/components/tickets/ActorAvatar';
+import { EarningsHoldBadge } from '@/components/tickets/EarningsHoldBadge';
 import { VerifiedBadge } from '@/components/common/VerifiedBadge';
 import {
   STATUS_LABEL_KEYS, STATUS_BADGE_CLASSES, STATUS_DOT_CLASSES, TICKET_STATUSES,
@@ -81,6 +82,7 @@ export function TicketDetailSheet({
   const [priorityBusy, setPriorityBusy] = useState(false);
   const [closing, setClosing] = useState(false);
   const [confirmCloseOpen, setConfirmCloseOpen] = useState(false);
+  const [confirmResolveOpen, setConfirmResolveOpen] = useState(false);
   /** Bumped after each change so the conversation picks up the event it caused. */
   const [activity, setActivity] = useState(0);
 
@@ -238,6 +240,10 @@ export function TicketDetailSheet({
   }
 
   const isClosed = ticket?.status === 'closed';
+  // ⛔ Read from the ticket as the server last sent it, never cleared here: the
+  // vendor resolving or closing the request does not lift the hold, so the
+  // banner stays until a fresh read says `false`.
+  const holdsEarnings = !!ticket?.holds_earnings;
   const TypeIcon = ticket ? getTypeVisual(ticket.type).Icon : null;
 
   // The vendor now follows tickets other people opened about their orders — a
@@ -280,6 +286,7 @@ export function TicketDetailSheet({
               <div className="flex flex-wrap items-center gap-2">
                 <StatusPill status={ticket.status} />
                 <PriorityPill priority={ticket.priority} locked={ticket.priority_locked} />
+                {holdsEarnings && <EarningsHoldBadge />}
                 <span className="font-mono text-xs text-muted-foreground">{shortTicketRef(ticket._id)}</span>
               </div>
               <SheetTitle className="text-lg leading-snug">{ticket.subject}</SheetTitle>
@@ -317,6 +324,13 @@ export function TicketDetailSheet({
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
               {/* Main column */}
               <div className="space-y-6 lg:col-span-2">
+                {holdsEarnings && (
+                  <p className="flex gap-2 rounded-md bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-300">
+                    <CirclePause className="mt-0.5 h-4 w-4 shrink-0" />
+                    {t('tickets.earningsHold.banner')}
+                  </p>
+                )}
+
                 {/* Description (inline editable) */}
                 <section className="space-y-2">
                   <h3 className="text-sm font-semibold">{t('tickets.detail.description')}</h3>
@@ -396,6 +410,8 @@ export function TicketDetailSheet({
                     value={ticket.status}
                     onValueChange={(v) => {
                       if (v === 'closed') setConfirmCloseOpen(true);
+                      // The note comes first; the change still goes through on confirm.
+                      else if (v === 'resolved' && holdsEarnings) setConfirmResolveOpen(true);
                       else changeStatus(v as TicketStatus);
                     }}
                     disabled={statusBusy || isClosed}
@@ -586,6 +602,11 @@ export function TicketDetailSheet({
             <AlertDialogTitle>{t('tickets.detail.closeConfirmTitle')}</AlertDialogTitle>
             <AlertDialogDescription>{t('tickets.detail.closeConfirmBody')}</AlertDialogDescription>
           </AlertDialogHeader>
+          {holdsEarnings && (
+            <p className="rounded-md bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-300">
+              {t('tickets.earningsHold.closeNote')}
+            </p>
+          )}
           <AlertDialogFooter>
             <AlertDialogCancel disabled={closing}>{t('tickets.detail.keepOpen')}</AlertDialogCancel>
             <AlertDialogAction
@@ -595,6 +616,30 @@ export function TicketDetailSheet({
             >
               {closing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CircleSlash className="mr-2 h-4 w-4" />}
               {t('tickets.detail.close')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Only for a request that holds the earnings (`holds_earnings`). */}
+      <AlertDialog open={confirmResolveOpen} onOpenChange={(o) => !statusBusy && setConfirmResolveOpen(o)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t('tickets.earningsHold.resolveTitle')}</AlertDialogTitle>
+            <AlertDialogDescription>{t('tickets.earningsHold.resolveNote')}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={statusBusy}>{t('common.actions.cancel')}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async (e) => {
+                e.preventDefault();
+                await changeStatus('resolved');
+                setConfirmResolveOpen(false);
+              }}
+              disabled={statusBusy}
+            >
+              {statusBusy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {t('tickets.earningsHold.resolveConfirm')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

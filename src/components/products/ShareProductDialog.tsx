@@ -32,6 +32,8 @@ import {
 interface ShareProductDialogProps {
   productId: string | null;
   onOpenChange: (open: boolean) => void;
+  /** The window heading — services pass their own; defaults to "Share this product". */
+  title?: string;
 }
 
 type Loaded = {
@@ -85,8 +87,9 @@ const CHANNEL_NAME: Record<ShareChannel, TranslationKey> = {
  * `ProductListItem` deliberately carries only what the grid renders — no slug,
  * no description, no price.
  */
-export function ShareProductDialog({ productId, onOpenChange }: ShareProductDialogProps) {
+export function ShareProductDialog({ productId, onOpenChange, title }: ShareProductDialogProps) {
   const { t } = useTranslation();
+  const heading = title ?? t('products.share.title');
   const apiError = useApiError();
   const { currency } = useFormatters();
   const { store } = useStoreStore();
@@ -299,13 +302,13 @@ export function ShareProductDialog({ productId, onOpenChange }: ShareProductDial
       title: data.title,
       text: buildProductShareMessage(data, 'telegram'),
       ...(data.url ? { url: data.url } : {}),
-      dialogTitle: t('products.share.title'),
+      dialogTitle: heading,
     });
     // Dismissing the sheet is a choice rather than a failure and gets no toast;
     // `shareContent` tells the two apart across both platforms' spellings of it.
     if (outcome === 'shared') onOpenChange(false);
     else if (outcome === 'failed') toast.error(t('products.share.shareFailed'));
-  }, [data, onOpenChange, t]);
+  }, [data, onOpenChange, t, heading]);
 
   const copyMessage = async () => {
     if (!message) return;
@@ -328,7 +331,7 @@ export function ShareProductDialog({ productId, onOpenChange }: ShareProductDial
     <ResponsiveModal
       open={!!productId}
       onOpenChange={onOpenChange}
-      title={t('products.share.title')}
+      title={heading}
       description={t('products.share.description')}
       desktopClassName="sm:max-w-md"
       /* The sheet grows to its content instead of claiming 92% of the screen —

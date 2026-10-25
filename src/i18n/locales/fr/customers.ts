@@ -152,13 +152,13 @@ export const customers = {
         how: {
             autoSend: 'Envoyé immédiatement',
             needsApproval: 'Doit être approuvé par Wi-Mall',
-            card: 'Il revient intégralement sur la carte du client, sans frais.',
+            card: 'Il revient sur la carte du client. Les frais de paiement de 2 % conservés par le prestataire de la carte sont déduits de ce que reçoit le client.',
             mobileMoney:
-                'Il est envoyé au numéro mobile money qui a payé. Des frais de transfert de 2 % sont déduits de ce que reçoit le client.',
+                'Il est envoyé au numéro mobile money qui a payé. Les frais de paiement de 2 % et des frais de transfert de 2 % sont déduits de ce que reçoit le client.',
             cod: 'Paiement à la livraison : il ne peut être envoyé qu’une fois que la société de livraison a remis l’argent de cette commande à Wi-Mall. Des frais de transfert de 2 % sont déduits de ce que reçoit le client.',
         },
         result: {
-            amountWithFee: 'Remboursement de {{gross}} — le client reçoit {{net}} ({{fee}} de frais de transfert).',
+            amountWithFee: 'Remboursement de {{gross}} — le client reçoit {{net}} ({{fee}} de frais).',
             amountNoFee: 'Remboursement de {{gross}} — le client reçoit la totalité.',
         },
     },

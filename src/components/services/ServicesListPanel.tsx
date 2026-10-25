@@ -3,10 +3,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Plus, CalendarClock, CalendarX2, Loader2, Clock, Grid3X3, List,
   MoreHorizontal, Edit, Rocket, RotateCcw, Trash2, Sparkles, RotateCw, XCircle,
-  CheckCircle2, TriangleAlert,
+  CheckCircle2, TriangleAlert, Eye, Share2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
+import {
+  Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -37,6 +41,8 @@ import { useIndexingWatch } from '@/hooks/use-indexing-watch';
 import { useTranslation, useApiError, type TranslationKey } from '@/i18n';
 import { ServiceStatusBadge } from '@/components/services/StatusBadges';
 import { PermanentDeleteDialog } from '@/components/products/PermanentDeleteDialog';
+import { ShareProductDialog } from '@/components/products/ShareProductDialog';
+import { useOpenPreview } from '@/components/preview';
 import {
   formatDuration, BOOKING_MODE_LABEL_KEYS, SERVICE_STATUS_TRANSITIONS,
   type ServiceStatusTransition,
@@ -165,6 +171,8 @@ function transitionIcon(t: ServiceStatusTransition) {
 interface ServiceActionsMenuProps {
   service: ServiceListItem;
   onEdit: () => void;
+  onPreview: () => void;
+  onShare: () => void;
   onStatusTransition: (t: ServiceStatusTransition) => void;
   onVectorisation: (action: VectorisationAction) => void;
   /** Shown on archived services only. */
@@ -172,7 +180,7 @@ interface ServiceActionsMenuProps {
 }
 
 function ServiceActionsMenu({
-  service, onEdit, onStatusTransition, onVectorisation, onDeletePermanently,
+  service, onEdit, onPreview, onShare, onStatusTransition, onVectorisation, onDeletePermanently,
 }: ServiceActionsMenuProps) {
   const { t } = useTranslation();
   const transitions = SERVICE_STATUS_TRANSITIONS[service.status] ?? [];
@@ -203,6 +211,14 @@ function ServiceActionsMenu({
         <DropdownMenuItem onClick={editLocked ? undefined : onEdit} disabled={editLocked}>
           <Edit className="mr-2 h-4 w-4" />
           {editLocked ? t('services.vectorisation.editLocked') : t('common.actions.edit')}
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={onPreview}>
+          <Eye className="mr-2 h-4 w-4" />
+          {t('products.preview.action')}
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={onShare}>
+          <Share2 className="mr-2 h-4 w-4" />
+          {t('products.share.action')}
         </DropdownMenuItem>
 
         {nonDestructive.map((transition) => {
@@ -297,6 +313,45 @@ function ServiceSheetActionButton({
   );
 }
 
+// ─── AI search switch (mirrors the products listing) ────────────────────────────
+
+/**
+ * The "AI search" switch on a card or phone row. Flipping it only asks the panel
+ * to confirm; the switch keeps showing the saved value until that succeeds.
+ *
+ * The click and key traps matter — the card and the row open the editor on click.
+ */
+function ServiceAiSwitch({
+  service,
+  onRequest,
+  className,
+}: {
+  service: ServiceListItem;
+  onRequest: (enable: boolean) => void;
+  className?: string;
+}) {
+  const { t } = useTranslation();
+  const id = `ai-search-${service.id}`;
+  return (
+    <div
+      className={cn('flex items-center justify-between gap-3', className)}
+      onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => e.stopPropagation()}
+    >
+      <label htmlFor={id} className="text-xs text-muted-foreground">
+        {t('products.ai.switchLabel')}
+      </label>
+      <Switch
+        id={id}
+        checked={service.vectorisationEnabled}
+        // Mid-indexing the backend refuses both directions.
+        disabled={service.vectorisationStatus === 'pending'}
+        onCheckedChange={onRequest}
+      />
+    </div>
+  );
+}
+
 // ─── Grid card ──────────────────────────────────────────────────────────────────
 
 interface ServiceCardProps {
@@ -304,9 +359,10 @@ interface ServiceCardProps {
   onOpen: () => void;
   actions: React.ReactNode;
   calendarDesynced: boolean;
+  onAiSwitch: (enable: boolean) => void;
 }
 
-function ServiceGridCard({ service, onOpen, actions, calendarDesynced }: ServiceCardProps) {
+function ServiceGridCard({ service, onOpen, actions, calendarDesynced, onAiSwitch }: ServiceCardProps) {
   const { t } = useTranslation();
   return (
     <Card
@@ -339,6 +395,7 @@ function ServiceGridCard({ service, onOpen, actions, calendarDesynced }: Service
           </div>
           {actions}
         </div>
+        <ServiceAiSwitch service={service} onRequest={onAiSwitch} className="mt-3" />
       </CardContent>
     </Card>
   );
@@ -375,6 +432,17 @@ export function ServicesListPanel({ onOpenDetail, onCreate, reloadToken, calenda
   const [actionsSheetService, setActionsSheetService] = useState<ServiceListItem | null>(null);
   /** Archived services only — deleting for good, not archiving. */
   const [serviceToErase, setServiceToErase] = useState<ServiceListItem | null>(null);
+  const [serviceToShare, setServiceToShare] = useState<string | null>(null);
+  /** The AI search switch's pending question: nothing is sent until it is confirmed. */
+  const [aiSwitchRequest, setAiSwitchRequest] =
+    useState<{ service: ServiceListItem; enable: boolean } | null>(null);
+  const [aiSwitchBusy, setAiSwitchBusy] = useState(false);
+  // Services are products on the storefront, so they share the product preview.
+  const openPreview = useOpenPreview();
+  const previewService = useCallback(
+    (service: ServiceListItem) => openPreview(`/preview/product/${service.id}`),
+    [openPreview],
+  );
 
   // Debounce search.
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -434,7 +502,7 @@ export function ServicesListPanel({ onOpenDetail, onCreate, reloadToken, calenda
 
   const infinite = useInfiniteList<ServiceListItem>({
     fetchPage,
-    rowHeight: 76,
+    rowHeight: 92,
     enabled: isMobile,
     deps: [debouncedSearch, statusFilter, reloadToken, localReload],
   });
@@ -545,10 +613,71 @@ export function ServicesListPanel({ onOpenDetail, onCreate, reloadToken, calenda
     }
   }, [applyIndexingSnapshot, t, apiError]);
 
+  const confirmAiSwitch = useCallback(async () => {
+    if (!aiSwitchRequest) return;
+    setAiSwitchBusy(true);
+    try {
+      await handleVectorisation(aiSwitchRequest.service, aiSwitchRequest.enable ? 'enable' : 'disable');
+    } finally {
+      setAiSwitchBusy(false);
+      setAiSwitchRequest(null);
+    }
+  }, [aiSwitchRequest, handleVectorisation]);
+
+  const aiSwitchDialog = (
+    <Dialog
+      open={!!aiSwitchRequest}
+      onOpenChange={(open) => {
+        if (!open && !aiSwitchBusy) setAiSwitchRequest(null);
+      }}
+    >
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader className="text-left">
+          <DialogTitle>
+            {t(aiSwitchRequest?.enable
+              ? 'products.ai.confirmEnableTitle'
+              : 'products.ai.confirmDisableTitle')}
+          </DialogTitle>
+          <DialogDescription className="pt-3 text-left">
+            <span className="font-semibold text-foreground">{aiSwitchRequest?.service.title}</span>
+            {' — '}
+            {t(aiSwitchRequest?.enable
+              ? 'services.vectorisation.confirmEnableBody'
+              : 'services.vectorisation.confirmDisableBody')}
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <DialogClose asChild disabled={aiSwitchBusy}>
+            <Button variant="outline">{t('common.actions.cancel')}</Button>
+          </DialogClose>
+          <Button disabled={aiSwitchBusy} onClick={() => void confirmAiSwitch()}>
+            {aiSwitchBusy ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              t(aiSwitchRequest?.enable
+                ? 'products.ai.confirmEnableCta'
+                : 'products.ai.confirmDisableCta')
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+
+  const shareDialog = (
+    <ShareProductDialog
+      productId={serviceToShare}
+      onOpenChange={(open) => { if (!open) setServiceToShare(null); }}
+      title={t('services.share.title')}
+    />
+  );
+
   const renderActions = (service: ServiceListItem) => (
     <ServiceActionsMenu
       service={service}
       onEdit={() => openService(service)}
+      onPreview={() => previewService(service)}
+      onShare={() => setServiceToShare(service.id)}
       onStatusTransition={(t) => requestTransition(service, t)}
       onVectorisation={(action) => handleVectorisation(service, action)}
       onDeletePermanently={() => setServiceToErase(service)}
@@ -666,6 +795,7 @@ export function ServicesListPanel({ onOpenDetail, onCreate, reloadToken, calenda
           onOpen={() => openService(s)}
           actions={renderActions(s)}
           calendarDesynced={calendarDesynced}
+          onAiSwitch={(enable) => setAiSwitchRequest({ service: s, enable })}
         />
       ))}
     </div>
@@ -747,9 +877,17 @@ export function ServicesListPanel({ onOpenDetail, onCreate, reloadToken, calenda
               <Clock className="h-3 w-3" /> {formatDuration(s.durationMinutes, t)}
               {s.bookingMode && ` · ${t(BOOKING_MODE_LABEL_KEYS[s.bookingMode])}`}
             </p>
+            <ServiceAiSwitch
+              service={s}
+              onRequest={(enable) => setAiSwitchRequest({ service: s, enable })}
+              className="mt-1.5 justify-start"
+            />
           </div>
           {calendarDesynced && s.status === 'active' && <CalendarDesyncBadge compact />}
-          <ServiceStatusBadge status={s.status} />
+          <div className="flex flex-col items-end gap-1">
+            <ServiceStatusBadge status={s.status} />
+            <VectorisationBadge enabled={s.vectorisationEnabled} status={s.vectorisationStatus} />
+          </div>
           <button
             type="button"
             onClick={(e) => {
@@ -823,6 +961,16 @@ export function ServicesListPanel({ onOpenDetail, onCreate, reloadToken, calenda
                   label={indexing ? t('services.vectorisation.editLocked') : t('common.actions.edit')}
                   disabled={indexing}
                   onClick={() => { close(); openService(s); }}
+                />
+                <ServiceSheetActionButton
+                  icon={<Eye className="h-5 w-5" />}
+                  label={t('products.preview.action')}
+                  onClick={() => { close(); previewService(s); }}
+                />
+                <ServiceSheetActionButton
+                  icon={<Share2 className="h-5 w-5" />}
+                  label={t('products.share.action')}
+                  onClick={() => { close(); setServiceToShare(s.id); }}
                 />
                 {nonDestructive.map((transition) => {
                   const Icon = transitionIcon(transition);
@@ -914,6 +1062,8 @@ export function ServicesListPanel({ onOpenDetail, onCreate, reloadToken, calenda
         {eraseDialog}
         {actionsSheet}
         {filterSheet}
+        {aiSwitchDialog}
+        {shareDialog}
       </div>
     );
   }
@@ -966,6 +1116,8 @@ export function ServicesListPanel({ onOpenDetail, onCreate, reloadToken, calenda
       )}
       {confirmDialog}
       {eraseDialog}
+      {aiSwitchDialog}
+      {shareDialog}
     </div>
   );
 }

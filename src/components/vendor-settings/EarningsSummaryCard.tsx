@@ -119,6 +119,7 @@ export function EarningsSummaryCard() {
           </p>
           <p>{t('account.earnings.info.holdTiming')}</p>
           <p>{t('account.earnings.info.paused')}</p>
+          <p>{t('account.earnings.info.problemReported')}</p>
           <p>{t('account.earnings.info.refunds')}</p>
           <p>
             {t('account.earnings.info.minimum', {

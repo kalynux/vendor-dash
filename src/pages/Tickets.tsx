@@ -36,6 +36,7 @@ import { MobileListFooter } from '@/components/layout/MobileListFooter';
 import { CreateTicketSheet } from '@/components/tickets/CreateTicketSheet';
 import { TicketDetailSheet } from '@/components/tickets/TicketDetailSheet';
 import { FaqSheet } from '@/components/tickets/FaqSheet';
+import { EarningsHoldBadge } from '@/components/tickets/EarningsHoldBadge';
 import {
   STATUS_LABEL_KEYS, STATUS_BADGE_CLASSES, STATUS_DOT_CLASSES, STATUS_TABS,
   PRIORITY_LABEL_KEYS, PRIORITY_BADGE_CLASSES, PRIORITY_DOT_CLASSES, TICKET_PRIORITIES,
@@ -458,6 +459,7 @@ export function Tickets() {
       <div className="flex flex-wrap items-center gap-2">
         <StatusPill status={t.status} />
         <PriorityPill priority={t.priority} locked={t.priority_locked} />
+        {t.holds_earnings && <EarningsHoldBadge />}
         <span className="ml-auto text-xs text-muted-foreground">{relativeTime(t.updatedAt, translate, fmt.date)}</span>
       </div>
     </button>
@@ -599,7 +601,12 @@ export function Tickets() {
                     <td className="px-4 py-3">
                       <TicketIdentity t={t} />
                     </td>
-                    <td className="px-4 py-3"><StatusPill status={t.status} /></td>
+                    <td className="px-4 py-3">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <StatusPill status={t.status} />
+                        {t.holds_earnings && <EarningsHoldBadge />}
+                      </div>
+                    </td>
                     <td className="px-4 py-3"><PriorityPill priority={t.priority} locked={t.priority_locked} /></td>
                     <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">{relativeTime(t.updatedAt, translate, fmt.date)}</td>
                     <td className="px-4 py-3 text-right">

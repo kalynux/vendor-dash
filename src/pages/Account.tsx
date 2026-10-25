@@ -7,6 +7,10 @@ import { ProfileSettings } from '@/components/vendor-settings/ProfileSettings';
 import { SecuritySettings } from '@/components/vendor-settings/SecuritySettings';
 import { PayoutSetupSettings } from '@/components/vendor-settings/PayoutSetupSettings';
 import { EarningsSummaryCard } from '@/components/vendor-settings/EarningsSummaryCard';
+import {
+  DamageCompensationSection,
+  EarningsAdjustmentsSection,
+} from '@/components/vendor-settings/EarningsHistorySections';
 import { StorefrontSettings } from '@/components/vendor-settings/StorefrontSettings';
 import { BusinessAddressSettings } from '@/components/vendor-settings/BusinessAddressSettings';
 import { IdentityVerificationSettings } from '@/components/vendor-settings/verification/IdentityVerificationSettings';
@@ -129,6 +133,8 @@ export function Account() {
             rule instead of each sitting in its own card. */}
         <SettingsSections>
           <EarningsSummaryCard />
+          <EarningsAdjustmentsSection />
+          <DamageCompensationSection />
           <PayoutSetupSettings />
         </SettingsSections>
       </TabsContent>

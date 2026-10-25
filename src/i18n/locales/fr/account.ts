@@ -305,6 +305,8 @@ export const account = {
                 'L’argent d’une commande devient disponible 3 jours après sa livraison. Un produit numérique compte comme livré dès qu’il est payé, et une réservation dès que vous la marquez terminée.',
             paused:
                 'Certains gains peuvent être suspendus le temps de traiter un remboursement ou une contestation de paiement. Les jours de suspension ne comptent pas dans les 3 jours.',
+            problemReported:
+                'Les revenus peuvent aussi être suspendus lorsqu’un client signale un problème dans les 3 jours suivant la livraison. La durée de la suspension n’est pas décomptée : la période de rétention reprend là où elle s’était arrêtée.',
             refunds:
                 'Quand une vente est remboursée, votre part est reprise — sur « En attente », ou sur « Disponible » si elle était déjà libérée. Si vous l’aviez déjà retirée, le reste est dû et vos prochains gains le remboursent en priorité.',
             minimum: 'Le retrait minimum est de {{amount}}.',
@@ -368,6 +370,60 @@ export const account = {
             noAvailableBalance: 'Aucun solde disponible à retirer pour l’instant.',
             belowMinimum:
                 'Votre solde disponible est inférieur au minimum de {{amount}} requis pour un retrait.',
+        },
+        adjustments: {
+            title: 'Argent repris',
+            info: 'Chaque fois que de l’argent a été repris sur vos gains — après un remboursement, une contestation de paiement par carte, ou une commande que vous avez annulée après le paiement du client — avec le motif. Les sommes dues remboursées par de nouveaux gains, ou annulées, figurent aussi ici.',
+            empty: 'Rien n’a été repris sur vos gains.',
+            loadFailed: 'Impossible de charger cette liste.',
+            order: 'la commande {{number}}',
+            thisOrder: 'cette commande',
+            parcel: 'le colis {{number}}',
+            thisParcel: 'ce colis',
+            partsSeparator: ' ; ',
+            kind: {
+                refundClawback: 'Repris',
+                recovery: 'Dette remboursée',
+                writeOff: 'Dette annulée',
+                unknown: 'Ajustement',
+            },
+            reason: {
+                refundShare: 'Le client a été remboursé sur {{order}} : {{amount}} de votre part ont été repris.',
+                disputeShare: 'Le client a obtenu gain de cause dans une contestation de paiement par carte sur {{order}} : {{amount}} de votre part ont été repris.',
+                beyond: {
+                    sentence: 'Facturé sur {{order}}, en plus de votre part de la vente : {{parts}}.',
+                    goods: '{{amount}} que votre part ne couvrait plus (y compris le coût du coursier d’une livraison gratuite)',
+                    delivery: '{{amount}} de frais de livraison remboursés selon votre réglage des frais de retour',
+                    sellerCancelFees: '{{amount}} de frais de paiement et de transfert, car vous avez annulé la commande après le paiement du client',
+                    disputeFee: '{{amount}}, les frais de paiement de 2 % conservés par le prestataire sur le paiement contesté',
+                },
+                deliveryFault: 'Le client a été remboursé sur {{order}}, {{parcel}}, et la livraison a été jugée fautive : {{amount}} de frais de livraison ont été rendus.',
+                damageClaim: '{{amount}} pour une réclamation pour dommages sur {{order}}, {{parcel}}.',
+            },
+            kindSentence: {
+                refundClawback: '{{amount}} ont été repris car le client a été remboursé.',
+                recovery: '{{amount}} de nouveaux gains ont servi à rembourser ce que vous deviez sur des remboursements.',
+                writeOff: 'Wi-Mall a annulé {{amount}} de ce que vous deviez sur des remboursements.',
+            },
+            from: {
+                sentence: 'Prélevé sur {{parts}}.',
+                pending: 'l’argent en attente ({{amount}})',
+                reserve: 'votre réserve de paiement à la livraison ({{amount}})',
+                available: 'votre solde disponible ({{amount}})',
+            },
+            nowOwe: '{{amount}} n’a pas pu être couvert : vous le devez maintenant. Vos prochains gains le remboursent en priorité.',
+        },
+        damageClaims: {
+            title: 'Indemnisation pour dommages',
+            info: 'Quand une agence de livraison endommage l’un de vos colis et que notre équipe le lui facture, le montant vous est crédité. Il est ajouté à vos gains pendant la nuit, et rembourse d’abord ce que vous devez sur des remboursements.',
+            empty: 'Aucune indemnisation pour l’instant.',
+            rowOrder: 'Commande {{number}}',
+            rowParcel: 'Colis {{number}}',
+            sentence: plural({
+                one: 'L’agence de livraison a endommagé {{count}} article de ce colis et cela lui a été facturé.',
+                other: 'L’agence de livraison a endommagé {{count}} articles de ce colis et cela lui a été facturé.',
+            }),
+            credited: 'Crédité sur vos gains',
         },
     },
 

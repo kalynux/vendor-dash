@@ -1,3 +1,4 @@
+import { useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import type { UseFormReturn } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -33,9 +34,40 @@ export function StepServiceBooking({
     resolver: zodResolver(serviceSettingsSchema),
     defaultValues,
   });
+  const formRef = useRef<HTMLFormElement>(null);
+  // Set when a save is refused and no error line is on screen to say why.
+  const [unseenError, setUnseenError] = useState(false);
+
+  /**
+   * A refused save must always answer. On a phone the error line is usually
+   * off screen above the button, so scroll to it; if there is none to scroll
+   * to, say so beside the button instead of doing nothing.
+   */
+  function handleInvalid() {
+    // One frame, so the error lines from this attempt are in the page.
+    requestAnimationFrame(() => {
+      const firstError = formRef.current?.querySelector('[data-field-error]');
+      if (firstError) {
+        setUnseenError(false);
+        firstError.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      } else {
+        setUnseenError(true);
+      }
+    });
+  }
 
   return (
-    <form onSubmit={form.handleSubmit(onSaveComplete)} className="space-y-6">
+    <form
+      ref={formRef}
+      onSubmit={(e) => {
+        setUnseenError(false);
+        return form.handleSubmit(onSaveComplete, handleInvalid)(e);
+      }}
+      // The phone's own number checks (min, step) block the submit without
+      // showing anything in the app's WebView; the schema checks instead.
+      noValidate
+      className="space-y-6"
+    >
       <div>
         <h2 className="text-lg font-semibold">{t('services.booking.settingsTitle')}</h2>
         <p className="text-sm text-muted-foreground mt-1">
@@ -51,6 +83,13 @@ export function StepServiceBooking({
       )}
 
       <ServiceConfigFields form={form as unknown as UseFormReturn<ServiceConfigFormShape>} />
+
+      {unseenError && (
+        <Alert variant="destructive">
+          <AlertCircle className="w-4 h-4" />
+          <AlertDescription>{t('common.validation.fixHighlighted')}</AlertDescription>
+        </Alert>
+      )}
 
       {/* Navigation */}
       <div className="flex items-center justify-between pt-2">

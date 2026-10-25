@@ -184,11 +184,11 @@ export const orders = {
                 other: 'Oui, annuler {{count}} commandes',
             }),
             paidNotice: plural({
-                one: '{{count}} commande sélectionnée a déjà été payée. L’annuler ne rembourse pas le client automatiquement : notre équipe s’occupera du remboursement, et vos gains sur cette commande seront suspendus jusqu’à ce que ce soit réglé.',
-                other: '{{count}} commandes sélectionnées ont déjà été payées. Les annuler ne rembourse pas les clients automatiquement : notre équipe s’occupera des remboursements, et vos gains sur ces commandes seront suspendus jusqu’à ce que chacun soit réglé.',
+                one: '{{count}} commande sélectionnée a déjà été payée. L’annuler ne rembourse pas le client automatiquement : notre équipe s’occupera du remboursement, et vos gains sur cette commande seront suspendus jusqu’à ce que ce soit réglé. Le client sera remboursé intégralement. Les frais de paiement et de transfert (environ 4 %) vous sont facturés.',
+                other: '{{count}} commandes sélectionnées ont déjà été payées. Les annuler ne rembourse pas les clients automatiquement : notre équipe s’occupera des remboursements, et vos gains sur ces commandes seront suspendus jusqu’à ce que chacun soit réglé. Chaque client sera remboursé intégralement. Les frais de paiement et de transfert (environ 4 %) vous sont facturés.',
             }),
             paidNoticeUnknown:
-                'Si l’une de ces commandes a déjà été payée, l’annuler ne rembourse pas le client automatiquement : notre équipe s’occupera du remboursement, et vos gains sur cette commande seront suspendus jusqu’à ce que ce soit réglé.',
+                'Si l’une de ces commandes a déjà été payée, l’annuler ne rembourse pas le client automatiquement : notre équipe s’occupera du remboursement, et vos gains sur cette commande seront suspendus jusqu’à ce que ce soit réglé. Le client sera remboursé intégralement. Les frais de paiement et de transfert (environ 4 %) vous sont facturés.',
         },
     },
 
@@ -335,7 +335,7 @@ export const orders = {
             keep: 'Garder la commande',
             confirm: 'Oui, annuler la commande',
             paidNotice:
-                'Cette commande a été payée. L’annuler ne rembourse pas le client automatiquement : notre équipe s’occupera du remboursement, et vos gains sur cette commande seront suspendus jusqu’à ce que ce soit réglé.',
+                'Cette commande a été payée. L’annuler ne rembourse pas le client automatiquement : notre équipe s’occupera du remboursement, et vos gains sur cette commande seront suspendus jusqu’à ce que ce soit réglé. Le client sera remboursé intégralement. Les frais de paiement et de transfert (environ 4 %) vous sont facturés.',
         },
     },
 

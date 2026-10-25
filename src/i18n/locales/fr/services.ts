@@ -122,6 +122,28 @@ export const services = {
             'Une fois activée, si le service est complet et actif, ses données sont envoyées pour ' +
             'vectorisation afin que les clients le trouvent via la recherche IA. Le statut et la ' +
             'relance sont disponibles depuis la fiche du service.',
+        confirmEnableBody:
+            'Les clients pourront le trouver via la recherche IA. L’indexation démarre tout de suite, et le service ne peut pas être modifié avant la fin.',
+        confirmDisableBody: 'Il n’apparaîtra plus dans la recherche IA.',
+    },
+
+    share: {
+        title: 'Partager ce service',
+    },
+
+    preview: {
+        linkUnavailable: 'Disponible une fois le service publié',
+        unavailable: {
+            draft: 'Brouillon — les clients ne voient pas encore ce service.',
+            pendingReview: 'En attente de validation — les clients ne voient pas encore ce service.',
+            archived: 'Archivé — les clients ne voient plus ce service.',
+            helpDraft:
+                'Votre boutique n’affiche que les services publiés : il n’existe donc pas encore de page client pour celui-ci. Publiez-le et l’aperçu apparaîtra ici.',
+            helpArchived:
+                'Votre boutique n’affiche que les services publiés. Restaurez celui-ci en brouillon puis publiez-le pour voir la page client.',
+            helpPendingReview:
+                'Ce service attend une validation. Dès qu’il sera approuvé et publié, sa page client apparaîtra ici — il n’y a rien à faire d’ici là.',
+        },
     },
 
     /**

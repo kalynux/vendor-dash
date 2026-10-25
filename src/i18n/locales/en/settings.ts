@@ -355,6 +355,8 @@ export const settings = {
 
             windowDays: 'Return window',
             windowDaysHint: 'How long the customer has to ask for a return, counted from the delivery date. Set 14 and an order delivered on the 1st can be returned until the 15th.',
+            /** Under the window field — FRONTEND-CHANGELOG-wi-mall-protection (2026-10-10). */
+            protectionNote: 'Wi-Mall settles customer problems during the first 3 days after delivery. After that, your return window is your own commitment: you handle the return and the refund with the customer.',
 
             refundType: 'Refund',
             refundTypeHint: 'What the customer gets back on an accepted return. Full → the whole item price. Partial → only the percentage you set below (80% of a 10 000 order = 8 000 back). None → the return is accepted but no money is returned, e.g. exchange-only stores.',

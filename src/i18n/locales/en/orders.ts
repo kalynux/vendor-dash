@@ -180,14 +180,17 @@ export const orders = {
             }),
             keep: 'Keep Orders',
             confirm: plural({ one: 'Yes, Cancel {{count}} Order', other: 'Yes, Cancel {{count}} Orders' }),
-            /** Some selected orders are paid (FRONTEND-CHANGELOG-earnings-hold-and-pauses § 3). */
+            /**
+             * Some selected orders are paid (FRONTEND-CHANGELOG-earnings-hold-and-pauses § 3,
+             * fees from FRONTEND-CHANGELOG-refund-fees, 2026-10-22).
+             */
             paidNotice: plural({
-                one: '{{count}} selected order has already been paid. Cancelling it will not refund the customer automatically: our team will arrange the refund, and your earnings for this order will be paused until it is resolved.',
-                other: '{{count}} selected orders have already been paid. Cancelling them will not refund the customers automatically: our team will arrange the refunds, and your earnings for these orders will be paused until each is resolved.',
+                one: '{{count}} selected order has already been paid. Cancelling it will not refund the customer automatically: our team will arrange the refund, and your earnings for this order will be paused until it is resolved. The customer will be refunded in full. The payment and transfer fees (about 4%) are charged to you.',
+                other: '{{count}} selected orders have already been paid. Cancelling them will not refund the customers automatically: our team will arrange the refunds, and your earnings for these orders will be paused until each is resolved. Each customer will be refunded in full. The payment and transfer fees (about 4%) are charged to you.',
             }),
             /** Some selected orders are on another page, so whether they are paid is unknown. */
             paidNoticeUnknown:
-                'If any of these orders has already been paid, cancelling it will not refund the customer automatically: our team will arrange the refund, and your earnings for that order will be paused until it is resolved.',
+                'If any of these orders has already been paid, cancelling it will not refund the customer automatically: our team will arrange the refund, and your earnings for that order will be paused until it is resolved. The customer will be refunded in full. The payment and transfer fees (about 4%) are charged to you.',
         },
     },
 
@@ -340,9 +343,13 @@ export const orders = {
             placeholder: 'Type “{{word}}”',
             keep: 'Keep Order',
             confirm: 'Yes, Cancel Order',
-            /** `paymentStatus: 'paid'` — wording from FRONTEND-CHANGELOG-earnings-hold-and-pauses § 3. */
+            /**
+             * `paymentStatus: 'paid'` — wording from FRONTEND-CHANGELOG-earnings-hold-and-pauses § 3,
+             * last two sentences verbatim from FRONTEND-CHANGELOG-refund-fees (2026-10-22). Both stay
+             * true: the team still makes the refund, and when it does the seller pays the fees.
+             */
             paidNotice:
-                'This order has been paid. Cancelling it will not refund the customer automatically: our team will arrange the refund, and your earnings for this order will be paused until it is resolved.',
+                'This order has been paid. Cancelling it will not refund the customer automatically: our team will arrange the refund, and your earnings for this order will be paused until it is resolved. The customer will be refunded in full. The payment and transfer fees (about 4%) are charged to you.',
         },
     },
 

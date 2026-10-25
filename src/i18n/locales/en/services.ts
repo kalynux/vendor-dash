@@ -126,6 +126,31 @@ export const services = {
             'When enabled and the service is complete and active, service data is sent for ' +
             'vectorisation so customers can find it via AI search. Status and retry options are ' +
             'available from the service card.',
+        /** The confirmation the card's AI search switch opens. */
+        confirmEnableBody:
+            'Customers will be able to find it through AI search. Indexing starts right away, and you can’t edit the service until it finishes.',
+        confirmDisableBody: 'It will stop showing up in AI search.',
+    },
+
+    /** The Share window, opened from a service's menu. */
+    share: {
+        title: 'Share this service',
+    },
+
+    /** The customer-page preview, opened from a service's menu. */
+    preview: {
+        linkUnavailable: 'Available once the service is published',
+        unavailable: {
+            draft: 'Draft — customers cannot see this service yet.',
+            pendingReview: 'Pending review — customers cannot see this service yet.',
+            archived: 'Archived — customers can no longer see this service.',
+            helpDraft:
+                'Your storefront only shows published services, so there is no customer page for this one yet. Publish it and the preview appears here.',
+            helpArchived:
+                'Your storefront only shows published services. Restore this one to draft and publish it to see the customer page.',
+            helpPendingReview:
+                'This service is waiting on moderation. Once it is approved and published, its customer page appears here — there is nothing to do in the meantime.',
+        },
     },
 
     /**

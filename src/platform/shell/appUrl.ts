@@ -42,3 +42,23 @@ export const APP_SCHEME = 'wivendor';
 export function appReturnUrl(routeUnderDashboard: string): string {
   return `${APP_SCHEME}://${routeUnderDashboard.replace(/^\/+/, '')}`;
 }
+
+/**
+ * The web host the App Link intent filter claims. Must match the
+ * `android:host` entries in `AndroidManifest.xml`.
+ */
+export const APP_LINK_ORIGIN = 'https://vendor.wi-mall.com';
+
+/**
+ * Build an App Link for a full app route — `appLinkUrl('/dashboard/account/billing')`
+ * → `https://vendor.wi-mall.com/dashboard/account/billing`.
+ *
+ * Use this instead of {@link appReturnUrl} when a third party will append a
+ * secret to the URL (Stripe adds `payment_intent_client_secret`): a verified
+ * App Link can only open this app, while any app can claim the custom scheme.
+ * If verification is not live on a device, the link opens the web dashboard,
+ * which is still a correct page to land on.
+ */
+export function appLinkUrl(route: string): string {
+  return `${APP_LINK_ORIGIN}/${route.replace(/^\/+/, '')}`;
+}

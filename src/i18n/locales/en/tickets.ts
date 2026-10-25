@@ -255,6 +255,20 @@ export const tickets = {
         assignedRole: 'Assigned to: {{role}}',
         assignedSupport: 'Handed to Wi-Mall support',
         takenBy: '{{name}} from support is now handling this ticket',
+        /** The server's two `ticket-earnings-hold.service` notes. */
+        earningsHeld: 'The earnings for this purchase are on hold while this request is open.',
+        earningsReleased: 'This request no longer holds the earnings for this purchase.',
+    },
+
+    /** `holds_earnings: true` — wording from FRONTEND-CHANGELOG-wi-mall-protection (2026-10-10). */
+    earningsHold: {
+        badge: 'Earnings on hold',
+        banner: 'The customer reported a problem with this order. Your earnings for it are on hold until the customer or Wi-Mall closes this request.',
+        /** Shown before the vendor marks a held request resolved; the change still goes through. */
+        resolveTitle: 'Mark as resolved?',
+        resolveNote: 'Marking this request as resolved does not release your earnings. They are released when the customer or Wi-Mall closes it.',
+        resolveConfirm: 'Mark as resolved',
+        closeNote: 'Closing this request yourself does not release your earnings. They are released when the customer or Wi-Mall closes it.',
     },
 
     /** "Tickets about this order", on the order screen. */

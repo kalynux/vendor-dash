@@ -378,6 +378,9 @@ export const account = {
                 'Money from an order becomes available 3 days after the order is delivered. A digital product counts as delivered once it is paid, and a booking once you mark it completed.',
             paused:
                 'Some earnings may be paused while a refund or a payment dispute is handled. The days it is paused don’t count towards the 3 days.',
+            /** FRONTEND-CHANGELOG-wi-mall-protection (2026-10-10) — copy verbatim. */
+            problemReported:
+                'Earnings can also be paused when a customer reports a problem within 3 days of delivery. Paused time does not count: the hold continues where it stopped.',
             /** Refund flow 2026-10-05 (earnings.md § clawback). */
             refunds:
                 'When a sale is refunded, your share of it is taken back — from Pending, or from Available if it was already released. If you already withdrew it, the rest is owed and your next earnings pay it off first.',
@@ -448,6 +451,68 @@ export const account = {
             noAvailableBalance: 'There is no available balance to withdraw yet.',
             belowMinimum:
                 'Your available balance is below the {{amount}} minimum for a withdrawal.',
+        },
+        /**
+         * GET /vendor/earnings/adjustments (FRONTEND-CHANGELOG-refund-fees, 2026-10-22).
+         * Worded from `reasonCode` + `reasonParams` — see `earningsAdjustments.ts`.
+         */
+        adjustments: {
+            title: 'Money taken back',
+            info: 'Every time money was taken back from your earnings — after a refund, a card dispute, or an order you cancelled after the customer paid — with the reason. Money you owed that was paid off by new earnings, or forgiven, is listed here too.',
+            empty: 'Nothing has been taken back from your earnings.',
+            loadFailed: 'Couldn’t load this list.',
+            order: 'order {{number}}',
+            thisOrder: 'this order',
+            parcel: 'parcel {{number}}',
+            thisParcel: 'this parcel',
+            /** Joins the charged parts inside one sentence. */
+            partsSeparator: '; ',
+            kind: {
+                refundClawback: 'Taken back',
+                recovery: 'Debt paid off',
+                writeOff: 'Debt forgiven',
+                unknown: 'Adjustment',
+            },
+            reason: {
+                refundShare: 'The customer was refunded on {{order}}, so {{amount}} of your share was taken back.',
+                disputeShare: 'The customer won a card dispute on {{order}}, so {{amount}} of your share was taken back.',
+                beyond: {
+                    sentence: 'Charged on {{order}}, on top of your share of the sale: {{parts}}.',
+                    goods: '{{amount}} that your share no longer covered (including the courier cost of a free delivery)',
+                    delivery: '{{amount}} of delivery money refunded under your return-shipping setting',
+                    sellerCancelFees: '{{amount}} of payment and transfer fees, because you cancelled the order after the customer paid',
+                    disputeFee: '{{amount}}, the 2% payment fee the provider kept on the disputed payment',
+                },
+                deliveryFault: 'The customer was refunded on {{order}}, {{parcel}}, and the delivery was found at fault, so {{amount}} of the delivery fee went back.',
+                damageClaim: '{{amount}} for a damage claim on {{order}}, {{parcel}}.',
+            },
+            /** Rows written before 2026-10-22, and every debt repayment (no reason code). */
+            kindSentence: {
+                refundClawback: '{{amount}} was taken back because the customer was refunded.',
+                recovery: '{{amount}} of new earnings went to pay back money you owed from refunds.',
+                writeOff: 'Wi-Mall forgave {{amount}} of money you owed from refunds.',
+            },
+            from: {
+                sentence: 'Taken from {{parts}}.',
+                pending: 'money on hold ({{amount}})',
+                reserve: 'your cash-on-delivery reserve ({{amount}})',
+                available: 'your available balance ({{amount}})',
+            },
+            /** `takenFrom.debt` > 0 on a `refund_clawback` row only. */
+            nowOwe: '{{amount}} could not be covered, so you now owe it. Your next earnings pay it off first.',
+        },
+        /** GET /vendor/earnings/agency-claims — the server's sentence is worded for the agency, never shown. */
+        damageClaims: {
+            title: 'Damage compensation',
+            info: 'When a delivery agency damages one of your parcels and our team charges the agency for it, the amount is credited to you. It is added to your earnings overnight, and pays off anything you owe from refunds first.',
+            empty: 'No damage compensation yet.',
+            rowOrder: 'Order {{number}}',
+            rowParcel: 'Parcel {{number}}',
+            sentence: plural({
+                one: 'The delivery agency damaged {{count}} item in this parcel and was charged for it.',
+                other: 'The delivery agency damaged {{count}} items in this parcel and was charged for it.',
+            }),
+            credited: 'Credited to you',
         },
     },
 

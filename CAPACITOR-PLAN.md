@@ -60,7 +60,7 @@ differs — and it does, in five places worth naming — that is called out expl
 | # | Decision | Consequence |
 |---|---|---|
 | **D1** | **Port agency-dash's `src/platform/` architecture** | Conventions come from there. Divergence needs a reason written down. |
-| **D2** | **Billing is read-only on mobile** | Invoices, transactions, plan status and storage usage stay. Plan upgrades and credit top-ups point at the web dashboard. Sidesteps the Apple IAP argument entirely and dissolves the Stripe 3-D Secure problem rather than solving it. |
+| **D2** | ~~**Billing is read-only on mobile**~~ **Superseded 2026-10-19** — the app sells plans and credits by mobile money and card, like the browser. See the note under Phase 5. | Invoices, transactions, plan status and storage usage stay. Plan upgrades and credit top-ups point at the web dashboard. Sidesteps the Apple IAP argument entirely and dissolves the Stripe 3-D Secure problem rather than solving it. |
 | **D3** | **Login + registration + password reset all in-app** | Built in Phase 1. Registration lands on `onboarding_step === 1` and hands straight to the existing onboarding flow. |
 | **D4** | **Android first, iOS after** | iOS needs the Firebase messaging SDK for push and a separate signing and review track. No reason to carry that through phases where everything is still moving. |
 | **D5** | **Custom hostname `vendor.wi-mall.internal`**, not `localhost` | WebView origin becomes `https://vendor.wi-mall.internal` (Android) / `capacitor://vendor.wi-mall.internal` (iOS). Closes the loopback-CORS gap the backend flagged. **Gates Phase 2** — nothing native works until both origins are in `ALLOWED_ORIGINS`. |
@@ -1222,6 +1222,24 @@ alone, by `google-services.json`.
 ---
 
 # Phase 5 — Billing read-only on mobile (D2) ✅
+
+> **Reversed 2026-10-19, at the owner's request.** The packaged app now buys plans and
+> credits and adds payment methods exactly like the browser — mobile money (as in
+> agency-dash) and cards (as in the storefront app). `purchasesEnabled` and
+> `PurchasesUnavailable` are gone, and so are the `billing.mobile.*` strings. Cards still
+> appear only while `GET /payments/options` lists `CARD` (switched off server-side at the
+> time of writing).
+>
+> The 3-D Secure worry below turned out narrower than it looked: with
+> `redirect: 'if_required'` a card's bank check runs in an iframe modal, and the Android
+> WebView only hands *main-frame* navigations to the system browser, so it stays in the
+> app. Only a redirect-based method (possible, since the backend uses
+> `automatic_payment_methods`) leaves. For that, `platform/purchases.ts → cardReturnUrl()`
+> passes the billing page's App Link (`https://vendor.wi-mall.com/dashboard/account/billing`)
+> instead of the `vendor.wi-mall.internal` URL; the dialog keeps polling in place (the
+> WebView never unloaded), and `BillingTab` re-checks the resume marker on app `resume`.
+> Not the `wivendor://` scheme: Stripe appends `payment_intent_client_secret`, and any app
+> can claim a custom scheme. **Untested on a handset.** The text below is kept as history.
 
 **Goal:** remove every purchase path from the native build without touching the web one.
 **Branch:** `mobile/phase-5-billing`

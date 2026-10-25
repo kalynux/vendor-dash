@@ -1,5 +1,3 @@
-import { purchasesEnabled } from '@/platform/purchases';
-
 // ─── Stripe.js loader ────────────────────────────────────────────────────────
 // Loads Stripe's hosted script (https://js.stripe.com/v3) on demand and returns a
 // configured Stripe instance. We use the hosted script directly (rather than the
@@ -146,14 +144,9 @@ const stripeInstances = new Map<string, StripeInstance>();
 export async function getStripe(
   publishableKey: string | null | undefined,
 ): Promise<StripeInstance | null> {
-  // Guarded here and not only at the call sites: this is the one function that
-  // can cause the CDN script to be injected, so the promise "js.stripe.com never
-  // loads in the native build" (CAPACITOR-PLAN.md → P5.2) is kept by one line
-  // rather than by every future caller remembering. ⚠ A packaged app should not
-  // pull executable code off a CDN at runtime at all: it is invisible to store
-  // review, it breaks offline, and both stores' policies are written against
-  // it. Callers already treat null as "cards unavailable".
-  if (!purchasesEnabled) return null;
+  // Loads in the packaged app too (since 2026-10-19). Stripe requires the script
+  // to come from js.stripe.com, and Play's rule against downloaded code exempts
+  // JavaScript run in a WebView. Callers treat null as "cards unavailable".
   if (!publishableKey) return null;
   const cached = stripeInstances.get(publishableKey);
   if (cached) return cached;

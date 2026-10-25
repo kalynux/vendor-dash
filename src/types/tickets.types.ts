@@ -146,6 +146,14 @@ export interface ApiTicketListItem {
   /** The administrator handling the ticket; `null` until one takes it. */
   assigned_admin: TicketAdminSnapshot | null;
   priority_locked: boolean;
+  /**
+   * 2026-10-10 (FRONTEND-CHANGELOG-wi-mall-protection). `true` while this
+   * request keeps the earnings of its order or booking paused — a customer's
+   * problem report made before the money was released. ⛔ The vendor changing
+   * the status never clears it; only the customer or Wi-Mall ending the request
+   * does. Optional: a server older than that change leaves it out.
+   */
+  holds_earnings?: boolean;
   createdAt: string;
   updatedAt: string;
 }

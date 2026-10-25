@@ -249,6 +249,17 @@ export const tickets = {
         assignedRole: 'Confié à : {{role}}',
         assignedSupport: 'Transmis au support Wi-Mall',
         takenBy: '{{name}}, du support, s’occupe maintenant de ce ticket',
+        earningsHeld: 'Les revenus de cet achat sont suspendus tant que cette demande est ouverte.',
+        earningsReleased: 'Cette demande ne suspend plus les revenus de cet achat.',
+    },
+
+    earningsHold: {
+        badge: 'Revenus suspendus',
+        banner: 'Le client a signalé un problème concernant cette commande. Vos revenus correspondants sont suspendus jusqu’à ce que le client ou Wi-Mall clôture cette demande.',
+        resolveTitle: 'Marquer comme résolue ?',
+        resolveNote: 'Marquer cette demande comme résolue ne libère pas vos revenus. Ils sont libérés lorsque le client ou Wi-Mall la clôture.',
+        resolveConfirm: 'Marquer comme résolue',
+        closeNote: 'Clôturer vous-même cette demande ne libère pas vos revenus. Ils sont libérés lorsque le client ou Wi-Mall la clôture.',
     },
 
     orderTickets: {

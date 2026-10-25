@@ -26,14 +26,16 @@ const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 export const peakPriceTypes = ['fixed', 'percentage'] as const;
 
+// ⚠ Rules for a field that can be hidden live in `serviceConfigRefine`, never on
+// the field. A field-level rule also fires while its box is off screen, and an
+// error with nowhere to show made Save do nothing at all — no message, no request.
 const peakHoursFormSchema = z.object({
   daysOfWeek: z.array(z.number().int().min(0).max(6)), // empty = every day
   startTime: z.string(),
   endTime: z.string(),
   priceType: z.enum(peakPriceTypes),
-  value: z
-    .number({ message: 'services.validation.surchargeRequired' })
-    .min(0, 'services.validation.surchargeMin'),
+  // Checked in `serviceConfigRefine`, only while peak hours are on.
+  value: z.number().optional(),
 });
 
 export const serviceConfigFields = {
@@ -47,11 +49,8 @@ export const serviceConfigFields = {
   bookingMode: z.enum(['calendar', 'manual', 'capacity']),
   bufferBeforeMinutes: z.number().int().min(0, 'services.validation.bufferMin').optional(),
   bufferAfterMinutes: z.number().int().min(0, 'services.validation.bufferMin').optional(),
-  maxBookings: z
-    .number()
-    .int('services.validation.seatsInteger')
-    .min(1, 'services.validation.seatsMin')
-    .optional(),
+  // Checked in `serviceConfigRefine`, only in capacity mode.
+  maxBookings: z.number().optional(),
   peakHoursEnabled: z.boolean(),
   peakHours: peakHoursFormSchema,
 };
@@ -63,19 +62,39 @@ interface ServiceConfigRefineInput {
   bookingMode: 'calendar' | 'manual' | 'capacity';
   maxBookings?: number;
   peakHoursEnabled: boolean;
-  peakHours: { startTime: string; endTime: string };
+  peakHours: { startTime: string; endTime: string; value?: number };
 }
 
 function serviceConfigRefine(v: ServiceConfigRefineInput, ctx: z.RefinementCtx): void {
-  if (v.bookingMode === 'capacity' && (v.maxBookings == null || v.maxBookings < 1)) {
-    ctx.addIssue({
-      code: 'custom',
-      message: 'services.validation.seatsRequired',
-      path: ['maxBookings'],
-    });
+  if (v.bookingMode === 'capacity') {
+    const seats = v.maxBookings;
+    const seatsError =
+      seats == null
+        ? 'services.validation.seatsRequired'
+        : !Number.isInteger(seats)
+          ? 'services.validation.seatsInteger'
+          : seats < 1
+            ? 'services.validation.seatsMin'
+            : null;
+    if (seatsError) {
+      ctx.addIssue({ code: 'custom', message: seatsError, path: ['maxBookings'] });
+    }
   }
   if (v.peakHoursEnabled) {
     const p = v.peakHours;
+    if (p.value == null) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'services.validation.surchargeRequired',
+        path: ['peakHours', 'value'],
+      });
+    } else if (p.value < 0) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'services.validation.surchargeMin',
+        path: ['peakHours', 'value'],
+      });
+    }
     if (!TIME_RE.test(p.startTime)) {
       ctx.addIssue({
         code: 'custom',

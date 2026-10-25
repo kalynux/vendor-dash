@@ -121,7 +121,7 @@ export function ServiceConfigFields({ form }: ServiceConfigFieldsProps) {
             min={1}
             className="w-32"
             placeholder={t('services.config.seatsPlaceholder')}
-            {...register('maxBookings', { valueAsNumber: true })}
+            {...register('maxBookings', { setValueAs: blankToUndefined })}
           />
           <p className="mt-1 text-xs text-muted-foreground">
             {t('services.config.seatsHelp')}
@@ -132,10 +132,10 @@ export function ServiceConfigFields({ form }: ServiceConfigFieldsProps) {
       {/* Buffers */}
       <div className="grid grid-cols-2 gap-3">
         <Field label={t('services.config.bufferBefore')} error={m(errors.bufferBeforeMinutes?.message)}>
-          <Input type="number" min={0} {...register('bufferBeforeMinutes', { valueAsNumber: true })} />
+          <Input type="number" min={0} {...register('bufferBeforeMinutes', { setValueAs: blankToUndefined })} />
         </Field>
         <Field label={t('services.config.bufferAfter')} error={m(errors.bufferAfterMinutes?.message)}>
-          <Input type="number" min={0} {...register('bufferAfterMinutes', { valueAsNumber: true })} />
+          <Input type="number" min={0} {...register('bufferAfterMinutes', { setValueAs: blankToUndefined })} />
         </Field>
       </div>
 
@@ -214,7 +214,7 @@ export function ServiceConfigFields({ form }: ServiceConfigFieldsProps) {
                 }
                 error={m(errors.peakHours?.value?.message)}
               >
-                <Input type="number" min={0} step="0.01" {...register('peakHours.value', { valueAsNumber: true })} />
+                <Input type="number" min={0} step="0.01" {...register('peakHours.value', { setValueAs: blankToUndefined })} />
               </Field>
             </div>
           </div>
@@ -222,6 +222,20 @@ export function ServiceConfigFields({ form }: ServiceConfigFieldsProps) {
       </div>
     </div>
   );
+}
+
+/**
+ * A cleared number box means "no value", not `NaN`.
+ *
+ * `valueAsNumber` turned an emptied box into `NaN`, which the schema rejected
+ * outright — and for a box that is hidden (seats outside capacity mode, the
+ * surcharge once peak hours are switched off) that rejection had no line to
+ * show on, so Save silently did nothing.
+ */
+function blankToUndefined(value: unknown): number | undefined {
+  if (value === '' || value == null) return undefined;
+  const n = Number(value);
+  return Number.isNaN(n) ? undefined : n;
 }
 
 // Local field wrapper (mirrors the create/detail sheet helpers).
@@ -235,7 +249,8 @@ function Field({
         {required && <span className="ml-0.5 text-destructive">*</span>}
       </Label>
       {children}
-      {error && <p className="text-xs text-destructive">{error}</p>}
+      {/* `data-field-error` is how a refused save finds the line to scroll to. */}
+      {error && <p data-field-error className="text-xs text-destructive">{error}</p>}
     </div>
   );
 }
