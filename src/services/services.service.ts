@@ -43,6 +43,8 @@ import type {
   AvailabilityResponse,
   SlotLock,
   SlotLockResponse,
+  BookingSlotHold,
+  BookingAccessUpdate,
   SimpleMessageResponse,
   CompleteBookingPayload,
   CompleteBookingResult,
@@ -121,11 +123,13 @@ function adaptListItem(p: ApiServiceListRaw): ServiceListItem {
     categories: p.categories ?? [],
     tags: p.tags ?? [],
     firstFileUrl: p.fileIds?.[0]?.url ?? null,
-    // serviceConfig now lives on the variant; the trimmed product-list payload
-    // no longer carries it, so duration/mode are unknown at list level. The
-    // detail sheet (which loads the variant) is the source of truth.
-    durationMinutes: null,
-    bookingMode: null,
+    // Read off the default variant by the server (`service`, 2026-10-26). Null
+    // on a draft that isn't priced yet — the row says so instead of a dash.
+    durationMinutes: p.service?.durationMinutes ?? null,
+    bookingMode: p.service?.bookingMode ?? null,
+    price: p.service?.price ?? null,
+    currency: p.service?.currency ?? 'XAF',
+    maxBookings: p.service?.maxBookings ?? null,
     vectorisationEnabled: p.vectorisationEnabled ?? false,
     vectorisationStatus: p.vectorisationStatus ?? 'not_started',
     createdAt: p.createdAt,
@@ -342,10 +346,52 @@ export async function cancelBooking(id: string, reason?: string): Promise<Bookin
   return res.data;
 }
 
-export async function rescheduleBooking(id: string, newSlotId: string): Promise<Booking> {
-  const res = await api.patch<BookingDetailResponse>(`${BASE}/bookings/${id}/reschedule`, {
-    newSlotId,
-  });
+/**
+ * PROPOSE a new time (since 2026-10-26 this no longer moves the booking). The
+ * reply keeps the booking's time and carries `rescheduleProposal.status: 'open'`.
+ * One slot → `newSlotId`; an appointment spanning several → the held run, in
+ * time order, as `newSlotIds` (bookings.md → Reschedule Booking).
+ */
+export async function rescheduleBooking(id: string, slotIds: string[]): Promise<Booking> {
+  const body = slotIds.length === 1 ? { newSlotId: slotIds[0] } : { newSlotIds: slotIds };
+  const res = await api.patch<BookingDetailResponse>(`${BASE}/bookings/${id}/reschedule`, body);
+  return res.data;
+}
+
+/**
+ * The shop's own hold for a move. Used for a run of consecutive slots: one call
+ * holds them all (each under its own id), and `409 BOOKING_SLOT_LOCKED` leaves
+ * none of the run held. Give them back one by one with `unlockSlot`.
+ */
+export async function holdBookingSlots(id: string, slotIds: string[]): Promise<BookingSlotHold> {
+  const body = slotIds.length === 1 ? { slotId: slotIds[0] } : { slotIds };
+  const res = await api.post<{ success: boolean; data: BookingSlotHold }>(
+    `${BASE}/bookings/${id}/slot-hold`,
+    body,
+  );
+  return res.data;
+}
+
+/** Withdraw the shop's own open proposal. */
+export async function withdrawRescheduleProposal(id: string): Promise<Booking> {
+  const res = await api.delete<BookingDetailResponse>(`${BASE}/bookings/${id}/reschedule-proposal`);
+  return res.data;
+}
+
+/** Answer a CUSTOMER's request to move (manual-approval services only). */
+export async function answerRescheduleProposal(
+  id: string,
+  answer: 'accept' | 'decline',
+): Promise<Booking> {
+  const res = await api.post<BookingDetailResponse>(
+    `${BASE}/bookings/${id}/reschedule-proposal/${answer}`,
+  );
+  return res.data;
+}
+
+/** This booking's link / instructions only — the service's defaults are untouched. */
+export async function updateBookingAccess(id: string, access: BookingAccessUpdate): Promise<Booking> {
+  const res = await api.patch<BookingDetailResponse>(`${BASE}/bookings/${id}/access`, access);
   return res.data;
 }
 

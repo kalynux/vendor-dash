@@ -1,7 +1,7 @@
 import { categoryNames } from '@/services/categories.service';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Plus, CalendarClock, CalendarX2, Loader2, Clock, Grid3X3, List,
+  Plus, CalendarClock, CalendarX2, Loader2, Grid3X3, List,
   MoreHorizontal, Edit, Rocket, RotateCcw, Trash2, Sparkles, RotateCw, XCircle,
   CheckCircle2, TriangleAlert, Eye, Share2,
 } from 'lucide-react';
@@ -38,7 +38,7 @@ import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useInfiniteList } from '@/hooks/use-infinite-list';
 import { useIndexingWatch } from '@/hooks/use-indexing-watch';
-import { useTranslation, useApiError, type TranslationKey } from '@/i18n';
+import { useTranslation, useFormatters, useApiError, type TranslationKey } from '@/i18n';
 import { ServiceStatusBadge } from '@/components/services/StatusBadges';
 import { PermanentDeleteDialog } from '@/components/products/PermanentDeleteDialog';
 import { ShareProductDialog } from '@/components/products/ShareProductDialog';
@@ -158,6 +158,30 @@ function CalendarDesyncBadge({ compact = false }: { compact?: boolean }) {
       {!compact && label}
     </span>
   );
+}
+
+// ─── What a row says about the service ──────────────────────────────────────────
+
+/** "5 000 XAF / 2 h" — the price is per session length. */
+function servicePriceText(
+  s: ServiceListItem,
+  t: ReturnType<typeof useTranslation>['t'],
+  fmt: ReturnType<typeof useFormatters>,
+): string | null {
+  if (s.price === null) return null;
+  const price = fmt.currency(s.price, s.currency);
+  return s.durationMinutes
+    ? t('services.list.pricePer', { price, duration: formatDuration(s.durationMinutes, t) })
+    : price;
+}
+
+/** "Capacity · 10 seats", or just the mode. */
+function serviceModeText(s: ServiceListItem, t: ReturnType<typeof useTranslation>['t']): string | null {
+  if (!s.bookingMode) return null;
+  const mode = t(BOOKING_MODE_LABEL_KEYS[s.bookingMode]);
+  return s.bookingMode === 'capacity' && s.maxBookings
+    ? t('services.list.modeWithSeats', { mode, seats: t('services.list.seats', { count: s.maxBookings }) })
+    : mode;
 }
 
 function transitionIcon(t: ServiceStatusTransition) {
@@ -338,7 +362,7 @@ function ServiceAiSwitch({
       onClick={(e) => e.stopPropagation()}
       onKeyDown={(e) => e.stopPropagation()}
     >
-      <label htmlFor={id} className="text-xs text-muted-foreground">
+      <label htmlFor={id} className="whitespace-nowrap text-xs text-muted-foreground">
         {t('products.ai.switchLabel')}
       </label>
       <Switch
@@ -364,6 +388,8 @@ interface ServiceCardProps {
 
 function ServiceGridCard({ service, onOpen, actions, calendarDesynced, onAiSwitch }: ServiceCardProps) {
   const { t } = useTranslation();
+  const fmt = useFormatters();
+  const priceText = servicePriceText(service, t, fmt);
   return (
     <Card
       onClick={onOpen}
@@ -391,7 +417,12 @@ function ServiceGridCard({ service, onOpen, actions, calendarDesynced, onAiSwitc
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
             <h3 className="truncate text-sm font-medium">{service.title}</h3>
-            <p className="truncate text-xs text-muted-foreground">{categoryNames(service.categories) || t('products.categories.none')}</p>
+            <p className={cn('truncate text-sm', priceText ? 'font-semibold' : 'text-muted-foreground')}>
+              {priceText ?? t('services.list.notPriced')}
+            </p>
+            <p className="truncate text-xs text-muted-foreground">
+              {serviceModeText(service, t) ?? (categoryNames(service.categories) || t('products.categories.none'))}
+            </p>
           </div>
           {actions}
         </div>
@@ -406,6 +437,7 @@ function ServiceGridCard({ service, onOpen, actions, calendarDesynced, onAiSwitc
 export function ServicesListPanel({ onOpenDetail, onCreate, reloadToken, calendarDesynced = false }: ServicesListPanelProps) {
   const isMobile = useIsMobile();
   const { t } = useTranslation();
+  const fmt = useFormatters();
   const apiError = useApiError();
 
   const [services, setServices] = useState<ServiceListItem[]>([]);
@@ -807,6 +839,7 @@ export function ServicesListPanel({ onOpenDetail, onCreate, reloadToken, calenda
         <thead className="border-b bg-muted/40 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
           <tr>
             <th className="px-4 py-3">{t('services.list.columns.service')}</th>
+            <th className="px-4 py-3">{t('services.list.columns.price')}</th>
             <th className="px-4 py-3">{t('services.list.columns.duration')}</th>
             <th className="px-4 py-3">{t('services.list.columns.mode')}</th>
             <th className="px-4 py-3">{t('services.list.columns.status')}</th>
@@ -836,9 +869,14 @@ export function ServicesListPanel({ onOpenDetail, onCreate, reloadToken, calenda
                     </div>
                   </div>
                 </td>
+                <td className="whitespace-nowrap px-4 py-3 font-medium">
+                  {s.price !== null
+                    ? fmt.currency(s.price, s.currency)
+                    : <span className="font-normal text-muted-foreground">{t('services.list.notPriced')}</span>}
+                </td>
                 <td className="px-4 py-3 text-muted-foreground">{formatDuration(s.durationMinutes, t)}</td>
                 <td className="px-4 py-3 text-muted-foreground">
-                  {s.bookingMode ? t(BOOKING_MODE_LABEL_KEYS[s.bookingMode]) : t('common.labels.emptyValue')}
+                  {serviceModeText(s, t) ?? t('common.labels.emptyValue')}
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex flex-col items-start gap-1">
@@ -856,15 +894,21 @@ export function ServicesListPanel({ onOpenDetail, onCreate, reloadToken, calenda
     </div>
   );
 
+  // One row per service: what it costs per session, how it's booked, then the
+  // AI switch. The old row only had duration + mode, both of which the list
+  // payload never carried — so phones showed a clock and a dash.
   const mobileListNode = (items: ServiceListItem[]) => (
     <div className="-mx-1">
-      {items.map((s) => (
+      {items.map((s) => {
+        const priceText = servicePriceText(s, t, fmt);
+        const modeText = serviceModeText(s, t);
+        return (
         <div
           key={s.id}
           onClick={() => openService(s)}
-          className="flex w-full items-center gap-3 border-b px-4 py-3 text-left transition-colors hover:bg-muted/30"
+          className="flex w-full items-start gap-3 border-b px-4 py-3 text-left transition-colors hover:bg-muted/30"
         >
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted">
             {s.firstFileUrl ? (
               <img src={s.firstFileUrl} alt="" className="h-full w-full object-cover" />
             ) : (
@@ -872,21 +916,25 @@ export function ServicesListPanel({ onOpenDetail, onCreate, reloadToken, calenda
             )}
           </div>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold">{s.title}</p>
-            <p className="flex items-center gap-1.5 truncate text-xs text-muted-foreground">
-              <Clock className="h-3 w-3" /> {formatDuration(s.durationMinutes, t)}
-              {s.bookingMode && ` · ${t(BOOKING_MODE_LABEL_KEYS[s.bookingMode])}`}
+            <div className="flex items-start justify-between gap-2">
+              <p className="min-w-0 truncate text-sm font-semibold">{s.title}</p>
+              <div className="flex shrink-0 items-center gap-1">
+                {calendarDesynced && s.status === 'active' && <CalendarDesyncBadge compact />}
+                <ServiceStatusBadge status={s.status} />
+              </div>
+            </div>
+            <p className={cn('mt-0.5 truncate text-sm', priceText ? 'font-medium' : 'text-muted-foreground')}>
+              {priceText ?? t('services.list.notPriced')}
             </p>
-            <ServiceAiSwitch
-              service={s}
-              onRequest={(enable) => setAiSwitchRequest({ service: s, enable })}
-              className="mt-1.5 justify-start"
-            />
-          </div>
-          {calendarDesynced && s.status === 'active' && <CalendarDesyncBadge compact />}
-          <div className="flex flex-col items-end gap-1">
-            <ServiceStatusBadge status={s.status} />
-            <VectorisationBadge enabled={s.vectorisationEnabled} status={s.vectorisationStatus} />
+            {modeText && <p className="truncate text-xs text-muted-foreground">{modeText}</p>}
+            <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+              <ServiceAiSwitch
+                service={s}
+                onRequest={(enable) => setAiSwitchRequest({ service: s, enable })}
+                className="justify-start"
+              />
+              <VectorisationBadge enabled={s.vectorisationEnabled} status={s.vectorisationStatus} />
+            </div>
           </div>
           <button
             type="button"
@@ -900,7 +948,8 @@ export function ServicesListPanel({ onOpenDetail, onCreate, reloadToken, calenda
             <MoreHorizontal className="h-5 w-5 text-muted-foreground" />
           </button>
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 

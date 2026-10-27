@@ -13,6 +13,7 @@ import type {
   DayOfWeek,
   PeakPriceType,
   ServiceConfig,
+  ServiceLocationKind,
 } from '@/types/services.types';
 
 type Translate = (key: TranslationKey, params?: Record<string, string | number>) => string;
@@ -27,6 +28,60 @@ export const TITLE_MAX = 200;
 export const SEO_TITLE_MAX = 60;
 export const SEO_DESCRIPTION_MAX = 160;
 export const CANCEL_REASON_MAX = 500;
+
+/**
+ * The service's `vendor_address` isn't on the profile (any more) — on saving
+ * the booking settings and at publishing. Shown next to the Where section.
+ */
+export const LOCATION_ADDRESS_MISSING = 'CATALOG_PRODUCT_SERVICE_LOCATION_ADDRESS_MISSING';
+
+// Access details (variants.md / bookings.md → Edit a booking's access details).
+export const MEETING_URL_MAX = 500;
+export const ACCESS_INSTRUCTIONS_MAX = 2000;
+export const REVEAL_MINUTES_MAX = 1440;
+export const REVEAL_MINUTES_DEFAULT = 30;
+
+/**
+ * The server's access rules, as translation keys per field — shared by the
+ * service form and the one-booking editor so both refuse the same things.
+ * Empty text is fine (it clears the field).
+ */
+export function accessFieldErrors(v: {
+  meetingUrl: string;
+  instructions: string;
+  revealMinutesBefore?: number;
+}): Partial<Record<'meetingUrl' | 'instructions' | 'revealMinutesBefore', TranslationKey>> {
+  const out: Partial<Record<'meetingUrl' | 'instructions' | 'revealMinutesBefore', TranslationKey>> = {};
+  const url = v.meetingUrl.trim();
+  if (url) {
+    if (!/^https:\/\/\S+$/i.test(url)) out.meetingUrl = 'services.validation.meetingUrlHttps';
+    else if (url.length > MEETING_URL_MAX) out.meetingUrl = 'services.validation.meetingUrlMax';
+  }
+  if (v.instructions.trim().length > ACCESS_INSTRUCTIONS_MAX) {
+    out.instructions = 'services.validation.instructionsMax';
+  }
+  const m = v.revealMinutesBefore;
+  if (m == null || !Number.isInteger(m) || m < 0 || m > REVEAL_MINUTES_MAX) {
+    out.revealMinutesBefore = 'services.validation.revealRange';
+  }
+  return out;
+}
+
+/** "Open in Maps" for an address: the coordinates when known, else the text. */
+export function mapsUrl(location: {
+  coordinates?: [number, number] | null;
+  formattedAddress?: string | null;
+  addressLine1?: string | null;
+  city?: string | null;
+}): string | null {
+  const c = location.coordinates;
+  if (c && Number.isFinite(c[0]) && Number.isFinite(c[1])) {
+    // GeoJSON is [longitude, latitude]; Maps wants "lat,lng".
+    return `https://www.google.com/maps/search/?api=1&query=${c[1]},${c[0]}`;
+  }
+  const text = location.formattedAddress || [location.addressLine1, location.city].filter(Boolean).join(', ');
+  return text ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(text)}` : null;
+}
 
 // ─── Days of week (availability-rules.md: 0 = Sunday … 6 = Saturday) ────────────
 
@@ -89,6 +144,12 @@ export const BOOKING_MODE_LABEL_KEYS: Record<BookingMode, TranslationKey> = {
   capacity: 'services.bookingMode.capacity',
 };
 
+export const LOCATION_KIND_LABEL_KEYS: Record<ServiceLocationKind, TranslationKey> = {
+  vendor_address: 'services.location.kinds.vendorAddress',
+  customer_address: 'services.location.kinds.customerAddress',
+  online: 'services.location.kinds.online',
+};
+
 // ─── Shared service-config form shape + builder ─────────────────────────────────
 // serviceConfig + price live on the single service variant. Both the create and
 // settings forms carry this shape; `buildServiceConfig` maps it to the API config.
@@ -108,6 +169,12 @@ export interface ServiceConfigFormShape {
     priceType: PeakPriceType;
     value: number;
   };
+  /** `''` until chosen. */
+  locationKind: ServiceLocationKind | '';
+  vendorAddressId: string;
+  meetingUrl: string;
+  instructions: string;
+  revealMinutesBefore?: number;
 }
 
 /**
@@ -133,6 +200,20 @@ export function buildServiceConfig(v: ServiceConfigFormShape): ServiceConfig {
       value: v.peakHours.value,
     };
   }
+  // Replaced whole by the server when sent. The schema refuses a blank kind,
+  // so `''` only reaches here from a caller that skipped validation.
+  if (v.locationKind) {
+    config.location = v.locationKind === 'vendor_address'
+      ? { kind: 'vendor_address', vendorAddressId: v.vendorAddressId }
+      : { kind: v.locationKind };
+  }
+  // The form shows the whole current state, so every field is sent; an emptied
+  // box is the vendor clearing it (`null`).
+  config.access = {
+    meetingUrl: v.meetingUrl.trim() || null,
+    instructions: v.instructions.trim() || null,
+    revealMinutesBefore: v.revealMinutesBefore ?? REVEAL_MINUTES_DEFAULT,
+  };
   return config;
 }
 
@@ -267,12 +348,15 @@ export const BOOKING_TRANSITIONS: Record<BookingStatus, BookingTransition[]> = {
 
 export const TERMINAL_BOOKING_STATES: BookingStatus[] = ['completed', 'no-show', 'cancelled'];
 
-/**
- * Booking amounts come from the API in the smallest currency unit
- * (`priceSnapshot` 5000 = 50.00 XAF). Divide before handing to `fmt.currency`.
- */
-export function toMajorUnits(amount: number): number {
-  return amount / 100;
+// Booking amounts (`priceSnapshot`, `settlement.*`) are the service's price as
+// the vendor typed it — 5000 is 5 000 XAF — so they go to `fmt.currency` as-is.
+// A `toMajorUnits` (÷100) used to sit here, trusting bookings.md's "smallest
+// currency unit" line; a 5 000 XAF booking showed as 50 XAF. XAF has no cents.
+
+/** The customer's note on a booking (`metadata.notes`), or `null`. */
+export function customerNote(metadata: Record<string, unknown> | null | undefined): string | null {
+  const notes = metadata?.notes;
+  return typeof notes === 'string' && notes.trim() ? notes.trim() : null;
 }
 
 // ─── Timezones ───────────────────────────────────────────────────────────────────

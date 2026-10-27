@@ -154,6 +154,9 @@ export const notifications = {
             bookingCreatedHint: 'Lorsqu’une nouvelle réservation de service est reçue',
             bookingCancelled: 'Réservation annulée',
             bookingCancelledHint: 'Lorsqu’une réservation de service est annulée',
+            bookingRescheduled: 'Changements d’horaire',
+            bookingRescheduledHint:
+                'Lorsqu’un client déplace une réservation, demande à la déplacer, ou répond à un nouvel horaire que vous avez proposé',
             paymentReceivedPartial: 'Paiement partiel',
             paymentReceivedPartialHint: 'Lorsqu’un paiement partiel est reçu',
             paymentReceivedFull: 'Paiement intégral',

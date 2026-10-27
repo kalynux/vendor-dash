@@ -10,7 +10,6 @@ import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { useTranslation, useFormatters, useApiError, type TranslationKey } from '@/i18n';
 import { completeBooking } from '@/services/services.service';
-import { toMajorUnits } from '@/components/services/service.constants';
 import type { Booking, CompleteBookingPayload, CompleteBookingResult } from '@/types/services.types';
 
 type Mode = 'asBooked' | 'actualEnd' | 'extraMinutes' | 'fixedPrice';
@@ -88,7 +87,7 @@ export function CompleteBookingDialog({ booking, open, onOpenChange, onCompleted
     }
     setBusy(true);
     try {
-      const res = await completeBooking(booking._id, payload);
+      const res = await completeBooking(booking.id, payload);
       setResult(res);
       toast.success(t('services.complete.resultTitle'));
       onCompleted();
@@ -99,7 +98,7 @@ export function CompleteBookingDialog({ booking, open, onOpenChange, onCompleted
     }
   }
 
-  const money = (amount: number) => fmt.currency(toMajorUnits(amount), currency);
+  const money = (amount: number) => fmt.currency(amount, currency);
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!busy) onOpenChange(o); }}>

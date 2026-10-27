@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import type { UseFormReturn } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -19,6 +19,8 @@ interface StepServiceBookingProps {
   onSaveComplete: (values: ServiceSettingsFormValues) => void;
   onBack: () => void;
   mode?: 'create' | 'edit';
+  /** The server refused the chosen address — shown under Where, not in the top alert. */
+  locationError?: string | null;
 }
 
 export function StepServiceBooking({
@@ -28,6 +30,7 @@ export function StepServiceBooking({
   onSaveComplete,
   onBack,
   mode = 'create',
+  locationError = null,
 }: StepServiceBookingProps) {
   const { t } = useTranslation();
   const form = useForm<ServiceSettingsFormValues>({
@@ -37,6 +40,14 @@ export function StepServiceBooking({
   const formRef = useRef<HTMLFormElement>(null);
   // Set when a save is refused and no error line is on screen to say why.
   const [unseenError, setUnseenError] = useState(false);
+
+  // A refused address arrives after the save, often with Where scrolled away.
+  useEffect(() => {
+    if (!locationError) return;
+    requestAnimationFrame(() => {
+      document.getElementById('service-where')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+  }, [locationError]);
 
   /**
    * A refused save must always answer. On a phone the error line is usually
@@ -82,7 +93,10 @@ export function StepServiceBooking({
         </Alert>
       )}
 
-      <ServiceConfigFields form={form as unknown as UseFormReturn<ServiceConfigFormShape>} />
+      <ServiceConfigFields
+        form={form as unknown as UseFormReturn<ServiceConfigFormShape>}
+        locationError={locationError}
+      />
 
       {unseenError && (
         <Alert variant="destructive">

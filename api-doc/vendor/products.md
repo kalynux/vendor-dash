@@ -223,12 +223,48 @@ GET /api/vendor/products
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
 | `type` | string | No | — | Filter: `physical`, `digital`, `service` |
-| `status` | string | No | — | Filter: `draft`, `active`, `archived` |
+| `status` | string | No | — | Filter to one exact status: `draft`, `active`, `archived`, `pending_review`, `suspended` |
+| `excludeStatus` | string | No | — | Statuses to **leave out**, comma-separated (e.g. `archived` or `archived,suspended`). Same five values as `status`. See the note below |
 | `q` | string | No | — | Case-insensitive **substring** match on title or description — see the note below |
 | `sortBy` | string | No | `createdAt` | `createdAt`, `updatedAt`, `title` |
 | `sortOrder` | string | No | `desc` | `asc`, `desc` |
 | `page` | number | No | `1` | Page number (1-indexed) |
 | `limit` | number | No | `20` | Items per page (max: 100) |
+
+> [!NOTE]
+> 🆕 **Service rows carry `service` (2026-10-26).** Every row whose `type` is `service` has:
+>
+> ```json
+> "service": { "price": 5000, "currency": "XAF", "durationMinutes": 120, "bookingMode": "capacity", "maxBookings": 10 }
+> ```
+>
+> Read from the service's single default variant, in one batched read per page. `price` is the
+> base price per `durationMinutes` in **whole XAF**, exactly as the vendor typed it (`5000` =
+> 5 000 XAF, never divided by 100). `durationMinutes` / `bookingMode` are `null` when the config
+> is missing. `maxBookings` is the seats per slot for `capacity`, otherwise `null`. A service
+> with no default variant yet (a fresh draft) has `"service": null`. Physical and digital rows
+> have **no** `service` key.
+
+> [!NOTE]
+> **`excludeStatus` (added 2026-10-18).** It is applied **in the database query**, so `data`,
+> `meta.total`, `meta.totalPages` and the page size all reflect it. A full page stays full, and
+> the totals count only rows the vendor can see.
+>
+> - **Values.** Comma-separated (`?excludeStatus=archived,suspended`), or the parameter
+>   repeated (`?excludeStatus=archived&excludeStatus=suspended`). Spaces around values,
+>   empty entries (a trailing comma) and duplicates are ignored. An **unknown** value
+>   (`?excludeStatus=deleted`) is a `400 VALIDATION_ERROR`. It is never silently ignored.
+> - **With `status`, both apply** (`status = X AND status NOT IN [...]`). So
+>   `?status=archived&excludeStatus=archived` returns `200` with an empty `data` and
+>   `meta.total: 0`. It is not an error.
+> - **Absent or empty, nothing is excluded.** That is the behaviour from before this
+>   parameter existed (all statuses).
+>
+> Example: the dashboard's default view, every product except archived ones:
+>
+> ```http
+> GET /api/vendor/products?excludeStatus=archived&page=1&limit=20
+> ```
 
 > [!NOTE]
 > **`q` is not a full-text search and not a pattern language.** It is an unanchored,
@@ -264,6 +300,7 @@ GET /api/vendor/products
 | `hasVariants` | boolean | Drives the "Has variants" / "Variants" badge. |
 | `vectorisationEnabled` | boolean | Vendor opt-in flag. Passed to `VectorisationBadge`. |
 | `vectorisationStatus` | `"not_started" \| "pending" \| "completed" \| "failed" \| "skipped_no_credits"` | Indexing state. Passed to `VectorisationBadge`; row edit menu is locked while `pending`. |
+| `service` | object \| null | **Service rows only (added 2026-10-26)** — absent on physical/digital rows. Read from the single default variant in one batched query per page: `{ price, currency, durationMinutes, bookingMode, maxBookings }`. `price` is the base price per `durationMinutes`, as typed (`5000` = 5 000 XAF). `maxBookings` is set only in `capacity` mode, else `null`. **`null`** on a service whose variant isn't created yet (a fresh draft). Before this field the services list could only show the title. |
 
 **Response `200`:**
 

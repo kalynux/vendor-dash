@@ -18,7 +18,9 @@ const NOTIFICATIONS = '/vendor/notifications';
  * renders off and the save bar compares `true` against `undefined`. Filled on
  * every read so the saved snapshot and the edited copy agree.
  */
-const DEFAULT_ON_EVENTS = ['agencyStorageUpdates', 'codLimitUpdates', 'deliveryFeeProposals'] as const;
+const DEFAULT_ON_EVENTS = [
+  'agencyStorageUpdates', 'codLimitUpdates', 'deliveryFeeProposals', 'bookingRescheduled',
+] as const;
 
 function withEventDefaults(data: NotificationPreferences): NotificationPreferences {
   const preferences = { ...data.preferences };

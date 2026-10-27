@@ -88,10 +88,16 @@ export const services = {
         rowActions: 'Service actions',
         columns: {
             service: 'Service',
+            price: 'Price',
             duration: 'Duration',
             mode: 'Mode',
             status: 'Status',
         },
+        /** Price per session length — "5 000 XAF / 2 h". */
+        pricePer: '{{price}} / {{duration}}',
+        notPriced: 'No price or length yet',
+        seats: plural({ one: '{{count}} seat', other: '{{count}} seats' }),
+        modeWithSeats: '{{mode}} · {{seats}}',
         count: plural({ one: '{{count}} service', other: '{{count}} services' }),
         emptyTitle: 'No services yet',
         emptyDescription: 'Create a bookable service to start accepting appointments.',
@@ -332,7 +338,9 @@ export const services = {
 
     detail: {
         title: 'Booking',
+        bookingNumber: 'Booking {{number}}',
         customer: 'Customer',
+        customerNote: 'Customer note',
         payment: 'Payment',
         paymentRequired: 'Payment required',
         paymentNotRequired: 'No payment required',
@@ -350,7 +358,7 @@ export const services = {
         balanceSettled: 'Balance settled ({{method}}).',
         creditRecorded: '{{amount}} overpaid — recorded, not refunded automatically.',
         settleBalanceInCash: 'Record {{amount}} received in cash',
-        reschedule: 'Reschedule',
+        reschedule: 'Propose a new time',
         statusConfirmDescription:
             'Apply this change? Confirmed bookings sync to your Google Calendar.',
         cancelTitle: 'Cancel this booking?',
@@ -410,14 +418,93 @@ export const services = {
         },
     },
 
+    /** Since 2026-10-26 this PROPOSES a time — never say "moved". */
     reschedule: {
-        title: 'Reschedule booking',
+        title: 'Propose a new time',
+        description:
+            'The customer accepts or declines. Until they answer, the booking keeps its current time.',
         empty:
             "No open time slots in the next {{days}} days. Check the service's availability rules.",
+        emptyLong:
+            "No free {{duration}} in a row in the next {{days}} days. Check the service's availability rules.",
+        longHint: 'This appointment lasts {{duration}}. Each time below is free for the whole {{duration}}.',
         heldFor: 'Held for {{time}}',
-        confirm: 'Confirm new time',
+        confirm: 'Send to the customer',
         lockExpired: 'The hold on that time expired. Pick a slot again.',
         lockFailed: 'Could not hold that slot',
+        errors: {
+            notContiguous: 'Pick times that follow each other.',
+            lengthChanged: 'Keep the same length as the original appointment — {{duration}}.',
+            slotCount: 'That is too many times for one appointment.',
+            notFuture: 'Choose a time in the future.',
+            inverted: 'That time ends before it starts.',
+            slotLockedAt: 'Someone is booking {{time}} right now. Pick another time, or try again in a few minutes.',
+        },
+    },
+
+    /** A new time waiting for an answer (2026-10-26). */
+    proposal: {
+        waiting: 'Waiting for the customer to accept',
+        customerAsks: 'The customer asks to change the time',
+        proposedTime: 'New time: {{time}}',
+        timeRange: '{{start}} – {{end}}',
+        expires: 'If nobody answers by {{date}}, the current time stays.',
+        accept: 'Accept',
+        decline: 'Decline',
+        withdraw: 'Withdraw this proposal',
+        withdrawn: 'Proposal withdrawn. The booking keeps its time.',
+        accepted: 'New time accepted. The booking has moved.',
+        declined: 'Request declined. The booking keeps its time.',
+        actionFailed: 'Could not update this request',
+        declinedByCustomer:
+            'The customer declined the new time ({{time}}). The original time stands, and they may cancel with a full refund.',
+        lapsed: 'Nobody answered the new time ({{time}}). The original time stands.',
+        markVendor: 'Waiting for customer',
+        markCustomer: 'Customer asks to move',
+    },
+
+    location: {
+        title: 'Where',
+        whereLabel: 'Where does it happen?',
+        kinds: {
+            vendorAddress: 'My address',
+            customerAddress: "Customer's place",
+            online: 'Online',
+        },
+        help: {
+            vendorAddress: 'Customers come to you. They see the address once you confirm the booking.',
+            customerAddress: 'You go to the customer. They choose their address when booking.',
+            online: 'Add the meeting link below. Customers see it just before the start.',
+        },
+        addressLabel: 'Address',
+        addressPlaceholder: 'Choose one of your addresses',
+        noAddresses: 'You have no business address yet.',
+        goToAddresses: 'Add an address',
+        online: 'Online',
+        atYourAddress: 'At your address',
+        goToCustomer: "You go to the customer's place",
+        noAddressYet: 'The customer has not given an address yet.',
+        openInMaps: 'Open in Maps',
+    },
+
+    access: {
+        title: 'Link and instructions',
+        serviceHelp: 'Private. Copied onto every new booking; you can change it for one booking later.',
+        meetingUrl: 'Meeting link',
+        meetingUrlPlaceholder: 'https://meet.google.com/…',
+        instructions: 'Instructions',
+        instructionsPlaceholder: 'e.g. Ring the second bell. Bring your ID.',
+        reveal: 'Show to the customer',
+        revealUnit: 'minutes before the start',
+        visibilityHelp:
+            'Customers see the link and instructions only from this many minutes before the start, and only once the booking is confirmed and paid.',
+        none: 'No link or instructions for this booking.',
+        visibleFrom: 'The customer sees this {{minutes}} min before the start, once confirmed and paid.',
+        editAction: 'Edit link / instructions',
+        editTitle: 'Link and instructions for this booking',
+        editDescription: 'Changes this booking only. The service keeps its own.',
+        saved: 'Saved for this booking',
+        saveFailed: 'Could not save the link and instructions',
     },
 
     availability: {
@@ -523,10 +610,18 @@ export const services = {
         nextMonth: 'Next month',
         today: 'Today',
         more: '+{{count}} more',
+        dayLabel: plural({ one: '{{date}}, 1 booking', other: '{{date}}, {{count}} bookings' }),
+        dayCount: plural({ one: '1 booking', other: '{{count}} bookings' }),
     },
 
     /** Field-level validation. Referenced by the zod schemas via key. */
     validation: {
+        locationRequired: 'Choose where the appointment happens.',
+        locationAddressRequired: 'Choose which of your addresses.',
+        meetingUrlHttps: 'The link must start with https://',
+        meetingUrlMax: 'The link must be 500 characters or less.',
+        instructionsMax: 'Instructions must be 2 000 characters or less.',
+        revealRange: 'Enter a whole number of minutes from 0 to 1440.',
         titleMin: 'Title must be at least 3 characters',
         titleMax: 'Title must be 200 characters or less',
         descriptionRequired: 'Description is required',
@@ -569,7 +664,7 @@ export const services = {
         statusUpdated: 'Service updated',
         bookingUpdated: 'Booking updated',
         bookingCancelled: 'Booking cancelled',
-        bookingRescheduled: 'Booking rescheduled',
+        rescheduleProposed: 'New time sent. The customer will accept or decline it.',
         markedPaid: 'Marked as paid',
         balanceSettled: 'Balance recorded as paid in cash',
     },

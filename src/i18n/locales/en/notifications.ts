@@ -176,6 +176,9 @@ export const notifications = {
             bookingCreatedHint: 'When a new service booking is received',
             bookingCancelled: 'Booking cancelled',
             bookingCancelledHint: 'When a service booking is cancelled',
+            bookingRescheduled: 'Booking time changes',
+            bookingRescheduledHint:
+                'When a customer moves a booking, asks to move one, or answers a new time you proposed',
             paymentReceivedPartial: 'Partial payment',
             paymentReceivedPartialHint: 'When a partial payment is received',
             paymentReceivedFull: 'Full payment',

@@ -1,4 +1,7 @@
+import { Link } from 'react-router-dom';
 import { Controller, type UseFormReturn } from 'react-hook-form';
+import { Button } from '@/components/ui/button';
+import { ChoiceChips } from '@/components/ui/choice-chips';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
@@ -6,16 +9,26 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
-import { useTranslation, useMessage } from '@/i18n';
+import { useOnboarding } from '@/onboarding/store/onboarding.store';
+import { useTranslation, useMessage, type TranslationKey } from '@/i18n';
+import { AccessDetailsInputs } from '@/components/services/BookingAccessEditor';
 import {
   BOOKING_MODES, DURATION_PRESETS, DAY_ORDER, DAY_SHORT_KEYS,
   type ServiceConfigFormShape,
 } from '@/components/services/service.constants';
-import type { DayOfWeek } from '@/types/services.types';
+import type { DayOfWeek, ServiceLocationKind } from '@/types/services.types';
+
+const LOCATION_KINDS: { value: ServiceLocationKind; labelKey: TranslationKey; helpKey: TranslationKey }[] = [
+  { value: 'vendor_address', labelKey: 'services.location.kinds.vendorAddress', helpKey: 'services.location.help.vendorAddress' },
+  { value: 'customer_address', labelKey: 'services.location.kinds.customerAddress', helpKey: 'services.location.help.customerAddress' },
+  { value: 'online', labelKey: 'services.location.kinds.online', helpKey: 'services.location.help.online' },
+];
 
 interface ServiceConfigFieldsProps {
   // Typed to the shared shape; call sites pass their form cast to this shape.
   form: UseFormReturn<ServiceConfigFormShape>;
+  /** The server refused the chosen address (`…LOCATION_ADDRESS_MISSING`) — shown under Where. */
+  locationError?: string | null;
 }
 
 /**
@@ -23,13 +36,28 @@ interface ServiceConfigFieldsProps {
  * booking mode, capacity seats, buffers, and an optional peak-hours surcharge.
  * Used by the Booking step in the service create + edit pages (StepServiceBooking).
  */
-export function ServiceConfigFields({ form }: ServiceConfigFieldsProps) {
+export function ServiceConfigFields({ form, locationError }: ServiceConfigFieldsProps) {
   const { t } = useTranslation();
   const m = useMessage();
+  const { session } = useOnboarding();
   const { register, control, watch, setValue, formState: { errors } } = form;
   const bookingMode = watch('bookingMode');
   const peakEnabled = watch('peakHoursEnabled');
   const peakDays = watch('peakHours.daysOfWeek') ?? [];
+  const locationKind = watch('locationKind');
+  const addresses = (session?.role_entity.business_addresses ?? []).filter((a) => !!a._id);
+
+  const revealValue = watch('revealMinutesBefore');
+  // Re-check as they type only once a save has been tried — like the rest of the form.
+  const accessOpts = { shouldDirty: true, shouldValidate: form.formState.isSubmitted };
+
+  function chooseLocation(kind: ServiceLocationKind) {
+    setValue('locationKind', kind, { shouldDirty: true, shouldValidate: form.formState.isSubmitted });
+    // One address → nothing to choose.
+    if (kind === 'vendor_address' && !watch('vendorAddressId') && addresses.length === 1) {
+      setValue('vendorAddressId', addresses[0]._id as string, { shouldDirty: true });
+    }
+  }
 
   function toggleDay(day: DayOfWeek) {
     const next = peakDays.includes(day)
@@ -128,6 +156,87 @@ export function ServiceConfigFields({ form }: ServiceConfigFieldsProps) {
           </p>
         </Field>
       )}
+
+      {/* Where it happens — one place per service. */}
+      <div id="service-where" className="space-y-1.5">
+        <Label className="text-sm">
+          {t('services.location.whereLabel')}
+          <span className="ml-0.5 text-destructive">*</span>
+        </Label>
+        <ChoiceChips<ServiceLocationKind>
+          label={t('services.location.whereLabel')}
+          value={locationKind || null}
+          onChange={chooseLocation}
+          options={LOCATION_KINDS.map((k) => ({ value: k.value, label: t(k.labelKey) }))}
+        />
+        {locationKind && (
+          <p className="text-xs text-muted-foreground">
+            {t(LOCATION_KINDS.find((k) => k.value === locationKind)!.helpKey)}
+          </p>
+        )}
+        {errors.locationKind?.message && (
+          <p data-field-error className="text-xs text-destructive">{m(errors.locationKind.message)}</p>
+        )}
+
+        {locationKind === 'vendor_address' && (
+          addresses.length === 0 ? (
+            <div className="space-y-2 pt-1">
+              <p className="text-sm text-muted-foreground">{t('services.location.noAddresses')}</p>
+              <Button asChild variant="outline" className="max-md:h-11 max-md:w-full">
+                <Link to="/dashboard/account/addresses">{t('services.location.goToAddresses')}</Link>
+              </Button>
+            </div>
+          ) : (
+            <div className="pt-1">
+              <Controller
+                control={control}
+                name="vendorAddressId"
+                render={({ field }) => (
+                  <Select value={field.value || undefined} onValueChange={field.onChange}>
+                    <SelectTrigger className="w-full" aria-label={t('services.location.addressLabel')}>
+                      <SelectValue placeholder={t('services.location.addressPlaceholder')} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {addresses.map((addr) => (
+                        <SelectItem key={addr._id} value={addr._id as string}>
+                          {[addr.label, [addr.address_line1, addr.city].filter(Boolean).join(', ')]
+                            .filter(Boolean)
+                            .join(' — ')}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+            </div>
+          )
+        )}
+        {errors.vendorAddressId?.message && (
+          <p data-field-error className="text-xs text-destructive">{m(errors.vendorAddressId.message)}</p>
+        )}
+        {locationError && <p data-field-error className="text-xs text-destructive">{locationError}</p>}
+      </div>
+
+      {/* Access details — private, copied onto every new booking. */}
+      <div className="space-y-3 border-t pt-4">
+        <div>
+          <p className="text-sm font-medium">{t('services.access.title')}</p>
+          <p className="text-xs text-muted-foreground">{t('services.access.serviceHelp')}</p>
+        </div>
+        <AccessDetailsInputs
+          meetingUrl={watch('meetingUrl') ?? ''}
+          instructions={watch('instructions') ?? ''}
+          reveal={revealValue == null ? '' : String(revealValue)}
+          onMeetingUrl={(v) => setValue('meetingUrl', v, accessOpts)}
+          onInstructions={(v) => setValue('instructions', v, accessOpts)}
+          onReveal={(v) => setValue('revealMinutesBefore', blankToUndefined(v), accessOpts)}
+          errors={{
+            meetingUrl: m(errors.meetingUrl?.message),
+            instructions: m(errors.instructions?.message),
+            revealMinutesBefore: m(errors.revealMinutesBefore?.message),
+          }}
+        />
+      </div>
 
       {/* Buffers */}
       <div className="grid grid-cols-2 gap-3">

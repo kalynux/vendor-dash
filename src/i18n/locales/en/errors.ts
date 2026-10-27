@@ -276,6 +276,8 @@ export const errors = {
             CATALOG_PRODUCT_INVALID_STATE:
                 "This status change isn't allowed from the service's current status.",
             CATALOG_PRODUCT_NO_DESCRIPTION: 'A service description is required.',
+            CATALOG_PRODUCT_SERVICE_LOCATION_ADDRESS_MISSING:
+                'That address is no longer on your profile. Choose another address, or add it back under Account → Addresses.',
             CATALOG_PRODUCT_NO_VARIANTS: 'Set a booking price before publishing.',
             CATALOG_PRODUCT_NO_DEFAULT_VARIANT: 'A booking price must be set before publishing.',
             CATALOG_PRODUCT_VARIANT_ZERO_PRICE: 'The booking price must be greater than 0.',
@@ -928,6 +930,12 @@ export const errors = {
         BOOKING_SLOT_FULL: 'That time slot is fully booked. Pick another.',
         BOOKING_NOT_CANCELLABLE: 'This booking is past the point where it can be cancelled.',
         BOOKING_SLOT_UNAVAILABLE: 'That time was taken while you were booking it. Pick another.',
+        BOOKING_PROPOSAL_PENDING: 'A new time is already waiting for the customer to answer. Withdraw it first to propose another.',
+        BOOKING_PROPOSAL_NOT_FOUND: 'There is no open request on this booking any more. It may have been answered or expired.',
+        BOOKING_PROPOSAL_NOT_YOURS: 'Only the other side can answer this request.',
+        BOOKING_ACCESS_NOT_EDITABLE: 'This booking is finished or cancelled, so its link and instructions can no longer change.',
+        BOOKING_MULTI_SLOT_NOT_SUPPORTED: 'A class is moved one session at a time.',
+        CATALOG_PRODUCT_SERVICE_LOCATION_ADDRESS_MISSING: 'The address chosen for this service is no longer on your profile. Choose another one.',
         // Completion balance — see the settle-in-cash flow on a completed booking.
         BOOKING_NOT_COMPLETED: 'Complete this booking before settling its balance.',
         BOOKING_NO_BALANCE_DUE: 'There is no outstanding balance on this booking.',

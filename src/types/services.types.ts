@@ -36,7 +36,33 @@ export interface PeakHours {
   startTime: string; // 'HH:mm'
   endTime: string; // 'HH:mm'
   priceType: PeakPriceType;
-  value: number; // percentage points or a flat minor-unit amount
+  value: number; // percentage points or a flat amount (5000 = 5 000 XAF)
+}
+
+/**
+ * Where the appointment happens (variants.md, 2026-10-26). One per service.
+ * `customer_address`: the vendor travels; the customer picks the address when booking.
+ */
+export type ServiceLocationKind = 'vendor_address' | 'customer_address' | 'online';
+
+export interface ServiceLocation {
+  kind: ServiceLocationKind;
+  /** One of the profile's `business_addresses[]._id` — `vendor_address` only. */
+  vendorAddressId?: string;
+}
+
+/**
+ * Private access details every new booking copies. Never on the public page;
+ * the customer sees them only `revealMinutesBefore` the start, once the booking
+ * is confirmed AND paid. `null`/`""` clears a text field.
+ */
+export interface ServiceAccess {
+  /** `https://` only, max 500. */
+  meetingUrl?: string | null;
+  /** Plain text, max 2 000. */
+  instructions?: string | null;
+  /** 0–1440, default 30. */
+  revealMinutesBefore?: number;
 }
 
 export interface ServiceConfig {
@@ -47,6 +73,10 @@ export interface ServiceConfig {
   /** Seats per slot — required (and only meaningful) when bookingMode is 'capacity'. */
   maxBookings?: number;
   peakHours?: PeakHours;
+  /** Absent on services from before 2026-10-26 ("not specified"). Replaced whole when sent. */
+  location?: ServiceLocation | null;
+  /** Merged field by field when sent. */
+  access?: ServiceAccess | null;
 }
 
 // ─── Service product shapes ─────────────────────────────────────────────────────
@@ -61,6 +91,11 @@ export interface ServiceListItem {
   firstFileUrl: string | null;
   durationMinutes: number | null;
   bookingMode: BookingMode | null;
+  /** Base price per `durationMinutes`, as typed. `null` until the service is priced. */
+  price: number | null;
+  currency: string;
+  /** Seats per slot, `capacity` mode only. */
+  maxBookings: number | null;
   vectorisationEnabled: boolean;
   vectorisationStatus: ApiVectorisationStatus;
   createdAt: string;
@@ -202,8 +237,14 @@ export type PaymentStatus =
 export type PaymentMethod = 'cash' | string;
 
 // Populated reference shapes returned by the list/detail endpoints.
+//
+// ⚠ The booking and its product answer to `id`, the user to `_id` — not a typo
+// (bookings.md, warning under List Bookings: `Booking`/`Product` are built on
+// `BaseSchemaOptions`, `User` is not). Reading `_id` off a booking gave
+// `undefined`, so list rows opened nothing and every action on the detail
+// sheet called `/bookings/undefined/…`.
 export interface BookingProductRef {
-  _id: string;
+  id: string;
   title: string;
   type: string;
 }
@@ -211,10 +252,14 @@ export interface BookingProductRef {
 export interface BookingUserRef {
   _id: string;
   login_email?: string;
+  /** Detail read only. */
+  login_phone?: string | null;
 }
 
 export interface Booking {
-  _id: string;
+  id: string;
+  /** `BKG-2026-000123`; `null` on bookings made before the field existed. */
+  bookingNumber?: string | null;
   productId: BookingProductRef | string;
   userId: BookingUserRef | string;
   vendorId: string;
@@ -224,8 +269,17 @@ export interface Booking {
   paymentStatus: PaymentStatus;
   paymentMethod?: PaymentMethod;
   paidAt?: string | null;
-  priceSnapshot: number; // minor currency unit (e.g. 5000 = 50.00 XAF)
+  /** As the service's price was typed — 5000 means 5 000 XAF. Never divide. */
+  priceSnapshot: number;
   currency: string;
+  /** Free-form; the customer's note is `metadata.notes` (see `customerNote`). */
+  metadata?: Record<string, unknown> | null;
+  /** The booking's own copy of where it happens (2026-10-26). `null` on older bookings. */
+  location?: BookingLocation | null;
+  /** The booking's own access details — always in full on vendor reads. */
+  access?: BookingAccess | null;
+  /** A time someone proposed to move it to. The booking keeps its time until accepted. */
+  rescheduleProposal?: RescheduleProposal | null;
   requiresPayment: boolean;
   externalCalendarEventId?: string | null;
   cancelledAt?: string | null;
@@ -234,13 +288,51 @@ export interface Booking {
   settlement?: BookingSettlement | null;
 }
 
+export interface BookingLocation {
+  kind: ServiceLocationKind;
+  label?: string | null;
+  addressLine1?: string | null;
+  addressLine2?: string | null;
+  city?: string | null;
+  state?: string | null;
+  country?: string | null;
+  formattedAddress?: string | null;
+  /** GeoJSON order: [longitude, latitude]. */
+  coordinates?: [number, number] | null;
+  sourceAddressId?: string | null;
+}
+
+export interface BookingAccess {
+  instructions?: string | null;
+  meetingUrl?: string | null;
+  revealMinutesBefore?: number | null;
+}
+
+/** `PATCH /vendor/bookings/:id/access` — at least one field. */
+export type BookingAccessUpdate = ServiceAccess;
+
+export type RescheduleProposalStatus = 'open' | 'accepted' | 'declined' | 'withdrawn' | 'lapsed';
+
+export interface RescheduleProposal {
+  status: RescheduleProposalStatus;
+  proposedBy: 'vendor' | 'customer';
+  startAt: string;
+  endAt: string;
+  previousStartAt?: string | null;
+  previousEndAt?: string | null;
+  proposedAt?: string | null;
+  /** Unanswered by then → `lapsed`, the original time stands. */
+  expiresAt?: string | null;
+  answeredAt?: string | null;
+}
+
 /**
  * What completion settled to, persisted on the booking rather than buried in
  * `metadata` — so an outstanding balance is still readable long after the
  * completion dialog closed.
  */
 export interface BookingSettlement {
-  /** The recomputed (or flat) price, in minor units. */
+  /** The recomputed (or flat) price (same unit as `priceSnapshot`). */
   finalPrice: number;
   /** What the customer still owes: `max(0, finalPrice − amountPaid)`. */
   balanceDue: number;
@@ -260,13 +352,13 @@ export interface BookingSettlement {
 export interface CompleteBookingPayload {
   actualEndAt?: string; // ISO — recompute price for [startAt, actualEndAt]
   additionalMinutes?: number; // extend beyond the booked end
-  fixedPrice?: number; // flat final price (minor units); excludes the other two
+  fixedPrice?: number; // flat final price (as typed, 5000 = 5 000 XAF); excludes the other two
 }
 
 export interface CompleteBookingResult {
   booking: Booking;
-  priceSnapshot: number; // originally booked estimate (minor units)
-  finalPrice: number; // recomputed/flat price (minor units)
+  priceSnapshot: number; // originally booked estimate
+  finalPrice: number; // recomputed/flat price
   /** What the customer has actually paid so far — `0` unless the booking is `paid`. */
   amountPaid?: number;
   /**
@@ -361,6 +453,18 @@ export interface SlotLock {
   expiresAt: string;
 }
 
+/** `POST /vendor/bookings/:id/slot-hold` — the shop's own hold (bookings.md → Hold Any Time). */
+export interface BookingSlotHold {
+  held: boolean;
+  /** For a run: the id of the whole interval. */
+  slotId: string;
+  /** The ids held, in time order (2026-10-27). */
+  slotIds?: string[];
+  startAt: string;
+  endAt: string;
+  expiresAt: string;
+}
+
 // ─── Calendar connection (calendar.md) ──────────────────────────────────────────
 
 export interface CalendarPermission {
@@ -398,6 +502,17 @@ export interface ApiServiceListRaw {
   fileIds: ApiFileDetail[];
   vectorisationEnabled?: boolean;
   vectorisationStatus?: ApiVectorisationStatus;
+  /**
+   * The default variant's price + config, added to service rows 2026-10-26.
+   * `null` before the service is priced; absent on an older server.
+   */
+  service?: {
+    price: number;
+    currency: string;
+    durationMinutes: number | null;
+    bookingMode: BookingMode | null;
+    maxBookings: number | null;
+  } | null;
   createdAt: string;
   updatedAt: string;
 }

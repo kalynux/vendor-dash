@@ -84,10 +84,15 @@ export const services = {
         rowActions: 'Actions du service',
         columns: {
             service: 'Service',
+            price: 'Prix',
             duration: 'Durée',
             mode: 'Mode',
             status: 'Statut',
         },
+        pricePer: '{{price}} / {{duration}}',
+        notPriced: 'Prix et durée à définir',
+        seats: plural({ one: '{{count}} place', other: '{{count}} places' }),
+        modeWithSeats: '{{mode}} · {{seats}}',
         count: plural({ one: '{{count}} service', other: '{{count}} services' }),
         emptyTitle: 'Aucun service',
         emptyDescription:
@@ -316,7 +321,9 @@ export const services = {
 
     detail: {
         title: 'Réservation',
+        bookingNumber: 'Réservation {{number}}',
         customer: 'Client',
+        customerNote: 'Note du client',
         payment: 'Paiement',
         paymentRequired: 'Paiement requis',
         paymentNotRequired: 'Aucun paiement requis',
@@ -333,7 +340,7 @@ export const services = {
         balanceSettled: 'Solde réglé ({{method}}).',
         creditRecorded: '{{amount}} payé en trop — enregistré, non remboursé automatiquement.',
         settleBalanceInCash: 'Enregistrer {{amount}} reçus en espèces',
-        reschedule: 'Reporter',
+        reschedule: 'Proposer un nouvel horaire',
         statusConfirmDescription:
             'Appliquer ce changement ? Les réservations confirmées sont synchronisées avec votre Google Agenda.',
         cancelTitle: 'Annuler cette réservation ?',
@@ -387,13 +394,90 @@ export const services = {
     },
 
     reschedule: {
-        title: 'Reporter la réservation',
+        title: 'Proposer un nouvel horaire',
+        description:
+            'Le client accepte ou refuse. En attendant sa réponse, la réservation garde son horaire actuel.',
         empty:
             'Aucun créneau libre dans les {{days}} prochains jours. Vérifiez les règles de disponibilité du service.',
+        emptyLong:
+            'Aucune plage libre de {{duration}} d’affilée dans les {{days}} prochains jours. Vérifiez les règles de disponibilité du service.',
+        longHint: 'Ce rendez-vous dure {{duration}}. Chaque horaire ci-dessous est libre pendant les {{duration}}.',
         heldFor: 'Réservé pour {{time}}',
-        confirm: 'Confirmer le nouvel horaire',
+        confirm: 'Envoyer au client',
         lockExpired: 'La réservation temporaire de ce créneau a expiré. Choisissez à nouveau.',
         lockFailed: 'Impossible de réserver ce créneau',
+        errors: {
+            notContiguous: 'Choisissez des créneaux qui se suivent.',
+            lengthChanged: 'Gardez la même durée que le rendez-vous d’origine : {{duration}}.',
+            slotCount: 'C’est trop de créneaux pour un seul rendez-vous.',
+            notFuture: 'Choisissez un horaire à venir.',
+            inverted: 'Cet horaire se termine avant de commencer.',
+            slotLockedAt: 'Quelqu’un réserve {{time}} en ce moment. Choisissez un autre horaire, ou réessayez dans quelques minutes.',
+        },
+    },
+
+    proposal: {
+        waiting: 'En attente de l’accord du client',
+        customerAsks: 'Le client demande à changer l’horaire',
+        proposedTime: 'Nouvel horaire : {{time}}',
+        timeRange: '{{start}} – {{end}}',
+        expires: 'Sans réponse avant le {{date}}, l’horaire actuel est conservé.',
+        accept: 'Accepter',
+        decline: 'Refuser',
+        withdraw: 'Retirer cette proposition',
+        withdrawn: 'Proposition retirée. La réservation garde son horaire.',
+        accepted: 'Nouvel horaire accepté. La réservation a été déplacée.',
+        declined: 'Demande refusée. La réservation garde son horaire.',
+        actionFailed: 'Impossible de mettre à jour cette demande',
+        declinedByCustomer:
+            'Le client a refusé le nouvel horaire ({{time}}). L’horaire d’origine est maintenu, et il peut annuler avec un remboursement complet.',
+        lapsed: 'Personne n’a répondu au nouvel horaire ({{time}}). L’horaire d’origine est maintenu.',
+        markVendor: 'En attente du client',
+        markCustomer: 'Le client demande un changement',
+    },
+
+    location: {
+        title: 'Lieu',
+        whereLabel: 'Où se passe le rendez-vous ?',
+        kinds: {
+            vendorAddress: 'Mon adresse',
+            customerAddress: 'Chez le client',
+            online: 'En ligne',
+        },
+        help: {
+            vendorAddress: 'Les clients viennent chez vous. Ils voient l’adresse une fois la réservation confirmée.',
+            customerAddress: 'Vous vous déplacez chez le client. Il choisit son adresse en réservant.',
+            online: 'Ajoutez le lien de la réunion ci-dessous. Les clients le voient juste avant le début.',
+        },
+        addressLabel: 'Adresse',
+        addressPlaceholder: 'Choisissez une de vos adresses',
+        noAddresses: 'Vous n’avez pas encore d’adresse professionnelle.',
+        goToAddresses: 'Ajouter une adresse',
+        online: 'En ligne',
+        atYourAddress: 'À votre adresse',
+        goToCustomer: 'Vous vous déplacez chez le client',
+        noAddressYet: 'Le client n’a pas encore indiqué d’adresse.',
+        openInMaps: 'Ouvrir dans Maps',
+    },
+
+    access: {
+        title: 'Lien et instructions',
+        serviceHelp: 'Privé. Copié sur chaque nouvelle réservation ; vous pourrez le modifier pour une réservation.',
+        meetingUrl: 'Lien de la réunion',
+        meetingUrlPlaceholder: 'https://meet.google.com/…',
+        instructions: 'Instructions',
+        instructionsPlaceholder: 'ex. Sonnez à la deuxième sonnette. Apportez votre pièce d’identité.',
+        reveal: 'Montrer au client',
+        revealUnit: 'minutes avant le début',
+        visibilityHelp:
+            'Le client voit le lien et les instructions seulement à partir de ce nombre de minutes avant le début, et seulement une fois la réservation confirmée et payée.',
+        none: 'Aucun lien ni instruction pour cette réservation.',
+        visibleFrom: 'Le client le voit {{minutes}} min avant le début, une fois confirmée et payée.',
+        editAction: 'Modifier le lien / les instructions',
+        editTitle: 'Lien et instructions de cette réservation',
+        editDescription: 'Modifie cette réservation seulement. Le service garde les siens.',
+        saved: 'Enregistré pour cette réservation',
+        saveFailed: 'Impossible d’enregistrer le lien et les instructions',
     },
 
     availability: {
@@ -487,9 +571,17 @@ export const services = {
         nextMonth: 'Mois suivant',
         today: 'Aujourd’hui',
         more: '+{{count}} de plus',
+        dayLabel: plural({ one: '{{date}}, 1 réservation', other: '{{date}}, {{count}} réservations' }),
+        dayCount: plural({ one: '1 réservation', other: '{{count}} réservations' }),
     },
 
     validation: {
+        locationRequired: 'Choisissez où se passe le rendez-vous.',
+        locationAddressRequired: 'Choisissez laquelle de vos adresses.',
+        meetingUrlHttps: 'Le lien doit commencer par https://',
+        meetingUrlMax: 'Le lien doit contenir au plus 500 caractères.',
+        instructionsMax: 'Les instructions doivent contenir au plus 2 000 caractères.',
+        revealRange: 'Entrez un nombre entier de minutes entre 0 et 1440.',
         titleMin: 'Le titre doit contenir au moins 3 caractères',
         titleMax: 'Le titre doit contenir au plus 200 caractères',
         descriptionRequired: 'La description est obligatoire',
@@ -531,7 +623,7 @@ export const services = {
         statusUpdated: 'Service mis à jour',
         bookingUpdated: 'Réservation mise à jour',
         bookingCancelled: 'Réservation annulée',
-        bookingRescheduled: 'Réservation reportée',
+        rescheduleProposed: 'Nouvel horaire envoyé. Le client va l’accepter ou le refuser.',
         markedPaid: 'Marquée comme payée',
         balanceSettled: 'Solde enregistré comme payé en espèces',
     },

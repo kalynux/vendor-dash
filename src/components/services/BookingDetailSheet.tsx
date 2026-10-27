@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   Loader2, XCircle, CalendarClock, User, Banknote, CalendarSync,
-  CheckCircle2, Ban, Receipt,
+  CheckCircle2, Ban, Receipt, MessageSquareText, Hourglass, MapPin, Navigation, Video,
+  KeyRound, Pencil,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -19,13 +20,14 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { useTranslation, useFormatters, useApiError } from '@/i18n';
 import {
   fetchBookingById, updateBookingStatus, markBookingPaid, cancelBooking,
-  settleBookingBalance,
+  settleBookingBalance, withdrawRescheduleProposal, answerRescheduleProposal,
 } from '@/services/services.service';
+import { BookingAccessEditor } from '@/components/services/BookingAccessEditor';
 import { BookingStatusBadge, PaymentStatusBadge } from '@/components/services/StatusBadges';
 import { RescheduleSheet } from '@/components/services/RescheduleSheet';
 import { CompleteBookingDialog } from '@/components/services/CompleteBookingDialog';
 import {
-  toMajorUnits,
+  customerNote, mapsUrl, REVEAL_MINUTES_DEFAULT,
   BOOKING_TRANSITIONS, CANCEL_REASON_MAX, type BookingTransition,
 } from '@/components/services/service.constants';
 import { responsiveSheetProps } from '@/components/ui/responsive-sheet';
@@ -38,9 +40,9 @@ interface BookingDetailSheetProps {
   onChanged: () => void;
 }
 
-function refId(ref: { _id: string } | string | undefined): string {
+function refId(ref: { id: string } | string | undefined): string {
   if (!ref) return '';
-  return typeof ref === 'string' ? ref : ref._id;
+  return typeof ref === 'string' ? ref : ref.id;
 }
 
 export function BookingDetailSheet({ bookingId, open, onOpenChange, onChanged }: BookingDetailSheetProps) {
@@ -56,6 +58,9 @@ export function BookingDetailSheet({ bookingId, open, onOpenChange, onChanged }:
   const customerEmail = (b: Booking): string =>
     (typeof b.userId === 'object' ? b.userId.login_email : null) ?? t('common.labels.emptyValue');
 
+  const customerPhone = (b: Booking): string | null =>
+    (typeof b.userId === 'object' ? b.userId.login_phone : null) || null;
+
   const [booking, setBooking] = useState<Booking | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -66,6 +71,7 @@ export function BookingDetailSheet({ bookingId, open, onOpenChange, onChanged }:
   const [cancelReason, setCancelReason] = useState('');
   const [rescheduleOpen, setRescheduleOpen] = useState(false);
   const [completeOpen, setCompleteOpen] = useState(false);
+  const [accessOpen, setAccessOpen] = useState(false);
 
   const load = useCallback(async (id: string) => {
     setLoading(true);
@@ -88,7 +94,7 @@ export function BookingDetailSheet({ bookingId, open, onOpenChange, onChanged }:
     if (!booking) return;
     setBusy(true);
     try {
-      const updated = await updateBookingStatus(booking._id, target);
+      const updated = await updateBookingStatus(booking.id, target);
       setBooking(updated);
       toast.success(t('services.toast.bookingUpdated'));
       setPendingStatus(null);
@@ -104,7 +110,7 @@ export function BookingDetailSheet({ bookingId, open, onOpenChange, onChanged }:
     if (!booking) return;
     setBusy(true);
     try {
-      const updated = await cancelBooking(booking._id, cancelReason.trim() || undefined);
+      const updated = await cancelBooking(booking.id, cancelReason.trim() || undefined);
       setBooking(updated);
       toast.success(t('services.toast.bookingCancelled'));
       setCancelOpen(false);
@@ -121,8 +127,8 @@ export function BookingDetailSheet({ bookingId, open, onOpenChange, onChanged }:
     if (!booking) return;
     setBusy(true);
     try {
-      await markBookingPaid(booking._id);
-      await load(booking._id);
+      await markBookingPaid(booking.id);
+      await load(booking.id);
       toast.success(t('services.toast.markedPaid'));
       onChanged();
     } catch (err) {
@@ -144,12 +150,44 @@ export function BookingDetailSheet({ bookingId, open, onOpenChange, onChanged }:
     if (!booking) return;
     setBusy(true);
     try {
-      await settleBookingBalance(booking._id);
-      await load(booking._id);
+      await settleBookingBalance(booking.id);
+      await load(booking.id);
       toast.success(t('services.toast.balanceSettled'));
       onChanged();
     } catch (err) {
       apiError.toast(err, { fallbackKey: 'services.errors.settleBalanceFailed' });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** Take back the shop's own open proposal — the booking keeps its time. */
+  async function handleWithdrawProposal() {
+    if (!booking) return;
+    setBusy(true);
+    try {
+      setBooking(await withdrawRescheduleProposal(booking.id));
+      toast.success(t('services.proposal.withdrawn'));
+      onChanged();
+    } catch (err) {
+      apiError.toast(err, { fallbackKey: 'services.proposal.actionFailed' });
+      await load(booking.id); // it may have been answered or lapsed meanwhile
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** Answer a customer's request to move (manual-approval services). */
+  async function handleAnswerProposal(answer: 'accept' | 'decline') {
+    if (!booking) return;
+    setBusy(true);
+    try {
+      setBooking(await answerRescheduleProposal(booking.id, answer));
+      toast.success(t(answer === 'accept' ? 'services.proposal.accepted' : 'services.proposal.declined'));
+      onChanged();
+    } catch (err) {
+      apiError.toast(err, { fallbackKey: 'services.proposal.actionFailed' });
+      await load(booking.id);
     } finally {
       setBusy(false);
     }
@@ -171,7 +209,10 @@ export function BookingDetailSheet({ bookingId, open, onOpenChange, onChanged }:
     booking.requiresPayment &&
     booking.paymentStatus !== 'paid' &&
     (!booking.paymentMethod || booking.paymentMethod === 'cash');
-  const canReschedule = !!booking && (booking.status === 'pending' || booking.status === 'confirmed');
+  const isOpenBooking = !!booking && (booking.status === 'pending' || booking.status === 'confirmed');
+  const openProposal = booking?.rescheduleProposal?.status === 'open' ? booking.rescheduleProposal : null;
+  // One proposal at a time — a second is `409 BOOKING_PROPOSAL_PENDING`.
+  const canReschedule = isOpenBooking && !openProposal;
   /**
    * What completion settled to, and what of it is still outstanding. Only a
    * completed booking has a `settlement`, so an unfinished one shows nothing.
@@ -213,18 +254,45 @@ export function BookingDetailSheet({ bookingId, open, onOpenChange, onChanged }:
                   <CalendarClock className="h-4 w-4" />
                   {fmt.dateTime(booking.startAt)} – {fmt.time(booking.endAt)}
                 </p>
+                {booking.bookingNumber && (
+                  <p className="text-xs text-muted-foreground">
+                    {t('services.detail.bookingNumber', { number: booking.bookingNumber })}
+                  </p>
+                )}
               </div>
 
-              {/* Customer */}
+              <ProposalNotice
+                booking={booking}
+                busy={busy}
+                onWithdraw={handleWithdrawProposal}
+                onAnswer={handleAnswerProposal}
+              />
+
+              <LocationBlock booking={booking} />
+
+              {/* Customer — with their note, which is what the vendor prepares from. */}
               <InfoCard icon={<User className="h-4 w-4" />} title={t('services.detail.customer')}>
                 <p className="text-sm">{customerEmail(booking)}</p>
+                {customerPhone(booking) && (
+                  <a href={`tel:${customerPhone(booking)}`} className="mt-0.5 block text-sm text-primary underline-offset-2 hover:underline">
+                    {customerPhone(booking)}
+                  </a>
+                )}
               </InfoCard>
+
+              {customerNote(booking.metadata) && (
+                <InfoCard icon={<MessageSquareText className="h-4 w-4" />} title={t('services.detail.customerNote')}>
+                  <p className="whitespace-pre-line break-words text-sm">{customerNote(booking.metadata)}</p>
+                </InfoCard>
+              )}
+
+              <AccessBlock booking={booking} canEdit={isOpenBooking} onEdit={() => setAccessOpen(true)} />
 
               {/* Payment */}
               <InfoCard icon={<Banknote className="h-4 w-4" />} title={t('services.detail.payment')}>
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium">
-                    {fmt.currency(toMajorUnits(booking.priceSnapshot), booking.currency)}
+                    {fmt.currency(booking.priceSnapshot, booking.currency)}
                   </span>
                   <PaymentStatusBadge status={booking.paymentStatus} />
                 </div>
@@ -250,13 +318,13 @@ export function BookingDetailSheet({ bookingId, open, onOpenChange, onChanged }:
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">{t('services.detail.finalPrice')}</span>
                     <span className="font-medium">
-                      {fmt.currency(toMajorUnits(settlement.finalPrice), booking.currency)}
+                      {fmt.currency(settlement.finalPrice, booking.currency)}
                     </span>
                   </div>
                   {outstandingBalance > 0 ? (
                     <p className="mt-2 rounded-md bg-amber-50 px-2.5 py-2 text-xs text-amber-700 dark:bg-amber-500/10 dark:text-amber-400">
                       {t('services.detail.balanceOutstanding', {
-                        amount: fmt.currency(toMajorUnits(outstandingBalance), booking.currency),
+                        amount: fmt.currency(outstandingBalance, booking.currency),
                       })}
                     </p>
                   ) : settlement.balanceDue > 0 ? (
@@ -269,7 +337,7 @@ export function BookingDetailSheet({ bookingId, open, onOpenChange, onChanged }:
                   {settlement.creditDue > 0 && (
                     <p className="mt-2 text-xs text-muted-foreground">
                       {t('services.detail.creditRecorded', {
-                        amount: fmt.currency(toMajorUnits(settlement.creditDue), booking.currency),
+                        amount: fmt.currency(settlement.creditDue, booking.currency),
                       })}
                     </p>
                   )}
@@ -299,7 +367,7 @@ export function BookingDetailSheet({ bookingId, open, onOpenChange, onChanged }:
               <Button variant="outline" className="w-full gap-2" disabled={busy} onClick={handleSettleBalance}>
                 <Banknote className="h-4 w-4" />
                 {t('services.detail.settleBalanceInCash', {
-                  amount: fmt.currency(toMajorUnits(outstandingBalance), booking.currency),
+                  amount: fmt.currency(outstandingBalance, booking.currency),
                 })}
               </Button>
             )}
@@ -375,20 +443,182 @@ export function BookingDetailSheet({ bookingId, open, onOpenChange, onChanged }:
       </AlertDialog>
 
       <RescheduleSheet
-        bookingId={booking?._id ?? null}
+        bookingId={booking?.id ?? null}
         productId={booking ? refId(booking.productId) : null}
+        bookingStartAt={booking?.startAt ?? null}
+        bookingEndAt={booking?.endAt ?? null}
         open={rescheduleOpen}
         onOpenChange={setRescheduleOpen}
-        onRescheduled={() => { if (booking) load(booking._id); onChanged(); }}
+        onProposed={(updated) => { setBooking(updated); onChanged(); }}
+      />
+
+      <BookingAccessEditor
+        booking={booking}
+        open={accessOpen}
+        onOpenChange={setAccessOpen}
+        onSaved={(updated) => { setBooking(updated); onChanged(); }}
       />
 
       <CompleteBookingDialog
         booking={booking}
         open={completeOpen}
         onOpenChange={setCompleteOpen}
-        onCompleted={() => { if (booking) load(booking._id); onChanged(); }}
+        onCompleted={() => { if (booking) load(booking.id); onChanged(); }}
       />
     </Sheet>
+  );
+}
+
+/**
+ * A proposed new time. The booking keeps its own time until the other side
+ * answers, so this must never read as "moved".
+ */
+function ProposalNotice({
+  booking, busy, onWithdraw, onAnswer,
+}: {
+  booking: Booking;
+  busy: boolean;
+  onWithdraw: () => void;
+  onAnswer: (answer: 'accept' | 'decline') => void;
+}) {
+  const { t } = useTranslation();
+  const fmt = useFormatters();
+  const p = booking.rescheduleProposal;
+  if (!p) return null;
+  const when = t('services.proposal.timeRange', { start: fmt.dateTime(p.startAt), end: fmt.time(p.endAt) });
+
+  if (p.status === 'open') {
+    const fromCustomer = p.proposedBy === 'customer';
+    return (
+      <div className="space-y-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
+        <p className="flex items-center gap-1.5 text-sm font-semibold">
+          <Hourglass className="h-4 w-4 shrink-0" />
+          {t(fromCustomer ? 'services.proposal.customerAsks' : 'services.proposal.waiting')}
+        </p>
+        <p className="text-sm">
+          {t('services.proposal.proposedTime', { time: when })}
+        </p>
+        {p.expiresAt && (
+          <p className="text-xs opacity-80">
+            {t('services.proposal.expires', { date: fmt.dateTime(p.expiresAt) })}
+          </p>
+        )}
+        {fromCustomer ? (
+          <div className="flex gap-2 pt-1">
+            <Button size="sm" className="h-11 flex-1 md:h-9" disabled={busy} onClick={() => onAnswer('accept')}>
+              {t('services.proposal.accept')}
+            </Button>
+            <Button size="sm" variant="outline" className="h-11 flex-1 bg-background md:h-9" disabled={busy} onClick={() => onAnswer('decline')}>
+              {t('services.proposal.decline')}
+            </Button>
+          </div>
+        ) : (
+          <Button size="sm" variant="outline" className="h-11 w-full bg-background md:h-9 md:w-auto" disabled={busy} onClick={onWithdraw}>
+            {t('services.proposal.withdraw')}
+          </Button>
+        )}
+      </div>
+    );
+  }
+
+  // The vendor's own proposal that didn't go through — worth one quiet line,
+  // because the customer may now cancel with a full refund.
+  if (p.proposedBy === 'vendor' && (p.status === 'declined' || p.status === 'lapsed')) {
+    return (
+      <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
+        {t(p.status === 'declined' ? 'services.proposal.declinedByCustomer' : 'services.proposal.lapsed', { time: when })}
+      </p>
+    );
+  }
+  return null;
+}
+
+/** Where it happens. Going to the customer is the one the vendor must not miss. */
+function LocationBlock({ booking }: { booking: Booking }) {
+  const { t } = useTranslation();
+  const loc = booking.location;
+  if (!loc) return null;
+
+  if (loc.kind === 'online') {
+    return (
+      <InfoCard icon={<Video className="h-4 w-4" />} title={t('services.location.title')}>
+        <p className="text-sm">{t('services.location.online')}</p>
+      </InfoCard>
+    );
+  }
+
+  const lines = [
+    loc.formattedAddress || [loc.addressLine1, loc.addressLine2].filter(Boolean).join(', '),
+    loc.formattedAddress ? null : [loc.city, loc.state].filter(Boolean).join(', '),
+  ].filter(Boolean) as string[];
+  const maps = mapsUrl(loc);
+
+  if (loc.kind === 'customer_address') {
+    return (
+      <div className="space-y-2 rounded-lg border-2 border-primary/40 bg-primary/5 p-3">
+        <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-primary">
+          <MapPin className="h-4 w-4" />
+          {t('services.location.goToCustomer')}
+        </p>
+        {loc.label && <p className="text-sm font-medium">{loc.label}</p>}
+        {lines.length > 0
+          ? lines.map((l) => <p key={l} className="text-base font-semibold leading-snug">{l}</p>)
+          : <p className="text-sm text-muted-foreground">{t('services.location.noAddressYet')}</p>}
+        {maps && (
+          <Button asChild variant="outline" size="sm" className="h-11 w-full gap-2 bg-background md:h-9 md:w-auto">
+            <a href={maps} target="_blank" rel="noopener noreferrer">
+              <Navigation className="h-4 w-4" /> {t('services.location.openInMaps')}
+            </a>
+          </Button>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <InfoCard icon={<MapPin className="h-4 w-4" />} title={t('services.location.title')}>
+      <p className="text-sm">{t('services.location.atYourAddress')}</p>
+      {loc.label && <p className="text-sm font-medium">{loc.label}</p>}
+      {lines.map((l) => <p key={l} className="text-sm text-muted-foreground">{l}</p>)}
+    </InfoCard>
+  );
+}
+
+/** This booking's own link + instructions, and when the customer will see them. */
+function AccessBlock({ booking, canEdit, onEdit }: { booking: Booking; canEdit: boolean; onEdit: () => void }) {
+  const { t } = useTranslation();
+  const a = booking.access;
+  const hasContent = !!(a?.meetingUrl || a?.instructions);
+  // Nothing to show and nothing the vendor can do about it.
+  if (!hasContent && !canEdit) return null;
+
+  return (
+    <InfoCard icon={<KeyRound className="h-4 w-4" />} title={t('services.access.title')}>
+      {a?.meetingUrl && (
+        <a
+          href={a.meetingUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="block break-all text-sm text-primary underline-offset-2 hover:underline"
+        >
+          {a.meetingUrl}
+        </a>
+      )}
+      {a?.instructions && (
+        <p className="mt-1 whitespace-pre-line break-words text-sm">{a.instructions}</p>
+      )}
+      {!hasContent && <p className="text-sm text-muted-foreground">{t('services.access.none')}</p>}
+      {hasContent && (
+        <p className="mt-2 text-xs text-muted-foreground">
+          {t('services.access.visibleFrom', { minutes: a?.revealMinutesBefore ?? REVEAL_MINUTES_DEFAULT })}
+        </p>
+      )}
+      {canEdit && (
+        <Button variant="outline" size="sm" className="mt-2 h-11 w-full gap-2 md:h-9 md:w-auto" onClick={onEdit}>
+          <Pencil className="h-4 w-4" /> {t('services.access.editAction')}
+        </Button>
+      )}
+    </InfoCard>
   );
 }
 

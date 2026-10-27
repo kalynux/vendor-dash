@@ -1,7 +1,7 @@
 // Notification settings — mirrors `GET/PATCH /api/vendor/notification-preferences`.
 // See api-doc/vendor/notifications.md.
 
-/** The fourteen subscribable events (`preferences.*` keys). See api-doc/vendor/notifications.md. */
+/** The fifteen subscribable events (`preferences.*` keys). See api-doc/vendor/notifications.md. */
 export type NotificationEventKey =
   | 'orderCreated'
   | 'orderCancelled'
@@ -23,7 +23,12 @@ export type NotificationEventKey =
   /** Auto-dispatch held a cash-on-delivery shipment back over a COD limit (2026-10-02). */
   | 'codLimitUpdates'
   /** An agency proposed, edited or withdrew a delivery-fee change (2026-10-02). */
-  | 'deliveryFeeProposals';
+  | 'deliveryFeeProposals'
+  /**
+   * Someone moved, asked to move, or answered a new time for a booking —
+   * all four `booking.reschedule*` types (2026-10-26). Default on.
+   */
+  | 'bookingRescheduled';
 
 export type NotificationEventPreferences = Record<NotificationEventKey, boolean>;
 
@@ -77,6 +82,13 @@ export type NotificationType =
   | 'order.cancelled'
   | 'booking.created'
   | 'booking.cancelled'
+  // 2026-10-26, preference `bookingRescheduled`, link `bookings/{bookingId}`.
+  // The customer moved it (calendar/capacity services) · asks to move it
+  // (manual services, yours to answer) · accepted · declined your new time.
+  | 'booking.rescheduled'
+  | 'booking.reschedule_requested'
+  | 'booking.reschedule_accepted'
+  | 'booking.reschedule_declined'
   | 'payment.received.partial'
   | 'payment.received.full'
   | 'storage.alert'

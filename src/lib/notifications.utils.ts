@@ -9,6 +9,8 @@ import {
   Warehouse,
   CalendarPlus,
   CalendarX2,
+  CalendarSync,
+  CalendarCheck,
   CircleDollarSign,
   CheckCircle2,
   HardDrive,
@@ -189,6 +191,13 @@ const TYPE_VISUALS: Record<NotificationType, Visual> = {
   'order.cancelled': { Icon: PackageX, iconWrap: 'bg-red-100 text-red-600', dot: 'bg-red-500' },
   'booking.created': { Icon: CalendarPlus, iconWrap: 'bg-violet-100 text-violet-600', dot: 'bg-violet-500' },
   'booking.cancelled': { Icon: CalendarX2, iconWrap: 'bg-red-100 text-red-600', dot: 'bg-red-500' },
+  // The customer moved it — informational.
+  'booking.rescheduled': { Icon: CalendarSync, iconWrap: 'bg-violet-100 text-violet-600', dot: 'bg-violet-500' },
+  // Amber: the vendor has to accept or decline.
+  'booking.reschedule_requested': { Icon: CalendarSync, iconWrap: 'bg-amber-100 text-amber-600', dot: 'bg-amber-500' },
+  'booking.reschedule_accepted': { Icon: CalendarCheck, iconWrap: 'bg-green-100 text-green-600', dot: 'bg-green-500' },
+  // Orange: the original time stands, and the customer may cancel with a full refund.
+  'booking.reschedule_declined': { Icon: CalendarX2, iconWrap: 'bg-orange-100 text-orange-600', dot: 'bg-orange-500' },
   'payment.received.partial': { Icon: CircleDollarSign, iconWrap: 'bg-amber-100 text-amber-600', dot: 'bg-amber-500' },
   'payment.received.full': { Icon: CheckCircle2, iconWrap: 'bg-green-100 text-green-600', dot: 'bg-green-500' },
   'storage.alert': { Icon: HardDrive, iconWrap: 'bg-orange-100 text-orange-600', dot: 'bg-orange-500' },

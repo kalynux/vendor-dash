@@ -25,7 +25,7 @@ import { BookingStatusBadge, PaymentStatusBadge } from '@/components/services/St
 import { BookingCalendar } from '@/components/services/BookingCalendar';
 import { BookingDetailSheet } from '@/components/services/BookingDetailSheet';
 import {
-  toMajorUnits, BOOKING_STATUS_META, PAYMENT_STATUS_FILTER_KEYS,
+  BOOKING_STATUS_META, PAYMENT_STATUS_FILTER_KEYS,
 } from '@/components/services/service.constants';
 import type {
   Booking, BookingListMeta, BookingsQueryParams, BookingStatus, PaymentStatus,
@@ -42,6 +42,28 @@ const SEARCH_SCAN_LIMIT = 100; // the endpoint's max page size
 const SEARCH_SCAN_PAGES = 5; // …so at most 500 bookings are scanned
 const SEARCH_SCAN_MAX = SEARCH_SCAN_LIMIT * SEARCH_SCAN_PAGES;
 const SEARCH_DEBOUNCE_MS = 350;
+
+type BookingsView = 'list' | 'calendar';
+
+// The vendor's last pick, so leaving the page (or the header refresh, which
+// remounts this panel) doesn't drop them back on the list every time.
+const VIEW_STORAGE_KEY = 'wi-vendor.bookings.view';
+
+function readStoredView(): BookingsView {
+  try {
+    return localStorage.getItem(VIEW_STORAGE_KEY) === 'calendar' ? 'calendar' : 'list';
+  } catch {
+    return 'list';
+  }
+}
+
+function storeView(value: BookingsView) {
+  try {
+    localStorage.setItem(VIEW_STORAGE_KEY, value);
+  } catch {
+    // A remembered view is a convenience; without storage it just resets.
+  }
+}
 
 const STATUS_OPTIONS: { value: BookingStatus; labelKey: TranslationKey }[] = [
   { value: 'pending', labelKey: BOOKING_STATUS_META.pending.labelKey },
@@ -66,7 +88,7 @@ export function BookingsPanel({ openBookingId }: { openBookingId?: string | null
   const { t } = useTranslation();
   const fmt = useFormatters();
   const apiError = useApiError();
-  const [view, setView] = useState<'list' | 'calendar'>('list');
+  const [view, setView] = useState<BookingsView>(readStoredView);
 
   const productTitle = (b: Booking): string =>
     typeof b.productId === 'object' ? b.productId.title : t('services.bookings.untitledService');
@@ -116,8 +138,9 @@ export function BookingsPanel({ openBookingId }: { openBookingId?: string | null
 
   // Calendar view can't be searched (it renders its own date-ranged fetch), so
   // leaving it holds no stale query behind a field the user can no longer see.
-  const changeView = useCallback((next: 'list' | 'calendar') => {
+  const changeView = useCallback((next: BookingsView) => {
     setView(next);
+    storeView(next);
     if (next === 'calendar') {
       setSearchQuery('');
       setDebouncedSearch('');
@@ -209,7 +232,8 @@ export function BookingsPanel({ openBookingId }: { openBookingId?: string | null
       return (
         title.toLowerCase().includes(q)
         || email.toLowerCase().includes(q)
-        || b._id.toLowerCase().includes(q)
+        || b.id.toLowerCase().includes(q)
+        || (b.bookingNumber ?? '').toLowerCase().includes(q)
       );
     });
   }, [searchResults, debouncedSearch]);
@@ -421,8 +445,8 @@ export function BookingsPanel({ openBookingId }: { openBookingId?: string | null
 
   const renderMobileRow = (b: Booking) => (
     <button
-      key={b._id}
-      onClick={() => setDetailId(b._id)}
+      key={b.id}
+      onClick={() => setDetailId(b.id)}
       className="flex w-full items-center gap-3 border-b px-4 py-3 text-left transition-colors hover:bg-muted/30"
     >
       <div className="min-w-0 flex-1">
@@ -432,8 +456,9 @@ export function BookingsPanel({ openBookingId }: { openBookingId?: string | null
       </div>
       <div className="flex flex-col items-end gap-1">
         <BookingStatusBadge status={b.status} />
+        <ProposalMark booking={b} />
         <span className="text-xs font-medium">
-          {fmt.currency(toMajorUnits(b.priceSnapshot), b.currency)}
+          {fmt.currency(b.priceSnapshot, b.currency)}
         </span>
       </div>
     </button>
@@ -507,17 +532,22 @@ export function BookingsPanel({ openBookingId }: { openBookingId?: string | null
               <tbody>
                 {desktopItems.map((b) => (
                   <tr
-                    key={b._id}
-                    onClick={() => setDetailId(b._id)}
+                    key={b.id}
+                    onClick={() => setDetailId(b.id)}
                     className="group cursor-pointer border-b last:border-0 hover:bg-muted/40"
                   >
                     <td className="px-4 py-3 font-medium">{productTitle(b)}</td>
                     <td className="px-4 py-3 text-muted-foreground">{customerEmail(b)}</td>
                     <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">{fmt.dateTime(b.startAt)}</td>
-                    <td className="px-4 py-3"><BookingStatusBadge status={b.status} /></td>
+                    <td className="px-4 py-3">
+                      <div className="flex flex-col items-start gap-1">
+                        <BookingStatusBadge status={b.status} />
+                        <ProposalMark booking={b} />
+                      </div>
+                    </td>
                     <td className="px-4 py-3"><PaymentStatusBadge status={b.paymentStatus} /></td>
                     <td className="px-4 py-3 text-right font-medium">
-                      {fmt.currency(toMajorUnits(b.priceSnapshot), b.currency)}
+                      {fmt.currency(b.priceSnapshot, b.currency)}
                     </td>
                     <td className="px-4 py-3 text-right">
                       <ChevronRight className="ml-auto h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
@@ -561,6 +591,21 @@ export function BookingsPanel({ openBookingId }: { openBookingId?: string | null
         onChanged={bump}
       />
     </div>
+  );
+}
+
+/**
+ * A new time is waiting for an answer — the row keeps its own time, so this
+ * says who has to answer rather than anything like "moved".
+ */
+function ProposalMark({ booking }: { booking: Booking }) {
+  const { t } = useTranslation();
+  const p = booking.rescheduleProposal;
+  if (p?.status !== 'open') return null;
+  return (
+    <span className="whitespace-nowrap text-[11px] font-medium text-amber-700 dark:text-amber-400">
+      {t(p.proposedBy === 'customer' ? 'services.proposal.markCustomer' : 'services.proposal.markVendor')}
+    </span>
   );
 }
 

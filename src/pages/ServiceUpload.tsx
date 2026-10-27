@@ -20,8 +20,11 @@ import {
   changeServiceStatus,
   fetchServiceById,
 } from '@/services/services.service';
-import { buildServiceConfig, type ServiceConfigFormShape } from '@/components/services/service.constants';
-import { DEFAULT_PEAK_HOURS } from '@/components/services/schemas/service.schemas';
+import {
+  buildServiceConfig, LOCATION_ADDRESS_MISSING, type ServiceConfigFormShape,
+} from '@/components/services/service.constants';
+import { serviceSettingsDefaults } from '@/components/services/schemas/service.schemas';
+import { ApiError } from '@/types/api';
 import { useTranslation, useApiError } from '@/i18n';
 import type {
   ServiceBasicsFormValues,
@@ -109,6 +112,7 @@ export function ServiceUpload() {
   const [resolvedCategories, setResolvedCategories] = useState<CategoryEntry[] | null>(null);
   // Photos picked in the description's "Generate" popup — the photo step opens with them.
   const [aiPhotos, setAiPhotos] = useState<ApiFileDetail[]>([]);
+  const [locationError, setLocationError] = useState<string | null>(null);
   const navigate = useNavigate();
   const { t } = useTranslation();
   const apiError = useApiError();
@@ -208,6 +212,7 @@ export function ServiceUpload() {
       if (!serviceId) return;
 
       dispatch({ type: 'SET_SAVING', value: true });
+      setLocationError(null);
       try {
         const config = buildServiceConfig(values as unknown as ServiceConfigFormShape);
         await ensureServiceVariant(serviceId, { price: values.price, serviceConfig: config });
@@ -216,6 +221,12 @@ export function ServiceUpload() {
         const service = await fetchServiceById(serviceId);
         advance({ price: values.price, config, service });
       } catch (err) {
+        // Shown under Where, where the vendor picks another address.
+        if (err instanceof ApiError && err.code === LOCATION_ADDRESS_MISSING) {
+          setLocationError(apiError.resolve(err, { context: 'service' }));
+          dispatch({ type: 'SET_SAVING', value: false });
+          return;
+        }
         dispatch({
           type: 'SET_STEP_ERROR',
           error: apiError.resolve(err, {
@@ -252,6 +263,13 @@ export function ServiceUpload() {
         toast.success(t('services.toast.published'));
         navigate('/dashboard/services');
       } catch (err) {
+        // The address was removed from the profile after it was chosen.
+        if (err instanceof ApiError && err.code === LOCATION_ADDRESS_MISSING) {
+          setLocationError(apiError.resolve(err, { context: 'service' }));
+          dispatch({ type: 'SET_STEP', step: 'booking' });
+          dispatch({ type: 'SET_SAVING', value: false });
+          return;
+        }
         dispatch({
           type: 'SET_STEP_ERROR',
           error: apiError.resolve(err, {
@@ -342,26 +360,10 @@ export function ServiceUpload() {
       case 'booking':
         return (
           <StepServiceBooking
-            defaultValues={{
-              durationMinutes: state.config?.durationMinutes ?? 60,
-              price: state.price ?? (undefined as unknown as number),
-              bookingMode: state.config?.bookingMode ?? 'calendar',
-              bufferBeforeMinutes: state.config?.bufferBeforeMinutes ?? 0,
-              bufferAfterMinutes: state.config?.bufferAfterMinutes ?? 0,
-              maxBookings: state.config?.maxBookings ?? undefined,
-              peakHoursEnabled: !!state.config?.peakHours,
-              peakHours: state.config?.peakHours
-                ? {
-                    daysOfWeek: state.config.peakHours.daysOfWeek ?? [],
-                    startTime: state.config.peakHours.startTime,
-                    endTime: state.config.peakHours.endTime,
-                    priceType: state.config.peakHours.priceType,
-                    value: state.config.peakHours.value,
-                  }
-                : { ...DEFAULT_PEAK_HOURS },
-            }}
+            defaultValues={serviceSettingsDefaults(state.price, state.config)}
             isSaving={state.isSaving}
             stepError={state.stepError}
+            locationError={locationError}
             onSaveComplete={handleBookingSave}
             onBack={handleBack}
           />

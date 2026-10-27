@@ -1,13 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import {
+  Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle,
+} from '@/components/ui/sheet';
 import { cn } from '@/lib/utils';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { useTranslation, useFormatters, useApiError } from '@/i18n';
 import { fetchBookingCalendar } from '@/services/services.service';
+import { BookingStatusBadge } from '@/components/services/StatusBadges';
 import {
   BOOKING_STATUS_META, TONE_CLASSES, DAY_ORDER, DAY_SHORT_KEYS,
 } from '@/components/services/service.constants';
-import type { BookingCalendarDay } from '@/types/services.types';
+import type { BookingCalendarDay, BookingCalendarEntry } from '@/types/services.types';
 
 interface BookingCalendarProps {
   onOpenBooking: (bookingId: string) => void;
@@ -57,6 +62,7 @@ export function BookingCalendar({ onOpenBooking, reloadToken }: BookingCalendarP
   const { t } = useTranslation();
   const fmt = useFormatters();
   const apiError = useApiError();
+  const isMobile = useIsMobile();
 
   // Anchor on the first day of the displayed month.
   const [anchor, setAnchor] = useState(() => {
@@ -118,6 +124,21 @@ export function BookingCalendar({ onOpenBooking, reloadToken }: BookingCalendarP
   // Which square to highlight — the vendor's today, not the browser's.
   const todayKey = todayIn(timezone);
 
+  // The day whose bookings are listed in the sheet. One booking skips the list.
+  const [dayKey, setDayKey] = useState<string | null>(null);
+  const openDay = (key: string, entries: BookingCalendarEntry[]) => {
+    if (entries.length === 1) onOpenBooking(entries[0].bookingId);
+    else setDayKey(key);
+  };
+  const dayEntries = useMemo(
+    () => (dayKey ? [...(days[dayKey] ?? [])].sort((a, b) => a.startAt.localeCompare(b.startAt)) : []),
+    [dayKey, days],
+  );
+  // Built from the key's own numbers, like the grid cells — a label, not an instant.
+  const dayDate = dayKey
+    ? new Date(Number(dayKey.slice(0, 4)), Number(dayKey.slice(5, 7)) - 1, Number(dayKey.slice(8, 10)))
+    : null;
+
   return (
     <div className="space-y-3">
       {/* Toolbar */}
@@ -170,56 +191,107 @@ export function BookingCalendar({ onOpenBooking, reloadToken }: BookingCalendarP
               <div key={day} className="py-2">{t(DAY_SHORT_KEYS[day])}</div>
             ))}
           </div>
-          {/* Day cells */}
+          {/* Day cells — the whole square is the target. The chips are far too
+              small to aim at on a phone, so tapping anywhere on a day opens its
+              one booking, or a list to pick from when there are several. */}
           <div className="grid grid-cols-7">
             {cells.map((date, i) => {
               const key = ymd(date);
               const inMonth = date.getMonth() === anchor.getMonth();
               const entries = days[key] ?? [];
-              return (
-                <div
-                  key={i}
-                  className={cn(
-                    'min-h-[92px] border-b border-r p-1.5 last:border-r-0 [&:nth-child(7n)]:border-r-0',
-                    !inMonth && 'bg-muted/20 text-muted-foreground',
-                  )}
-                >
-                  <div
+              const cellClass = cn(
+                'flex min-h-[92px] flex-col items-stretch border-b border-r p-1.5 text-left last:border-r-0 [&:nth-child(7n)]:border-r-0',
+                !inMonth && 'bg-muted/20 text-muted-foreground',
+              );
+              const content = (
+                <>
+                  <span
                     className={cn(
                       'mb-1 flex h-6 w-6 items-center justify-center rounded-full text-xs',
                       key === todayKey && 'bg-primary text-primary-foreground font-semibold',
                     )}
                   >
                     {date.getDate()}
-                  </div>
-                  <div className="space-y-1">
+                  </span>
+                  <span className="space-y-1">
                     {entries.slice(0, 3).map((b) => (
-                      <button
+                      <span
                         key={b.bookingId}
-                        type="button"
-                        onClick={() => onOpenBooking(b.bookingId)}
-                        title={`${fmt.time(b.startAt)} · ${b.productTitle} · ${b.customerEmail}`}
                         className={cn(
-                          'flex w-full items-center gap-1 truncate rounded px-1 py-0.5 text-left text-[10px] leading-tight transition hover:opacity-80',
+                          'flex w-full items-center gap-1 truncate rounded px-1 py-0.5 text-[10px] leading-tight',
                           TONE_CLASSES[BOOKING_STATUS_META[b.status]?.tone ?? 'neutral'],
                         )}
                       >
                         <span className="font-medium">{fmt.time(b.startAt)}</span>
-                        <span className="truncate">{b.productTitle}</span>
-                      </button>
+                        {/* A phone column is ~50px: the title only ever showed as "H". */}
+                        <span className="hidden truncate md:inline">{b.productTitle}</span>
+                      </span>
                     ))}
                     {entries.length > 3 && (
-                      <p className="px-1 text-[10px] text-muted-foreground">
+                      <span className="block px-1 text-[10px] text-muted-foreground">
                         {t('services.calendarView.more', { count: entries.length - 3 })}
-                      </p>
+                      </span>
                     )}
-                  </div>
-                </div>
+                  </span>
+                </>
+              );
+              if (entries.length === 0) {
+                return <div key={i} className={cellClass}>{content}</div>;
+              }
+              return (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => openDay(key, entries)}
+                  aria-label={t('services.calendarView.dayLabel', {
+                    date: fmt.date(date, 'long'),
+                    count: entries.length,
+                  })}
+                  className={cn(cellClass, 'transition-colors hover:bg-muted/40')}
+                >
+                  {content}
+                </button>
               );
             })}
           </div>
         </div>
       )}
+
+      <Sheet open={!!dayKey} onOpenChange={(o) => { if (!o) setDayKey(null); }}>
+        <SheetContent
+          side={isMobile ? 'bottom' : 'right'}
+          className={cn(
+            'flex flex-col p-0',
+            isMobile ? 'max-h-[85dvh] rounded-t-2xl pb-[env(safe-area-inset-bottom)]' : 'w-full sm:max-w-md',
+          )}
+        >
+          <SheetHeader className="border-b pr-12">
+            <SheetTitle>{dayDate ? fmt.date(dayDate, 'long') : ''}</SheetTitle>
+            <SheetDescription>
+              {t('services.calendarView.dayCount', { count: dayEntries.length })}
+            </SheetDescription>
+          </SheetHeader>
+          <div className="flex-1 overflow-y-auto">
+            {dayEntries.map((b) => (
+              <button
+                key={b.bookingId}
+                type="button"
+                onClick={() => { setDayKey(null); onOpenBooking(b.bookingId); }}
+                className="flex w-full items-center gap-3 border-b px-4 py-3 text-left transition-colors last:border-0 hover:bg-muted/30"
+              >
+                <span className="w-24 shrink-0 text-sm font-semibold tabular-nums">
+                  {fmt.time(b.startAt)} – {fmt.time(b.endAt)}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-medium">{b.productTitle}</span>
+                  <span className="block truncate text-xs text-muted-foreground">{b.customerEmail}</span>
+                </span>
+                <BookingStatusBadge status={b.status} />
+              </button>
+            ))}
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

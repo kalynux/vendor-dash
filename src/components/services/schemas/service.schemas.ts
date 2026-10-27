@@ -7,7 +7,10 @@ import {
   TITLE_MAX,
   SEO_TITLE_MAX,
   SEO_DESCRIPTION_MAX,
+  REVEAL_MINUTES_DEFAULT,
+  accessFieldErrors,
 } from '@/components/services/service.constants';
+import type { ServiceConfig } from '@/types/services.types';
 
 // HH:mm, 24-hour with leading zeros (availability-rules.md → Time Format).
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -53,6 +56,13 @@ export const serviceConfigFields = {
   maxBookings: z.number().optional(),
   peakHoursEnabled: z.boolean(),
   peakHours: peakHoursFormSchema,
+  // Where + access (2026-10-26). `''` = not chosen yet; required in the refine
+  // below so a service from before this change is asked once it is edited.
+  locationKind: z.union([z.enum(['vendor_address', 'customer_address', 'online']), z.literal('')]),
+  vendorAddressId: z.string(),
+  meetingUrl: z.string(),
+  instructions: z.string(),
+  revealMinutesBefore: z.number().optional(),
 };
 
 // Conditional capacity + peak-hours rules, shared by the create + settings
@@ -63,9 +73,23 @@ interface ServiceConfigRefineInput {
   maxBookings?: number;
   peakHoursEnabled: boolean;
   peakHours: { startTime: string; endTime: string; value?: number };
+  locationKind: string;
+  vendorAddressId: string;
+  meetingUrl: string;
+  instructions: string;
+  revealMinutesBefore?: number;
 }
 
 function serviceConfigRefine(v: ServiceConfigRefineInput, ctx: z.RefinementCtx): void {
+  if (!v.locationKind) {
+    ctx.addIssue({ code: 'custom', message: 'services.validation.locationRequired', path: ['locationKind'] });
+  } else if (v.locationKind === 'vendor_address' && !v.vendorAddressId) {
+    ctx.addIssue({ code: 'custom', message: 'services.validation.locationAddressRequired', path: ['vendorAddressId'] });
+  }
+  const access = accessFieldErrors(v);
+  for (const [field, message] of Object.entries(access)) {
+    ctx.addIssue({ code: 'custom', message, path: [field] });
+  }
   if (v.bookingMode === 'capacity') {
     const seats = v.maxBookings;
     const seatsError =
@@ -127,6 +151,40 @@ export const DEFAULT_PEAK_HOURS = {
   priceType: 'percentage' as const,
   value: 0,
 };
+
+/**
+ * The Booking step's starting values from the saved variant — shared by the
+ * create and edit pages. A service from before 2026-10-26 has no `location`,
+ * so its Where starts blank and must be chosen before the step saves.
+ */
+export function serviceSettingsDefaults(
+  price: number | null,
+  config: ServiceConfig | null,
+): ServiceSettingsFormValues {
+  return {
+    durationMinutes: config?.durationMinutes ?? 60,
+    price: price ?? (undefined as unknown as number),
+    bookingMode: config?.bookingMode ?? 'calendar',
+    bufferBeforeMinutes: config?.bufferBeforeMinutes ?? 0,
+    bufferAfterMinutes: config?.bufferAfterMinutes ?? 0,
+    maxBookings: config?.maxBookings ?? undefined,
+    peakHoursEnabled: !!config?.peakHours,
+    peakHours: config?.peakHours
+      ? {
+          daysOfWeek: config.peakHours.daysOfWeek ?? [],
+          startTime: config.peakHours.startTime,
+          endTime: config.peakHours.endTime,
+          priceType: config.peakHours.priceType,
+          value: config.peakHours.value,
+        }
+      : { ...DEFAULT_PEAK_HOURS },
+    locationKind: config?.location?.kind ?? '',
+    vendorAddressId: config?.location?.vendorAddressId ?? '',
+    meetingUrl: config?.access?.meetingUrl ?? '',
+    instructions: config?.access?.instructions ?? '',
+    revealMinutesBefore: config?.access?.revealMinutesBefore ?? REVEAL_MINUTES_DEFAULT,
+  };
+}
 
 // ─── Create service ─────────────────────────────────────────────────────────────
 // Collects everything the multi-step backend flow needs in one form: product

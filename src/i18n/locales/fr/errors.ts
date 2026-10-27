@@ -184,6 +184,8 @@ export const errors = {
             CATALOG_PRODUCT_INVALID_STATE:
                 "Ce changement de statut n'est pas autorisé depuis le statut actuel du service.",
             CATALOG_PRODUCT_NO_DESCRIPTION: 'Une description du service est obligatoire.',
+            CATALOG_PRODUCT_SERVICE_LOCATION_ADDRESS_MISSING:
+                'Cette adresse ne figure plus sur votre profil. Choisissez-en une autre, ou rajoutez-la dans Compte → Adresses.',
             CATALOG_PRODUCT_NO_VARIANTS: 'Définissez un prix de réservation avant de publier.',
             CATALOG_PRODUCT_NO_DEFAULT_VARIANT:
                 'Un prix de réservation doit être défini avant de publier.',
@@ -800,6 +802,12 @@ export const errors = {
         BOOKING_SLOT_FULL: 'Ce créneau est complet. Choisissez-en un autre.',
         BOOKING_NOT_CANCELLABLE: "Cette réservation ne peut plus être annulée.",
         BOOKING_SLOT_UNAVAILABLE: 'Ce créneau a été pris pendant la réservation. Choisissez-en un autre.',
+        BOOKING_PROPOSAL_PENDING: 'Un nouvel horaire attend déjà la réponse du client. Retirez-le d’abord pour en proposer un autre.',
+        BOOKING_PROPOSAL_NOT_FOUND: 'Il n’y a plus de demande en cours sur cette réservation. Elle a peut-être reçu une réponse ou expiré.',
+        BOOKING_PROPOSAL_NOT_YOURS: 'Seule l’autre partie peut répondre à cette demande.',
+        BOOKING_ACCESS_NOT_EDITABLE: 'Cette réservation est terminée ou annulée : son lien et ses instructions ne peuvent plus changer.',
+        BOOKING_MULTI_SLOT_NOT_SUPPORTED: 'Un cours se déplace une séance à la fois.',
+        CATALOG_PRODUCT_SERVICE_LOCATION_ADDRESS_MISSING: 'L’adresse choisie pour ce service ne figure plus sur votre profil. Choisissez-en une autre.',
         BOOKING_NOT_COMPLETED: 'Terminez cette réservation avant de régler son solde.',
         BOOKING_NO_BALANCE_DUE: "Aucun solde n'est dû sur cette réservation.",
         BOOKING_BALANCE_ALREADY_SETTLED: 'Ce solde a déjà été réglé.',

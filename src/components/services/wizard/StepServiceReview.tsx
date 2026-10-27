@@ -8,7 +8,7 @@ import { Switch } from '@/components/ui/switch';
 import { useTranslation, useFormatters } from '@/i18n';
 import { validateServiceActivation } from '@/components/services/schemas/service.schemas';
 import {
-  formatDuration, BOOKING_MODE_LABEL_KEYS, SERVICE_STATUS_META,
+  formatDuration, BOOKING_MODE_LABEL_KEYS, LOCATION_KIND_LABEL_KEYS, SERVICE_STATUS_META,
 } from '@/components/services/service.constants';
 import type { ServiceProduct, ServiceConfig } from '@/types/services.types';
 
@@ -168,6 +168,14 @@ export function StepServiceReview({
                 <p className="font-medium">{config?.maxBookings ?? t('common.labels.emptyValue')}</p>
               </div>
             )}
+            <div>
+              <span className="text-muted-foreground text-xs">{t('services.location.title')}</span>
+              <p className="font-medium">
+                {config?.location?.kind
+                  ? t(LOCATION_KIND_LABEL_KEYS[config.location.kind])
+                  : t('common.labels.emptyValue')}
+              </p>
+            </div>
             {service.tags.length > 0 && (
               <div className="col-span-2">
                 <span className="text-muted-foreground text-xs">{t('services.review.tags')}</span>

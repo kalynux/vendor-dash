@@ -113,6 +113,7 @@ const EVENTS: EventMeta[] = [
   { key: 'orderCancelled', labelKey: 'notifications.settings.events.orderCancelled', descriptionKey: 'notifications.settings.events.orderCancelledHint' },
   { key: 'bookingCreated', labelKey: 'notifications.settings.events.bookingCreated', descriptionKey: 'notifications.settings.events.bookingCreatedHint' },
   { key: 'bookingCancelled', labelKey: 'notifications.settings.events.bookingCancelled', descriptionKey: 'notifications.settings.events.bookingCancelledHint' },
+  { key: 'bookingRescheduled', labelKey: 'notifications.settings.events.bookingRescheduled', descriptionKey: 'notifications.settings.events.bookingRescheduledHint' },
   { key: 'paymentReceivedPartial', labelKey: 'notifications.settings.events.paymentReceivedPartial', descriptionKey: 'notifications.settings.events.paymentReceivedPartialHint' },
   { key: 'paymentReceivedFull', labelKey: 'notifications.settings.events.paymentReceivedFull', descriptionKey: 'notifications.settings.events.paymentReceivedFullHint' },
   // These two share only the word "storage": `storageAlert` is the media-file
