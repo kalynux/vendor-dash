@@ -442,7 +442,13 @@ export async function fetchAvailability(
 ): Promise<AvailabilitySlot[]> {
   const qs = buildQueryString({ fromDate, toDate });
   const res = await api.get<AvailabilityResponse>(`/products/${productId}/availability${qs}`);
-  return res.data.slots;
+  // The server's slots carry `start`/`end` (its `Slot` type), unlike bookings'
+  // `startAt`/`endAt`. Renamed here so the rest of the app reads one shape.
+  return res.data.slots.map((slot) => ({
+    ...slot,
+    startAt: slot.startAt ?? slot.start!,
+    endAt: slot.endAt ?? slot.end!,
+  }));
 }
 
 export async function lockSlot(productId: string, slotId: string): Promise<SlotLock> {

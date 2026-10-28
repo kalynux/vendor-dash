@@ -441,10 +441,18 @@ export interface AvailabilitySlot {
   available?: boolean;
 }
 
+/** A slot as `GET /products/:id/availability` sends it — `start`/`end`, not `startAt`/`endAt`. */
+export interface AvailabilitySlotWire extends Omit<AvailabilitySlot, 'startAt' | 'endAt'> {
+  start?: string;
+  end?: string;
+  startAt?: string;
+  endAt?: string;
+}
+
 export interface AvailabilityResponse {
   success: boolean;
   data: {
-    slots: AvailabilitySlot[];
+    slots: AvailabilitySlotWire[];
   };
 }
 
