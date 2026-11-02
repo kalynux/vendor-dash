@@ -169,7 +169,7 @@ export const notifications = {
             info: 'Which events reach you. Turning one off silences it on every channel, including in-app.',
             about: 'About {{event}}',
             orderCreated: 'New order',
-            orderCreatedHint: 'When a new order is received',
+            orderCreatedHint: 'When a new order is received. A partly paid order arrives once its online part is paid.',
             orderCancelled: 'Order cancelled',
             orderCancelledHint: 'When an order is cancelled',
             bookingCreated: 'New booking',

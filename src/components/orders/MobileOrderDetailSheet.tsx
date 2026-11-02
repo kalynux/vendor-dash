@@ -50,6 +50,7 @@ import { ShipmentReviewControl } from '@/components/reviews/ShipmentReviewContro
 import { DeliveryRejectionNotice } from './DeliveryRejectionNotice';
 import { ReassignAgencyPopover } from './ReassignAgencyPopover';
 import { PaidCancelNotice } from './PaidCancelNotice';
+import { OnlinePartDueBanner, PartialPaymentNote } from './PartialPaymentNote';
 import { cn } from '@/lib/utils';
 import { useOrderStore } from '@/store';
 import { addNote, revokeEntitlement, restoreEntitlement, fetchNote, fetchOrderById, getOrderErrorMessage, isOrderFrozen } from '@/services/orders.service';
@@ -63,7 +64,7 @@ import { RefundDialog } from '@/components/customers/RefundDialog';
 import { REFUND_REASON_KEYS, refundStatusNote } from '@/components/customers/customer.constants';
 import { RefundRequestChip } from '@/components/orders/RefundRequestChip';
 import { useRefundEligibility } from '@/hooks/use-refund-eligibility';
-import { getNextStatuses, STATUS_ACTION_KEYS, ORDER_STATUS_KEYS, canDispatchOrder } from '@/lib/orderStatus';
+import { getEffectiveNextStatuses, STATUS_ACTION_KEYS, ORDER_STATUS_KEYS, canDispatchOrder, paidCancelNoticeKey } from '@/lib/orderStatus';
 import { ApiError } from '@/types/api';
 import { toast } from 'sonner';
 import { CustomerAvatar } from '@/components/customers/CustomerAvatar';
@@ -210,8 +211,9 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
   const isDigital = order.orderType === 'digital';
   const hasEntitlements = (order.entitlements?.length ?? 0) > 0;
   const frozen = isOrderFrozen(order);
-  const nextStatuses = frozen ? [] : getNextStatuses(order.status);
+  const nextStatuses = getEffectiveNextStatuses(order);
   const canDispatch = canDispatchOrder(order);
+  const paidCancelKey = paidCancelNoticeKey(order);
   // Translated, so the confirm check reads the same key the prompt renders.
   const cancelWord = t('orders.detail.cancelDialog.confirmWord');
 
@@ -427,6 +429,8 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                 </div>
                 <p className="text-xs text-muted-foreground mt-0.5">{customer.name}</p>
               </div>
+
+              <OnlinePartDueBanner order={order} className="border-b px-4 py-3" />
 
               {/* Tab bar */}
               <div className="flex border-b flex-shrink-0 overflow-x-auto">
@@ -810,6 +814,7 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                           <p className="text-sm font-medium">{formatDate(order.createdAt)}</p>
                         </div>
                       </div>
+                      <PartialPaymentNote order={order} className="mt-3 text-sm" />
                       {/* Why the Refund action isn't offered — the vendor looks here for it. */}
                       {refund.openRefundRequest ? (
                         <p className="mt-3 text-xs text-muted-foreground">
@@ -1162,9 +1167,7 @@ export function MobileOrderDetailSheet({ order: initialOrder, open, isDetailLoad
                     components={[<span className="font-semibold text-foreground" />]}
                   />
                 </p>
-                {order.paymentStatus === 'paid' && (
-                  <PaidCancelNotice>{t('orders.detail.cancelDialog.paidNotice')}</PaidCancelNotice>
-                )}
+                {paidCancelKey && <PaidCancelNotice>{t(paidCancelKey)}</PaidCancelNotice>}
                 <div className="space-y-2 pt-2">
                   <label htmlFor="mobile-cancel-confirm-input" className="text-xs font-semibold text-muted-foreground block">
                     <Trans

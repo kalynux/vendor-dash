@@ -205,6 +205,15 @@ export const account = {
         emailPendingNotice:
             "Continuez à vous connecter avec votre e-mail actuel jusqu'à ce que vous confirmiez depuis le lien envoyé.",
 
+        emailVerifyPrompt:
+            "Votre e-mail n'est pas encore vérifié. Vérifiez-le pour recevoir les notifications par e-mail.",
+        emailLinkSentToast: 'Lien de vérification envoyé.',
+        emailLinkSent:
+            "Nous avons envoyé un lien à {{email}}. Ouvrez-le dans les 24 heures pour vérifier votre e-mail. Si vous ne le trouvez pas, regardez dans vos courriers indésirables.",
+        emailResend: 'Renvoyer le lien',
+        emailResendIn: 'Renvoyer le lien dans {{seconds}} s',
+        emailVerified: 'Votre adresse e-mail est vérifiée.',
+
         newPhoneLabel: 'Nouveau numéro de téléphone',
         phoneFlowHint:
             'Nous enverrons un code à six chiffres au nouveau numéro sur WhatsApp : utilisez donc un numéro qui a WhatsApp. La modification prend effet dès que vous saisissez le code. Vous avez 24 heures pour terminer.',
@@ -373,7 +382,7 @@ export const account = {
         },
         adjustments: {
             title: 'Argent repris',
-            info: 'Chaque fois que de l’argent a été repris sur vos gains — après un remboursement, une contestation de paiement par carte, ou une commande que vous avez annulée après le paiement du client — avec le motif. Les sommes dues remboursées par de nouveaux gains, ou annulées, figurent aussi ici.',
+            info: 'Chaque fois que de l’argent a été repris sur vos gains — après un remboursement, une contestation de paiement par carte, une commande que vous avez annulée après le paiement du client, ou un colis revenu par votre faute — avec le motif. Les sommes dues remboursées par de nouveaux gains, ou annulées, figurent aussi ici.',
             empty: 'Rien n’a été repris sur vos gains.',
             loadFailed: 'Impossible de charger cette liste.',
             order: 'la commande {{number}}',
@@ -399,6 +408,11 @@ export const account = {
                 },
                 deliveryFault: 'Le client a été remboursé sur {{order}}, {{parcel}}, et la livraison a été jugée fautive : {{amount}} de frais de livraison ont été rendus.',
                 damageClaim: '{{amount}} pour une réclamation pour dommages sur {{order}}, {{parcel}}.',
+                partialReturn: {
+                    sentence: 'Un colis de {{order}} est revenu par votre faute, et le client a récupéré tout ce qu’il avait payé en ligne : {{parts}}.',
+                    returnFee: '{{amount}} pour le trajet retour du livreur',
+                    fees: '{{amount}} de frais de paiement et de transfert sur le remboursement du client',
+                },
             },
             kindSentence: {
                 refundClawback: '{{amount}} ont été repris car le client a été remboursé.',

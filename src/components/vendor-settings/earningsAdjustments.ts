@@ -64,6 +64,14 @@ export function adjustmentSentence(row: EarningsAdjustment, t: Translate, fmt: F
       return t('account.earnings.adjustments.reason.deliveryFault', { order, parcel, amount });
     case 'damage_claim':
       return t('account.earnings.adjustments.reason.damageClaim', { order, parcel, amount });
+    // A partial-payment order's parcel came back through the vendor's fault (2026-11-01).
+    case 'partial_return_fault': {
+      const parts: string[] = [];
+      if (num(p, 'returnFee') > 0) parts.push(t('account.earnings.adjustments.reason.partialReturn.returnFee', { amount: money(num(p, 'returnFee')) }));
+      if (num(p, 'fees') > 0) parts.push(t('account.earnings.adjustments.reason.partialReturn.fees', { amount: money(num(p, 'fees')) }));
+      if (parts.length === 0) return row.explanation;
+      return t('account.earnings.adjustments.reason.partialReturn.sentence', { order, parts: parts.join(t('account.earnings.adjustments.partsSeparator')) });
+    }
     case null:
     case undefined:
       // Rows from before 2026-10-22, and every debt repayment: the server words

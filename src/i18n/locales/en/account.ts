@@ -228,6 +228,18 @@ export const account = {
         emailPendingNotice:
             'Keep signing in with your current email until you confirm this from the link we sent.',
 
+        // ── Verifying the email already on the account ───────────────────────
+        // Separate from a change: nothing about signing in moves. The prompt's
+        // reason is real — the server refuses email notifications until verified.
+        emailVerifyPrompt:
+            "Your email isn't verified yet. Verify it to get notifications by email.",
+        emailLinkSentToast: 'Verification link sent.',
+        emailLinkSent:
+            "We sent a link to {{email}}. Open it within 24 hours to verify your email. If you can't find it, check your spam folder.",
+        emailResend: 'Send the link again',
+        emailResendIn: 'Send the link again in {{seconds}}s',
+        emailVerified: 'Your email address is verified.',
+
         newPhoneLabel: 'New phone number',
         /**
          * The code is the ONLY proof now (2026-09-21), and the form sends it as
@@ -458,7 +470,7 @@ export const account = {
          */
         adjustments: {
             title: 'Money taken back',
-            info: 'Every time money was taken back from your earnings — after a refund, a card dispute, or an order you cancelled after the customer paid — with the reason. Money you owed that was paid off by new earnings, or forgiven, is listed here too.',
+            info: 'Every time money was taken back from your earnings — after a refund, a card dispute, an order you cancelled after the customer paid, or a parcel that came back through your fault — with the reason. Money you owed that was paid off by new earnings, or forgiven, is listed here too.',
             empty: 'Nothing has been taken back from your earnings.',
             loadFailed: 'Couldn’t load this list.',
             order: 'order {{number}}',
@@ -485,6 +497,11 @@ export const account = {
                 },
                 deliveryFault: 'The customer was refunded on {{order}}, {{parcel}}, and the delivery was found at fault, so {{amount}} of the delivery fee went back.',
                 damageClaim: '{{amount}} for a damage claim on {{order}}, {{parcel}}.',
+                partialReturn: {
+                    sentence: 'A parcel on {{order}} came back through your fault, and the customer got back everything they paid online: {{parts}}.',
+                    returnFee: '{{amount}} for the delivery company’s return trip',
+                    fees: '{{amount}} of payment and transfer fees on the customer’s refund',
+                },
             },
             /** Rows written before 2026-10-22, and every debt repayment (no reason code). */
             kindSentence: {

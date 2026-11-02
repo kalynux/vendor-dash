@@ -1,6 +1,6 @@
 import { fetchOrders } from '@/services/orders.service';
 import { orderFiltersToQuery, type OrderFilters } from '@/lib/orderFilters';
-import { ORDER_STATUS_KEYS, PAYMENT_METHOD_FILTER_OPTIONS, PAYMENT_STATUS_FILTER_OPTIONS } from '@/lib/orderStatus';
+import { isPartialPaymentClosed, ORDER_STATUS_KEYS, PAYMENT_METHOD_FILTER_OPTIONS, PAYMENT_STATUS_FILTER_OPTIONS } from '@/lib/orderStatus';
 import { exportFileName, isoDay, spreadsheetBlob, type SheetCell } from '@/lib/spreadsheet';
 import { saveBlob, type SaveOutcome } from '@/platform/filesystem';
 import type { TranslationKey, useTranslation } from '@/i18n';
@@ -52,6 +52,8 @@ export async function exportOrders(
       t('orders.export.columns.status'),
       t('orders.export.columns.paymentStatus'),
       t('orders.export.columns.paymentMethod'),
+      t('orders.export.columns.paidOnline'),
+      t('orders.export.columns.cashAtDelivery'),
       t('orders.export.columns.items'),
       t('orders.export.columns.subtotal'),
       t('orders.export.columns.shipping'),
@@ -68,6 +70,9 @@ export async function exportOrders(
       t(ORDER_STATUS_KEYS[o.status]),
       label(PAYMENT_STATUS_FILTER_OPTIONS, o.paymentStatus),
       o.paymentMethod ? label(PAYMENT_METHOD_FILTER_OPTIONS, o.paymentMethod) : '',
+      // Both empty on anything but a partial-payment order, whose cash may never come.
+      o.partialPayment ? o.partialPayment.amountPaidOnline : '',
+      o.partialPayment && !isPartialPaymentClosed(o) ? o.partialPayment.balanceDue : '',
       o.items.length,
       o.subtotal,
       o.shipping,

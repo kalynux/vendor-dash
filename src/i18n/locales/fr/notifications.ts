@@ -147,7 +147,7 @@ export const notifications = {
             info: 'Les événements qui vous parviennent. En désactiver un le rend silencieux sur tous les canaux, y compris in-app.',
             about: 'À propos de : {{event}}',
             orderCreated: 'Nouvelle commande',
-            orderCreatedHint: 'Lorsqu’une nouvelle commande est reçue',
+            orderCreatedHint: 'Lorsqu’une nouvelle commande est reçue. Une commande payée en partie arrive une fois sa partie en ligne payée.',
             orderCancelled: 'Commande annulée',
             orderCancelledHint: 'Lorsqu’une commande est annulée',
             bookingCreated: 'Nouvelle réservation',

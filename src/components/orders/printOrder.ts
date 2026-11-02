@@ -1,6 +1,7 @@
 import type { Formatters, useTranslation } from '@/i18n';
 import type { Order } from '@/types';
 import { formatPhoneInternational } from '@/lib/phone';
+import { partialPaymentSentence } from '@/lib/orderStatus';
 
 type Translate = ReturnType<typeof useTranslation>['t'];
 
@@ -34,6 +35,7 @@ const escapeHtml = (value: unknown): string =>
  */
 export function printOrder({ order, addressLines, storeName, t, fmt }: PrintOrderInput): void {
   const money = (value: number) => escapeHtml(fmt.currency(value, order.currency));
+  const partialLine = partialPaymentSentence(order, t, fmt);
   const customerLines = [
     order.customer.name,
     order.customer.email,
@@ -99,6 +101,7 @@ export function printOrder({ order, addressLines, storeName, t, fmt }: PrintOrde
           ? t('orders.paymentMethod.cashOnDelivery')
           : t('orders.paymentMethod.online'),
       )}</div>
+      ${partialLine ? `<div class="muted">${escapeHtml(partialLine)}</div>` : ''}
     </div>
   </div>
 

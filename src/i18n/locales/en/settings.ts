@@ -489,6 +489,32 @@ export const settings = {
         loadFailed: 'Could not load your cash-on-delivery terms.',
         saveFailed: 'Could not save your cash-on-delivery terms.',
     },
+    /** 2026-11-01 — part online, the rest in cash. Separate from `codTerms` on purpose. */
+    partialPayment: {
+        title: 'Partial payment',
+        info: 'Saved on its own, and separate from cash on delivery: you can accept this even with cash on delivery turned off. Changing it does not ask your agencies to approve you again.',
+        acceptLabel: 'Accept partial payment',
+        acceptHint: 'Let customers pay part online and the rest in cash at delivery. You set the minimum they pay online.',
+        minLabel: 'Minimum paid online',
+        minHint: 'The customer may pay more, up to {{max}}% of the order.',
+        minInvalid: 'Enter a whole number from {{min}} to {{max}}.',
+        lastChanged: 'Last changed {{date}}',
+        scope: 'Applies to new orders only. Your delivery agency must still accept cash.',
+        saved: 'Partial payment settings saved',
+        loadFailed: 'Could not load your partial payment settings.',
+        saveFailed: 'Could not save your partial payment settings.',
+        /** "Your money" from FRONTEND-CHANGELOG-partial-payment — the brief asks for it next to the setting. */
+        money: {
+            title: 'Your money',
+            pending: 'Your share of the whole order appears as pending when the agent collects the cash.',
+            locked: 'You can withdraw it only once that parcel’s cash has reached Wi-Mall, plus the usual hold. That includes your share of what the customer paid online, so if the agency hands the cash in late, you wait longer.',
+            perParcel: 'Each parcel unlocks on its own.',
+            fees: 'Commission is on the whole sale. The agency’s cash handling fee is on the cash it carries, so it is lower than on a fully cash order.',
+            faultTitle: 'If a parcel comes back through your fault',
+            faultBody: 'For example, it was damaged or wrong. The customer gets back everything they paid. You pay the delivery company’s return fee and both refund fees. If your balance does not cover it, it is recorded as money you owe and comes out of your later earnings. The explanation appears on the charge, under Money taken back.',
+            cancelBody: 'Cancelling an order after its online part was paid works like cancelling a paid order: the customer is refunded in full and you pay the fees.',
+        },
+    },
     /** 2026-10-03 — who pays delivery for the whole shop (replaced the per-product switch). */
     deliveryTerms: {
         title: 'Delivery terms',

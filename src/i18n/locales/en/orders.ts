@@ -69,6 +69,16 @@ export const orders = {
         cashOnDeliveryShort: 'COD',
     },
 
+    /** 2026-11-01 — paid part online, part in cash at delivery. See `partialPaymentSentence`. */
+    partialPayment: {
+        split: '{{paid}} paid online, {{balance}} collected in cash at delivery.',
+        /** The order was cancelled or came back: there will be no cash to collect. */
+        paidOnlineOnly: '{{paid}} paid online.',
+        dueShort: 'Don’t prepare yet: the online part isn’t paid.',
+        dueTitle: 'Don’t prepare this order yet',
+        dueBody: 'The customer still has to pay the online part. Until then this order can’t be sent to a delivery agency. You’ll get a notification when it’s paid.',
+    },
+
     orderType: {
         physical: 'Physical',
         digital: 'Digital',
@@ -119,6 +129,8 @@ export const orders = {
             status: 'Status',
             paymentStatus: 'Payment status',
             paymentMethod: 'Payment method',
+            paidOnline: 'Paid online',
+            cashAtDelivery: 'Cash at delivery',
             items: 'Items',
             subtotal: 'Subtotal',
             shipping: 'Delivery',
@@ -350,6 +362,9 @@ export const orders = {
              */
             paidNotice:
                 'This order has been paid. Cancelling it will not refund the customer automatically: our team will arrange the refund, and your earnings for this order will be paused until it is resolved. The customer will be refunded in full. The payment and transfer fees (about 4%) are charged to you.',
+            /** A partial-payment order whose online part was paid — it cancels like a paid one. */
+            partialPaidNotice:
+                'The customer has paid the online part of this order. Cancelling it will not refund them automatically: our team will arrange the refund, and your earnings for this order will be paused until it is resolved. The customer will be refunded in full. The payment and transfer fees (about 4%) are charged to you.',
         },
     },
 

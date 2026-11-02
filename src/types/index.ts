@@ -1,6 +1,7 @@
 import type { TranslationKey } from '@/i18n';
 import type { CodLimitForce, CodLimitHold } from './cod-limits.types';
 import type { DeliveryFeeProposal } from './delivery-fee-proposals.types';
+import type { OrderPartialPayment } from './partial-payment.types';
 
 // Product Types - Legacy (for backward compatibility)
 export interface Product {
@@ -89,6 +90,8 @@ export interface Order {
   status: OrderStatus;
   paymentStatus: PaymentStatus;
   paymentMethod: PaymentMethod;
+  /** 2026-11-01 — paid part online, part in cash; `null` on every other order (`paymentMethod` reads `cash_on_delivery`). */
+  partialPayment?: OrderPartialPayment | null;
   fulfillmentStatus: FulfillmentStatus;
   subtotal: number;
   tax: number;

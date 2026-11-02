@@ -65,6 +65,14 @@ export const orders = {
         cashOnDeliveryShort: 'PAL',
     },
 
+    partialPayment: {
+        split: '{{paid}} payés en ligne, {{balance}} encaissés en espèces à la livraison.',
+        paidOnlineOnly: '{{paid}} payés en ligne.',
+        dueShort: 'À ne pas préparer : la partie en ligne n’est pas payée.',
+        dueTitle: 'Ne préparez pas encore cette commande',
+        dueBody: 'Le client doit encore payer la partie en ligne. D’ici là, cette commande ne peut pas être confiée à une agence de livraison. Vous recevrez une notification dès qu’elle sera payée.',
+    },
+
     orderType: {
         physical: 'Physique',
         digital: 'Numérique',
@@ -119,6 +127,8 @@ export const orders = {
             status: 'Statut',
             paymentStatus: 'Statut du paiement',
             paymentMethod: 'Mode de paiement',
+            paidOnline: 'Payé en ligne',
+            cashAtDelivery: 'Espèces à la livraison',
             items: 'Articles',
             subtotal: 'Sous-total',
             shipping: 'Livraison',
@@ -336,6 +346,8 @@ export const orders = {
             confirm: 'Oui, annuler la commande',
             paidNotice:
                 'Cette commande a été payée. L’annuler ne rembourse pas le client automatiquement : notre équipe s’occupera du remboursement, et vos gains sur cette commande seront suspendus jusqu’à ce que ce soit réglé. Le client sera remboursé intégralement. Les frais de paiement et de transfert (environ 4 %) vous sont facturés.',
+            partialPaidNotice:
+                'Le client a payé la partie en ligne de cette commande. L’annuler ne le rembourse pas automatiquement : notre équipe s’occupera du remboursement, et vos gains sur cette commande seront suspendus jusqu’à ce que ce soit réglé. Le client sera remboursé intégralement. Les frais de paiement et de transfert (environ 4 %) vous sont facturés.',
         },
     },
 

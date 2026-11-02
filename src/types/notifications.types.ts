@@ -79,6 +79,9 @@ export type PreferredLanguage = 'en' | 'fr' | 'pt' | 'es' | 'ar';
  */
 export type NotificationType =
   | 'order.created'
+  // 2026-11-01, preference `orderCreated`: sent instead of `order.created` for a
+  // partial-payment order, once its online part is paid — never at checkout.
+  | 'order.created.partial'
   | 'order.cancelled'
   | 'booking.created'
   | 'booking.cancelled'

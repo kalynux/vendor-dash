@@ -188,6 +188,7 @@ type Visual = { Icon: LucideIcon; iconWrap: string; dot: string };
 
 const TYPE_VISUALS: Record<NotificationType, Visual> = {
   'order.created': { Icon: ShoppingCart, iconWrap: 'bg-blue-100 text-blue-600', dot: 'bg-blue-500' },
+  'order.created.partial': { Icon: ShoppingCart, iconWrap: 'bg-blue-100 text-blue-600', dot: 'bg-blue-500' },
   'order.cancelled': { Icon: PackageX, iconWrap: 'bg-red-100 text-red-600', dot: 'bg-red-500' },
   'booking.created': { Icon: CalendarPlus, iconWrap: 'bg-violet-100 text-violet-600', dot: 'bg-violet-500' },
   'booking.cancelled': { Icon: CalendarX2, iconWrap: 'bg-red-100 text-red-600', dot: 'bg-red-500' },

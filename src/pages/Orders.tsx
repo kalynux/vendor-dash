@@ -64,7 +64,7 @@ import { DeliveryPayerTag } from '@/components/orders/DeliveryMoney';
 import { ApiError } from '@/types/api';
 import { COD_AGENCY_LIMIT_EXCEEDED, COD_AGENCY_RESTRICTED, readCodLimitDetails, type CodLimitExceededDetails } from '@/types/cod-limits.types';
 import {
-  getNextStatuses,
+  getEffectiveNextStatuses,
   STATUS_ACTION_KEYS,
   ORDER_STATUS_KEYS,
   STATUS_ICONS,
@@ -73,6 +73,7 @@ import {
   PAYMENT_STATUS_FILTER_OPTIONS,
   ORDER_TYPE_FILTER_OPTIONS,
   canDispatchOrder,
+  paidCancelNoticeKey,
   getCommonNextStatuses,
   canBulkDispatch,
 } from '@/lib/orderStatus';
@@ -91,6 +92,7 @@ import { OrderStatusBadge } from '@/components/orders/OrderStatusBadge';
 import { PaymentStatusBadge } from '@/components/orders/PaymentStatusBadge';
 import { MobileOrderDetailSheet } from '@/components/orders/MobileOrderDetailSheet';
 import { PaidCancelNotice } from '@/components/orders/PaidCancelNotice';
+import { PartialPaymentNote } from '@/components/orders/PartialPaymentNote';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useInfiniteList } from '@/hooks/use-infinite-list';
 import { useScrollRestoration } from '@/hooks/use-scroll-restoration';
@@ -649,13 +651,14 @@ export function Orders() {
 
   const allSelected = orders.length > 0 && selectedOrders.length === orders.length;
   const cancelWord = t('orders.detail.cancelDialog.confirmWord');
+  const orderToCancelNotice = orderToCancel ? paidCancelNoticeKey(orderToCancel) : null;
 
   // A paid order cancelled here is not refunded and pauses the vendor's earnings,
   // so the bulk dialog says how many are paid. The selection survives paging, so
   // some selected orders may not be loaded — then we can only say "if any".
   const loadedOrders = isMobile ? infinite.items : orders;
   const selectedLoaded = loadedOrders.filter((o) => selectedOrders.includes(o.id));
-  const bulkPaidCount = selectedLoaded.filter((o) => o.paymentStatus === 'paid').length;
+  const bulkPaidCount = selectedLoaded.filter((o) => paidCancelNoticeKey(o) !== null).length;
   const bulkHasUnseen = selectedLoaded.length < selectedOrders.length;
 
   // Changing agency is per item, on the order's own screen.
@@ -812,9 +815,7 @@ export function Orders() {
                   components={[<span className="font-semibold text-foreground" />]}
                 />
               </p>
-              {orderToCancel?.paymentStatus === 'paid' && (
-                <PaidCancelNotice>{t('orders.detail.cancelDialog.paidNotice')}</PaidCancelNotice>
-              )}
+              {orderToCancelNotice && <PaidCancelNotice>{t(orderToCancelNotice)}</PaidCancelNotice>}
               <div className="space-y-2 pt-2">
                 <label htmlFor="cancel-confirm-input" className="text-xs font-semibold text-muted-foreground block">
                   <Trans
@@ -1141,6 +1142,7 @@ export function Orders() {
                           )}
                           {rowFlags(order)}
                         </div>
+                        <PartialPaymentNote order={order} className="mt-1.5" />
                       </div>
                     </div>
                     {!selectionMode && (
@@ -1190,7 +1192,7 @@ export function Orders() {
             {actionsSheetOrder && (() => {
               const o = actionsSheetOrder;
               const frozen = isOrderFrozen(o);
-              const nexts = frozen ? [] : getNextStatuses(o.status);
+              const nexts = getEffectiveNextStatuses(o);
               const close = () => setActionsSheetOrder(null);
               return (
                 <>
@@ -1443,6 +1445,7 @@ export function Orders() {
                           )}
                           {rowFlags(order)}
                         </div>
+                        <PartialPaymentNote order={order} className="mt-1 max-w-[14rem]" />
                       </td>
                       <td className="whitespace-nowrap px-2.5 py-3 text-right font-medium tabular-nums">
                         {formatCurrency(order.total, order.currency)}
@@ -1470,7 +1473,7 @@ export function Orders() {
                                 <AlertTriangle className="w-4 h-4" />
                                 {t('orders.list.frozenAction')}
                               </DropdownMenuItem>
-                            ) : getNextStatuses(order.status).map((s) => {
+                            ) : getEffectiveNextStatuses(order).map((s) => {
                               const Icon = STATUS_ICONS[s];
                               return (
                                 <DropdownMenuItem

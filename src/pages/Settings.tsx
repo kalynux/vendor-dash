@@ -2,6 +2,7 @@ import { useParams, Navigate } from 'react-router-dom';
 import { Tabs, TabsContent } from '@/components/ui/tabs';
 import { PoliciesSettings } from '@/components/vendor-settings/PoliciesSettings';
 import { CodTermsSettings } from '@/components/vendor-settings/CodTermsSettings';
+import { PartialPaymentSettings } from '@/components/vendor-settings/PartialPaymentSettings';
 import { DeliveryTermsSettings } from '@/components/vendor-settings/DeliveryTermsSettings';
 import { NotificationSettings } from '@/components/vendor-settings/NotificationSettings';
 import { PreferencesSettings } from '@/components/vendor-settings/PreferencesSettings';
@@ -53,6 +54,7 @@ export function Settings() {
         {/* Each its own card and its own save — never part of the policies PATCH. */}
         <DeliveryTermsSettings />
         <CodTermsSettings />
+        <PartialPaymentSettings />
       </TabsContent>
 
       <TabsContent value="notifications" className="space-y-6">

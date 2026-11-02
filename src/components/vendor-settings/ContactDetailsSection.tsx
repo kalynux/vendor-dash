@@ -26,6 +26,11 @@ import {
   phoneVerificationAttemptsLeft,
   requestPhoneVerificationCode,
 } from '@/services/phone-verification.service';
+import {
+  fetchEmailVerificationState,
+  sendEmailVerification,
+  type EmailVerificationState,
+} from '@/services/notification-channels.service';
 import { isValidEmail, normalizeEmail } from '@/lib/email';
 import { ApiError } from '@/types/api';
 import type { ContactState, PendingContactChange } from '@/types/contact-change.types';
@@ -55,6 +60,15 @@ const CODE_LENGTH = 6;
 const RESEND_COOLDOWN_SECONDS = 60;
 
 /**
+ * Pause before the verification email can be sent again.
+ *
+ * Unlike the code above this is purely ours — the backend has no email cooldown and
+ * would happily mail a new link per tap, so this is what keeps a slow inbox from
+ * turning into a pile of identical messages.
+ */
+const EMAIL_RESEND_COOLDOWN_SECONDS = 60;
+
+/**
  * The account's sign-in identifiers — email and phone — and the two-step change
  * flow behind each.
  *
@@ -78,6 +92,14 @@ const RESEND_COOLDOWN_SECONDS = 60;
  * left to the bot (see contact-change.service.ts). When the code completes a
  * change, the backend moves the WhatsApp link off the old number by itself.
  * See api-doc/me/contact-change.md and api-doc/me/phone-verification.md.
+ *
+ * ── Proving an email address ─────────────────────────────────────────────────
+ *
+ * A link, in two flows that must not be confused. "Verify" proves the address
+ * already on the account (`POST /auth/send-email-verification`) and moves nothing.
+ * "Change" proves a new one (`PATCH /me/email`) and swaps the sign-in address, which
+ * also marks it verified. Both links open on the main site, not in this dashboard,
+ * so the panel re-checks when the vendor comes back to it.
  *
  * Three things this panel must never say:
  *
@@ -140,17 +162,25 @@ export function ContactDetailsSection() {
    */
   const [verifiedNow, setVerifiedNow] = useState(false);
 
+  // ── Verifying the email already on the account ─────────────────────────────
+  const [emailVerification, setEmailVerification] = useState<EmailVerificationState | null>(null);
+  /** A link went out from this page, so the row says so and watches for the result. */
+  const [emailLinkSent, setEmailLinkSent] = useState(false);
+  const [emailResendAt, setEmailResendAt] = useState<number | null>(null);
+
   const reload = useCallback(async () => {
     try {
       // The verification state is an enhancement, not the backbone: if it fails
       // the panel still has to render the identifiers. Degrading to "no verify
       // affordance" beats blanking the whole section.
-      const [contact, verifyState] = await Promise.all([
+      const [contact, verifyState, emailState] = await Promise.all([
         fetchContactState(),
         fetchPhoneVerificationState().catch(() => null),
+        fetchEmailVerificationState().catch(() => null),
       ]);
       setState(contact);
       setVerification(verifyState);
+      setEmailVerification(emailState);
     } catch (err) {
       apiError.toast(err, { fallbackKey: 'account.contact.errors.loadFailed' });
     } finally {
@@ -164,10 +194,38 @@ export function ContactDetailsSection() {
 
   // Only ticks while a cooldown is actually running.
   useEffect(() => {
-    if (resendAt === null) return;
+    if (resendAt === null && emailResendAt === null) return;
     const id = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(id);
-  }, [resendAt]);
+  }, [resendAt, emailResendAt]);
+
+  /**
+   * The vendor is off in their inbox, so coming back to this tab (or to the phone
+   * app) is the moment worth checking. A failed check keeps what is on screen: it
+   * says nothing about the address, and the next return tries again.
+   */
+  useEffect(() => {
+    if (!emailLinkSent) return;
+    const recheck = () => {
+      if (document.visibilityState !== 'visible') return;
+      fetchEmailVerificationState()
+        .then((fresh) => {
+          setEmailVerification(fresh);
+          if (!fresh.emailVerified) return;
+          setEmailLinkSent(false);
+          setEmailResendAt(null);
+          // Returning fires both events below, so the id keeps this to one toast.
+          toast.success(t('account.contact.emailVerified'), { id: 'email-verified' });
+        })
+        .catch(() => undefined);
+    };
+    document.addEventListener('visibilitychange', recheck);
+    window.addEventListener('focus', recheck);
+    return () => {
+      document.removeEventListener('visibilitychange', recheck);
+      window.removeEventListener('focus', recheck);
+    };
+  }, [emailLinkSent, t]);
 
   const run = useCallback(
     async (key: string, action: () => Promise<void>, successKey: Parameters<typeof t>[0]) => {
@@ -185,6 +243,31 @@ export function ContactDetailsSection() {
     },
     [t, reload, apiError],
   );
+
+  /** Mail a verification link to the address already on the account. */
+  const sendEmailLink = useCallback(async () => {
+    setBusy('send-email-link');
+    try {
+      await sendEmailVerification();
+      setEmailLinkSent(true);
+      setEmailResendAt(Date.now() + EMAIL_RESEND_COOLDOWN_SECONDS * 1000);
+      setNow(Date.now());
+      toast.success(t('account.contact.emailLinkSentToast'));
+    } catch (err) {
+      // They opened an earlier link somewhere this page could not see. That is
+      // the outcome they wanted, so it is good news rather than an error.
+      if (err instanceof ApiError && err.code === 'AUTH_EMAIL_ALREADY_VERIFIED') {
+        setEmailVerification((prev) => (prev ? { ...prev, emailVerified: true } : prev));
+        setEmailLinkSent(false);
+        setEmailResendAt(null);
+        toast.success(t('account.contact.emailVerified'), { id: 'email-verified' });
+        return;
+      }
+      apiError.toast(err, { fallbackKey: 'account.contact.errors.actionFailed' });
+    } finally {
+      setBusy(null);
+    }
+  }, [t, apiError]);
 
   /**
    * Send a code, and open the entry panel.
@@ -346,6 +429,27 @@ export function ContactDetailsSection() {
     verifiedNow ||
     (roleEntity?.phone_verified === true && !!state.phone && roleEntity.phone === state.phone);
 
+  /**
+   * Same caution for email, with a second reason: the link is mailed to the
+   * PROFILE's address, while this row shows the sign-in one. If they ever differ,
+   * "Verify" would send it somewhere the vendor is not looking, and the flag would
+   * describe an address this row does not show. So neither is offered — "Change"
+   * still works, and a confirmed change brings the two back together.
+   */
+  const emailMatchesProfile =
+    !!state.email &&
+    !!emailVerification?.email &&
+    normalizeEmail(emailVerification.email) === normalizeEmail(state.email);
+  const emailVerified = emailMatchesProfile && emailVerification?.emailVerified === true;
+  // A pending change would replace this address, so proving it now is wasted effort.
+  const emailLinkOpen =
+    emailLinkSent && !emailVerified && !state.pendingEmail && openForm !== 'email';
+  const canVerifyEmail =
+    emailMatchesProfile && !emailVerified && !state.pendingEmail && !emailLinkSent;
+  const emailCooldownLeft =
+    emailResendAt === null ? 0 : Math.max(0, Math.ceil((emailResendAt - now) / 1000));
+  const sendingEmailLink = busy === 'send-email-link';
+
   // `phoneMasked: null` is the GET's way of saying the account carries no number
   // — the signal not to offer the flow. Only `request` raises NO_TARGET.
   const hasVerifiableNumber = verification?.phoneMasked != null;
@@ -397,24 +501,75 @@ export function ContactDetailsSection() {
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="text-xs text-muted-foreground">{t('account.contact.emailLabel')}</p>
-            <p className="truncate text-sm font-medium">
-              {state.email ?? t('common.labels.emptyValue')}
-            </p>
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <p className="truncate text-sm font-medium">
+                {state.email ?? t('common.labels.emptyValue')}
+              </p>
+              {emailVerified && (
+                <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                  <BadgeCheck className="size-3.5" />
+                  {t('account.contact.verified')}
+                </span>
+              )}
+            </div>
           </div>
-          {!state.pendingEmail && openForm !== 'email' && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="shrink-0"
-              onClick={() => {
-                setEmailDraft('');
-                setOpenForm('email');
-              }}
-            >
-              {t(state.email === null ? 'account.contact.add' : 'account.contact.change')}
-            </Button>
-          )}
+          <div className="flex shrink-0 flex-wrap gap-2">
+            {canVerifyEmail && (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={sendingEmailLink}
+                onClick={() => void sendEmailLink()}
+              >
+                {sendingEmailLink && <Loader2 className="size-4 animate-spin" />}
+                {t('account.contact.verify')}
+              </Button>
+            )}
+            {!state.pendingEmail && openForm !== 'email' && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setEmailDraft('');
+                  setOpenForm('email');
+                }}
+              >
+                {t(state.email === null ? 'account.contact.add' : 'account.contact.change')}
+              </Button>
+            )}
+          </div>
         </div>
+
+        {canVerifyEmail && (
+          <p className="text-xs text-muted-foreground">{t('account.contact.emailVerifyPrompt')}</p>
+        )}
+
+        {/* Plain text, no box and no cancel: nothing is in progress here that could
+            be cancelled, the link simply stays usable for a day. Sending again is
+            the fallback, so it is a link rather than a button. */}
+        {emailLinkOpen && (
+          <div className="space-y-1" role="status">
+            <p className="text-sm text-muted-foreground">
+              {t('account.contact.emailLinkSent', { email: state.email ?? '' })}
+            </p>
+            {emailCooldownLeft > 0 ? (
+              <p className="text-xs text-muted-foreground">
+                {t('account.contact.emailResendIn', { seconds: emailCooldownLeft })}
+              </p>
+            ) : (
+              <Button
+                variant="link"
+                size="sm"
+                className="h-auto p-0 text-xs"
+                disabled={sendingEmailLink}
+                onClick={() => void sendEmailLink()}
+              >
+                {sendingEmailLink && <Loader2 className="size-3.5 animate-spin" />}
+                {t('account.contact.emailResend')}
+              </Button>
+            )}
+          </div>
+        )}
 
         {state.pendingEmail ? (
           <PendingBanner
@@ -450,7 +605,14 @@ export function ContactDetailsSection() {
                 onClick={() =>
                   void run(
                     'request-email',
-                    () => requestEmailChange(normalizeEmail(emailDraft)),
+                    async () => {
+                      await requestEmailChange(normalizeEmail(emailDraft));
+                      // That link was for the old address. If this change is later
+                      // cancelled, the row should offer Verify again, not claim a
+                      // link is still on its way.
+                      setEmailLinkSent(false);
+                      setEmailResendAt(null);
+                    },
                     'account.contact.emailChangeRequested',
                   )
                 }

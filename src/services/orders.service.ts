@@ -5,6 +5,7 @@ import { refreshPendingOrdersCount } from '@/lib/pending-orders-count';
 import type { FileRef } from '@/types/file.types';
 import type { CodLimitForce, CodLimitHold } from '@/types/cod-limits.types';
 import type { DeliveryFeeProposal } from '@/types/delivery-fee-proposals.types';
+import type { OrderPartialPayment } from '@/types/partial-payment.types';
 import type { Order, OrderItem, Customer, OrderTimelineEvent, Entitlement, TimelineEventType, DisputeHold, OrderItemDelivery, OrderDeliveryTimelineEntry, VendorSettableStatus, PaymentMethod, DeliveryPayer, DeliveryPayerReason, ShipmentDeliveryFee } from '@/types';
 
 // ─── Error Handling ────────────────────────────────────────────────────────────
@@ -111,6 +112,7 @@ interface ApiOrderListItem {
   fulfillmentStatus: string;
   paymentStatus: string;
   paymentMethod: string;
+  partialPayment?: OrderPartialPayment | null;
   dispute_hold?: ApiDisputeHold | null;
   customer: {
     id: string;
@@ -138,6 +140,7 @@ interface ApiOrderDetail {
   fulfillmentStatus: string;
   paymentStatus: string;
   paymentMethod: string;
+  partialPayment?: OrderPartialPayment | null;
   paymentIntentId?: string;
   dispute_hold?: ApiDisputeHold | null;
   customer: {
@@ -445,6 +448,7 @@ function adaptListItemToOrder(item: ApiOrderListItem): Order {
     status: adaptFulfillmentStatus(item.fulfillmentStatus),
     paymentStatus: adaptPaymentStatus(item.paymentStatus),
     paymentMethod: adaptPaymentMethod(item.paymentMethod),
+    partialPayment: item.partialPayment ?? null,
     disputeHold: adaptDisputeHold(item.dispute_hold),
     codLimitHeld: item.codLimitHeld === true,
     deliveryPayer: item.deliveryPayer ?? null,
@@ -528,6 +532,7 @@ function adaptDetailToOrder(detail: ApiOrderDetail): Order {
     status: adaptFulfillmentStatus(detail.fulfillmentStatus),
     paymentStatus: adaptPaymentStatus(detail.paymentStatus),
     paymentMethod: adaptPaymentMethod(detail.paymentMethod),
+    partialPayment: detail.partialPayment ?? null,
     disputeHold: adaptDisputeHold(detail.dispute_hold),
     fulfillmentStatus: 'unfulfilled',
     total: detail.totalAmount,

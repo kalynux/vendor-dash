@@ -130,7 +130,9 @@ export type AdjustmentReasonCode =
   | 'refund_delivery_fault'
   | 'dispute_share'
   | 'dispute_payin_fee'
-  | 'damage_claim';
+  | 'damage_claim'
+  // 2026-11-01 — a partial-payment order's parcel came back through the vendor's fault.
+  | 'partial_return_fault';
 
 export interface EarningsTakenFrom {
   pending: number;

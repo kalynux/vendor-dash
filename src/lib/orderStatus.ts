@@ -1,8 +1,10 @@
 import type { ElementType } from 'react';
 import { PackageSearch, XCircle } from 'lucide-react';
 import { isOrderFrozen } from '@/services/orders.service';
-import type { TranslationKey } from '@/i18n';
+import type { Formatters, TranslateParams, TranslationKey } from '@/i18n';
 import type { Order, OrderStatus, PaymentMethod, PaymentStatus, VendorSettableStatus } from '@/types';
+
+type Translate = (key: TranslationKey, params?: TranslateParams) => string;
 
 /**
  * Statuses a vendor can move an order to next, from its current status.
@@ -49,9 +51,63 @@ export const STATUS_ICONS: Record<VendorSettableStatus, ElementType> = {
   cancelled: XCircle,
 };
 
-/** `getNextStatuses`, additionally accounting for a dispute-frozen order (no moves allowed). */
+/**
+ * A partial-payment order whose online part is still unpaid (FRONTEND-CHANGELOG-partial-payment,
+ * 2026-11-01). It reads `AWAITING_PAYMENT` exactly like a plain COD order, which CAN be prepared
+ * and dispatched, so only `partialPayment` tells the two apart — never go by the status alone.
+ */
+export function isOnlinePartDue(order: Order): boolean {
+  return !!order.partialPayment && !order.partialPayment.paidAt;
+}
+
+/** Still worth telling the vendor to wait: `isOnlinePartDue`, and the order is still alive. */
+export function isWaitingForOnlinePart(order: Order): boolean {
+  return isOnlinePartDue(order) && order.paymentStatus === 'AWAITING_PAYMENT' && order.status !== 'cancelled';
+}
+
+/** A partial order whose cash will never be collected, so "collected at delivery" would be false. */
+export function isPartialPaymentClosed(order: Order): boolean {
+  return (
+    !!order.partialPayment &&
+    (order.status === 'cancelled' ||
+      order.status === 'returned' ||
+      order.paymentStatus === 'failed' ||
+      order.paymentStatus === 'refunded')
+  );
+}
+
+/** The line shown with the payment status of a partial order; `null` on every other order. */
+export function partialPaymentSentence(order: Order, t: Translate, fmt: Formatters): string | null {
+  const part = order.partialPayment;
+  if (!part) return null;
+  if (isOnlinePartDue(order)) return isWaitingForOnlinePart(order) ? t('orders.partialPayment.dueShort') : null;
+  const paid = fmt.currency(part.amountPaidOnline, order.currency);
+  if (isPartialPaymentClosed(order)) return t('orders.partialPayment.paidOnlineOnly', { paid });
+  return t('orders.partialPayment.split', { paid, balance: fmt.currency(part.balanceDue, order.currency) });
+}
+
+/**
+ * The warning for the cancel dialogs: `null` when no money was paid in. Cancelling a partial order
+ * after its online part was paid works like cancelling a paid order, the customer is refunded in
+ * full and the vendor pays the fees.
+ */
+export function paidCancelNoticeKey(order: Order): TranslationKey | null {
+  if (order.paymentStatus === 'paid') return 'orders.detail.cancelDialog.paidNotice';
+  if (order.paymentStatus === 'partially_paid' && order.partialPayment?.paidAt) {
+    return 'orders.detail.cancelDialog.partialPaidNotice';
+  }
+  return null;
+}
+
+/**
+ * `getNextStatuses`, additionally accounting for a dispute-frozen order (no moves allowed) and for
+ * a partial order still waiting for its online part: the server would accept `processing` there,
+ * but the vendor is being told not to prepare it. Cancelling stays available.
+ */
 export function getEffectiveNextStatuses(order: Order): VendorSettableStatus[] {
-  return isOrderFrozen(order) ? [] : getNextStatuses(order.status);
+  if (isOrderFrozen(order)) return [];
+  const next = getNextStatuses(order.status);
+  return isOnlinePartDue(order) ? next.filter((s) => s !== 'processing') : next;
 }
 
 const DISPATCH_TERMINAL_STATUSES: OrderStatus[] = ['cancelled', 'delivered', 'returned', 'fulfilled'];
@@ -94,6 +150,8 @@ export function canDispatchOrder(order: Order): boolean {
   return (
     order.orderType === 'physical' &&
     paymentOk &&
+    // The server refuses this one with `422 ORDER_PAYMENT_REQUIRED`.
+    !isOnlinePartDue(order) &&
     !isOrderFrozen(order) &&
     !DISPATCH_TERMINAL_STATUSES.includes(order.status) &&
     hasPendingShipment(order)

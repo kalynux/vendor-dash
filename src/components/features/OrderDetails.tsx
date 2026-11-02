@@ -58,6 +58,7 @@ import { DeliveryStatusBadge } from '@/components/orders/DeliveryStatusBadge';
 import { DeliveryRejectionNotice } from '@/components/orders/DeliveryRejectionNotice';
 import { ReassignAgencyPopover } from '@/components/orders/ReassignAgencyPopover';
 import { PaidCancelNotice } from '@/components/orders/PaidCancelNotice';
+import { OnlinePartDueBanner, PartialPaymentNote } from '@/components/orders/PartialPaymentNote';
 import { ShipmentReviewControl } from '@/components/reviews/ShipmentReviewControl';
 import { ApiError } from '@/types/api';
 import { toast } from 'sonner';
@@ -67,7 +68,7 @@ import { useProductImages } from '@/hooks/use-product-images';
 import { VerifiedBadge } from '@/components/common/VerifiedBadge';
 import { useTranslation, useFormatters, Trans } from '@/i18n';
 import type { Address, Order, Entitlement, OrderTimelineEvent, VendorSettableStatus } from '@/types';
-import { getNextStatuses, STATUS_ACTION_KEYS, ORDER_STATUS_KEYS, canDispatchOrder } from '@/lib/orderStatus';
+import { getEffectiveNextStatuses, STATUS_ACTION_KEYS, ORDER_STATUS_KEYS, canDispatchOrder, paidCancelNoticeKey } from '@/lib/orderStatus';
 
 const REASSIGNABLE_DELIVERY_STATUSES = ['pending', 'assigned', 'pending_agency_reassignment'];
 
@@ -136,8 +137,9 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
   const hasEntitlements = (currentOrder.entitlements?.length ?? 0) > 0;
   const frozen = isOrderFrozen(currentOrder);
   // A frozen (disputed) order can't be advanced — the status PATCH returns 423.
-  const nextStatuses = frozen ? [] : getNextStatuses(currentOrder.status);
+  const nextStatuses = getEffectiveNextStatuses(currentOrder);
   const canDispatch = canDispatchOrder(currentOrder);
+  const paidCancelKey = paidCancelNoticeKey(currentOrder);
   const cancelWord = t('orders.detail.cancelDialog.confirmWord');
 
   const formatCurrency = (value: number) => fmt.currency(value, currentOrder.currency);
@@ -436,6 +438,8 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
           </div>
         </div>
       )}
+
+      <OnlinePartDueBanner order={currentOrder} className="rounded-lg border p-3" />
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full flex flex-col flex-1 min-h-0">
         <TabsList className={`grid w-full flex-shrink-0 ${hasEntitlements ? 'grid-cols-5' : 'grid-cols-4'}`}>
@@ -885,6 +889,8 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
                 </div>
               </div>
 
+              <PartialPaymentNote order={currentOrder} className="text-sm" />
+
               {/* Why the Refund action isn't offered — the vendor looks here for it. */}
               {refund.openRefundRequest ? (
                 <p className="text-xs text-muted-foreground">
@@ -1122,9 +1128,7 @@ export function OrderDetails({ order, onOrderUpdated }: OrderDetailsProps) {
                     components={[<span className="font-semibold text-foreground" />]}
                   />
                 </p>
-                {currentOrder.paymentStatus === 'paid' && (
-                  <PaidCancelNotice>{t('orders.detail.cancelDialog.paidNotice')}</PaidCancelNotice>
-                )}
+                {paidCancelKey && <PaidCancelNotice>{t(paidCancelKey)}</PaidCancelNotice>}
                 <div className="space-y-2 pt-2">
                   <label htmlFor="details-cancel-confirm-input" className="text-xs font-semibold text-muted-foreground block">
                     <Trans
