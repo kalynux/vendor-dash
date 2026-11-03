@@ -92,6 +92,11 @@ export type NotificationType =
   | 'booking.reschedule_requested'
   | 'booking.reschedule_accepted'
   | 'booking.reschedule_declined'
+  // 2026-11-03, no preference silences these, link `bookings/{bookingId}`.
+  // The customer used their one reminder · accepted · declined your proposed price.
+  | 'booking.reminder'
+  | 'booking.price_accepted'
+  | 'booking.price_declined'
   | 'payment.received.partial'
   | 'payment.received.full'
   | 'storage.alert'

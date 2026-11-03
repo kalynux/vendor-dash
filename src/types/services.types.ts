@@ -269,9 +269,21 @@ export interface Booking {
   paymentStatus: PaymentStatus;
   paymentMethod?: PaymentMethod;
   paidAt?: string | null;
-  /** As the service's price was typed — 5000 means 5 000 XAF. Never divide. */
+  /**
+   * The AGREED price, as typed — 5000 means 5 000 XAF. Never divide. Since
+   * 2026-11-03 it is not the first quote: that is `pricing.originalPrice`.
+   */
   priceSnapshot: number;
   currency: string;
+  /**
+   * Not in the docs: stored on the booking since 2026-11-03, absent on older
+   * ones. Read it through `isManualBooking`.
+   */
+  bookingMode?: BookingMode | null;
+  /** List and detail reads only. */
+  reminder?: BookingReminder;
+  /** List, detail and the two price-proposal replies only. */
+  pricing?: BookingPricing;
   /** Free-form; the customer's note is `metadata.notes` (see `customerNote`). */
   metadata?: Record<string, unknown> | null;
   /** The booking's own copy of where it happens (2026-10-26). `null` on older bookings. */
@@ -324,6 +336,43 @@ export interface RescheduleProposal {
   /** Unanswered by then → `lapsed`, the original time stands. */
   expiresAt?: string | null;
   answeredAt?: string | null;
+  /** A new price to go with the new time. Both null when the price is untouched. */
+  price?: number | null;
+  previousPrice?: number | null;
+}
+
+/** One reminder each way per booking. `canSend` decides the button, never the client. */
+export interface BookingReminder {
+  canSend: boolean;
+  /** When the shop sent theirs. */
+  sentAt: string | null;
+  /** When the customer sent theirs. */
+  receivedAt: string | null;
+}
+
+export type BookingPriceProposalStatus = 'open' | 'accepted' | 'declined' | 'withdrawn' | 'lapsed';
+
+export interface BookingPriceProposal {
+  status: BookingPriceProposalStatus;
+  amount: number;
+  previousAmount: number;
+  proposedAt: string;
+  /** Unanswered by then → `lapsed`. The server already reports it as lapsed. */
+  expiresAt: string;
+  answeredAt: string | null;
+}
+
+export interface BookingPricing {
+  /** What the customer booked at: the floor for every later price. */
+  originalPrice: number;
+  /** The agreed price, the same as `priceSnapshot`. */
+  currentPrice: number;
+  /** What has really been received. */
+  amountPaid: number;
+  proposal: BookingPriceProposal | null;
+  /** Owed after a paid booking's price went up. Unpaid by `dueAt` → cancelled and refunded. */
+  topup: { amount: number; dueAt: string } | null;
+  canPropose: boolean;
 }
 
 /**

@@ -29,7 +29,9 @@ export function UnitInput({ unit, invalid, wrapperClassName, className, ...props
       <input
         aria-invalid={invalid || undefined}
         className={cn(
-          'h-full min-w-0 flex-1 bg-transparent px-3 text-base outline-none placeholder:text-muted-foreground md:text-sm',
+          // The box above draws the focus ring. `index.css` outlines every focused
+          // input and outranks a plain `outline-none`, which drew a second, square one.
+          'h-full min-w-0 flex-1 bg-transparent px-3 text-base outline-none focus-visible:outline-none placeholder:text-muted-foreground md:text-sm',
           className,
         )}
         {...props}

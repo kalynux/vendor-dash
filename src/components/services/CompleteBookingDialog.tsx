@@ -8,27 +8,32 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { isManualBooking } from '@/components/services/service.constants';
+import { ApiError } from '@/types/api';
 import { useTranslation, useFormatters, useApiError, type TranslationKey } from '@/i18n';
 import { completeBooking } from '@/services/services.service';
 import type { Booking, CompleteBookingPayload, CompleteBookingResult } from '@/types/services.types';
 
 type Mode = 'asBooked' | 'actualEnd' | 'extraMinutes' | 'fixedPrice';
 
-const MODES: { value: Mode; labelKey: TranslationKey; hintKey: TranslationKey }[] = [
+const MODES: { value: Mode; labelKey: TranslationKey; hintKey: TranslationKey; manualHintKey?: TranslationKey }[] = [
   {
     value: 'asBooked',
     labelKey: 'services.complete.modes.asBooked',
     hintKey: 'services.complete.modes.asBookedHint',
+    manualHintKey: 'services.complete.modes.asBookedManualHint',
   },
   {
     value: 'actualEnd',
     labelKey: 'services.complete.modes.actualEnd',
     hintKey: 'services.complete.modes.actualEndHint',
+    manualHintKey: 'services.complete.modes.actualEndManualHint',
   },
   {
     value: 'extraMinutes',
     labelKey: 'services.complete.modes.extraMinutes',
     hintKey: 'services.complete.modes.extraMinutesHint',
+    manualHintKey: 'services.complete.modes.extraMinutesManualHint',
   },
   {
     value: 'fixedPrice',
@@ -55,6 +60,8 @@ export function CompleteBookingDialog({ booking, open, onOpenChange, onCompleted
   const [fixedPrice, setFixedPrice] = useState('');
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<CompleteBookingResult | null>(null);
+  // The server's answer, for an older booking that does not say it is manual.
+  const [priceLocked, setPriceLocked] = useState(false);
 
   // Reset transient state whenever the dialog (re)opens.
   useEffect(() => {
@@ -65,10 +72,14 @@ export function CompleteBookingDialog({ booking, open, onOpenChange, onCompleted
       setFixedPrice('');
       setResult(null);
       setBusy(false);
+      setPriceLocked(false);
     }
   }, [open]);
 
   const currency = booking?.currency ?? 'XAF';
+  // A manual service's price is agreed beforehand, so `fixedPrice` is refused.
+  const manual = priceLocked || (!!booking && isManualBooking(booking));
+  const modes = manual ? MODES.filter((option) => option.value !== 'fixedPrice') : MODES;
 
   async function handleSubmit() {
     if (!booking) return;
@@ -93,6 +104,10 @@ export function CompleteBookingDialog({ booking, open, onOpenChange, onCompleted
       onCompleted();
     } catch (err) {
       apiError.toast(err, { fallbackKey: 'services.errors.completeFailed' });
+      if (err instanceof ApiError && err.code === 'BOOKING_PRICE_LOCKED') {
+        setPriceLocked(true);
+        setMode('asBooked');
+      }
     } finally {
       setBusy(false);
     }
@@ -113,7 +128,7 @@ export function CompleteBookingDialog({ booking, open, onOpenChange, onCompleted
               <DialogDescription>{t('services.complete.resultDescription')}</DialogDescription>
             </DialogHeader>
             <div className="space-y-2 rounded-lg border p-3 text-sm">
-              <Row label={t('services.complete.originallyBooked')} value={money(result.priceSnapshot)} />
+              <Row label={t(manual ? 'services.complete.agreedPrice' : 'services.complete.originallyBooked')} value={money(result.priceSnapshot)} />
               {/* What is owed is measured against what was PAID, so showing the
                   paid figure is what makes the balance below add up. */}
               {result.amountPaid !== undefined && (
@@ -168,11 +183,11 @@ export function CompleteBookingDialog({ booking, open, onOpenChange, onCompleted
           <>
             <DialogHeader>
               <DialogTitle>{t('services.complete.title')}</DialogTitle>
-              <DialogDescription>{t('services.complete.description')}</DialogDescription>
+              <DialogDescription>{t(manual ? 'services.complete.manualDescription' : 'services.complete.description')}</DialogDescription>
             </DialogHeader>
 
             <RadioGroup value={mode} onValueChange={(v) => setMode(v as Mode)} className="gap-2">
-              {MODES.map((option) => (
+              {modes.map((option) => (
                 <Label
                   key={option.value}
                   htmlFor={`complete-${option.value}`}
@@ -181,7 +196,9 @@ export function CompleteBookingDialog({ booking, open, onOpenChange, onCompleted
                   <RadioGroupItem id={`complete-${option.value}`} value={option.value} className="mt-0.5" />
                   <span className="space-y-0.5">
                     <span className="block text-sm font-medium">{t(option.labelKey)}</span>
-                    <span className="block text-xs text-muted-foreground">{t(option.hintKey)}</span>
+                    <span className="block text-xs text-muted-foreground">
+                      {t(manual && option.manualHintKey ? option.manualHintKey : option.hintKey)}
+                    </span>
                   </span>
                 </Label>
               ))}

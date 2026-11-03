@@ -45,6 +45,7 @@ import type {
   SlotLockResponse,
   BookingSlotHold,
   BookingAccessUpdate,
+  BookingReminder,
   SimpleMessageResponse,
   CompleteBookingPayload,
   CompleteBookingResult,
@@ -352,8 +353,12 @@ export async function cancelBooking(id: string, reason?: string): Promise<Bookin
  * One slot → `newSlotId`; an appointment spanning several → the held run, in
  * time order, as `newSlotIds` (bookings.md → Reschedule Booking).
  */
-export async function rescheduleBooking(id: string, slotIds: string[]): Promise<Booking> {
-  const body = slotIds.length === 1 ? { newSlotId: slotIds[0] } : { newSlotIds: slotIds };
+export async function rescheduleBooking(id: string, slotIds: string[], price?: number): Promise<Booking> {
+  const body = {
+    ...(slotIds.length === 1 ? { newSlotId: slotIds[0] } : { newSlotIds: slotIds }),
+    // Manual services only. The customer answers the time and the price together.
+    ...(price !== undefined ? { price } : {}),
+  };
   const res = await api.patch<BookingDetailResponse>(`${BASE}/bookings/${id}/reschedule`, body);
   return res.data;
 }
@@ -378,15 +383,45 @@ export async function withdrawRescheduleProposal(id: string): Promise<Booking> {
   return res.data;
 }
 
-/** Answer a CUSTOMER's request to move (manual-approval services only). */
+/**
+ * Answer a CUSTOMER's request to move (manual-approval services only). Accepting
+ * with a different `price` moves nothing yet: the request becomes the shop's own
+ * proposal (`rescheduleProposal.proposedBy: 'vendor'`, still `open`).
+ */
 export async function answerRescheduleProposal(
   id: string,
   answer: 'accept' | 'decline',
+  price?: number,
 ): Promise<Booking> {
   const res = await api.post<BookingDetailResponse>(
     `${BASE}/bookings/${id}/reschedule-proposal/${answer}`,
+    price !== undefined ? { price } : undefined,
   );
   return res.data;
+}
+
+/**
+ * Ask for a different price on a pending manual booking. Accepting confirms the
+ * booking at once. The reply has `pricing` but no `reminder`, and its product
+ * and customer are bare ids, so read the booking again rather than drawing it.
+ */
+export async function proposeBookingPrice(id: string, price: number): Promise<Booking> {
+  const res = await api.post<BookingDetailResponse>(`${BASE}/bookings/${id}/price-proposal`, { price });
+  return res.data;
+}
+
+/** Take back the shop's open price. Same reply as `proposeBookingPrice`. */
+export async function withdrawBookingPrice(id: string): Promise<Booking> {
+  const res = await api.delete<BookingDetailResponse>(`${BASE}/bookings/${id}/price-proposal`);
+  return res.data;
+}
+
+/** The shop's one reminder for this booking. No body: the platform writes the message. */
+export async function sendBookingReminder(id: string): Promise<BookingReminder> {
+  const res = await api.post<{ success: boolean; data: { reminder: BookingReminder } }>(
+    `${BASE}/bookings/${id}/reminder`,
+  );
+  return res.data.reminder;
 }
 
 /** This booking's link / instructions only — the service's defaults are untouched. */
@@ -420,6 +455,9 @@ export async function completeBooking(
  * accepted and over-declaring is clamped to what is owed. Distinct from
  * `markBookingPaid`, which settles the **original** price of an unpaid cash
  * booking — this settles the **completion balance** on one already paid.
+ *
+ * Also records a price difference (`pricing.topup`), which it clears first.
+ * That one is all or nothing, and the reply's figures say nothing about it.
  */
 export async function settleBookingBalance(
   id: string,

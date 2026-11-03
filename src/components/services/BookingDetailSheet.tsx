@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   Loader2, XCircle, CalendarClock, User, Banknote, CalendarSync,
   CheckCircle2, Ban, Receipt, MessageSquareText, Hourglass, MapPin, Navigation, Video,
-  KeyRound, Pencil,
+  KeyRound, Pencil, BellRing, CircleDollarSign, UserX, type LucideIcon,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -17,17 +17,20 @@ import {
 } from '@/components/ui/alert-dialog';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { useTranslation, useFormatters, useApiError } from '@/i18n';
+import { useTranslation, useFormatters, useApiError, type TranslationKey } from '@/i18n';
 import {
   fetchBookingById, updateBookingStatus, markBookingPaid, cancelBooking,
   settleBookingBalance, withdrawRescheduleProposal, answerRescheduleProposal,
+  withdrawBookingPrice, sendBookingReminder,
 } from '@/services/services.service';
 import { BookingAccessEditor } from '@/components/services/BookingAccessEditor';
+import { BookingPriceDialog, type BookingPriceDialogMode } from '@/components/services/BookingPriceDialog';
 import { BookingStatusBadge, PaymentStatusBadge } from '@/components/services/StatusBadges';
 import { RescheduleSheet } from '@/components/services/RescheduleSheet';
 import { CompleteBookingDialog } from '@/components/services/CompleteBookingDialog';
+import { isStaleBookingRefusal, useBookingPriceError } from '@/components/services/useBookingPriceError';
 import {
-  customerNote, mapsUrl, REVEAL_MINUTES_DEFAULT,
+  canRepriceWithNewTime, customerNote, mapsUrl, REVEAL_MINUTES_DEFAULT,
   BOOKING_TRANSITIONS, CANCEL_REASON_MAX, type BookingTransition,
 } from '@/components/services/service.constants';
 import { responsiveSheetProps } from '@/components/ui/responsive-sheet';
@@ -72,6 +75,10 @@ export function BookingDetailSheet({ bookingId, open, onOpenChange, onChanged }:
   const [rescheduleOpen, setRescheduleOpen] = useState(false);
   const [completeOpen, setCompleteOpen] = useState(false);
   const [accessOpen, setAccessOpen] = useState(false);
+  const [priceDialog, setPriceDialog] = useState<BookingPriceDialogMode | null>(null);
+
+  const currency = booking?.currency ?? 'XAF';
+  const priceError = useBookingPriceError(currency);
 
   const load = useCallback(async (id: string) => {
     setLoading(true);
@@ -85,22 +92,42 @@ export function BookingDetailSheet({ bookingId, open, onOpenChange, onChanged }:
     }
   }, [apiError]);
 
+  /**
+   * Read the booking again in place, after every action. Only this read carries
+   * everything on screen together: the replies to the actions have no `reminder`,
+   * most have no `pricing`, and their product and customer are bare ids.
+   */
+  const reread = useCallback(async (id: string) => {
+    try {
+      setBooking(await fetchBookingById(id));
+    } catch {
+      // The action itself went through; what is on screen stays until the next open.
+    }
+  }, []);
+
   useEffect(() => {
     if (open && bookingId) load(bookingId);
     if (!open) { setBooking(null); setError(null); setCancelReason(''); }
   }, [open, bookingId, load]);
 
+  /** Say why it was refused and, if the screen was out of date, redraw it. */
+  async function showRefusal(err: unknown, fallbackKey: TranslationKey) {
+    toast.error(priceError(err, fallbackKey));
+    if (booking && isStaleBookingRefusal(err)) await reread(booking.id);
+  }
+
   async function applyStatus(target: BookingTransition['target']) {
     if (!booking) return;
     setBusy(true);
     try {
-      const updated = await updateBookingStatus(booking.id, target);
-      setBooking(updated);
+      await updateBookingStatus(booking.id, target);
+      await reread(booking.id);
       toast.success(t('services.toast.bookingUpdated'));
       setPendingStatus(null);
       onChanged();
     } catch (err) {
-      apiError.toast(err, { fallbackKey: 'services.errors.bookingUpdateFailed' });
+      await showRefusal(err, 'services.errors.bookingUpdateFailed');
+      if (isStaleBookingRefusal(err)) setPendingStatus(null);
     } finally {
       setBusy(false);
     }
@@ -110,14 +137,14 @@ export function BookingDetailSheet({ bookingId, open, onOpenChange, onChanged }:
     if (!booking) return;
     setBusy(true);
     try {
-      const updated = await cancelBooking(booking.id, cancelReason.trim() || undefined);
-      setBooking(updated);
+      await cancelBooking(booking.id, cancelReason.trim() || undefined);
+      await reread(booking.id);
       toast.success(t('services.toast.bookingCancelled'));
       setCancelOpen(false);
       setCancelReason('');
       onChanged();
     } catch (err) {
-      apiError.toast(err, { fallbackKey: 'services.errors.bookingCancelFailed' });
+      await showRefusal(err, 'services.errors.bookingCancelFailed');
     } finally {
       setBusy(false);
     }
@@ -128,11 +155,11 @@ export function BookingDetailSheet({ bookingId, open, onOpenChange, onChanged }:
     setBusy(true);
     try {
       await markBookingPaid(booking.id);
-      await load(booking.id);
+      await reread(booking.id);
       toast.success(t('services.toast.markedPaid'));
       onChanged();
     } catch (err) {
-      apiError.toast(err, { fallbackKey: 'services.errors.markPaidFailed' });
+      await showRefusal(err, 'services.errors.markPaidFailed');
     } finally {
       setBusy(false);
     }
@@ -151,11 +178,27 @@ export function BookingDetailSheet({ bookingId, open, onOpenChange, onChanged }:
     setBusy(true);
     try {
       await settleBookingBalance(booking.id);
-      await load(booking.id);
+      await reread(booking.id);
       toast.success(t('services.toast.balanceSettled'));
       onChanged();
     } catch (err) {
-      apiError.toast(err, { fallbackKey: 'services.errors.settleBalanceFailed' });
+      await showRefusal(err, 'services.errors.settleBalanceFailed');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** The price difference, taken at the counter. Sends no `amount`: it must cover all of it. */
+  async function handleCollectTopup() {
+    if (!booking) return;
+    setBusy(true);
+    try {
+      await settleBookingBalance(booking.id);
+      await reread(booking.id);
+      toast.success(t('services.pricing.collected'));
+      onChanged();
+    } catch (err) {
+      await showRefusal(err, 'services.pricing.collectFailed');
     } finally {
       setBusy(false);
     }
@@ -166,12 +209,12 @@ export function BookingDetailSheet({ bookingId, open, onOpenChange, onChanged }:
     if (!booking) return;
     setBusy(true);
     try {
-      setBooking(await withdrawRescheduleProposal(booking.id));
+      await withdrawRescheduleProposal(booking.id);
+      await reread(booking.id);
       toast.success(t('services.proposal.withdrawn'));
       onChanged();
     } catch (err) {
-      apiError.toast(err, { fallbackKey: 'services.proposal.actionFailed' });
-      await load(booking.id); // it may have been answered or lapsed meanwhile
+      await showRefusal(err, 'services.proposal.actionFailed'); // it may have been answered or lapsed meanwhile
     } finally {
       setBusy(false);
     }
@@ -182,12 +225,43 @@ export function BookingDetailSheet({ bookingId, open, onOpenChange, onChanged }:
     if (!booking) return;
     setBusy(true);
     try {
-      setBooking(await answerRescheduleProposal(booking.id, answer));
+      await answerRescheduleProposal(booking.id, answer);
+      await reread(booking.id);
       toast.success(t(answer === 'accept' ? 'services.proposal.accepted' : 'services.proposal.declined'));
       onChanged();
     } catch (err) {
-      apiError.toast(err, { fallbackKey: 'services.proposal.actionFailed' });
-      await load(booking.id);
+      await showRefusal(err, 'services.proposal.actionFailed');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** Take back the shop's open price — the booking can be confirmed again. */
+  async function handleWithdrawPrice() {
+    if (!booking) return;
+    setBusy(true);
+    try {
+      await withdrawBookingPrice(booking.id);
+      await reread(booking.id);
+      toast.success(t('services.pricing.withdrawn'));
+      onChanged();
+    } catch (err) {
+      await showRefusal(err, 'services.pricing.withdrawFailed'); // it may have been answered or lapsed meanwhile
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** The one reminder. Its reply is only the `reminder` block, so nothing else is redrawn. */
+  async function handleSendReminder() {
+    if (!booking) return;
+    setBusy(true);
+    try {
+      const reminder = await sendBookingReminder(booking.id);
+      setBooking((current) => current && { ...current, reminder });
+      toast.success(t('services.reminder.sentToast'));
+    } catch (err) {
+      await showRefusal(err, 'services.reminder.failed');
     } finally {
       setBusy(false);
     }
@@ -203,7 +277,13 @@ export function BookingDetailSheet({ bookingId, open, onOpenChange, onChanged }:
     }
   }
 
-  const transitions = booking ? BOOKING_TRANSITIONS[booking.status] ?? [] : [];
+  const pricing = booking?.pricing ?? null;
+  const priceOpen = pricing?.proposal?.status === 'open';
+  const topup = pricing?.topup ?? null;
+  const canPropose = !!pricing?.canPropose;
+  // The server refuses a confirm while a price waits (`BOOKING_PRICE_PROPOSAL_OPEN`).
+  const transitions = (booking ? BOOKING_TRANSITIONS[booking.status] ?? [] : [])
+    .filter((transition) => !(priceOpen && transition.target === 'confirmed'));
   const canMarkPaid =
     !!booking &&
     booking.requiresPayment &&
@@ -218,9 +298,57 @@ export function BookingDetailSheet({ bookingId, open, onOpenChange, onChanged }:
    * completed booking has a `settlement`, so an unfinished one shows nothing.
    */
   const settlement = booking?.settlement ?? null;
-  const outstandingBalance = settlement
+  // The one route clears a price difference first, so only one of the two can be offered.
+  const outstandingBalance = settlement && !topup
     ? Math.max(0, settlement.balanceDue - settlement.balancePaid)
     : 0;
+  const canReprice = !!booking && canRepriceWithNewTime(booking);
+
+  // Money first, then changes to the booking, then what ends it: the order they stack in.
+  const actions: BookingAction[] = [];
+  if (booking) {
+    if (canMarkPaid) {
+      actions.push({ id: 'mark-paid', label: t('services.detail.markCashReceived'), icon: CheckCircle2, onClick: handleMarkPaid });
+    }
+    if (topup) {
+      actions.push({
+        id: 'collect-topup',
+        label: t('services.pricing.collectedInCash', { amount: fmt.currency(topup.amount, booking.currency) }),
+        icon: Banknote,
+        onClick: handleCollectTopup,
+      });
+    }
+    // Distinct from "cash received" above, which settles the ORIGINAL price of an
+    // unpaid booking. This settles the completion balance on one that was already paid.
+    if (outstandingBalance > 0) {
+      actions.push({
+        id: 'settle-balance',
+        label: t('services.detail.settleBalanceInCash', { amount: fmt.currency(outstandingBalance, booking.currency) }),
+        icon: Banknote,
+        onClick: handleSettleBalance,
+      });
+    }
+    if (canReschedule) {
+      actions.push({ id: 'reschedule', label: t('services.detail.reschedule'), icon: CalendarSync, onClick: () => setRescheduleOpen(true) });
+    }
+    if (canPropose) {
+      actions.push({
+        id: 'propose-price',
+        label: t(pricing?.proposal ? 'services.pricing.proposeAgain' : 'services.pricing.propose'),
+        icon: CircleDollarSign,
+        onClick: () => setPriceDialog('propose'),
+      });
+    }
+    for (const transition of transitions) {
+      actions.push({
+        id: transition.target,
+        label: t(transition.labelKey),
+        icon: transition.kind === 'cancel' ? Ban : UserX,
+        tone: transition.tone === 'destructive' ? 'destructive' : 'main',
+        onClick: () => onTransitionClick(transition),
+      });
+    }
+  }
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -264,9 +392,13 @@ export function BookingDetailSheet({ bookingId, open, onOpenChange, onChanged }:
               <ProposalNotice
                 booking={booking}
                 busy={busy}
+                canReprice={canReprice}
                 onWithdraw={handleWithdrawProposal}
                 onAnswer={handleAnswerProposal}
+                onAcceptWithPrice={() => setPriceDialog('accept')}
               />
+
+              <PriceNotice booking={booking} busy={busy} onWithdraw={handleWithdrawPrice} />
 
               <LocationBlock booking={booking} />
 
@@ -286,16 +418,30 @@ export function BookingDetailSheet({ bookingId, open, onOpenChange, onChanged }:
                 </InfoCard>
               )}
 
+              <ReminderBlock booking={booking} busy={busy} onSend={handleSendReminder} />
+
               <AccessBlock booking={booking} canEdit={isOpenBooking} onEdit={() => setAccessOpen(true)} />
 
-              {/* Payment */}
+              {/* Payment. `priceSnapshot` is the agreed price, which may not be the first quote. */}
               <InfoCard icon={<Banknote className="h-4 w-4" />} title={t('services.detail.payment')}>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">
-                    {fmt.currency(booking.priceSnapshot, booking.currency)}
+                <div className="flex items-start justify-between gap-2">
+                  <span className="flex flex-wrap items-baseline gap-x-2">
+                    <span className="text-sm font-medium">
+                      {fmt.currency(pricing?.currentPrice ?? booking.priceSnapshot, booking.currency)}
+                    </span>
+                    {pricing && pricing.originalPrice !== pricing.currentPrice && (
+                      <span className="text-xs text-muted-foreground">
+                        {t('services.pricing.bookedAt', { amount: fmt.currency(pricing.originalPrice, booking.currency) })}
+                      </span>
+                    )}
                   </span>
                   <PaymentStatusBadge status={booking.paymentStatus} />
                 </div>
+                {!!pricing?.amountPaid && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {t('services.pricing.paidSoFar', { amount: fmt.currency(pricing.amountPaid, booking.currency) })}
+                  </p>
+                )}
                 <p className="mt-1 text-xs text-muted-foreground">
                   {booking.requiresPayment
                     ? t('services.detail.paymentRequired')
@@ -308,6 +454,17 @@ export function BookingDetailSheet({ bookingId, open, onOpenChange, onChanged }:
                   <p className="mt-2 rounded-md bg-orange-50 px-2.5 py-2 text-xs text-orange-700">
                     {t('services.detail.disputeNotice')}
                   </p>
+                )}
+                {topup && (
+                  <div className="mt-2 rounded-md bg-amber-50 px-2.5 py-2 text-xs text-amber-700 dark:bg-amber-500/10 dark:text-amber-400">
+                    <p className="font-medium">
+                      {t('services.pricing.owes', {
+                        amount: fmt.currency(topup.amount, booking.currency),
+                        date: fmt.dateTime(topup.dueAt),
+                      })}
+                    </p>
+                    <p className="mt-0.5">{t('services.pricing.owesHelp')}</p>
+                  </div>
                 )}
               </InfoCard>
 
@@ -353,42 +510,7 @@ export function BookingDetailSheet({ bookingId, open, onOpenChange, onChanged }:
           ) : null}
         </SheetBody>
 
-        {booking && (transitions.length > 0 || canMarkPaid || canReschedule || outstandingBalance > 0) && (
-          <SheetFooter className="flex-col gap-2 border-t">
-            {canMarkPaid && (
-              <Button variant="outline" className="w-full gap-2" disabled={busy} onClick={handleMarkPaid}>
-                <CheckCircle2 className="h-4 w-4" /> {t('services.detail.markCashReceived')}
-              </Button>
-            )}
-            {/* Distinct from "cash received" above, which settles the ORIGINAL
-                price of an unpaid booking. This settles the completion balance
-                on one that was already paid. */}
-            {outstandingBalance > 0 && (
-              <Button variant="outline" className="w-full gap-2" disabled={busy} onClick={handleSettleBalance}>
-                <Banknote className="h-4 w-4" />
-                {t('services.detail.settleBalanceInCash', {
-                  amount: fmt.currency(outstandingBalance, booking.currency),
-                })}
-              </Button>
-            )}
-            {canReschedule && (
-              <Button variant="outline" className="w-full gap-2" disabled={busy} onClick={() => setRescheduleOpen(true)}>
-                <CalendarSync className="h-4 w-4" /> {t('services.detail.reschedule')}
-              </Button>
-            )}
-            {transitions.map((transition) => (
-              <Button
-                key={transition.target}
-                variant={transition.tone === 'destructive' ? 'outline' : 'default'}
-                className={cn('w-full', transition.tone === 'destructive' && 'text-destructive hover:text-destructive')}
-                disabled={busy}
-                onClick={() => onTransitionClick(transition)}
-              >
-                {t(transition.labelKey)}
-              </Button>
-            ))}
-          </SheetFooter>
-        )}
+        <BookingActionsFooter actions={actions} busy={busy} />
       </SheetContent>
 
       {/* Non-cancel status confirmation */}
@@ -447,25 +569,126 @@ export function BookingDetailSheet({ bookingId, open, onOpenChange, onChanged }:
         productId={booking ? refId(booking.productId) : null}
         bookingStartAt={booking?.startAt ?? null}
         bookingEndAt={booking?.endAt ?? null}
+        currency={currency}
+        priceRules={canReprice && pricing
+          ? { minimum: pricing.originalPrice, current: pricing.currentPrice, amountPaid: pricing.amountPaid }
+          : null}
         open={rescheduleOpen}
         onOpenChange={setRescheduleOpen}
-        onProposed={(updated) => { setBooking(updated); onChanged(); }}
+        onProposed={() => { if (booking) void reread(booking.id); onChanged(); }}
+        onStale={() => { if (booking) void reread(booking.id); }}
       />
 
       <BookingAccessEditor
         booking={booking}
         open={accessOpen}
         onOpenChange={setAccessOpen}
-        onSaved={(updated) => { setBooking(updated); onChanged(); }}
+        onSaved={() => { if (booking) void reread(booking.id); onChanged(); }}
       />
 
       <CompleteBookingDialog
         booking={booking}
         open={completeOpen}
         onOpenChange={setCompleteOpen}
-        onCompleted={() => { if (booking) load(booking.id); onChanged(); }}
+        onCompleted={() => { if (booking) void reread(booking.id); onChanged(); }}
+      />
+
+      <BookingPriceDialog
+        booking={booking}
+        mode={priceDialog}
+        onClose={() => setPriceDialog(null)}
+        onStale={() => { if (booking) void reread(booking.id); onChanged(); }}
       />
     </Sheet>
+  );
+}
+
+interface BookingAction {
+  id: string;
+  label: string;
+  /** Beside the label in the sheet, and on the plain buttons unless destructive. */
+  icon: LucideIcon;
+  tone?: 'main' | 'destructive';
+  onClick: () => void;
+}
+
+/** Up to this many actions a phone just shows them: a sheet for one or two only adds a tap. */
+const PHONE_VISIBLE_ACTIONS = 2;
+
+/**
+ * The booking's actions. Five stacked buttons left a phone about half the screen
+ * for the booking itself, so past two it keeps the main one in view and the rest
+ * open from "More actions". Above `md` the panel has the room, so they all stay.
+ */
+function BookingActionsFooter({ actions, busy }: { actions: BookingAction[]; busy: boolean }) {
+  const isMobile = useIsMobile();
+  const { t } = useTranslation();
+  const [moreOpen, setMoreOpen] = useState(false);
+  if (actions.length === 0) return null;
+
+  if (!isMobile || actions.length <= PHONE_VISIBLE_ACTIONS) {
+    return (
+      <SheetFooter className="flex-col gap-2 border-t">
+        {actions.map((action) => <BookingActionButton key={action.id} action={action} busy={busy} className="w-full" />)}
+      </SheetFooter>
+    );
+  }
+
+  // No main action while a price waits for the customer: the first one stands in.
+  const main = actions.find((action) => action.tone === 'main') ?? actions[0];
+  const rest = actions.filter((action) => action !== main);
+
+  return (
+    <SheetFooter className="flex-row gap-2 border-t">
+      <BookingActionButton action={main} busy={busy} className="min-w-0 flex-1" />
+      <Button variant="outline" className="shrink-0" disabled={busy} onClick={() => setMoreOpen(true)}>
+        {t('services.detail.moreActions')}
+      </Button>
+
+      <Sheet open={moreOpen} onOpenChange={setMoreOpen}>
+        <SheetContent side="bottom" className="gap-0 rounded-t-2xl p-0 pb-[calc(0.5rem+env(safe-area-inset-bottom))]">
+          <SheetHeader className="border-b pr-12">
+            <SheetTitle>{t('services.detail.moreActions')}</SheetTitle>
+          </SheetHeader>
+          <div className="py-1">
+            {rest.map((action) => (
+              <button
+                key={action.id}
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  setMoreOpen(false);
+                  action.onClick();
+                }}
+                className={cn(
+                  'flex min-h-12 w-full items-center gap-3 px-4 py-3 text-left text-sm font-medium transition-colors hover:bg-accent',
+                  'disabled:pointer-events-none disabled:opacity-50',
+                  action.tone === 'destructive' && 'text-destructive',
+                )}
+              >
+                <action.icon className="h-5 w-5 shrink-0" />
+                {action.label}
+              </button>
+            ))}
+          </div>
+        </SheetContent>
+      </Sheet>
+    </SheetFooter>
+  );
+}
+
+function BookingActionButton({ action, busy, className }: { action: BookingAction; busy: boolean; className?: string }) {
+  const destructive = action.tone === 'destructive';
+  return (
+    <Button
+      variant={action.tone === 'main' ? 'default' : 'outline'}
+      className={cn('gap-2', className, destructive && 'text-destructive hover:text-destructive')}
+      disabled={busy}
+      onClick={action.onClick}
+    >
+      {!destructive && action.tone !== 'main' && <action.icon className="h-4 w-4" />}
+      {action.label}
+    </Button>
   );
 }
 
@@ -474,18 +697,21 @@ export function BookingDetailSheet({ bookingId, open, onOpenChange, onChanged }:
  * answers, so this must never read as "moved".
  */
 function ProposalNotice({
-  booking, busy, onWithdraw, onAnswer,
+  booking, busy, canReprice, onWithdraw, onAnswer, onAcceptWithPrice,
 }: {
   booking: Booking;
   busy: boolean;
+  canReprice: boolean;
   onWithdraw: () => void;
   onAnswer: (answer: 'accept' | 'decline') => void;
+  onAcceptWithPrice: () => void;
 }) {
   const { t } = useTranslation();
   const fmt = useFormatters();
   const p = booking.rescheduleProposal;
   if (!p) return null;
   const when = t('services.proposal.timeRange', { start: fmt.dateTime(p.startAt), end: fmt.time(p.endAt) });
+  const money = (amount: number) => fmt.currency(amount, booking.currency);
 
   if (p.status === 'open') {
     const fromCustomer = p.proposedBy === 'customer';
@@ -498,20 +724,35 @@ function ProposalNotice({
         <p className="text-sm">
           {t('services.proposal.proposedTime', { time: when })}
         </p>
+        {p.price != null && (
+          <p className="text-sm">
+            {t('services.proposal.proposedPrice', {
+              price: money(p.price),
+              previous: money(p.previousPrice ?? booking.priceSnapshot),
+            })}
+          </p>
+        )}
         {p.expiresAt && (
           <p className="text-xs opacity-80">
             {t('services.proposal.expires', { date: fmt.dateTime(p.expiresAt) })}
           </p>
         )}
         {fromCustomer ? (
-          <div className="flex gap-2 pt-1">
-            <Button size="sm" className="h-11 flex-1 md:h-9" disabled={busy} onClick={() => onAnswer('accept')}>
-              {t('services.proposal.accept')}
-            </Button>
-            <Button size="sm" variant="outline" className="h-11 flex-1 bg-background md:h-9" disabled={busy} onClick={() => onAnswer('decline')}>
-              {t('services.proposal.decline')}
-            </Button>
-          </div>
+          <>
+            <div className="flex gap-2 pt-1">
+              <Button size="sm" className="h-11 flex-1 md:h-9" disabled={busy} onClick={() => onAnswer('accept')}>
+                {t('services.proposal.accept')}
+              </Button>
+              <Button size="sm" variant="outline" className="h-11 flex-1 bg-background md:h-9" disabled={busy} onClick={() => onAnswer('decline')}>
+                {t('services.proposal.decline')}
+              </Button>
+            </div>
+            {canReprice && (
+              <Button size="sm" variant="outline" className="h-11 w-full bg-background md:h-9" disabled={busy} onClick={onAcceptWithPrice}>
+                {t('services.proposal.acceptWithPrice')}
+              </Button>
+            )}
+          </>
         ) : (
           <Button size="sm" variant="outline" className="h-11 w-full bg-background md:h-9 md:w-auto" disabled={busy} onClick={onWithdraw}>
             {t('services.proposal.withdraw')}
@@ -527,10 +768,102 @@ function ProposalNotice({
     return (
       <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
         {t(p.status === 'declined' ? 'services.proposal.declinedByCustomer' : 'services.proposal.lapsed', { time: when })}
+        {p.price != null && ` ${t('services.proposal.priceStays', { price: money(booking.priceSnapshot) })}`}
       </p>
     );
   }
   return null;
+}
+
+/**
+ * A proposed price on a booking still waiting for approval. Accepting confirms it
+ * at once, so `accepted` is a quiet line that asks nothing more of the vendor.
+ */
+function PriceNotice({
+  booking, busy, onWithdraw,
+}: {
+  booking: Booking;
+  busy: boolean;
+  onWithdraw: () => void;
+}) {
+  const { t } = useTranslation();
+  const fmt = useFormatters();
+  const pricing = booking.pricing;
+  const p = pricing?.proposal;
+  if (!pricing || !p) return null;
+  const amount = fmt.currency(p.amount, booking.currency);
+  const current = fmt.currency(pricing.currentPrice, booking.currency);
+
+  if (p.status === 'open') {
+    return (
+      <div className="space-y-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
+        <p className="flex items-center gap-1.5 text-sm font-semibold">
+          <Hourglass className="h-4 w-4 shrink-0" />
+          {t('services.pricing.waiting')}
+        </p>
+        <p className="text-sm">{t('services.pricing.proposed', { amount, current })}</p>
+        <p className="text-xs opacity-80">
+          {t('services.pricing.expires', { date: fmt.dateTime(p.expiresAt) })}
+        </p>
+        <Button size="sm" variant="outline" className="h-11 w-full bg-background md:h-9 md:w-auto" disabled={busy} onClick={onWithdraw}>
+          {t('services.pricing.withdraw')}
+        </Button>
+      </div>
+    );
+  }
+
+  // A later price agreed with a new time replaces this one, so it stops being news.
+  if (p.status === 'accepted') {
+    if (p.amount !== pricing.currentPrice) return null;
+    return <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">{t('services.pricing.acceptedNote', { amount })}</p>;
+  }
+
+  // Past the point of approval the question is closed.
+  if (booking.status !== 'pending') return null;
+  const noteKey = {
+    declined: 'services.pricing.declinedNote',
+    withdrawn: 'services.pricing.withdrawnNote',
+    lapsed: 'services.pricing.lapsedNote',
+  } as const;
+  return (
+    <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
+      {t(noteKey[p.status], { amount })}
+      {pricing.canPropose && ` ${t('services.pricing.nextSteps', { current })}`}
+    </p>
+  );
+}
+
+/** The shop's one reminder, and the customer's to the shop. The two are independent. */
+function ReminderBlock({
+  booking, busy, onSend,
+}: {
+  booking: Booking;
+  busy: boolean;
+  onSend: () => void;
+}) {
+  const { t } = useTranslation();
+  const fmt = useFormatters();
+  const reminder = booking.reminder;
+  if (!reminder || (!reminder.canSend && !reminder.sentAt && !reminder.receivedAt)) return null;
+
+  return (
+    <InfoCard icon={<BellRing className="h-4 w-4" />} title={t('services.reminder.title')}>
+      {reminder.receivedAt && (
+        <p className="text-sm">{t('services.reminder.received', { date: fmt.dateTime(reminder.receivedAt) })}</p>
+      )}
+      {reminder.sentAt && (
+        <p className="text-sm">{t('services.reminder.sent', { date: fmt.dateTime(reminder.sentAt) })}</p>
+      )}
+      {reminder.canSend && (
+        <div className={cn(reminder.receivedAt && 'mt-2')}>
+          <Button variant="outline" size="sm" className="h-11 w-full md:h-9 md:w-auto" disabled={busy} onClick={onSend}>
+            {t('services.reminder.send')}
+          </Button>
+          <p className="mt-1.5 text-xs text-muted-foreground">{t('services.reminder.oneOnly')}</p>
+        </div>
+      )}
+    </InfoCard>
+  );
 }
 
 /** Where it happens. Going to the customer is the one the vendor must not miss. */

@@ -6,6 +6,7 @@
 
 import type { TranslationKey } from '@/i18n';
 import type {
+  Booking,
   BookingMode,
   BookingStatus,
   PaymentStatus,
@@ -347,6 +348,62 @@ export const BOOKING_TRANSITIONS: Record<BookingStatus, BookingTransition[]> = {
 };
 
 export const TERMINAL_BOOKING_STATES: BookingStatus[] = ['completed', 'no-show', 'cancelled'];
+
+/**
+ * Whether this booking is on a service the shop approves by hand.
+ *
+ * `bookingMode` only exists on bookings made since 2026-11-03. On an older one
+ * the other three still give it away: a price can only be proposed on a manual
+ * booking, and only a manual service lets a customer ask for a new time. If none
+ * of them shows, the server still refuses a typed final price
+ * (`BOOKING_PRICE_LOCKED`), so `CompleteBookingDialog` also listens for that.
+ */
+export function isManualBooking(booking: Booking): boolean {
+  return (
+    booking.bookingMode === 'manual' ||
+    !!booking.pricing?.canPropose ||
+    !!booking.pricing?.proposal ||
+    booking.rescheduleProposal?.proposedBy === 'customer'
+  );
+}
+
+/**
+ * Whether a new time may bring a new price with it. No flag says so, unlike
+ * `pricing.canPropose`, so this mirrors the refusals that leave the vendor nothing
+ * to do. A payment still in flight is left to the server's own answer.
+ */
+export function canRepriceWithNewTime(booking: Booking): boolean {
+  const { pricing } = booking;
+  return (
+    !!pricing &&
+    isManualBooking(booking) &&
+    booking.requiresPayment &&
+    pricing.currentPrice > 0 &&
+    pricing.proposal?.status !== 'open'
+  );
+}
+
+const PROPOSED_PRICE_MAX = 1_000_000_000;
+
+/**
+ * What is wrong with a typed price, as a translation key. `above` is the strict
+ * rule for a proposal on approval, where the floor itself is simply confirming.
+ * With a new time the floor is allowed: an agreed 7 000 may come back down to the
+ * 5 000 booked.
+ */
+export function proposedPriceError(
+  raw: string,
+  minimum: number,
+  rule: 'above' | 'atLeast',
+): TranslationKey | null {
+  const price = Number(raw);
+  if (!Number.isInteger(price) || price <= 0 || price > PROPOSED_PRICE_MAX) {
+    return 'services.pricing.errors.notWhole';
+  }
+  if (rule === 'above' && price <= minimum) return 'services.pricing.errors.notAbove';
+  if (rule === 'atLeast' && price < minimum) return 'services.pricing.errors.belowMinimum';
+  return null;
+}
 
 // Booking amounts (`priceSnapshot`, `settlement.*`) are the service's price as
 // the vendor typed it — 5000 is 5 000 XAF — so they go to `fmt.currency` as-is.

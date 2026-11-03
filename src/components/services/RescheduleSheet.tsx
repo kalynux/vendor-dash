@@ -13,9 +13,11 @@ import { useTranslation, useFormatters, useApiError, type TranslationKey } from 
 import {
   fetchAvailability, lockSlot, unlockSlot, rescheduleBooking, holdBookingSlots,
 } from '@/services/services.service';
-import { formatDuration } from '@/components/services/service.constants';
+import { BookingPriceField } from '@/components/services/BookingPriceField';
+import { formatDuration, proposedPriceError } from '@/components/services/service.constants';
+import { isStaleBookingRefusal, useBookingPriceError } from '@/components/services/useBookingPriceError';
 import { responsiveSheetProps } from '@/components/ui/responsive-sheet';
-import type { AvailabilitySlot, Booking } from '@/types/services.types';
+import type { AvailabilitySlot } from '@/types/services.types';
 
 interface RescheduleSheetProps {
   bookingId: string | null;
@@ -23,10 +25,15 @@ interface RescheduleSheetProps {
   /** The appointment being moved — its length decides how many slots a new time takes. */
   bookingStartAt: string | null;
   bookingEndAt: string | null;
+  currency: string;
+  /** From `booking.pricing`, on a manual service. `null` → this move cannot change the price. */
+  priceRules: { minimum: number; current: number; amountPaid: number } | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** The booking as the server returned it: same time, `rescheduleProposal` open. */
-  onProposed: (booking: Booking) => void;
+  /** Sent: same time as before, `rescheduleProposal` open. Read the booking again. */
+  onProposed: () => void;
+  /** Refused because the screen was out of date. Read the booking again. */
+  onStale: () => void;
 }
 
 const LOOKAHEAD_DAYS = 21;
@@ -58,13 +65,15 @@ const INVALID_SLOT_REASON_KEYS: Record<string, TranslationKey> = {
  * that is followed by enough free slots, and holds and sends the whole run.
  */
 export function RescheduleSheet({
-  bookingId, productId, bookingStartAt, bookingEndAt, open, onOpenChange, onProposed,
+  bookingId, productId, bookingStartAt, bookingEndAt, currency, priceRules, open, onOpenChange, onProposed, onStale,
 }: RescheduleSheetProps) {
   const isMobile = useIsMobile();
   const { t } = useTranslation();
   const fmt = useFormatters();
   const apiError = useApiError();
+  const priceError = useBookingPriceError(currency);
   const sheet = responsiveSheetProps(isMobile, 'sm:max-w-lg');
+  const [price, setPrice] = useState('');
 
   const [slots, setSlots] = useState<AvailabilitySlot[]>([]);
   const [loading, setLoading] = useState(false);
@@ -115,6 +124,7 @@ export function RescheduleSheet({
   useEffect(() => {
     if (open) {
       setSelected(null);
+      setPrice('');
       heldLock.current = null;
       setLockExpiresAt(null);
       setSecondsLeft(null);
@@ -207,25 +217,36 @@ export function RescheduleSheet({
     }
   }
 
+  // Optional here: empty keeps the price, and the booked price itself is allowed.
+  const priceTyped = !!priceRules && price.trim() !== '';
+  const priceErrorKey = priceTyped ? proposedPriceError(price, priceRules.minimum, 'atLeast') : null;
+  const minimumText = priceRules ? fmt.currency(priceRules.minimum, currency) : '';
+
   async function handleConfirm() {
     if (!bookingId || !productId || !selected) return;
+    if (priceErrorKey) {
+      toast.error(t(priceErrorKey, { minimum: minimumText }));
+      return;
+    }
     setSubmitting(true);
     try {
       // The same ids, in the same order, as were held.
-      const updated = await rescheduleBooking(bookingId, selected.slotIds);
+      await rescheduleBooking(bookingId, selected.slotIds, priceTyped ? Number(price) : undefined);
       heldLock.current = null; // the proposal now holds the time
       toast.success(t('services.toast.rescheduleProposed'));
-      onProposed(updated);
+      onProposed();
       onOpenChange(false);
     } catch (err) {
-      toast.error(moveErrorMessage(err, 'services.errors.rescheduleFailed'));
+      const isPriceRefusal = err instanceof ApiError && err.code.startsWith('BOOKING_PRICE_');
+      toast.error(isPriceRefusal ? priceError(err, 'services.errors.rescheduleFailed') : moveErrorMessage(err, 'services.errors.rescheduleFailed'));
       if (err instanceof ApiError && err.code === 'BOOKING_SLOT_NOT_LOCKED') {
         setSelected(null);
         heldLock.current = null;
         setLockExpiresAt(null);
         loadSlots();
       }
-      if (err instanceof ApiError && err.code === 'BOOKING_PROPOSAL_PENDING') {
+      if (isStaleBookingRefusal(err)) onStale();
+      if (err instanceof ApiError && (err.code === 'BOOKING_PROPOSAL_PENDING' || err.code === 'BOOKING_PRICE_NOT_PROPOSABLE')) {
         onOpenChange(false);
       }
     } finally {
@@ -271,6 +292,21 @@ export function RescheduleSheet({
             </div>
           ) : (
             <div className="space-y-5">
+              {priceRules && (
+                <BookingPriceField
+                  id="reschedule-price"
+                  label={t('services.pricing.priceLabelOptional')}
+                  value={price}
+                  onChange={setPrice}
+                  currency={currency}
+                  hint={t('services.pricing.hintKeep', {
+                    current: fmt.currency(priceRules.current, currency),
+                    minimum: minimumText,
+                  })}
+                  error={priceErrorKey && t(priceErrorKey, { minimum: minimumText })}
+                  amountPaid={priceRules.amountPaid}
+                />
+              )}
               {slotsNeeded > 1 && (
                 <p className="text-sm text-muted-foreground">
                   {t('services.reschedule.longHint', { duration: formatDuration(bookingMinutes, t) })}

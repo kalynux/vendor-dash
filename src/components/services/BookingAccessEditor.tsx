@@ -17,7 +17,7 @@ interface BookingAccessEditorProps {
   booking: Booking | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSaved: (booking: Booking) => void;
+  onSaved: () => void;
 }
 
 /**
@@ -54,13 +54,13 @@ export function BookingAccessEditor({ booking, open, onOpenChange, onSaved }: Bo
     try {
       // All three, always: the form shows the whole current state, and an
       // emptied box is the vendor clearing it (`null`).
-      const updated = await updateBookingAccess(booking.id, {
+      await updateBookingAccess(booking.id, {
         meetingUrl: meetingUrl.trim() || null,
         instructions: instructions.trim() || null,
         revealMinutesBefore: revealNumber,
       });
       toast.success(t('services.access.saved'));
-      onSaved(updated);
+      onSaved();
       onOpenChange(false);
     } catch (err) {
       apiError.toast(err, { fallbackKey: 'services.access.saveFailed' });

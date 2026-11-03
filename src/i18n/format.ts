@@ -91,6 +91,16 @@ export function formatCurrency(
     }
 }
 
+/** The currency as `formatCurrency` writes it (`FCFA` for XAF), for a unit inside a field. */
+export function formatCurrencySymbol(locale: Locale, currency = 'XAF'): string {
+    try {
+        const parts = new Intl.NumberFormat(tagFor(locale), { style: 'currency', currency }).formatToParts(0);
+        return parts.find((part) => part.type === 'currency')?.value ?? currency;
+    } catch {
+        return currency;
+    }
+}
+
 export function formatPercent(locale: Locale, value: number, fractionDigits = 0): string {
     return formatNumber(locale, value / 100, {
         style: 'percent',
@@ -235,6 +245,7 @@ export interface Formatters {
     locale: Locale;
     number: (value: number, options?: Intl.NumberFormatOptions) => string;
     currency: (value: number, currency?: string, options?: Intl.NumberFormatOptions) => string;
+    currencySymbol: (currency?: string) => string;
     percent: (value: number, fractionDigits?: number) => string;
     date: (value: Date | string | number | null | undefined, style?: DateStyle, fallback?: string) => string;
     time: (value: Date | string | number | null | undefined, fallback?: string) => string;
@@ -253,6 +264,7 @@ export function useFormatters(): Formatters {
             locale,
             number: (value, options) => formatNumber(locale, value, options),
             currency: (value, currency, options) => formatCurrency(locale, value, currency, options),
+            currencySymbol: (currency) => formatCurrencySymbol(locale, currency),
             percent: (value, fractionDigits) => formatPercent(locale, value, fractionDigits),
             date: (value, style, fallback) => formatDate(locale, value, style, fallback),
             time: (value, fallback) => formatTime(locale, value, fallback),

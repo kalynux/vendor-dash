@@ -359,6 +359,7 @@ export const services = {
         creditRecorded: '{{amount}} overpaid — recorded, not refunded automatically.',
         settleBalanceInCash: 'Record {{amount}} received in cash',
         reschedule: 'Propose a new time',
+        moreActions: 'More actions',
         statusConfirmDescription:
             'Apply this change? Confirmed bookings sync to your Google Calendar.',
         cancelTitle: 'Cancel this booking?',
@@ -384,7 +385,13 @@ export const services = {
             extraMinutesHint: 'Add minutes beyond the booked end.',
             fixedPrice: 'Fixed price',
             fixedPriceHint: 'Charge a flat final amount.',
+            /** Manual services: the price is agreed, and only extra time adds to it. */
+            asBookedManualHint: 'Settle at the agreed price.',
+            actualEndManualHint: 'Extra time adds its cost. Finishing early never lowers the price.',
+            extraMinutesManualHint: 'Adds the cost of the extra time to the agreed price.',
         },
+        manualDescription: 'The price is already agreed. Only extra time can add to it.',
+        agreedPrice: 'Agreed price',
         actualEndLabel: 'Actual end time',
         extraMinutesLabel: 'Extra minutes',
         extraMinutesPlaceholder: 'e.g. 30',
@@ -461,6 +468,78 @@ export const services = {
         lapsed: 'Nobody answered the new time ({{time}}). The original time stands.',
         markVendor: 'Waiting for customer',
         markCustomer: 'Customer asks to move',
+        /** A new time can bring a new price: the customer answers both together. */
+        proposedPrice: 'New price: {{price}} (now {{previous}})',
+        priceStays: 'The price stays at {{price}}.',
+        acceptWithPrice: 'Accept with a different price',
+    },
+
+    /** Proposed prices on services the vendor approves by hand (2026-11-03). */
+    pricing: {
+        bookedAt: 'booked at {{amount}}',
+        paidSoFar: 'Paid so far: {{amount}}',
+        owes: 'Customer owes {{amount}} by {{date}}',
+        owesHelp: 'If it is not paid by then, the booking is cancelled and what they paid is refunded.',
+        collectedInCash: 'Collected in cash ({{amount}})',
+        collected: 'Recorded as collected in cash',
+        collectFailed: 'Could not record the cash',
+        propose: 'Propose a price',
+        proposeAgain: 'Propose another price',
+        proposeTitle: 'Propose a price',
+        proposeDescription:
+            'The customer accepts or declines. If they accept, the booking is confirmed at this price.',
+        priceLabel: 'New price',
+        priceLabelOptional: 'New price (optional)',
+        hintAbove: 'Must be more than {{minimum}}, the price the customer booked at.',
+        hintAtLeast: 'The lowest you can set is {{minimum}}, the price the customer booked at.',
+        hintKeep: 'Leave empty to keep {{current}}. The lowest you can set is {{minimum}}.',
+        refundWarning:
+            'The customer already paid {{paid}}. {{difference}} will be refunded automatically, and the fees are charged to you.',
+        send: 'Send to the customer',
+        sent: 'Price sent. The customer will accept or decline it.',
+        sendFailed: 'Could not send this price',
+        waiting: 'Waiting for the customer',
+        proposed: 'You proposed {{amount}} (now {{current}}).',
+        expires: 'If nobody answers by {{date}}, the price stays as it is.',
+        withdraw: 'Withdraw this price',
+        withdrawn: 'Price withdrawn. You can confirm the booking again.',
+        withdrawFailed: 'Could not withdraw this price',
+        acceptedNote: 'The customer accepted {{amount}}. The booking is confirmed.',
+        declinedNote: 'The customer declined {{amount}}.',
+        withdrawnNote: 'You withdrew {{amount}}.',
+        lapsedNote: 'The customer did not answer {{amount}} in time.',
+        nextSteps: 'You can propose another price, confirm at {{current}}, or cancel.',
+        markWaiting: 'Price waiting for customer',
+        markOwes: 'Customer owes {{amount}}',
+        acceptTitle: 'Accept with a different price',
+        acceptDescription:
+            'Nothing changes yet. The customer answers the new time and the price together. If they decline, both stay as they are.',
+        acceptSent: 'New time and price sent. The customer will accept or decline them.',
+        errors: {
+            notWhole: 'Enter a whole amount.',
+            notAbove: 'Enter more than {{minimum}}.',
+            belowMinimum: 'Enter at least {{minimum}}.',
+        },
+        /** `details.reason` on `409 BOOKING_PRICE_NOT_PROPOSABLE`. */
+        refused: {
+            not_manual: 'Prices can only be proposed on services you approve by hand.',
+            free: 'A free appointment cannot be given a price.',
+            not_pending: 'A price can only be proposed before the booking is confirmed.',
+            started: 'This appointment has already started.',
+            proposal_open: 'A price is already waiting for the customer to answer.',
+            payment_state: 'A payment, refund or dispute is still open on this booking. Try again once it ends.',
+        },
+    },
+
+    /** The shop's one reminder. The platform writes the message, so there is no text box. */
+    reminder: {
+        title: 'Reminder',
+        send: 'Remind the customer',
+        oneOnly: 'You can send one reminder. We write the message for you.',
+        sent: 'Reminder sent on {{date}}',
+        received: 'The customer sent you a reminder on {{date}}',
+        sentToast: 'Reminder sent to the customer',
+        failed: 'Could not send the reminder',
     },
 
     location: {

@@ -596,15 +596,25 @@ export function BookingsPanel({ openBookingId }: { openBookingId?: string | null
 
 /**
  * A new time is waiting for an answer — the row keeps its own time, so this
- * says who has to answer rather than anything like "moved".
+ * says who has to answer rather than anything like "moved". Otherwise the
+ * same small line says a price is waiting, or that money is owed on it.
  */
 function ProposalMark({ booking }: { booking: Booking }) {
   const { t } = useTranslation();
+  const fmt = useFormatters();
   const p = booking.rescheduleProposal;
-  if (p?.status !== 'open') return null;
+  const topup = booking.pricing?.topup;
+  const text = p?.status === 'open'
+    ? t(p.proposedBy === 'customer' ? 'services.proposal.markCustomer' : 'services.proposal.markVendor')
+    : booking.pricing?.proposal?.status === 'open'
+      ? t('services.pricing.markWaiting')
+      : topup
+        ? t('services.pricing.markOwes', { amount: fmt.currency(topup.amount, booking.currency) })
+        : null;
+  if (!text) return null;
   return (
     <span className="whitespace-nowrap text-[11px] font-medium text-amber-700 dark:text-amber-400">
-      {t(p.proposedBy === 'customer' ? 'services.proposal.markCustomer' : 'services.proposal.markVendor')}
+      {text}
     </span>
   );
 }
