@@ -3,7 +3,7 @@ import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
 import { SettingsSection } from '@/components/vendor-settings/SettingsSection';
-import { useFormatters, useTranslation, type TranslationKey } from '@/i18n';
+import { Trans, useFormatters, useTranslation, type TranslationKey } from '@/i18n';
 import { copyText } from '@/platform/clipboard';
 import { shareAvailable, shareContent } from '@/platform/share';
 import type { ReferralCategoryTerms, ReferralLinks, ReferralProgram } from '@/types/referral.types';
@@ -23,7 +23,13 @@ export function ProgramRules({ program, currency }: { program: ReferralProgram; 
         {t('referrals.rules.earned')} {t('referrals.rules.wait', { count: program.rewardWaitDays })}
       </li>
       <li>{t('referrals.rules.refunds')}</li>
-      <li>{t('referrals.rules.minimum', { amount: fmt.currency(program.minPayoutAmount, currency) })}</li>
+      <li>
+        <Trans
+          i18nKey="referrals.rules.minimum"
+          params={{ amount: fmt.currency(program.minPayoutAmount, currency) }}
+          components={[<strong className="font-semibold text-foreground" />]}
+        />
+      </li>
     </ul>
   );
 }

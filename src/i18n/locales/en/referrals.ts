@@ -8,19 +8,18 @@ import { plural } from '../../types';
  */
 export default {
     rules: {
-        fromCommission:
-            'Your reward comes out of Wi-Mall’s commission. It never comes from the order’s value or from anyone’s earnings.',
-        who: 'Vendors, customers and agencies earn you rewards. A delivery agent can be a partner, but an agent’s own deliveries earn nothing.',
-        limited:
-            'Each person earns you rewards for a limited time from the day they sign up, so an order placed before that time ends can still earn nothing.',
+        fromCommission: 'Your reward comes out of Wi-Mall’s commission.',
+        who: 'Vendors, customers and agencies earn you rewards.',
+        limited: 'Each person earns you rewards for a limited time from the day they sign up.',
         earned: 'A reward counts once Wi-Mall has received its commission on the order.',
         wait: plural({
             one: 'You can withdraw a reward {{count}} day after that.',
             other: 'You can withdraw a reward {{count}} days after that.',
         }),
         refunds:
-            'A refund lowers the reward, and can leave you owing money. Later rewards pay that first.',
-        minimum: 'The minimum withdrawal is {{amount}}, and your whole available balance is sent.',
+            'If an order is refunded after you’ve already withdrawn its reward, you may owe that amount back. Your next rewards pay it off automatically.',
+        /** <0> = the amount, in bold. */
+        minimum: 'The minimum withdrawal is <0>{{amount}}</0>.',
     },
 
     intro: {

@@ -2,19 +2,17 @@ import { plural } from '../../types';
 
 export default {
     rules: {
-        fromCommission:
-            'Votre récompense est prélevée sur la commission de Wi-Mall. Elle ne vient jamais de la valeur de la commande ni des gains de qui que ce soit.',
-        who: 'Les vendeurs, les clients et les agences vous rapportent des récompenses. Un livreur peut être partenaire, mais ses propres livraisons ne rapportent rien.',
-        limited:
-            'Chaque personne vous rapporte des récompenses pendant une durée limitée à partir de son inscription : une commande passée avant la fin de cette durée peut donc ne rien rapporter.',
+        fromCommission: 'Votre récompense est prélevée sur la commission de Wi-Mall.',
+        who: 'Les vendeurs, les clients et les agences vous rapportent des récompenses.',
+        limited: 'Chaque personne vous rapporte des récompenses pendant une durée limitée à partir de son inscription.',
         earned: 'Une récompense compte une fois que Wi-Mall a reçu sa commission sur la commande.',
         wait: plural({
             one: 'Vous pouvez retirer une récompense {{count}} jour plus tard.',
             other: 'Vous pouvez retirer une récompense {{count}} jours plus tard.',
         }),
         refunds:
-            'Un remboursement réduit la récompense et peut vous laisser une somme à rendre. Les récompenses suivantes la remboursent en priorité.',
-        minimum: 'Le retrait minimum est de {{amount}}, et tout votre solde disponible est envoyé.',
+            'Si une commande est remboursée après le retrait de sa récompense, vous pouvez devoir rendre ce montant. Vos prochaines récompenses le règlent automatiquement.',
+        minimum: 'Le retrait minimum est de <0>{{amount}}</0>.',
     },
 
     intro: {
