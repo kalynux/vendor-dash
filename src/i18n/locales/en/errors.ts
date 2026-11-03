@@ -1228,6 +1228,17 @@ export const errors = {
             'Your vendor account has to be closed by support before this account can be closed.',
         ACCOUNT_CLOSURE_ORDERS_IN_FLIGHT:
             'There are still orders in progress. They have to finish first.',
+        ACCOUNT_CLOSURE_REFERRAL_BALANCE:
+            'Your referral balance has to be withdrawn or settled first.',
+
+        // ── Referral program ─────────────────────────────────────────────────
+        REFERRAL_PROGRAM_DISABLED: 'The referral program isn’t open right now.',
+        REFERRAL_ALREADY_APPLIED: 'You have already applied to the referral program.',
+        REFERRAL_REAPPLY_NOT_ALLOWED: 'You can’t apply to the referral program again for now.',
+        REFERRAL_PARTNER_NOT_FOUND: 'You aren’t a referral partner yet.',
+        REFERRAL_PARTNER_STATUS_CONFLICT: 'Your referral status has just changed. Please try again.',
+        REFERRAL_BALANCE_FROZEN: 'Your referral balance is frozen, so you can’t withdraw it for now.',
+        REFERRAL_PAYOUT_METHOD_MANAGED_ELSEWHERE: 'Change your payout method on your Payout page.',
 
         // ── Shop closure requested by an administrator (ADR-A10) ─────────────
         ROLE_CLOSURE_REQUEST_NOT_FOUND: 'There is no longer a request to close your shop.',

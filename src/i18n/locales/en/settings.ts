@@ -503,17 +503,6 @@ export const settings = {
         saved: 'Partial payment settings saved',
         loadFailed: 'Could not load your partial payment settings.',
         saveFailed: 'Could not save your partial payment settings.',
-        /** "Your money" from FRONTEND-CHANGELOG-partial-payment — the brief asks for it next to the setting. */
-        money: {
-            title: 'Your money',
-            pending: 'Your share of the whole order appears as pending when the agent collects the cash.',
-            locked: 'You can withdraw it only once that parcel’s cash has reached Wi-Mall, plus the usual hold. That includes your share of what the customer paid online, so if the agency hands the cash in late, you wait longer.',
-            perParcel: 'Each parcel unlocks on its own.',
-            fees: 'Commission is on the whole sale. The agency’s cash handling fee is on the cash it carries, so it is lower than on a fully cash order.',
-            faultTitle: 'If a parcel comes back through your fault',
-            faultBody: 'For example, it was damaged or wrong. The customer gets back everything they paid. You pay the delivery company’s return fee and both refund fees. If your balance does not cover it, it is recorded as money you owe and comes out of your later earnings. The explanation appears on the charge, under Money taken back.',
-            cancelBody: 'Cancelling an order after its online part was paid works like cancelling a paid order: the customer is refunded in full and you pay the fees.',
-        },
     },
     /** 2026-10-03 — who pays delivery for the whole shop (replaced the per-product switch). */
     deliveryTerms: {

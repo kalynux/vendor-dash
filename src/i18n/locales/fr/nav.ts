@@ -30,6 +30,7 @@ export const nav = {
         security: 'Sécurité',
         billing: 'Facturation',
         payout: 'Versements',
+        referrals: 'Parrainage',
         settings: 'Paramètres',
         policies: 'Politiques',
         preferences: 'Préférences',

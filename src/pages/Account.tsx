@@ -3,6 +3,7 @@ import { useParams, Navigate } from 'react-router-dom';
 import { LogOut } from 'lucide-react';
 import { Tabs, TabsContent } from '@/components/ui/tabs';
 import { BillingTab } from '@/components/billing/BillingTab';
+import { ReferralTab } from '@/components/referrals/ReferralTab';
 import { ProfileSettings } from '@/components/vendor-settings/ProfileSettings';
 import { SecuritySettings } from '@/components/vendor-settings/SecuritySettings';
 import { PayoutSetupSettings } from '@/components/vendor-settings/PayoutSetupSettings';
@@ -33,9 +34,10 @@ const VALID_TABS = [
   'security',
   'billing',
   'payout',
+  'referrals',
 ] as const;
 
-/** The same seven, as routes — what a sideways swipe walks. Order matters. */
+/** The same tabs, as routes — what a sideways swipe walks. Order matters. */
 const TAB_RING = VALID_TABS.map((tab) => `/dashboard/account/${tab}`);
 const DEFAULT_TAB = 'profile';
 
@@ -50,6 +52,7 @@ const TAB_LABEL_KEYS: Record<AccountTab, TranslationKey> = {
   security: 'nav.items.security',
   billing: 'nav.items.billing',
   payout: 'nav.items.payout',
+  referrals: 'nav.items.referrals',
 };
 
 const TAB_SUBTITLE_KEYS: Record<AccountTab, TranslationKey> = {
@@ -60,6 +63,7 @@ const TAB_SUBTITLE_KEYS: Record<AccountTab, TranslationKey> = {
   security: 'account.tabSubtitles.security',
   billing: 'account.tabSubtitles.billing',
   payout: 'account.tabSubtitles.payout',
+  referrals: 'account.tabSubtitles.referrals',
 };
 
 export function Account() {
@@ -137,6 +141,10 @@ export function Account() {
           <DamageCompensationSection />
           <PayoutSetupSettings />
         </SettingsSections>
+      </TabsContent>
+
+      <TabsContent value="referrals">
+        <ReferralTab />
       </TabsContent>
     </Tabs>
   );

@@ -458,16 +458,6 @@ export const settings = {
         saved: 'Réglages du paiement partiel enregistrés',
         loadFailed: 'Impossible de charger vos réglages de paiement partiel.',
         saveFailed: 'Impossible d’enregistrer vos réglages de paiement partiel.',
-        money: {
-            title: 'Votre argent',
-            pending: 'Votre part de la commande entière apparaît en attente lorsque le livreur encaisse les espèces.',
-            locked: 'Vous ne pouvez la retirer qu’une fois les espèces de ce colis arrivées chez Wi-Mall, après le délai de retenue habituel. Cela inclut votre part de ce que le client a payé en ligne : si l’agence remet les espèces en retard, vous attendez plus longtemps.',
-            perParcel: 'Chaque colis se débloque séparément.',
-            fees: 'La commission porte sur la vente entière. Les frais de gestion des espèces de l’agence portent sur les espèces qu’elle transporte : ils sont donc plus bas que sur une commande entièrement en espèces.',
-            faultTitle: 'Si un colis revient par votre faute',
-            faultBody: 'Par exemple s’il était abîmé ou erroné. Le client récupère tout ce qu’il a payé. Vous payez les frais de retour du livreur et les deux frais de remboursement. Si votre solde ne suffit pas, le montant est enregistré comme une somme que vous devez et sera déduit de vos prochains gains. L’explication figure sur le prélèvement, dans Argent repris.',
-            cancelBody: 'Annuler une commande après le paiement de sa partie en ligne revient à annuler une commande payée : le client est remboursé intégralement et vous payez les frais.',
-        },
     },
     deliveryTerms: {
         title: 'Conditions de livraison',

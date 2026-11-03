@@ -13,6 +13,7 @@ export const account = {
         security: 'Votre mot de passe, l’authentification à deux facteurs et vos appareils connectés',
         billing: 'Votre formule, vos crédits, vos moyens de paiement enregistrés et votre stockage',
         payout: 'Votre solde de gains et la destination de vos retraits',
+        referrals: 'Invitez des personnes sur Wi-Mall et gagnez sur leur activité',
     },
 
     unsavedBar: {

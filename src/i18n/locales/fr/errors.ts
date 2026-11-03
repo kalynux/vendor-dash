@@ -1037,6 +1037,16 @@ export const errors = {
             'Votre compte vendeur doit être fermé par le support avant de pouvoir fermer ce compte.',
         ACCOUNT_CLOSURE_ORDERS_IN_FLIGHT:
             'Des commandes sont encore en cours. Elles doivent d’abord se terminer.',
+        ACCOUNT_CLOSURE_REFERRAL_BALANCE:
+            'Votre solde de parrainage doit d’abord être retiré ou réglé.',
+
+        REFERRAL_PROGRAM_DISABLED: 'Le programme de parrainage n’est pas ouvert pour le moment.',
+        REFERRAL_ALREADY_APPLIED: 'Vous avez déjà fait une demande au programme de parrainage.',
+        REFERRAL_REAPPLY_NOT_ALLOWED: 'Vous ne pouvez pas refaire de demande au programme de parrainage pour le moment.',
+        REFERRAL_PARTNER_NOT_FOUND: 'Vous n’êtes pas encore partenaire de parrainage.',
+        REFERRAL_PARTNER_STATUS_CONFLICT: 'Votre statut de parrainage vient de changer. Veuillez réessayer.',
+        REFERRAL_BALANCE_FROZEN: 'Votre solde de parrainage est gelé : vous ne pouvez pas le retirer pour le moment.',
+        REFERRAL_PAYOUT_METHOD_MANAGED_ELSEWHERE: 'Modifiez votre moyen de versement dans votre page Versements.',
 
         ROLE_CLOSURE_REQUEST_NOT_FOUND: 'Il n’y a plus de demande de fermeture de votre boutique.',
         ROLE_CLOSURE_ALREADY_PENDING: 'Une demande de fermeture de cette boutique attend déjà une réponse.',

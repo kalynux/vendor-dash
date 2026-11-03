@@ -23,6 +23,7 @@ import {
   CalendarDays,
   CalendarCheck,
   Wallet,
+  Gift,
   Truck,
   Link2,
   Search,
@@ -160,6 +161,7 @@ export const FOOTER_NAV: NavItem[] = [
       { id: 'account-security', labelKey: 'nav.items.security', path: '/dashboard/account/security', icon: Shield, disabled: false },
       { id: 'account-billing', labelKey: 'nav.items.billing', path: '/dashboard/account/billing', icon: CreditCard },
       { id: 'account-payout', labelKey: 'nav.items.payout', path: '/dashboard/account/payout', icon: Wallet },
+      { id: 'account-referrals', labelKey: 'nav.items.referrals', path: '/dashboard/account/referrals', icon: Gift },
     ],
   },
   {

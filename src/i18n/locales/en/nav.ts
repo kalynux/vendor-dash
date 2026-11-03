@@ -37,6 +37,7 @@ export const nav = {
         security: 'Security',
         billing: 'Billing',
         payout: 'Payout Setup',
+        referrals: 'Referrals',
         settings: 'Settings',
         policies: 'Policies',
         preferences: 'Preferences',

@@ -11,7 +11,7 @@ import type { Locale } from '@/i18n/config';
  * Only English and French exist. French UI gets `-fr`; every other language
  * (es / pt / ar included) gets `-en`.
  */
-export type LegalDocument = 'terms' | 'privacy';
+export type LegalDocument = 'terms' | 'privacy' | 'referralTerms';
 
 const LEGAL_URLS: Record<LegalDocument, { en: string; fr: string }> = {
   terms: {
@@ -21,6 +21,10 @@ const LEGAL_URLS: Record<LegalDocument, { en: string; fr: string }> = {
   privacy: {
     en: 'https://cdn.wi-mall.com/legal/privacy-policy-en.html',
     fr: 'https://cdn.wi-mall.com/legal/privacy-policy-fr.html',
+  },
+  referralTerms: {
+    en: 'https://cdn.wi-mall.com/legal/referral-partner-terms-en.html',
+    fr: 'https://cdn.wi-mall.com/legal/referral-partner-terms-fr.html',
   },
 };
 

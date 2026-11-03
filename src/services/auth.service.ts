@@ -57,6 +57,12 @@ export interface RegisterPayload {
      * unticked, so it is only ever `true`.
      */
     terms_accepted: true;
+    /**
+     * Optional, and never refuses a registration: a bad code is ignored and the
+     * response says nothing about it, so nothing is shown either way. Register
+     * only — only a brand-new account can be referred, so add-role never takes it.
+     */
+    referral_code?: string;
 }
 
 export const authService = {

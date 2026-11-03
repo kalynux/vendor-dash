@@ -116,6 +116,9 @@ export const registerSchema = z
         // Unticked by default and required: the backend refuses a vendor
         // registration without `terms_accepted: true`.
         terms_accepted: z.boolean().refine((v) => v === true, 'auth.validation.termsRequired'),
+        // Never validated beyond this: the backend ignores a bad code, and the
+        // form must not refuse an account over one either.
+        referral_code: z.string().trim(),
     })
     .refine((v) => v.password === v.confirmPassword, {
         message: 'auth.validation.confirmMismatch',

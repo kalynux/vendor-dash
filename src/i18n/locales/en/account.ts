@@ -19,6 +19,7 @@ export const account = {
         security: 'Your password, two-factor authentication, and signed-in devices',
         billing: 'Your plan, credit wallet, saved payment methods, and storage usage',
         payout: 'Your earnings balance and where withdrawals are sent',
+        referrals: 'Invite people to Wi-Mall and earn from their activity',
     },
 
     /** Shared by every settings/account tab (the floating save pill). */

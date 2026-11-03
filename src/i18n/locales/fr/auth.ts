@@ -53,6 +53,7 @@ export const auth = {
         passwordLabel: 'Mot de passe',
         passwordHint: 'Au moins 8 caractères.',
         confirmLabel: 'Confirmez le mot de passe',
+        referralLabel: 'Code de parrainage',
         submit: 'Créer le compte',
         submitting: 'Création de votre compte…',
         haveAccount: 'Vous avez déjà un compte ?',

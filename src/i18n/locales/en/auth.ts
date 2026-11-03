@@ -52,6 +52,7 @@ export const auth = {
         passwordLabel: 'Password',
         passwordHint: 'At least 8 characters.',
         confirmLabel: 'Confirm password',
+        referralLabel: 'Referral code',
         submit: 'Create account',
         submitting: 'Creating your account…',
         haveAccount: 'Already have an account?',

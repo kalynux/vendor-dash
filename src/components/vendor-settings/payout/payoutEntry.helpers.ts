@@ -57,8 +57,19 @@ function formatExpiry(month: number, year: number): string {
     return `${String(month).padStart(2, '0')} / ${year}`;
 }
 
+/**
+ * The parts that name a method. Narrower than `PayoutEntry` so a server-masked
+ * method, which has no full number, can be named the same way.
+ */
+interface NamedPayoutEntry {
+    method: PayoutMethod;
+    mobile_money?: { provider?: string } | null;
+    bank?: { bank_name?: string } | null;
+    card?: { brand?: string } | null;
+}
+
 /** The mark shown at the leading edge of a row, falling back to a neutral one. */
-export function payoutEntryBrand(entry: PayoutEntry): PaymentBrand {
+export function payoutEntryBrand(entry: NamedPayoutEntry): PaymentBrand {
     if (entry.method === 'bank') return GENERIC_BRANDS.bank_transfer;
     if (entry.method === 'card') {
         const raw = entry.card?.brand;
@@ -79,7 +90,7 @@ export function payoutEntryBrand(entry: PayoutEntry): PaymentBrand {
  * provider resolves; an entry saved under some other spelling still shows what
  * is actually stored rather than a generic label.
  */
-export function payoutEntryTitle(entry: PayoutEntry, t: Translate): string {
+export function payoutEntryTitle(entry: NamedPayoutEntry, t: Translate): string {
     if (entry.method === 'bank') {
         return entry.bank?.bank_name?.trim() || t('settings.payout.bankTransfer');
     }

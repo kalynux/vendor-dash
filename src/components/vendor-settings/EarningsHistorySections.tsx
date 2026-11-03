@@ -1,127 +1,15 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { AlertCircle, Loader2 } from 'lucide-react';
-import { toast } from 'sonner';
-
-import { Button } from '@/components/ui/button';
-import { SettingsSection } from '@/components/vendor-settings/SettingsSection';
-import { CardSkeleton } from '@/components/billing/BillingSkeletons';
 import { cn } from '@/lib/utils';
-import { useFormatters, useTranslation, type TranslationKey } from '@/i18n';
+import { useFormatters, useTranslation } from '@/i18n';
 import { fetchEarningsAdjustments, fetchVendorAgencyClaims } from '@/services/earnings.service';
-import type {
-  EarningsAdjustment,
-  EarningsPage,
-  EarningsPageMeta,
-  VendorAgencyClaim,
-} from '@/types/earnings.types';
-import { earningsErrorMessage } from './earnings.constants';
+import type { EarningsAdjustment, VendorAgencyClaim } from '@/types/earnings.types';
 import {
   adjustmentDebt,
   adjustmentKindLabel,
   adjustmentSentence,
   takenFromSentence,
 } from './earningsAdjustments';
-
-const PAGE_SIZE = 10;
-
-/** First page on mount, then "Load more" appends the next one. */
-function usePagedList<T>(fetchPage: (page: number, limit: number) => Promise<EarningsPage<T>>) {
-  const [items, setItems] = useState<T[]>([]);
-  const [meta, setMeta] = useState<EarningsPageMeta | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [error, setError] = useState<unknown>(null);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetchPage(1, PAGE_SIZE);
-      setItems(res.items);
-      setMeta(res.meta);
-    } catch (err) {
-      setError(err);
-    } finally {
-      setLoading(false);
-    }
-  }, [fetchPage]);
-
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  const loadMore = useCallback(async () => {
-    if (!meta) return;
-    setLoadingMore(true);
-    try {
-      const res = await fetchPage(meta.page + 1, PAGE_SIZE);
-      setItems((prev) => [...prev, ...res.items]);
-      setMeta(res.meta);
-    } catch (err) {
-      toast.error(earningsErrorMessage(err, 'account.earnings.adjustments.loadFailed'));
-    } finally {
-      setLoadingMore(false);
-    }
-  }, [fetchPage, meta]);
-
-  const hasMore = !!meta && meta.page < meta.pages;
-  return { items, loading, loadingMore, error, hasMore, load, loadMore };
-}
-
-interface PagedSectionProps<T> {
-  list: ReturnType<typeof usePagedList<T>>;
-  titleKey: TranslationKey;
-  infoKey: TranslationKey;
-  emptyKey: TranslationKey;
-  renderItem: (item: T) => ReactNode;
-  getKey: (item: T) => string;
-}
-
-function PagedSection<T>({ list, titleKey, infoKey, emptyKey, renderItem, getKey }: PagedSectionProps<T>) {
-  const { t } = useTranslation();
-
-  if (list.loading) return <CardSkeleton lines={2} />;
-
-  return (
-    <SettingsSection title={t(titleKey)} info={<p>{t(infoKey)}</p>}>
-      {list.error ? (
-        <div className="flex flex-col items-center gap-3 py-6 text-center">
-          <AlertCircle className="h-8 w-8 text-destructive" />
-          <p className="text-sm text-destructive">
-            {earningsErrorMessage(list.error, 'account.earnings.adjustments.loadFailed')}
-          </p>
-          <Button variant="outline" size="sm" onClick={list.load}>
-            {t('common.actions.retry')}
-          </Button>
-        </div>
-      ) : list.items.length === 0 ? (
-        <p className="text-sm text-muted-foreground">{t(emptyKey)}</p>
-      ) : (
-        <div className="space-y-3">
-          <ul className="divide-y">
-            {list.items.map((item) => (
-              <li key={getKey(item)} className="space-y-1 py-3 first:pt-0">
-                {renderItem(item)}
-              </li>
-            ))}
-          </ul>
-          {list.hasMore && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={list.loadMore}
-              disabled={list.loadingMore}
-              className="w-full gap-2 sm:w-auto"
-            >
-              {list.loadingMore && <Loader2 className="h-4 w-4 animate-spin" />}
-              {t('common.actions.loadMore')}
-            </Button>
-          )}
-        </div>
-      )}
-    </SettingsSection>
-  );
-}
+import { PagedSection } from './PagedSection';
+import { usePagedList } from './usePagedList';
 
 /** "Money taken back" — GET /vendor/earnings/adjustments (FRONTEND-CHANGELOG-refund-fees). */
 export function EarningsAdjustmentsSection() {

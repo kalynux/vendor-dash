@@ -12,7 +12,8 @@ import { ApiError } from '@/types/api';
 import { useApiError, useFormatters, useTranslation } from '@/i18n';
 import { UnsavedChangesBar } from '@/components/vendor-settings/UnsavedChangesBar';
 import { SettingsSection } from '@/components/vendor-settings/SettingsSection';
-import { Input } from '@/components/ui/input';
+import { UnitInput } from '@/components/ui/unit-input';
+import { cn } from '@/lib/utils';
 import { LabelWithHint } from '@/components/ui/info-hint';
 import { Switch } from '@/components/ui/switch';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -28,8 +29,9 @@ interface Snapshot {
  * ⚠ Never folded into the COD terms: a vendor with cash on delivery off can still
  * accept this. Both keys are always sent (full replace).
  *
- * The "Your money" points stay on screen rather than behind an info icon: the
- * brief asks for them next to the setting, and they decide whether to switch it on.
+ * The brief's "Your money" points are deliberately NOT repeated here: they are in
+ * the platform's terms and conditions, and on a phone they buried the setting
+ * (owner, 2026-11-02).
  */
 export function PartialPaymentSettings() {
   const { t } = useTranslation();
@@ -153,26 +155,25 @@ export function PartialPaymentSettings() {
               >
                 {t('settings.partialPayment.minLabel')}
               </LabelWithHint>
-              <div className="flex items-center gap-2">
-                <Input
-                  id="partial-payment-min"
-                  type="number"
-                  inputMode="numeric"
-                  min={PARTIAL_PAYMENT_MIN_PERCENT}
-                  max={PARTIAL_PAYMENT_MAX_PERCENT}
-                  step={1}
-                  placeholder="30"
-                  value={minPercent}
-                  disabled={!enabled}
-                  onChange={(e) => {
-                    setServerFieldError(false);
-                    setMinPercent(e.target.value);
-                  }}
-                  aria-invalid={showPercentError}
-                  className="h-11 w-24"
-                />
-                <span className="text-sm text-muted-foreground">%</span>
-              </div>
+              <UnitInput
+                id="partial-payment-min"
+                type="number"
+                inputMode="numeric"
+                min={PARTIAL_PAYMENT_MIN_PERCENT}
+                max={PARTIAL_PAYMENT_MAX_PERCENT}
+                step={1}
+                placeholder="30"
+                value={minPercent}
+                disabled={!enabled}
+                onChange={(e) => {
+                  setServerFieldError(false);
+                  setMinPercent(e.target.value);
+                }}
+                unit="%"
+                invalid={showPercentError}
+                wrapperClassName={cn('w-28', !enabled && 'cursor-not-allowed opacity-50')}
+                className="disabled:cursor-not-allowed"
+              />
               {showPercentError && (
                 <p className="text-xs text-destructive">
                   {t('settings.partialPayment.minInvalid', {
@@ -186,23 +187,6 @@ export function PartialPaymentSettings() {
             <div className="space-y-0.5 text-xs text-muted-foreground">
               {updatedAt && <p>{t('settings.partialPayment.lastChanged', { date: fmt.dateTime(updatedAt) })}</p>}
               <p>{t('settings.partialPayment.scope')}</p>
-            </div>
-
-            <div className="space-y-3 border-t pt-4 text-sm">
-              <div className="space-y-1.5">
-                <p className="font-medium">{t('settings.partialPayment.money.title')}</p>
-                <ul className="list-disc space-y-1.5 ps-4 text-muted-foreground">
-                  <li>{t('settings.partialPayment.money.pending')}</li>
-                  <li>{t('settings.partialPayment.money.locked')}</li>
-                  <li>{t('settings.partialPayment.money.perParcel')}</li>
-                  <li>{t('settings.partialPayment.money.fees')}</li>
-                </ul>
-              </div>
-              <div className="space-y-1.5">
-                <p className="font-medium">{t('settings.partialPayment.money.faultTitle')}</p>
-                <p className="text-muted-foreground">{t('settings.partialPayment.money.faultBody')}</p>
-                <p className="text-muted-foreground">{t('settings.partialPayment.money.cancelBody')}</p>
-              </div>
             </div>
           </>
         )}

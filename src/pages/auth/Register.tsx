@@ -1,6 +1,6 @@
 import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -14,6 +14,9 @@ import { useTranslation, useMessage, useApiError, Trans } from '@/i18n';
 import { AuthLayout, AuthLink } from './AuthLayout';
 import { PasswordField } from './PasswordField';
 import { registerSchema, type RegisterFormValues } from './schemas';
+
+/** The backend's own limit. A longer value would be a `400`, and a code must never refuse a registration. */
+const REFERRAL_CODE_MAX_LENGTH = 40;
 
 /**
  * Create a vendor account.
@@ -29,6 +32,8 @@ export function Register() {
   const apiError = useApiError();
   const navigate = useNavigate();
   const { signUp } = useOnboarding();
+  const [params] = useSearchParams();
+  const referralFromLink = params.get('ref')?.trim() ?? '';
 
   const {
     register,
@@ -45,6 +50,7 @@ export function Register() {
       password: '',
       confirmPassword: '',
       terms_accepted: false,
+      referral_code: referralFromLink.length <= REFERRAL_CODE_MAX_LENGTH ? referralFromLink : '',
     },
   });
 
@@ -59,6 +65,7 @@ export function Register() {
         ...(values.email ? { email: values.email } : {}),
         password: values.password,
         terms_accepted: true,
+        ...(values.referral_code ? { referral_code: values.referral_code } : {}),
       });
       navigate('/onboarding', { replace: true });
     } catch (err) {
@@ -173,6 +180,21 @@ export function Register() {
           error={errors.confirmPassword ? m(errors.confirmPassword.message) : undefined}
           registration={register('confirmPassword')}
         />
+
+        {/* Optional. Nothing is ever said about what happened to the code: the
+            response doesn't report on it. */}
+        <div className="space-y-1.5">
+          <Label htmlFor="referral_code">{t('auth.register.referralLabel')}</Label>
+          <Input
+            id="referral_code"
+            autoComplete="off"
+            autoCapitalize="characters"
+            autoCorrect="off"
+            spellCheck={false}
+            maxLength={REFERRAL_CODE_MAX_LENGTH}
+            {...register('referral_code')}
+          />
+        </div>
 
         {/* Required and unticked. The two names are links; tapping one opens
             the document without ticking the box (see LegalLink). */}
