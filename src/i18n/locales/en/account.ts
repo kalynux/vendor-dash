@@ -213,9 +213,16 @@ export const account = {
         info: 'The email address and phone number you sign in with. Changing either takes two steps, and the old one keeps working until the new one is confirmed.',
         emailLabel: 'Email address',
         phoneLabel: 'Phone number',
-        change: 'Change',
-        /** In place of Change when the account has no email (or phone) at all yet. */
-        add: 'Add',
+        /**
+         * Spoken names of the icon-only buttons on each row (also the desktop hover
+         * hint). "Add" stands in for "Change" when the account has none yet.
+         */
+        changeEmail: 'Change email address',
+        addEmail: 'Add an email address',
+        verifyEmail: 'Verify email address',
+        changePhone: 'Change phone number',
+        addPhone: 'Add a phone number',
+        verifyPhone: 'Verify phone number',
         cancelChange: 'Cancel change',
 
         newEmailLabel: 'New email address',

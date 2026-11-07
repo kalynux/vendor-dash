@@ -164,6 +164,8 @@ export interface PaymentOption {
   fields: string[];
   /** True when an SMS code may be asked for after the charge starts. */
   mayRequireOtp: boolean;
+  /** The amounts this provider accepts right now, when the server declares any. Never hard-code them. */
+  limits?: { min: number; max: number };
   /** Only on a card entry: the key Stripe.js is loaded with. */
   publishableKey?: string;
 }
@@ -186,6 +188,13 @@ export interface PaymentChannel {
 export interface GatewayInstructions {
   // Mobile money
   ussdCode?: string;
+  /**
+   * The name the vendor will see on their phone, when it is not ours. Present
+   * means the instruction is the main thing on the waiting screen: someone not
+   * warned may refuse a request from a name they do not know. Read it from here,
+   * never hard-code it. See api-doc/FRONTEND-CHANGELOG-novasend-moon-sarl.md.
+   */
+  payeeName?: string;
   /**
    * The buyer was SMSed a one-time code and **nothing has been charged yet** —
    * nothing happens until that code is relayed back through the row's own
@@ -298,6 +307,8 @@ export interface PaymentInitResult {
   id: string;
   status: PaymentStatus;
   instructions: GatewayInstructions | null;
+  /** What this attempt is really charged on, which decides what the vendor does on their phone. */
+  provider?: PaymentProvider | null;
 }
 
 /**

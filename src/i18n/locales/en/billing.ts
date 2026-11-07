@@ -214,6 +214,26 @@ export const billing = {
         /** The payment continues on a separate page. */
         redirectPrompt: 'Finish paying on the payment page, then come back here.',
         openPaymentPage: 'Open payment page',
+        /** The amount is outside what this wallet accepts. Figures come from the server. */
+        amountBelowMin: '{{brand}} payments start at {{min}}.',
+        amountAboveMax: '{{brand}} payments stop at {{max}}.',
+        /**
+         * The step on the vendor's phone. The payee name and the code come from the
+         * server. `<0>` makes the name stand out: someone not warned may refuse it.
+         */
+        handset: {
+            dialTitle: 'Dial this code on your phone',
+            dialBody:
+                'No prompt will appear: nothing happens until you dial. Check the request is from ' +
+                '<0>{{payee}}</0>, then enter your PIN.',
+            promptTitle: 'Confirm the payment on your phone',
+            promptBody: 'A request from <0>{{payee}}</0> will appear. Check the name, then enter your PIN.',
+            otherBody: 'Check the request is from <0>{{payee}}</0>, then enter your PIN.',
+            noPrompt: 'If no request appears, dial this code:',
+            dialNow: 'Dial now',
+            waiting: 'Waiting for your confirmation…',
+            keepOpen: "This can take a few minutes. Come back to this screen when you're done.",
+        },
     },
 
     /** The Stripe-hosted card fields. */

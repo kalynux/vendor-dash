@@ -202,6 +202,22 @@ export const billing = {
         providerSwitchedOffAll: 'Le paiement en ligne vient d’être désactivé. Merci de réessayer plus tard.',
         redirectPrompt: 'Terminez le paiement sur la page de paiement, puis revenez ici.',
         openPaymentPage: 'Ouvrir la page de paiement',
+        amountBelowMin: 'Les paiements {{brand}} commencent à {{min}}.',
+        amountAboveMax: 'Les paiements {{brand}} s’arrêtent à {{max}}.',
+        handset: {
+            dialTitle: 'Composez ce code sur votre téléphone',
+            dialBody:
+                'Aucune invite n’apparaîtra : rien ne se passe tant que vous n’avez pas composé le code. ' +
+                'Vérifiez que la demande vient de <0>{{payee}}</0>, puis entrez votre code secret.',
+            promptTitle: 'Confirmez le paiement sur votre téléphone',
+            promptBody:
+                'Une demande de <0>{{payee}}</0> va apparaître. Vérifiez le nom, puis entrez votre code secret.',
+            otherBody: 'Vérifiez que la demande vient de <0>{{payee}}</0>, puis entrez votre code secret.',
+            noPrompt: 'Si aucune demande n’apparaît, composez ce code :',
+            dialNow: 'Composer',
+            waiting: 'En attente de votre confirmation…',
+            keepOpen: 'Cela peut prendre quelques minutes. Revenez sur cet écran une fois terminé.',
+        },
     },
 
     cardForm: {

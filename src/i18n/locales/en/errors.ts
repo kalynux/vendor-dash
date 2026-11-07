@@ -408,6 +408,8 @@ export const errors = {
             'This number belongs to a different network. Pick its network, or enter another number.',
         PAYMENT_PROVIDER_UNAVAILABLE:
             "That way to pay isn't available right now. Pick another one.",
+        PAYMENT_AMOUNT_OUT_OF_RANGE:
+            "This amount can't be paid with this wallet right now. Nothing was charged.",
         /** Only an out-of-date app can get this — a current build always names the provider. */
         PAYMENT_PROVIDER_REQUIRED:
             'Something went wrong on our side while starting the payment. Please refresh the page and try again.',

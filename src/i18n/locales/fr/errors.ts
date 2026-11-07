@@ -293,6 +293,8 @@ export const errors = {
             'Ce numéro appartient à un autre réseau. Choisissez son réseau, ou saisissez un autre numéro.',
         PAYMENT_PROVIDER_UNAVAILABLE:
             'Ce moyen de paiement n’est pas disponible en ce moment. Choisissez-en un autre.',
+        PAYMENT_AMOUNT_OUT_OF_RANGE:
+            'Ce montant ne peut pas être payé avec ce portefeuille en ce moment. Rien n’a été débité.',
         PAYMENT_PROVIDER_REQUIRED:
             'Un problème de notre côté a empêché de lancer le paiement. Actualisez la page et réessayez.',
         PAYMENT_CART_NOT_FOUND: 'Ce panier est introuvable.',

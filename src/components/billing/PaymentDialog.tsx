@@ -9,6 +9,7 @@ import {
   Plus,
   Info,
   ArrowLeft,
+  Phone,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -37,8 +38,9 @@ import {
   mobileMoneyBrandByOperator,
   type MobileMoneyBrandId,
 } from '@/components/payment-methods';
-import { useTranslation, useFormatters, useApiError, type TranslationKey } from '@/i18n';
+import { Trans, useTranslation, useFormatters, useApiError, type TranslationKey } from '@/i18n';
 import type {
+  GatewayInstructions,
   PaymentAuthorizeResult,
   PaymentChannel,
   PaymentInitResult,
@@ -53,11 +55,15 @@ import { fetchPaymentMethods } from '@/services/payment-methods.service';
 import { StripePaymentElement, type StripePaymentElementHandle } from './StripePaymentElement';
 import { CardPreview } from './CardPreview';
 import {
+  HANDSET_POLL_TIMEOUT_MS,
   OTP_CODE_MAX_LENGTH,
   PAYMENT_POLL_INTERVAL_MS,
   PAYMENT_POLL_TIMEOUT_MS,
+  amountLimitMiss,
+  amountRefusalLimits,
   chargeCurrencyOf,
   formatCharged,
+  handsetStepOf,
   isOtpAttemptsExceeded,
   isOtpReconcileError,
   isValidOtpCode,
@@ -66,9 +72,11 @@ import {
   providerMismatchDetected,
   requiresOtpStep,
   unavailableProviderOffered,
+  ussdTelHref,
   saveStripeResume,
   readStripeResume,
   clearStripeResume,
+  type HandsetStep,
   type StripeResumeKind,
 } from './billing.constants';
 import { isNative } from '@/platform/env';
@@ -174,6 +182,10 @@ export function PaymentDialog({
   const [ussd, setUssd] = useState<string | null>(null);
   // Set when the charge answered with a page to finish paying on.
   const [redirectUrl, setRedirectUrl] = useState<string | null>(null);
+  // Set when the server names who the phone will show: it then leads the screen.
+  const [handset, setHandset] = useState<HandsetStep | null>(null);
+  // What the charge is really on. Decides what the vendor does on their phone.
+  const [chargedProvider, setChargedProvider] = useState<PaymentProvider | null>(null);
   const [stripeInit, setStripeInit] = useState<StripeInit | null>(null);
   const [cardReady, setCardReady] = useState(false);
 
@@ -211,6 +223,8 @@ export function PaymentDialog({
     ? cardOption
     : mobileOptions.find((o) => o.provider === brand?.chargeOperator);
   const needsPhone = !isStripe && (selectedOption?.fields.includes('phoneNumber') ?? true);
+  // Refused before anything is charged, so say it before they fill anything in.
+  const limitMiss = amountLimitMiss(amount, selectedOption?.limits);
 
   /**
    * Show a (new) list of ways to pay, keeping the vendor's pick when it is
@@ -259,6 +273,8 @@ export function PaymentDialog({
       setInstructionMsg(null);
       setUssd(null);
       setRedirectUrl(null);
+      setHandset(null);
+      setChargedProvider(null);
       setStripeInit(null);
       setCardReady(false);
       setSelectedSavedId(null);
@@ -306,8 +322,8 @@ export function PaymentDialog({
     }
   }
 
-  function startPolling(id: string) {
-    pollDeadline.current = Date.now() + PAYMENT_POLL_TIMEOUT_MS;
+  function startPolling(id: string, timeoutMs = PAYMENT_POLL_TIMEOUT_MS) {
+    pollDeadline.current = Date.now() + timeoutMs;
     stopPolling();
     pollTimer.current = setInterval(async () => {
       // Ask once more before giving up: in the app, timers stall while the
@@ -343,6 +359,20 @@ export function PaymentDialog({
         giveUp();
       }
     }, PAYMENT_POLL_INTERVAL_MS);
+  }
+
+  /** Nothing left to do here but wait: show what to do on the phone, and poll. */
+  function waitOnPhone(
+    id: string,
+    instructions: GatewayInstructions | null,
+    provider: PaymentProvider | null,
+  ) {
+    const step = handsetStepOf(instructions, provider);
+    setHandset(step);
+    setUssd(instructions?.ussdCode ?? null);
+    setInstructionMsg(instructions?.message ?? t('billing.checkout.phonePrompt'));
+    setPhase('processing');
+    startPolling(id, step ? HANDSET_POLL_TIMEOUT_MS : PAYMENT_POLL_TIMEOUT_MS);
   }
 
   /**
@@ -411,10 +441,22 @@ export function PaymentDialog({
     return mobileMoneyBrandByOperator(provider)?.name ?? provider;
   }
 
+  /** Why this amount can't be paid with this provider. The figures are the server's. */
+  function limitMessage(
+    miss: 'min' | 'max',
+    limits: NonNullable<PaymentOption['limits']>,
+    provider: PaymentProvider,
+  ): string {
+    const brandName = providerName(provider);
+    return miss === 'min'
+      ? t('billing.checkout.amountBelowMin', { brand: brandName, min: fmt.currency(limits.min, currency) })
+      : t('billing.checkout.amountAboveMax', { brand: brandName, max: fmt.currency(limits.max, currency) });
+  }
+
   /**
    * The server refused the charge before writing anything. Returns true when
-   * the refusal was one of the two provider ones, which keep the form filled
-   * in and say exactly what to change.
+   * the refusal was one that keeps the form filled in and says exactly what to
+   * change.
    */
   function handleProviderRefusal(err: unknown, provider: PaymentProvider): boolean {
     // The number is on another network than the one picked. Say which, and
@@ -427,6 +469,14 @@ export function PaymentDialog({
           chosen: providerName(provider),
         }),
       );
+      return true;
+    }
+
+    // The limits moved after the dialog loaded. Nothing was charged.
+    const limits = amountRefusalLimits(err);
+    const miss = amountLimitMiss(amount, limits ?? undefined);
+    if (limits && miss) {
+      setFormError(limitMessage(miss, limits, provider));
       return true;
     }
 
@@ -478,6 +528,8 @@ export function PaymentDialog({
       // Pending. Hold the row id for whatever comes next — the OTP relay, the
       // verify poll, or both.
       setPaymentId(result.id);
+      const charged = result.provider ?? provider;
+      setChargedProvider(charged);
 
       // What happens next is read off the answer, never off which company the
       // server used, and never off what `/options` hinted: the server can
@@ -520,19 +572,19 @@ export function PaymentDialog({
       if (result.instructions?.redirectUrl) {
         setRedirectUrl(result.instructions.redirectUrl);
         setUssd(null);
+        setHandset(null);
         setInstructionMsg(t('billing.checkout.redirectPrompt'));
         setPhase('processing');
-        startPolling(result.id);
+        // The page is the instruction here, but the wait is just as long.
+        startPolling(
+          result.id,
+          result.instructions.payeeName ? HANDSET_POLL_TIMEOUT_MS : PAYMENT_POLL_TIMEOUT_MS,
+        );
         return;
       }
 
       // Otherwise: approve the prompt on the handset, and poll.
-      setUssd(result.instructions?.ussdCode ?? null);
-      setInstructionMsg(
-        result.instructions?.message ?? t('billing.checkout.phonePrompt'),
-      );
-      setPhase('processing');
-      startPolling(result.id);
+      waitOnPhone(result.id, result.instructions, charged);
     } catch (err) {
       if (handleProviderRefusal(err, provider)) return;
       setFormError(
@@ -571,10 +623,7 @@ export function PaymentDialog({
       //
       // The authorize response is also where the USSD prompt finally appears on
       // this branch: the initiating call had none to give.
-      setUssd(result.instructions?.ussdCode ?? null);
-      setInstructionMsg(result.instructions?.message ?? t('billing.checkout.phonePrompt'));
-      setPhase('processing');
-      startPolling(paymentId);
+      waitOnPhone(paymentId, result.instructions, chargedProvider);
     } catch (err) {
       if (isOtpAttemptsExceeded(err)) {
         // Out of attempts — the backend has already failed the row. Another code
@@ -588,6 +637,7 @@ export function PaymentDialog({
         // a payment with no OTP step at all. Reconcile with the idempotent verify
         // poll rather than resubmit — a second accepted code is a second charge.
         setUssd(null);
+        setHandset(null);
         setInstructionMsg(t('billing.checkout.otpReconciling'));
         setPhase('processing');
         startPolling(paymentId);
@@ -656,6 +706,8 @@ export function PaymentDialog({
   function backToForm() {
     setStripeInit(null);
     setRedirectUrl(null);
+    setHandset(null);
+    setChargedProvider(null);
     setCardError(null);
     setCardReady(false);
     setSubmitting(false);
@@ -877,10 +929,16 @@ export function PaymentDialog({
               </div>
             )}
 
-            {formError && (
+            {limitMiss && selectedOption?.limits ? (
               <p className="text-sm text-destructive" role="alert">
-                {formError}
+                {limitMessage(limitMiss, selectedOption.limits, selectedOption.provider)}
               </p>
+            ) : (
+              formError && (
+                <p className="text-sm text-destructive" role="alert">
+                  {formError}
+                </p>
+              )
             )}
 
             <DialogFooter>
@@ -894,9 +952,15 @@ export function PaymentDialog({
               </Button>
               <Button
                 onClick={handleInitiate}
-                // Nothing offered is picked, or the number is incomplete — don't
-                // send a charge that can only be refused.
-                disabled={submitting || !selectedOption || (needsPhone && !isValidPhone(phone))}
+                // Nothing offered is picked, the number is incomplete, or the
+                // amount is out of range — don't send a charge that can only be
+                // refused.
+                disabled={
+                  submitting ||
+                  !selectedOption ||
+                  !!limitMiss ||
+                  (needsPhone && !isValidPhone(phone))
+                }
                 className="max-sm:w-full"
               >
                 {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -1040,7 +1104,11 @@ export function PaymentDialog({
           </div>
         )}
 
-        {phase === 'processing' && (
+        {phase === 'processing' && handset && (
+          <HandsetWaiting step={handset} onClose={() => handleClose(false)} />
+        )}
+
+        {phase === 'processing' && !handset && (
           <div className="space-y-4 py-2 text-center">
             <Loader2 className="mx-auto h-10 w-10 animate-spin text-primary" />
             <div className="space-y-1">
@@ -1111,6 +1179,85 @@ export function PaymentDialog({
         )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ * The waiting screen when the server names who the phone will show. The step
+ * leads and the wait is secondary: an Orange payer gets no prompt, so without
+ * this nothing ever happens, and a name nobody warned them about gets refused.
+ */
+function HandsetWaiting({ step, onClose }: { step: HandsetStep; onClose: () => void }) {
+  const { t } = useTranslation();
+  const payee = <strong className="font-semibold text-foreground" />;
+  const params = { payee: step.payeeName };
+
+  return (
+    <div className="space-y-4 py-2 text-center">
+      {step.action === 'dial' && step.ussdCode && (
+        <>
+          <p className="font-medium">{t('billing.checkout.handset.dialTitle')}</p>
+          <UssdCode code={step.ussdCode} />
+          <p className="text-sm text-muted-foreground">
+            <Trans i18nKey="billing.checkout.handset.dialBody" params={params} components={[payee]} />
+          </p>
+        </>
+      )}
+
+      {step.action === 'prompt' && (
+        <>
+          <p className="font-medium">{t('billing.checkout.handset.promptTitle')}</p>
+          <p className="text-sm text-muted-foreground">
+            <Trans i18nKey="billing.checkout.handset.promptBody" params={params} components={[payee]} />
+          </p>
+          {step.ussdCode && (
+            <div className="space-y-2 border-t pt-4">
+              <p className="text-sm text-muted-foreground">{t('billing.checkout.handset.noPrompt')}</p>
+              <UssdCode code={step.ussdCode} quiet />
+            </div>
+          )}
+        </>
+      )}
+
+      {step.action === 'other' && (
+        <>
+          <p className="font-medium">{t('billing.checkout.handset.promptTitle')}</p>
+          <p className="text-sm text-muted-foreground">
+            {step.message ?? (
+              <Trans i18nKey="billing.checkout.handset.otherBody" params={params} components={[payee]} />
+            )}
+          </p>
+          {step.ussdCode && <UssdCode code={step.ussdCode} quiet />}
+        </>
+      )}
+
+      <div className="space-y-1 text-xs text-muted-foreground">
+        <p className="flex items-center justify-center gap-2">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          {t('billing.checkout.handset.waiting')}
+        </p>
+        <p>{t('billing.checkout.handset.keepOpen')}</p>
+      </div>
+      <Button variant="ghost" size="sm" onClick={onClose}>
+        {t('billing.checkout.closeKeepProcessing')}
+      </Button>
+    </div>
+  );
+}
+
+/** A code to dial: always readable as text, and one tap away where the device can dial. */
+function UssdCode({ code, quiet = false }: { code: string; quiet?: boolean }) {
+  const { t } = useTranslation();
+  return (
+    <div className="space-y-2">
+      <p className={cn('select-all font-mono font-semibold', quiet ? 'text-lg' : 'text-3xl')}>{code}</p>
+      <Button asChild variant={quiet ? 'outline' : 'default'} className="max-sm:w-full">
+        <a href={ussdTelHref(code)}>
+          <Phone className="mr-2 h-4 w-4" />
+          {t('billing.checkout.handset.dialNow')}
+        </a>
+      </Button>
+    </div>
   );
 }
 

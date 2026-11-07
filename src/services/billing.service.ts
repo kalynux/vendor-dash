@@ -99,7 +99,12 @@ export async function fetchPaymentOptions(): Promise<PaymentOption[]> {
 export async function initiateTopup(payload: TopupInitPayload): Promise<PaymentInitResult> {
   const res = await api.post<TopupInitResponse>(`${BASE}/credits/topups`, payload);
   const topup = normalizeId(res.data.topup);
-  return { id: topup._id, status: topup.status, instructions: res.data.instructions };
+  return {
+    id: topup._id,
+    status: topup.status,
+    instructions: res.data.instructions,
+    provider: res.data.provider,
+  };
 }
 
 /**
@@ -136,7 +141,12 @@ export async function initiatePlanPurchase(
 ): Promise<PaymentInitResult> {
   const res = await api.post<PlanPurchaseInitResponse>(`${BASE}/plans/${planId}/purchase`, payload);
   const purchase = normalizeId(res.data.purchase);
-  return { id: purchase._id, status: purchase.status, instructions: res.data.instructions };
+  return {
+    id: purchase._id,
+    status: purchase.status,
+    instructions: res.data.instructions,
+    provider: res.data.provider,
+  };
 }
 
 /**

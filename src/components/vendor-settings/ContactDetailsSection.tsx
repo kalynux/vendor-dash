@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { BadgeCheck, Loader2, Mail, MessageCircle } from 'lucide-react';
+import { BadgeCheck, Loader2, Mail, MessageCircle, Pencil, Plus, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
@@ -494,48 +494,35 @@ export function ContactDetailsSection() {
     <SettingsSection
       title={t('account.contact.title')}
       info={t('account.contact.info')}
-      contentClassName="space-y-5"
+      contentClassName="space-y-6"
     >
       {/* ── Email ──────────────────────────────────────────────────────────── */}
       <div className="space-y-3">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-xs text-muted-foreground">{t('account.contact.emailLabel')}</p>
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-              <p className="truncate text-sm font-medium">
-                {state.email ?? t('common.labels.emptyValue')}
-              </p>
-              {emailVerified && (
-                <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600 dark:text-emerald-400">
-                  <BadgeCheck className="size-3.5" />
-                  {t('account.contact.verified')}
-                </span>
-              )}
-            </div>
-          </div>
-          <div className="flex shrink-0 flex-wrap gap-2">
+        <div className="flex items-center justify-between gap-4">
+          <IdentifierValue
+            label={t('account.contact.emailLabel')}
+            value={state.email ?? t('common.labels.emptyValue')}
+            verified={emailVerified}
+          />
+          <div className="flex shrink-0 items-center gap-3">
             {canVerifyEmail && (
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={sendingEmailLink}
+              <VerifyButton
+                label={t('account.contact.verifyEmail')}
+                busy={sendingEmailLink}
                 onClick={() => void sendEmailLink()}
-              >
-                {sendingEmailLink && <Loader2 className="size-4 animate-spin" />}
-                {t('account.contact.verify')}
-              </Button>
+              />
             )}
             {!state.pendingEmail && openForm !== 'email' && (
-              <Button
-                variant="outline"
-                size="sm"
+              <EditButton
+                adding={state.email === null}
+                label={t(
+                  state.email === null ? 'account.contact.addEmail' : 'account.contact.changeEmail',
+                )}
                 onClick={() => {
                   setEmailDraft('');
                   setOpenForm('email');
                 }}
-              >
-                {t(state.email === null ? 'account.contact.add' : 'account.contact.change')}
-              </Button>
+              />
             )}
           </div>
         </div>
@@ -632,41 +619,33 @@ export function ContactDetailsSection() {
 
       {/* ── Phone ──────────────────────────────────────────────────────────── */}
       <div className="space-y-3">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-xs text-muted-foreground">{t('account.contact.phoneLabel')}</p>
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-              <p className="truncate text-sm font-medium">
-                {state.phone
-                  ? formatPhoneInternational(state.phone)
-                  : t('common.labels.emptyValue')}
-              </p>
-              {phoneVerified && (
-                <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600 dark:text-emerald-400">
-                  <BadgeCheck className="size-3.5" />
-                  {t('account.contact.verified')}
-                </span>
-              )}
-            </div>
-          </div>
-          <div className="flex shrink-0 flex-wrap gap-2">
+        <div className="flex items-center justify-between gap-4">
+          <IdentifierValue
+            label={t('account.contact.phoneLabel')}
+            value={
+              state.phone ? formatPhoneInternational(state.phone) : t('common.labels.emptyValue')
+            }
+            verified={phoneVerified}
+          />
+          <div className="flex shrink-0 items-center gap-3">
             {canVerify && (
-              <Button variant="outline" size="sm" disabled={sending} onClick={() => void sendCode()}>
-                {sending && <Loader2 className="size-4 animate-spin" />}
-                {t('account.contact.verify')}
-              </Button>
+              <VerifyButton
+                label={t('account.contact.verifyPhone')}
+                busy={sending}
+                onClick={() => void sendCode()}
+              />
             )}
             {!state.pendingPhone && openForm !== 'phone' && (
-              <Button
-                variant="outline"
-                size="sm"
+              <EditButton
+                adding={state.phone === null}
+                label={t(
+                  state.phone === null ? 'account.contact.addPhone' : 'account.contact.changePhone',
+                )}
                 onClick={() => {
                   setPhoneDraft('');
                   setOpenForm('phone');
                 }}
-              >
-                {t(state.phone === null ? 'account.contact.add' : 'account.contact.change')}
-              </Button>
+              />
             )}
           </div>
         </div>
@@ -884,6 +863,85 @@ export function ContactDetailsSection() {
         )}
       </div>
     </SettingsSection>
+  );
+}
+
+/** Label over value, with the green "Verified" mark beside the value once it is proven. */
+function IdentifierValue({
+  label,
+  value,
+  verified,
+}: {
+  label: string;
+  value: string;
+  verified: boolean;
+}) {
+  const { t } = useTranslation();
+  return (
+    <div className="min-w-0 flex-1 space-y-1">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+        <p className="min-w-0 truncate text-sm font-medium">{value}</p>
+        {verified && (
+          <span className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+            <BadgeCheck className="size-3.5" />
+            {t('account.contact.verified')}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The shield leads; the word "Verify" only joins it from `sm` up. On a phone the
+ * row is too narrow for a long email AND two worded buttons, and the sentence
+ * under the row already says why to press it. `label` names what is verified,
+ * for screen readers and the desktop hover hint.
+ */
+function VerifyButton({
+  label,
+  busy,
+  onClick,
+}: {
+  label: string;
+  busy: boolean;
+  onClick: () => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <Button
+      variant="outline"
+      className="max-sm:size-9 max-sm:p-0"
+      aria-label={label}
+      title={label}
+      disabled={busy}
+      onClick={onClick}
+    >
+      {busy ? (
+        <Loader2 className="size-[18px] animate-spin" />
+      ) : (
+        <ShieldCheck className="size-[18px] text-primary" />
+      )}
+      <span className="max-sm:hidden">{t('account.contact.verify')}</span>
+    </Button>
+  );
+}
+
+/** Pencil to change the value, plus to add one when the account has none yet. */
+function EditButton({
+  adding,
+  label,
+  onClick,
+}: {
+  adding: boolean;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <Button variant="outline" size="icon" aria-label={label} title={label} onClick={onClick}>
+      {adding ? <Plus className="size-[18px]" /> : <Pencil className="size-[18px]" />}
+    </Button>
   );
 }
 

@@ -16,6 +16,7 @@ import type {
 import type { PaymentMethodKind, SavedPaymentMethod } from '@/types/payment-method.types';
 
 type Translate = (key: TranslationKey, params?: Record<string, string | number>) => string;
+type AmountLimits = NonNullable<PaymentOption['limits']>;
 
 // ─── Settings limits ──────────────────────────────────────────────────────────
 
@@ -28,6 +29,50 @@ export const NOTIFY_DAYS_MAX = 90;
 export const PAYMENT_POLL_INTERVAL_MS = 4000;
 /** Give up polling after this long (mobile money can take a couple of minutes). */
 export const PAYMENT_POLL_TIMEOUT_MS = 3 * 60 * 1000;
+/**
+ * The wait when the vendor has a step to do on their phone (see `handsetStepOf`).
+ * An Orange payment stays pending until they dial and enter their PIN, which took
+ * several minutes in the live test, and leaving for the phone's dialer eats into it.
+ */
+export const HANDSET_POLL_TIMEOUT_MS = 15 * 60 * 1000;
+
+// ─── The step on the vendor's phone ─────────────────────────────────────────────
+
+export interface HandsetStep {
+    /** The name the phone will show. From the server, never hard-coded. */
+    payeeName: string;
+    /** What to dial, from the server. Absent when it sent none. */
+    ussdCode: string | null;
+    /** What the vendor has to do. `other` has no wording of ours: show the server's. */
+    action: 'dial' | 'prompt' | 'other';
+    /** The server's own instruction, ready to show. */
+    message: string | null;
+}
+
+/**
+ * What the waiting screen leads with, or `null` for today's screen when the
+ * server names no payee. Decided by the network being charged, never by the
+ * company behind it: Orange gets no prompt and nothing happens until the vendor
+ * dials, MTN gets a prompt by itself.
+ */
+export function handsetStepOf(
+    instructions: GatewayInstructions | null | undefined,
+    provider: PaymentProvider | null | undefined,
+): HandsetStep | null {
+    const payeeName = instructions?.payeeName?.trim();
+    if (!payeeName) return null;
+    const ussdCode = instructions?.ussdCode?.trim() || null;
+    let action: HandsetStep['action'] = 'other';
+    if (provider === 'MTN') action = 'prompt';
+    // Without a code there is nothing of ours to tell an Orange payer to dial.
+    else if (provider === 'ORANGE' && ussdCode) action = 'dial';
+    return { payeeName, ussdCode, action, message: instructions?.message?.trim() || null };
+}
+
+/** A USSD code as a link: `#` would otherwise start the URL's fragment and cut the code off. */
+export function ussdTelHref(code: string): string {
+    return `tel:${code.replace(/#/g, '%23')}`;
+}
 
 // ─── Mobile-money OTP relay ─────────────────────────────────────────────────────
 // Some providers, depending on which company the server routes them through,
@@ -150,6 +195,24 @@ export function unavailableProviderOffered(err: unknown): PaymentProvider[] | nu
     return offered.filter((v): v is PaymentProvider =>
         v === 'MTN' || v === 'ORANGE' || v === 'MOOV' || v === 'CARD',
     );
+}
+
+/**
+ * `422 PAYMENT_AMOUNT_OUT_OF_RANGE`: the server's limits changed since `/options`
+ * was read. Returns the limits it refused against, or `null` when this is not
+ * that refusal or they are missing.
+ */
+export function amountRefusalLimits(err: unknown): AmountLimits | null {
+    if (!(err instanceof ApiError) || err.code !== 'PAYMENT_AMOUNT_OUT_OF_RANGE') return null;
+    const { min, max } = err.detailsObject ?? {};
+    return typeof min === 'number' && typeof max === 'number' ? { min, max } : null;
+}
+
+/** Which way `amount` misses the limits, or `null` when it fits or there are none. */
+export function amountLimitMiss(amount: number, limits: AmountLimits | undefined): 'min' | 'max' | null {
+    if (!limits) return null;
+    if (amount < limits.min) return 'min';
+    return amount > limits.max ? 'max' : null;
 }
 
 /**
