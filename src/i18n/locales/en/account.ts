@@ -12,6 +12,7 @@ export const account = {
      * crumb and the sidebar can never drift apart.
      */
     tabSubtitles: {
+        billingProvider: 'Your plan and your credits',
         profile: 'Your personal details, photo, and the language the dashboard speaks to you in',
         store: 'Your public store identity, support contacts, and vacation mode',
         addresses: 'The business locations your products are shipped and picked up from',

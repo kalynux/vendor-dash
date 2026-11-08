@@ -9,7 +9,10 @@ import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { nameInitials } from '@/components/customers/customer.constants';
 import { useAuth } from '@/app-context';
 import { useNotificationStore } from '@/store';
-import { PRIMARY_NAV, FOOTER_NAV, type NavItem, type NavChild, type NavBadge } from '@/config/navigation';
+import {
+  navFor, PROVIDER_TAB_PATHS, type NavItem, type NavChild, type NavBadge,
+} from '@/config/navigation';
+import { useVendorKind } from '@/hooks/use-vendor-kind';
 import { cn } from '@/lib/utils';
 import { useKycNeedsAttention } from '@/hooks/use-kyc-attention';
 import { usePendingOrdersCount } from '@/lib/pending-orders-count';
@@ -17,6 +20,7 @@ import { useTranslation } from '@/i18n';
 
 // Items already present in the bottom tab bar — hidden from "More".
 const TAB_BAR_PATHS = new Set(['/dashboard', '/dashboard/orders', '/dashboard/products']);
+const PROVIDER_BAR_PATHS = new Set<string>(PROVIDER_TAB_PATHS);
 
 interface NavHandlers {
   go: (path: string) => void;
@@ -138,8 +142,11 @@ export function MobileMoreDrawer({ open, onOpenChange }: MobileMoreDrawerProps) 
     },
   };
 
+  const kind = useVendorKind();
+  const nav = navFor(kind);
+  const onBar = kind === 'provider' ? PROVIDER_BAR_PATHS : TAB_BAR_PATHS;
   // Primary items not already in the bottom tab bar.
-  const primaryItems = PRIMARY_NAV.filter((item) => !TAB_BAR_PATHS.has(item.path));
+  const primaryItems = nav.primary.filter((item) => !onBar.has(item.path));
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -162,7 +169,9 @@ export function MobileMoreDrawer({ open, onOpenChange }: MobileMoreDrawerProps) 
               <div className="flex-1 min-w-0">
                 <p className="font-semibold truncate">{user?.name}</p>
                 <p className="text-sm text-muted-foreground">
-                  {user?.name ?? t('nav.sidebar.defaultStoreName')} · {t('nav.header.vendor')}
+                  {kind === 'provider'
+                    ? t('nav.header.provider')
+                    : `${user?.name ?? t('nav.sidebar.defaultStoreName')} · ${t('nav.header.vendor')}`}
                 </p>
               </div>
               <Button
@@ -176,7 +185,7 @@ export function MobileMoreDrawer({ open, onOpenChange }: MobileMoreDrawerProps) 
             </div>
 
             <MenuGroup items={primaryItems} handlers={handlers} />
-            <MenuGroup items={FOOTER_NAV} handlers={handlers} />
+            <MenuGroup items={nav.footer} handlers={handlers} />
 
             {/* Platform identity + health. Counterpart to the sidebar footer,
                 which mobile never renders — this drawer is the only place the

@@ -38,6 +38,14 @@ export const auth = {
     },
 
     register: {
+        kindQuestion: 'What will you do on Wi-Mall?',
+        kindSeller: 'Sell products and services',
+        kindSellerHint: 'Customers order and pay on Wi-Mall. You pay a commission on each order.',
+        kindProvider: 'Advertise a service business',
+        kindProviderHint: 'Customers find you and unlock your contacts. You pay per contact, in credits. No orders, no commission.',
+        kindPermanent: 'You can’t change this choice later.',
+        subtitleProvider: 'A few details now, then you create your first listing.',
+        businessHintProvider: 'The name customers see on your listings.',
         title: 'Create your vendor account',
         subtitle: 'A few details now, and we will set up your storefront next.',
         nameLabel: 'Your name',

@@ -1,4 +1,4 @@
-import { Controller, useForm } from 'react-hook-form';
+import { Controller, useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
@@ -14,6 +14,7 @@ import { useTranslation, useMessage, useApiError, Trans } from '@/i18n';
 import { AuthLayout, AuthLink } from './AuthLayout';
 import { PasswordField } from './PasswordField';
 import { registerSchema, type RegisterFormValues } from './schemas';
+import { VendorKindChoice } from './VendorKindChoice';
 
 /** The backend's own limit. A longer value would be a `400`, and a code must never refuse a registration. */
 const REFERRAL_CODE_MAX_LENGTH = 40;
@@ -43,6 +44,7 @@ export function Register() {
   } = useForm<RegisterFormValues>({
     resolver: zodResolver(registerSchema),
     defaultValues: {
+      vendorKind: 'seller',
       name: '',
       business_name: '',
       phone: '',
@@ -54,9 +56,13 @@ export function Register() {
     },
   });
 
+  const vendorKind = useWatch({ control, name: 'vendorKind' });
+  const isProvider = vendorKind === 'provider';
+
   async function onSubmit(values: RegisterFormValues) {
     try {
-      await signUp({
+      const session = await signUp({
+        vendorKind: values.vendorKind,
         name: values.name,
         business_name: values.business_name,
         phone: values.phone,
@@ -67,7 +73,9 @@ export function Register() {
         terms_accepted: true,
         ...(values.referral_code ? { referral_code: values.referral_code } : {}),
       });
-      navigate('/onboarding', { replace: true });
+      // A provider starts with onboarding already complete (they have no shop
+      // to set up) and goes straight to their listings.
+      navigate(session.role_entity?.onboarding_step === 0 ? '/dashboard' : '/onboarding', { replace: true });
     } catch (err) {
       // `register` rewords AUTH_PHONE_TAKEN / AUTH_EMAIL_TAKEN into "sign in
       // and add the Vendor role" — see errors.contexts.register.
@@ -78,7 +86,7 @@ export function Register() {
   return (
     <AuthLayout
       title={t('auth.register.title')}
-      subtitle={t('auth.register.subtitle')}
+      subtitle={isProvider ? t('auth.register.subtitleProvider') : t('auth.register.subtitle')}
       footer={
         <>
           {t('auth.register.haveAccount')}{' '}
@@ -87,6 +95,12 @@ export function Register() {
       }
     >
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
+        <Controller
+          control={control}
+          name="vendorKind"
+          render={({ field }) => <VendorKindChoice value={field.value} onChange={field.onChange} />}
+        />
+
         <div className="space-y-1.5">
           <Label htmlFor="name">
             {t('auth.register.nameLabel')} <span className="text-destructive">*</span>
@@ -115,7 +129,9 @@ export function Register() {
           {errors.business_name ? (
             <p className="text-xs text-destructive">{m(errors.business_name.message)}</p>
           ) : (
-            <p className="text-xs text-muted-foreground">{t('auth.register.businessHint')}</p>
+            <p className="text-xs text-muted-foreground">
+              {isProvider ? t('auth.register.businessHintProvider') : t('auth.register.businessHint')}
+            </p>
           )}
         </div>
 

@@ -5,6 +5,7 @@ export const settings = {
 
     /** One line per Settings sub-route — see `account.tabSubtitles`. */
     tabSubtitles: {
+        listings: 'What happens when your credits run out, and the limits you set',
         policies: 'The return, cancellation, and support terms customers see on your storefront',
         notifications: 'Which events reach you, and on which channel',
         preferences: 'Dashboard appearance and the rules that dispatch or cancel orders for you',

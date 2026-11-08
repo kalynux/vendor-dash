@@ -19,6 +19,7 @@ import type {
 import { LedgerSkeleton } from '@/components/billing/BillingSkeletons';
 import { gatewayLabel } from '@/components/billing/billing.constants';
 import { useTranslation, useFormatters, useApiError, type TranslationKey } from '@/i18n';
+import { useIsProvider } from '@/hooks/use-vendor-kind';
 import {
   TRANSACTION_CATEGORY_TABS,
   categoryLabel,
@@ -27,6 +28,7 @@ import {
   isReversalTransaction,
   isInternalTransaction,
   transactionLabel,
+  PROVIDER_CATEGORIES,
 } from './transactions.constants';
 
 const PAGE_LIMIT = 20;
@@ -41,6 +43,7 @@ type CategoryFilter = TransactionCategory | 'all';
  */
 export function TransactionsTab({ refreshKey = 0 }: { refreshKey?: number }) {
   const isMobile = useIsMobile();
+  const isProvider = useIsProvider();
   const { t } = useTranslation();
   const fmt = useFormatters();
   const apiError = useApiError();
@@ -156,6 +159,7 @@ export function TransactionsTab({ refreshKey = 0 }: { refreshKey?: number }) {
         <FilterChips
           options={TRANSACTION_CATEGORY_TABS
             .filter((tab) => tab.value !== 'all')
+            .filter((tab) => !isProvider || PROVIDER_CATEGORIES.has(tab.value))
             .map((tab) => ({
               value: tab.value as TransactionCategory,
               labelKey: tab.labelKey as TranslationKey,

@@ -24,7 +24,8 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { SignOutDialog } from '@/components/layout/SignOutDialog';
 import { GlobalSearch } from '@/components/layout/GlobalSearch';
-import { QUICK_ACTIONS, type QuickAction } from '@/config/quickActions';
+import { quickActionsFor, type QuickAction } from '@/config/quickActions';
+import { useVendorKind } from '@/hooks/use-vendor-kind';
 import { notificationRoute, notificationVisual, notificationTimeAgo } from '@/lib/notifications.utils';
 import { storePath, storefrontUrl } from '@/lib/storefront/urls';
 import { useFormatters, useTranslation } from '@/i18n';
@@ -52,13 +53,19 @@ export function Header() {
   const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotificationStore();
   const { store } = useStoreStore();
   const roleEntity = useOnboarding().session?.role_entity;
+  const kind = useVendorKind();
+  // A provider has no orders, products, customers or store to search or open,
+  // so the search box, the "My store" link and the seller's "+" items go.
+  const isProvider = kind === 'provider';
+  const quickActions = quickActionsFor(kind);
 
   // This is the *user* menu (it links to Profile), so it leads with the vendor's
   // personal identity — `avatar` + `display_name`, both still on the profile. The
   // business logo/name moved to the Store, which the Sidebar renders; they're the
   // fallback here so the menu never goes blank on an account with no avatar set.
-  const storeName = roleEntity?.display_name || store?.name || t('nav.sidebar.defaultStoreName');
-  const storeLogo = roleEntity?.avatar?.url || store?.logo?.url || null;
+  const storeName = roleEntity?.display_name
+    || (isProvider ? t('nav.header.provider') : store?.name || t('nav.sidebar.defaultStoreName'));
+  const storeLogo = roleEntity?.avatar?.url || (isProvider ? null : store?.logo?.url) || null;
   const storeEmail = roleEntity?.email ?? '';
 
   const toggleSearch = () => setIsSearchOpen((v) => !v);
@@ -66,6 +73,7 @@ export function Header() {
   // ⌘K / Ctrl+K from anywhere on the dashboard — the button has always
   // advertised it; nothing listened until now.
   useEffect(() => {
+    if (isProvider) return;
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
@@ -74,7 +82,7 @@ export function Header() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  }, [isProvider]);
 
   const handleQuickAction = (action: QuickAction) => {
     setIsSearchOpen(false);
@@ -101,6 +109,7 @@ export function Header() {
         <div className="h-full px-6 flex items-center justify-between">
           {/* Left - search */}
           <div className="flex items-center gap-4">
+            {!isProvider && (
             <Button
               variant="outline"
               className="h-9 gap-2 text-muted-foreground"
@@ -112,6 +121,7 @@ export function Header() {
                 {IS_MAC ? '⌘K' : 'Ctrl K'}
               </kbd>
             </Button>
+            )}
           </div>
 
           {/* Right - Actions */}
@@ -126,7 +136,7 @@ export function Header() {
               <DropdownMenuContent align="end" className="w-60">
                 <DropdownMenuLabel>{t('nav.quickActions.title')}</DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                {QUICK_ACTIONS.map((action) => (
+                {quickActions.map((action) => (
                   <DropdownMenuItem
                     key={action.id}
                     onClick={() => handleQuickAction(action)}
@@ -233,7 +243,7 @@ export function Header() {
                   <User className="w-4 h-4" />
                   {t('nav.header.profile')}
                 </DropdownMenuItem>
-                {store?.slug && (
+                {!isProvider && store?.slug && (
                   <DropdownMenuItem asChild className="gap-2">
                     <a
                       href={storefrontUrl(storePath(store.slug))}
@@ -266,7 +276,7 @@ export function Header() {
           reason this stopped calling the `useAuth()` shim. See SignOutDialog. */}
       <SignOutDialog open={logoutOpen} onOpenChange={setLogoutOpen} />
 
-      <GlobalSearch open={isSearchOpen} onOpenChange={setIsSearchOpen} />
+      {!isProvider && <GlobalSearch open={isSearchOpen} onOpenChange={setIsSearchOpen} />}
     </>
   );
 }

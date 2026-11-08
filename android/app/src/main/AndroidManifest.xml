@@ -101,6 +101,10 @@
                 <data android:scheme="https"
                       android:host="vendor.wi-mall.com"
                       android:pathPrefix="/plans" />
+                <!-- A service provider's listing (2026-11-07). -->
+                <data android:scheme="https"
+                      android:host="vendor.wi-mall.com"
+                      android:pathPrefix="/listings" />
                 <!-- Only `settings/storage` is in the vocabulary, but a prefix
                      cannot express that; the resolver returns null for any other
                      `settings/*` and the app lands on the dashboard. -->

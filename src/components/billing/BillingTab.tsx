@@ -13,7 +13,11 @@ import {
   initiateTopup,
   authorizeTopup,
   verifyTopup,
+  planKind,
 } from '@/services/billing.service';
+import { fetchListings } from '@/services/listings.service';
+import { useIsProvider } from '@/hooks/use-vendor-kind';
+import type { VendorListingSummary } from '@/types/listings.types';
 import { fetchProducts } from '@/services/products.service';
 import { useProductStore } from '@/store';
 import { fetchStorageUsage } from '@/services/files.service';
@@ -64,8 +68,21 @@ interface PaymentRequest {
   verify: (id: string) => Promise<{ status: PaymentStatus }>;
 }
 
+/**
+ * Whether a listing takes one of the plan's live-listing places — the backend's
+ * `occupiesSlot`: live, waiting for review, or paused for any reason but the
+ * plan limit itself (a quota-paused listing frees its place).
+ */
+function occupiesSlot(l: VendorListingSummary): boolean {
+  if (l.status === 'live' || l.status === 'pending_review') return true;
+  return l.status === 'suspended' && l.suspension?.reason !== 'plan_quota_exceeded';
+}
+
 export function BillingTab() {
   const { t } = useTranslation();
+  // A service provider sees provider plans and listing places; a seller sees
+  // exactly what they always did.
+  const isProvider = useIsProvider();
   // The shared list the Products page renders — refreshed after a plan change so
   // the quota sweep's un-suspensions are visible when the vendor walks back.
   const { fetchProducts: refreshProducts } = useProductStore();
@@ -98,7 +115,9 @@ export function BillingTab() {
         fetchStorageUsage(),
       ]);
       setCurrent(planData);
-      setPlans(planList);
+      // `/vendor/plans` already answers with the vendor's own kind only; the
+      // filter is a guard so a mixed list can never offer the wrong plans.
+      setPlans(planList.filter((p) => planKind(p) === (isProvider ? 'provider' : 'seller')));
       setBalance(bal);
       setPacks(packList);
       setStorage(storageData);
@@ -109,15 +128,21 @@ export function BillingTab() {
     } finally {
       setLoading(false);
     }
-    // Product count is non-critical — load it separately so a failure here
-    // doesn't block the whole tab.
+    // Product (or, for a provider, listing) count is non-critical — load it
+    // separately so a failure here doesn't block the whole tab. A provider has
+    // no products: that route answers them 403.
     try {
-      const res = await fetchProducts({ status: 'active', limit: 1 });
-      setProductCount(res.meta.total);
+      if (isProvider) {
+        const res = await fetchListings({ page: 1, limit: 100 });
+        setProductCount(res.items.filter(occupiesSlot).length);
+      } else {
+        const res = await fetchProducts({ status: 'active', limit: 1 });
+        setProductCount(res.meta.total);
+      }
     } catch {
       setProductCount(null);
     }
-  }, [apiError]);
+  }, [apiError, isProvider]);
 
   useEffect(() => {
     load();
@@ -208,8 +233,8 @@ export function BillingTab() {
     // (Products only fetches on mount when it is empty), so without this the
     // vendor walks back to a list still showing everything as suspended.
     // Best-effort and deliberately un-awaited: it must not delay the receipt.
-    void refreshProducts().catch(() => {});
-  }, [refreshProducts]);
+    if (!isProvider) void refreshProducts().catch(() => {});
+  }, [refreshProducts, isProvider]);
 
   const scrollToPlans = useCallback(() => {
     plansRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -275,9 +300,16 @@ export function BillingTab() {
         {/* Plan + wallet sit side by side from lg; below that they are two
             sections in the same flow, separated by a rule on mobile. */}
         <div className="grid max-md:divide-y md:gap-6 lg:grid-cols-2">
-          {current && <CurrentPlanCard data={current} productCount={productCount} />}
+          {current && (
+            <CurrentPlanCard data={current} productCount={productCount} isProvider={isProvider} />
+          )}
           {balance !== null && (
-            <CreditWalletCard balance={balance} packs={packs} onBuyPack={openPackPurchase} />
+            <CreditWalletCard
+              balance={balance}
+              packs={packs}
+              onBuyPack={openPackPurchase}
+              isProvider={isProvider}
+            />
           )}
         </div>
 
@@ -288,7 +320,12 @@ export function BillingTab() {
           title={t('billing.plans.title')}
           info={t('billing.plans.info')}
         >
-          <PlansCatalog plans={plans} current={current} onBuy={openPlanPurchase} />
+          <PlansCatalog
+            plans={plans}
+            current={current}
+            onBuy={openPlanPurchase}
+            isProvider={isProvider}
+          />
         </SettingsSection>
 
         <SavedPaymentMethodsCard />

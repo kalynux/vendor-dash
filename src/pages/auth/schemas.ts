@@ -97,6 +97,8 @@ export type LoginFormValues = z.infer<typeof loginSchema>;
 
 export const registerSchema = z
     .object({
+        // Chosen once, here, and never changeable afterwards. Always sent.
+        vendorKind: z.enum(['seller', 'provider']),
         name: z.string().trim().min(1, 'auth.validation.nameRequired'),
         business_name: z.string().trim().min(1, 'auth.validation.businessRequired'),
         // Stored as E.164 by `<PhoneInput>`. This is the account's primary

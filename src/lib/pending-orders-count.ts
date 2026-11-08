@@ -1,6 +1,7 @@
 import { useEffect, useSyncExternalStore } from 'react';
 import { api } from '@/services/api';
 import { subscribeNetworkRestored } from '@/platform/network';
+import { useIsProvider } from '@/hooks/use-vendor-kind';
 
 /**
  * The Orders nav badge: how many orders are still `pending` — new, and waiting
@@ -80,8 +81,12 @@ function subscribe(listener: () => void): () => void {
 }
 
 export function usePendingOrdersCount(): number {
+  // A service provider has no orders, and `/vendor/orders` answers them 403 —
+  // so their badges never start the poll at all, and always read 0.
+  const isProvider = useIsProvider();
   // Auto-refresh runs while at least one badge is on screen.
   useEffect(() => {
+    if (isProvider) return;
     if (!stopAutoRefresh) stopAutoRefresh = startAutoRefresh();
     mounted++;
     return () => {
@@ -91,6 +96,7 @@ export function usePendingOrdersCount(): number {
         stopAutoRefresh = null;
       }
     };
-  }, []);
-  return useSyncExternalStore(subscribe, () => count);
+  }, [isProvider]);
+  const value = useSyncExternalStore(subscribe, () => count);
+  return isProvider ? 0 : value;
 }

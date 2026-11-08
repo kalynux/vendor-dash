@@ -54,6 +54,9 @@ export const transactions = {
     },
 
     typeLabel: {
+        listing_reveal: 'Contact débloqué par un client',
+        listing_reveal_refund: 'Déblocage remboursé',
+        credit_debt_written_off: 'Dette de crédits annulée à la fermeture du compte',
         earning_clawback: 'Repris pour un remboursement',
         earning_clawback_recovery: 'Imputé sur la somme que vous devez',
         earning_clawback_write_off: 'Dette annulée par Wi-Mall',

@@ -6,6 +6,7 @@ export const account = {
     subtitle: 'Gérez votre compte personnel, l’identité de votre boutique et vos versements',
 
     tabSubtitles: {
+        billingProvider: 'Votre forfait et vos crédits',
         profile: 'Vos informations personnelles, votre photo et la langue du tableau de bord',
         store: 'L’identité publique de votre boutique, vos contacts d’assistance et le mode vacances',
         addresses: 'Les adresses professionnelles d’où vos produits sont expédiés et retirés',

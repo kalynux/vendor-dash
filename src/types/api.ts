@@ -192,6 +192,12 @@ export interface VendorRoleEntity {
    * 4 = Policy Setup required (skippable)
    */
   onboarding_step: 0 | 1 | 2 | 3 | 4;
+  /**
+   * The vendor kind as the raw vendor row stores it. Absent on every vendor
+   * registered before 2026-11-07 — those are sellers. Read it through
+   * `vendorKindOf()` (`lib/vendorKind.ts`), never directly.
+   */
+  kind?: 'seller' | 'provider' | null;
   /** Vendor-defined store policies (return, cancellation, support). */
   policies?: VendorPolicies | null;
   status: string;
@@ -224,6 +230,12 @@ export interface AuthMeVendorResponse {
   user: ApiUser;
   role: 'vendor';
   role_entity: VendorRoleEntity;
+  /**
+   * `'seller'` or `'provider'`, beside `role_entity` on every auth response
+   * (login, register, add-role, auth-me). The app branches on this, through
+   * `vendorKindOf()`. Optional: an older backend does not send it (= seller).
+   */
+  vendorKind?: 'seller' | 'provider' | null;
   /**
    * Present only when the response came from `/auth/mobile/auth-me/:role`. The
    * bearer transport stores it; the cookie transport never sees it.

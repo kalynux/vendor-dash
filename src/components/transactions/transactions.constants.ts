@@ -64,11 +64,26 @@ const TYPE_LABEL_KEYS: Partial<Record<TransactionType, TranslationKey>> = {
   earning_clawback_write_off: 'transactions.typeLabel.earning_clawback_write_off',
 };
 
+/**
+ * The service-listing credit movements (2026-11-07). The feed folds them into
+ * `credit_usage` / `credit_adjustment` and keeps the reason only in a fixed
+ * English sentence (jovi-mall `vendor-transaction.service.ts`), so that exact
+ * sentence is what identifies them. An unmatched one still shows the server's.
+ */
+const DESCRIPTION_LABEL_KEYS: Record<string, TranslationKey> = {
+  'Contact revealed to a customer': 'transactions.typeLabel.listing_reveal',
+  'Contact reveal refunded': 'transactions.typeLabel.listing_reveal_refund',
+  'Credit debt written off at account closure': 'transactions.typeLabel.credit_debt_written_off',
+};
+
 /** The row's title. */
 export function transactionLabel(tx: Transaction, t: Translate): string {
-  const key = TYPE_LABEL_KEYS[tx.type];
+  const key = TYPE_LABEL_KEYS[tx.type] ?? DESCRIPTION_LABEL_KEYS[tx.description];
   return key ? t(key) : tx.description;
 }
+
+/** A service provider earns nothing and is paid nothing: no earnings or payout rows. */
+export const PROVIDER_CATEGORIES: ReadonlySet<TransactionCategory | 'all'> = new Set(['all', 'plan', 'credit']);
 
 export function transactionStatusMeta(
   status: TransactionStatus,

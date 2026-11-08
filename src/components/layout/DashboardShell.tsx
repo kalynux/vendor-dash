@@ -14,6 +14,8 @@ import { cn } from '@/lib/utils';
 import { useStoreStore } from '@/store';
 import { useUI } from '@/app-context';
 import { DeepLinkFallback } from '@/routes/DeepLinkFallback';
+import { useVendorKind } from '@/hooks/use-vendor-kind';
+import { PROVIDER_HOME, PROVIDER_TAB_PATHS } from '@/config/navigation';
 import {
     Account,
     AccountClosure,
@@ -21,6 +23,9 @@ import {
     Analytics,
     Customers,
     Inventory,
+    Leads,
+    ListingEditor,
+    Listings,
     MediaGallery,
     Notifications,
     Orders,
@@ -69,14 +74,18 @@ export function DashboardShell() {
     // Always false on the web, so the browser build is unchanged (P3.2).
     const keyboardOpen = useKeyboardOpen();
     const { fetchStore } = useStoreStore();
+    // Sellers and service providers share this shell but not its pages: each
+    // kind gets its own route table below, and a provider never loads the
+    // store (`/vendor/store` answers them 403 — they have none).
+    const isProvider = useVendorKind() === 'provider';
 
     // Swipe left/right to move along the bottom tab bar. Inert off mobile, and
     // inert on any screen that is not one of the three — see `useRouteSwipe`.
-    useRouteSwipe(TAB_BAR_RING);
+    useRouteSwipe(isProvider ? PROVIDER_TAB_PATHS : TAB_BAR_RING);
 
     useEffect(() => {
-        fetchStore();
-    }, [fetchStore]);
+        if (!isProvider) fetchStore();
+    }, [fetchStore, isProvider]);
 
     return (
         <div className="min-h-screen bg-background">
@@ -118,6 +127,30 @@ export function DashboardShell() {
                             sidebar, header and tab bar painted. A boundary above the shell
                             would blank the whole screen on every navigation. */}
                         <Suspense fallback={<PageSkeleton />}>
+                            {isProvider ? (
+                            /* A service provider: their three sections plus the shared
+                               ones. Every seller path falls through to the listings —
+                               those screens would only answer 403. Deliberately NOT
+                               the deep-link fallback: it maps `/dashboard/orders` back
+                               onto itself, which here would be a redirect loop. */
+                            <Routes>
+                                <Route index element={<Navigate to={PROVIDER_HOME} replace />} />
+                                <Route path="listings" element={<Listings />} />
+                                <Route path="listings/new" element={<ListingEditor />} />
+                                <Route path="listings/:id" element={<ListingEditor />} />
+                                <Route path="leads" element={<Leads />} />
+                                <Route path="notifications" element={<Notifications />} />
+                                <Route path="account" element={<Navigate to="/dashboard/account/profile" replace />} />
+                                <Route path="account/closure" element={<AccountClosure />} />
+                                <Route path="account/:tab" element={<Account />} />
+                                <Route path="settings" element={<Navigate to="/dashboard/settings/listings" replace />} />
+                                <Route path="settings/:tab" element={<Settings />} />
+                                <Route path="transactions" element={<Transactions />} />
+                                <Route path="media" element={<MediaGallery />} />
+                                <Route path="tickets" element={<Tickets />} />
+                                <Route path="*" element={<Navigate to={PROVIDER_HOME} replace />} />
+                            </Routes>
+                            ) : (
                             <Routes>
                                 <Route index element={<Overview />} />
                                 <Route path="orders" element={<Orders />} />
@@ -156,8 +189,14 @@ export function DashboardShell() {
                                 <Route path="services/:tab" element={<Services />} />
                                 <Route path="service-upload" element={<ServiceUpload />} />
                                 <Route path="service-edit/:id" element={<ServiceEdit />} />
+                                {/* The provider-only sections. Explicit, because the
+                                    deep-link fallback would map them back onto
+                                    themselves. */}
+                                <Route path="listings/*" element={<Navigate to="/dashboard" replace />} />
+                                <Route path="leads" element={<Navigate to="/dashboard" replace />} />
                                 <Route path="*" element={<DeepLinkFallback stripDashboard />} />
                             </Routes>
+                            )}
                         </Suspense>
                     </div>
                 </main>

@@ -6,7 +6,7 @@ import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { OrderStatusBadge } from '@/components/orders/OrderStatusBadge';
 import { CustomerAvatar } from '@/components/customers/CustomerAvatar';
-import { QUICK_ACTIONS, type QuickAction } from '@/config/quickActions';
+import { quickActionsFor, type QuickAction } from '@/config/quickActions';
 import { fetchOrders } from '@/services/orders.service';
 import { fetchProducts } from '@/services/products.service';
 import { fetchCustomers } from '@/services/customers.service';
@@ -168,7 +168,7 @@ export function GlobalSearch({ open, onOpenChange }: GlobalSearchProps) {
           </span>
         ),
       }));
-      const actionEntries: Entry[] = QUICK_ACTIONS.map((action) => ({
+      const actionEntries: Entry[] = quickActionsFor('seller').map((action) => ({
         key: `action-${action.id}`,
         run: () => runQuickAction(action),
         render: (isActive) => (

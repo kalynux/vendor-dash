@@ -149,10 +149,20 @@ export type NotificationType =
   | 'account.closure_requested'
   // A connected agency closed its account, so the connection ENDED
   // (`terminated`, `termination.reason: 'role_closed'`). `aggregateType` is `connection`.
-  | 'connection.ended_by_closure';
+  | 'connection.ended_by_closure'
+  // 2026-11-07, service providers only. `aggregateType` is `listing`, the
+  // link `listings/{listingId}`. Not mutable: each is about whether customers
+  // can reach the business.
+  | 'listing.approved'
+  | 'listing.rejected'
+  | 'listing.suspended'
+  | 'listing.resumed'
+  | 'listing.video_unavailable';
 
 /** Entity kind a notification points at, for deep-linking. */
 export type NotificationAggregateType =
+  /** A service provider's listing. */
+  | 'listing'
   | 'order'
   | 'booking'
   | 'payment'

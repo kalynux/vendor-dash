@@ -49,6 +49,17 @@ export interface PricingPlan {
   /** `null` = unlimited. */
   max_active_products: number | null;
   commission_percent: number;
+  /**
+   * Which vendor kind the plan is for. `null`/absent on an old plan = seller.
+   * `/vendor/plans` sends the raw `vendor_kind`; the public DTO calls it
+   * `vendorKind` — `fetchPlans` reads both into this one field.
+   */
+  vendorKind?: 'seller' | 'provider' | null;
+  /** Provider plans: listings live at once. `null` = unlimited. Same two spellings. */
+  maxActiveListings?: number | null;
+  /** Raw wire spellings — read through `vendorKind` / `maxActiveListings`. */
+  vendor_kind?: 'seller' | 'provider' | null;
+  max_active_listings?: number | null;
   is_active?: boolean;
   sort_order?: number;
   created_at?: string;

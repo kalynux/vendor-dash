@@ -42,6 +42,14 @@ export const nav = {
         policies: 'Policies',
         preferences: 'Preferences',
         more: 'More',
+        listings: 'Service listings',
+        listingsShort: 'Listings',
+        leads: 'Leads',
+        creditHistory: 'Credit history',
+        photos: 'Photos',
+        plansCredits: 'Plans & credits',
+        credits: 'Credits',
+        listingSettings: 'Listing settings',
     },
 
     quickActions: {
@@ -58,6 +66,12 @@ export const nav = {
         addCustomerDescription: 'Save a new contact',
         uploadMedia: 'Upload Media',
         uploadMediaDescription: 'Add product photos or banners',
+        newListing: 'New listing',
+        newListingDescription: 'Advertise your service business',
+        buyCredits: 'Buy credits',
+        buyCreditsDescription: 'Top up so customers can reach you',
+        uploadPhotos: 'Upload photos',
+        uploadPhotosDescription: 'Add photos for your listings',
     },
 
     header: {
@@ -82,6 +96,7 @@ export const nav = {
         logoutTitle: 'Log out?',
         logoutDescription: "You'll need to sign in again to access your dashboard.",
         vendor: 'Vendor',
+        provider: 'Service provider',
         toNavigate: 'to navigate',
         toSelect: 'to select',
         toClose: 'to close',

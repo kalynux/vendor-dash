@@ -1,15 +1,19 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { LayoutDashboard, ShoppingCart, Package, Menu, Plus, ChevronRight } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import {
+  LayoutDashboard, ShoppingCart, Package, Menu, Plus, ChevronRight, Megaphone, Inbox, Coins,
+} from 'lucide-react';
 import { useRouter } from '@/app-context';
 import { useNotificationStore } from '@/store';
 import { usePendingOrdersCount } from '@/lib/pending-orders-count';
 import { cn } from '@/lib/utils';
 import { MobileMoreDrawer } from './MobileMoreDrawer';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
-import { QUICK_ACTIONS, type QuickAction } from '@/config/quickActions';
+import { quickActionsFor, type QuickAction } from '@/config/quickActions';
 import { useTranslation, type TranslationKey } from '@/i18n';
 import { useKeyboardOpen } from '@/platform/shell/keyboard';
+import { useVendorKind } from '@/hooks/use-vendor-kind';
+import { PROVIDER_TAB_PATHS } from '@/config/navigation';
 
 type LegacyRoute = 'overview' | 'orders' | 'products' | 'product-upload' | 'customers'
   | 'analytics' | 'notifications' | 'settings' | 'media' | 'tickets'
@@ -61,6 +65,11 @@ export function MobileTabBar() {
   const [quickActionsOpen, setQuickActionsOpen] = useState(false);
   // Always false on the web, so the browser build is unchanged (P3.2).
   const keyboardOpen = useKeyboardOpen();
+  const kind = useVendorKind();
+  const isProvider = kind === 'provider';
+  const quickActions = quickActionsFor(kind);
+  const { pathname } = useLocation();
+  const onPath = (path: string) => pathname === path || pathname.startsWith(`${path}/`);
 
   const handleQuickAction = (action: QuickAction) => {
     reactNavigate(
@@ -90,7 +99,22 @@ export function MobileTabBar() {
       {!keyboardOpen && (
         <nav className="fixed bottom-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-sm border-t shadow-[0_-4px_12px_rgba(0,0,0,0.05)] pb-safe">
           <div className="flex items-center justify-around h-16 px-2">
-            {tabs.map((tab) => (
+            {isProvider ? (
+              <>
+                <TabButton
+                  label={t('nav.items.listingsShort')}
+                  icon={Megaphone}
+                  active={!moreOpen && onPath(PROVIDER_TAB_PATHS[0])}
+                  onClick={() => reactNavigate(PROVIDER_TAB_PATHS[0])}
+                />
+                <TabButton
+                  label={t('nav.items.leads')}
+                  icon={Inbox}
+                  active={!moreOpen && onPath(PROVIDER_TAB_PATHS[1])}
+                  onClick={() => reactNavigate(PROVIDER_TAB_PATHS[1])}
+                />
+              </>
+            ) : tabs.map((tab) => (
               <TabButton
                 key={tab.route}
                 label={t(tab.labelKey)}
@@ -110,7 +134,14 @@ export function MobileTabBar() {
               <Plus className="w-6 h-6" strokeWidth={2.5} />
             </button>
 
-            {rightTabs.map((tab) => (
+            {isProvider ? (
+              <TabButton
+                label={t('nav.items.credits')}
+                icon={Coins}
+                active={!moreOpen && onPath(PROVIDER_TAB_PATHS[2])}
+                onClick={() => reactNavigate(PROVIDER_TAB_PATHS[2])}
+              />
+            ) : rightTabs.map((tab) => (
               <TabButton
                 key={tab.route}
                 label={t(tab.labelKey)}
@@ -142,7 +173,7 @@ export function MobileTabBar() {
             </p>
           </div>
           <div className="py-2">
-            {QUICK_ACTIONS.map((action) => (
+            {quickActions.map((action) => (
               <button
                 key={action.id}
                 onClick={() => handleQuickAction(action)}

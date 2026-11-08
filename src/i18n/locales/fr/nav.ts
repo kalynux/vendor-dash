@@ -35,6 +35,14 @@ export const nav = {
         policies: 'Politiques',
         preferences: 'Préférences',
         more: 'Plus',
+        listings: 'Annonces de service',
+        listingsShort: 'Annonces',
+        leads: 'Contacts reçus',
+        creditHistory: 'Historique des crédits',
+        photos: 'Photos',
+        plansCredits: 'Forfaits et crédits',
+        credits: 'Crédits',
+        listingSettings: 'Réglages des annonces',
     },
 
     quickActions: {
@@ -51,6 +59,12 @@ export const nav = {
         addCustomerDescription: 'Enregistrer un nouveau contact',
         uploadMedia: 'Envoyer un média',
         uploadMediaDescription: 'Ajouter des photos ou des bannières',
+        newListing: 'Nouvelle annonce',
+        newListingDescription: 'Faites connaître votre activité',
+        buyCredits: 'Acheter des crédits',
+        buyCreditsDescription: 'Rechargez pour que les clients vous joignent',
+        uploadPhotos: 'Importer des photos',
+        uploadPhotosDescription: 'Ajoutez des photos à vos annonces',
     },
 
     header: {
@@ -75,6 +89,7 @@ export const nav = {
         logoutTitle: 'Se déconnecter ?',
         logoutDescription: 'Vous devrez vous reconnecter pour accéder à votre tableau de bord.',
         vendor: 'Vendeur',
+        provider: 'Prestataire de services',
         toNavigate: 'pour naviguer',
         toSelect: 'pour sélectionner',
         toClose: 'pour fermer',

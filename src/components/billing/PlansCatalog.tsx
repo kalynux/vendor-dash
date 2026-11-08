@@ -11,9 +11,11 @@ interface PlansCatalogProps {
   plans: PricingPlan[];
   current: CurrentPlanData | null;
   onBuy: (plan: PricingPlan) => void;
+  /** Provider plans list live listings instead of products and commission. */
+  isProvider?: boolean;
 }
 
-export function PlansCatalog({ plans, current, onBuy }: PlansCatalogProps) {
+export function PlansCatalog({ plans, current, onBuy, isProvider = false }: PlansCatalogProps) {
   const { t } = useTranslation();
   const fmt = useFormatters();
   const activeCode = current?.active.plan.code;
@@ -54,14 +56,27 @@ export function PlansCatalog({ plans, current, onBuy }: PlansCatalogProps) {
                     credits: fmt.number(plan.credit_allowance),
                   })}
                 </Feature>
-                <Feature>
-                  {t('billing.plans.activeProductsFeature', {
-                    cap: formatProductCap(plan.max_active_products, t, fmt.number),
-                  })}
-                </Feature>
-                <Feature>
-                  {t('billing.plans.commissionFeature', { percent: plan.commission_percent })}
-                </Feature>
+                {isProvider ? (
+                  <Feature>
+                    {t('billing.plans.activeListingsFeature', {
+                      cap:
+                        plan.maxActiveListings == null
+                          ? t('billing.plans.unlimitedListings')
+                          : fmt.number(plan.maxActiveListings),
+                    })}
+                  </Feature>
+                ) : (
+                  <>
+                    <Feature>
+                      {t('billing.plans.activeProductsFeature', {
+                        cap: formatProductCap(plan.max_active_products, t, fmt.number),
+                      })}
+                    </Feature>
+                    <Feature>
+                      {t('billing.plans.commissionFeature', { percent: plan.commission_percent })}
+                    </Feature>
+                  </>
+                )}
               </ul>
               <div className="mt-auto">
                 {isCurrent ? (

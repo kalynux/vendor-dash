@@ -37,6 +37,7 @@ import {
 import { InfoHint } from '@/components/ui/info-hint';
 import { cn } from '@/lib/utils';
 import { useMessage, useTranslation, type TranslationKey } from '@/i18n';
+import { useIsProvider } from '@/hooks/use-vendor-kind';
 
 // ─── Static config ──────────────────────────────────────────────────────────
 
@@ -129,6 +130,13 @@ const EVENTS: EventMeta[] = [
   { key: 'planUpdates', labelKey: 'notifications.settings.events.planUpdates', descriptionKey: 'notifications.settings.events.planUpdatesHint', readOnly: true },
 ];
 
+/**
+ * The only rows a service provider has: they hold files and a plan, and nothing
+ * else on this list. Their listing notifications cannot be muted (each one is
+ * about whether customers can reach them), so they get no row either.
+ */
+const PROVIDER_EVENT_KEYS = new Set<NotificationEventKey>(['storageAlert', 'planUpdates']);
+
 /** The events a PATCH can actually change — everything except `planUpdates`. */
 const WRITABLE_EVENTS = EVENTS.filter((e) => !e.readOnly);
 
@@ -162,6 +170,8 @@ function isVerified(p: NotificationPreferences, channel: SecondaryChannel): bool
 
 export function NotificationSettings() {
   const { t } = useTranslation();
+  const isProvider = useIsProvider();
+  const visibleEvents = isProvider ? EVENTS.filter((e) => PROVIDER_EVENT_KEYS.has(e.key)) : EVENTS;
   const m = useMessage();
   const { session, updateVendorProfile } = useOnboarding();
   const roleEntity = session?.role_entity;
@@ -533,7 +543,7 @@ export function NotificationSettings() {
           info={t('notifications.settings.events.info')}
         >
           <div className="divide-y">
-            {EVENTS.map((e) => (
+            {visibleEvents.map((e) => (
               <div key={e.key} className="flex min-h-12 items-center justify-between gap-3 py-2 first:pt-0 last:pb-0">
                 <div className="flex min-w-0 items-center gap-1">
                   <p className="truncate text-sm font-medium">{t(e.labelKey)}</p>

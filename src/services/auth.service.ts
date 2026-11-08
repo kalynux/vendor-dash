@@ -23,6 +23,7 @@ import { onboardingService } from './onboarding.service';
 import { authStrategy } from '@/platform/auth/strategy';
 import { startRefreshScheduler, stopRefreshScheduler } from '@/platform/auth/refreshScheduler';
 import type { AuthMeVendorResponse, AuthTokens, ChangePasswordPayload } from '@/types/api';
+import type { VendorKind } from '@/lib/vendorKind';
 
 /** Shape shared by login, register and add-role. */
 interface AuthSessionResponse extends AuthMeVendorResponse {
@@ -63,6 +64,12 @@ export interface RegisterPayload {
      * only — only a brand-new account can be referred, so add-role never takes it.
      */
     referral_code?: string;
+    /**
+     * `'seller'` sells products, `'provider'` advertises a service business
+     * (service listings). Absent = seller. Set once at sign-up and never
+     * changeable by the vendor — nothing in this app writes it afterwards.
+     */
+    vendorKind?: VendorKind;
 }
 
 export const authService = {

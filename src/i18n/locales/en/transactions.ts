@@ -57,6 +57,9 @@ export const transactions = {
 
     /** Refund-debt rows (2026-10-05) — the server's English description is replaced. */
     typeLabel: {
+        listing_reveal: 'Contact unlocked by a customer',
+        listing_reveal_refund: 'Unlock refunded',
+        credit_debt_written_off: 'Credit debt cancelled at account closure',
         earning_clawback: 'Recovered for a refund',
         earning_clawback_recovery: 'Applied to money you owe',
         earning_clawback_write_off: 'Debt cancelled by Wi-Mall',

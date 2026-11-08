@@ -21,6 +21,8 @@ import {
   AlertTriangle,
   XCircle,
   Store,
+  Megaphone,
+  VideoOff,
   type LucideIcon,
 } from 'lucide-react';
 import type {
@@ -46,6 +48,11 @@ export function notificationRoute(
 ): string {
   const view = n.aggregateId ? `?view=${encodeURIComponent(n.aggregateId)}` : '';
   switch (n.aggregateType) {
+    case 'listing':
+      // The provider's listing editor, which shows the status and the reasons.
+      return n.aggregateId
+        ? `/dashboard/listings/${encodeURIComponent(n.aggregateId)}`
+        : '/dashboard/listings';
     case 'order':
       return `/dashboard/orders${view}`;
     case 'booking':
@@ -117,6 +124,8 @@ export function routeFromNotificationPath(path: string): string | null {
   const view = tail ? `?view=${encodeURIComponent(tail)}` : '';
 
   switch (head) {
+    case 'listings':
+      return tail ? `/dashboard/listings/${encodeURIComponent(tail)}` : '/dashboard/listings';
     case 'orders':
       return `/dashboard/orders${view}`;
     case 'bookings':
@@ -152,6 +161,7 @@ export function routeFromNotificationPath(path: string): string | null {
 
 /** Action-button label per aggregate, e.g. an order notification → "View order". */
 const AGGREGATE_ACTION_LABEL: Record<NotificationAggregateType, TranslationKey> = {
+  listing: 'notifications.actionLabels.listing',
   order: 'notifications.actionLabels.order',
   booking: 'notifications.actionLabels.booking',
   payment: 'notifications.actionLabels.payment',
@@ -248,9 +258,17 @@ const TYPE_VISUALS: Record<NotificationType, Visual> = {
   'account.closure_requested': { Icon: Store, iconWrap: 'bg-red-100 text-red-600', dot: 'bg-red-500' },
   // Grey: the connection is already over; there is nothing to answer.
   'connection.ended_by_closure': { Icon: Handshake, iconWrap: 'bg-gray-100 text-gray-600', dot: 'bg-gray-500' },
+  // Service listings. Red when customers can no longer reach the business,
+  // amber when the provider has something to fix.
+  'listing.approved': { Icon: CheckCircle2, iconWrap: 'bg-green-100 text-green-600', dot: 'bg-green-500' },
+  'listing.rejected': { Icon: XCircle, iconWrap: 'bg-red-100 text-red-600', dot: 'bg-red-500' },
+  'listing.suspended': { Icon: Ban, iconWrap: 'bg-red-100 text-red-600', dot: 'bg-red-500' },
+  'listing.resumed': { Icon: Megaphone, iconWrap: 'bg-green-100 text-green-600', dot: 'bg-green-500' },
+  'listing.video_unavailable': { Icon: VideoOff, iconWrap: 'bg-amber-100 text-amber-600', dot: 'bg-amber-500' },
 };
 
 const AGGREGATE_FALLBACK: Record<NotificationAggregateType, Visual> = {
+  listing: { Icon: Megaphone, iconWrap: 'bg-blue-100 text-blue-600', dot: 'bg-blue-500' },
   order: { Icon: ShoppingCart, iconWrap: 'bg-blue-100 text-blue-600', dot: 'bg-blue-500' },
   booking: { Icon: CalendarPlus, iconWrap: 'bg-violet-100 text-violet-600', dot: 'bg-violet-500' },
   payment: { Icon: CircleDollarSign, iconWrap: 'bg-amber-100 text-amber-600', dot: 'bg-amber-500' },

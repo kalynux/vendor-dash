@@ -13,7 +13,9 @@ import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { AppLogo } from '@/components/layout/AppLogo';
 import { PlatformStatus } from '@/components/layout/PlatformStatus';
-import { PRIMARY_NAV, FOOTER_NAV, type NavItem, type NavChild, type NavBadge } from '@/config/navigation';
+import { navFor, type NavItem, type NavChild, type NavBadge } from '@/config/navigation';
+import { useVendorKind } from '@/hooks/use-vendor-kind';
+import { useOnboarding } from '@/onboarding/store/onboarding.store';
 import { useKycNeedsAttention } from '@/hooks/use-kyc-attention';
 import { usePendingOrdersCount } from '@/lib/pending-orders-count';
 import { useTranslation } from '@/i18n';
@@ -36,6 +38,7 @@ function ActiveBar({ show, faded }: { show: boolean; faded?: boolean }) {
 function normalizePath(pathname: string): string {
   if (pathname.startsWith('/dashboard/product-')) return '/dashboard/products';
   if (pathname.startsWith('/dashboard/service-')) return '/dashboard/services';
+  // The listing editor lives under its list, so it already highlights Listings.
   return pathname;
 }
 
@@ -251,10 +254,20 @@ export function Sidebar() {
   const location = useLocation();
   const pathname = normalizePath(location.pathname);
   const { store } = useStoreStore();
+  const kind = useVendorKind();
+  const isProvider = kind === 'provider';
+  const nav = navFor(kind);
+  const roleEntity = useOnboarding().session?.role_entity;
 
-  const storeName = store?.name || t('nav.sidebar.defaultStoreName');
-  const storeDescription = store?.description || null;
-  const storeLogo = store?.logo?.url || null;
+  // A provider has no store, so the top of the rail carries their own name and
+  // picture, and says what kind of account it is.
+  const storeName = isProvider
+    ? roleEntity?.display_name || t('nav.header.provider')
+    : store?.name || t('nav.sidebar.defaultStoreName');
+  const storeDescription = isProvider
+    ? t('nav.header.provider')
+    : store?.description || null;
+  const storeLogo = isProvider ? roleEntity?.avatar?.url || null : store?.logo?.url || null;
 
   // Per-item manual expand overrides; otherwise a group auto-opens when a child
   // is active. Works for any item with children.
@@ -464,7 +477,7 @@ export function Sidebar() {
       {/* Primary navigation — scrolls between top and the pinned footer group */}
       <ScrollArea className="flex-1 min-h-0 py-4">
         <nav className="space-y-1 px-2">
-          {PRIMARY_NAV.map(renderItem)}
+          {nav.primary.map(renderItem)}
         </nav>
       </ScrollArea>
 
@@ -487,7 +500,7 @@ export function Sidebar() {
         )}
         <ScrollArea className={cn('h-full', footerStyle && 'overflow-y-auto')}>
           <nav ref={footerContentRef} className="space-y-1 px-2 py-4">
-            {FOOTER_NAV.map(renderItem)}
+            {nav.footer.map(renderItem)}
           </nav>
         </ScrollArea>
       </div>

@@ -32,6 +32,7 @@ import account from './account';
 import agency from './agency';
 import aiCopy from './aiCopy';
 import referrals from './referrals';
+import listings from './listings';
 
 export const en = {
     auth,
@@ -57,6 +58,7 @@ export const en = {
     agency,
     aiCopy,
     referrals,
+    listings,
 } as const;
 
 export default en;

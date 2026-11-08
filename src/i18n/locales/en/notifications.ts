@@ -35,6 +35,7 @@ export const notifications = {
      * back as a generic "View order" for every event type.
      */
     actionLabels: {
+        listing: 'View listing',
         default: 'View details',
         order: 'View order',
         booking: 'View booking',

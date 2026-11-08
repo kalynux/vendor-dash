@@ -32,6 +32,7 @@ export const billing = {
         commission: 'Commission',
         creditAllowance: 'Allocation de crédits',
         activeProducts: 'Produits actifs',
+        activeListings: 'Annonces en ligne',
         pendingQueued: '{{name}} en file d’attente',
         pendingStarts: 'Démarre à la fin de votre formule actuelle.',
         pendingStartsOn: 'Démarre à la fin de votre formule actuelle, le {{date}}.',
@@ -46,6 +47,8 @@ export const billing = {
         free: 'Gratuit',
         creditsOnActivation: '{{credits}} crédits à l’activation',
         activeProductsFeature: '{{cap}} produits actifs',
+        activeListingsFeature: '{{cap}} annonces en ligne à la fois',
+        unlimitedListings: 'Illimitées',
         commissionFeature: '{{percent}} % de commission par vente',
         yourPlan: 'Votre formule',
         defaultTier: 'Formule par défaut',
@@ -63,6 +66,9 @@ export const billing = {
             'clients. Ils n’expirent jamais et votre formule les recharge à chaque échéance. Un ' +
             'rechargement remboursé ou contesté reprend ses crédits, ce qui peut rendre le solde négatif.',
         currentBalance: 'Solde actuel',
+        negativeWarningProvider:
+            'Votre solde est en dessous de zéro. Rechargez pour que les nouveaux clients puissent vous joindre.',
+        chargingTitle: 'Comment les déblocages sont facturés',
         unit: 'crédits',
         negativeWarning:
             'Votre solde est négatif après un rechargement remboursé ou contesté. Les fonctions ' +

@@ -32,16 +32,40 @@ function normalizeId<T extends { _id?: string; id?: string }>(item: T): T {
   return { ...item, _id: item._id ?? item.id ?? '' };
 }
 
+/**
+ * One spelling for the two service-listing plan fields. The doc names them
+ * `vendorKind` / `maxActiveListings` (the public DTO), but `/vendor/plans`
+ * returns the raw plan documents, which carry `vendor_kind` /
+ * `max_active_listings` — verified in jovi-mall source, 2026-11-08.
+ */
+export function normalizePlan(plan: PricingPlan): PricingPlan {
+  return {
+    ...normalizeId(plan),
+    vendorKind: plan.vendorKind ?? plan.vendor_kind ?? null,
+    maxActiveListings: plan.maxActiveListings ?? plan.max_active_listings ?? null,
+  };
+}
+
+/** A plan's kind; an old plan with none is a seller plan. */
+export function planKind(plan: PricingPlan): 'seller' | 'provider' {
+  return (plan.vendorKind ?? plan.vendor_kind) === 'provider' ? 'provider' : 'seller';
+}
+
 // ─── Plans ──────────────────────────────────────────────────────────────────────
 
 export async function fetchPlans(): Promise<PricingPlan[]> {
   const res = await api.get<PlansResponse>(`${BASE}/plans`);
-  return res.data.map(normalizeId);
+  return res.data.map(normalizePlan);
 }
 
 export async function fetchCurrentPlan(): Promise<CurrentPlanData> {
   const res = await api.get<CurrentPlanResponse>(`${BASE}/plan`);
-  return res.data;
+  const data = res.data;
+  return {
+    ...data,
+    active: data.active ? { ...data.active, plan: normalizePlan(data.active.plan) } : data.active,
+    pending: data.pending ? { ...data.pending, plan: normalizePlan(data.pending.plan) } : null,
+  };
 }
 
 // Purchase/top-up/ledger histories now live in the unified transactions feed —

@@ -33,6 +33,7 @@ import account from './account';
 import agency from './agency';
 import aiCopy from './aiCopy';
 import referrals from './referrals';
+import listings from './listings';
 
 export const fr: DeepPartial<Messages> = {
     auth,
@@ -58,6 +59,7 @@ export const fr: DeepPartial<Messages> = {
     agency,
     aiCopy,
     referrals,
+    listings,
 };
 
 export default fr;

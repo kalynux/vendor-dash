@@ -4,6 +4,7 @@ export const settings = {
     subtitle: 'Configurez les politiques, les notifications et les préférences de votre boutique',
 
     tabSubtitles: {
+        listings: 'Ce qui se passe quand vos crédits sont épuisés, et vos limites',
         policies: 'Les conditions de retour, d’annulation et d’assistance affichées à vos clients',
         notifications: 'Les événements qui vous sont signalés, et par quel canal',
         preferences:

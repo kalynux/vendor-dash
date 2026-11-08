@@ -22,6 +22,8 @@ import { SignOutDialog } from '@/components/layout/SignOutDialog';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useRouteSwipe } from '@/hooks/use-route-swipe';
 import { useTranslation, type TranslationKey } from '@/i18n';
+import { useIsProvider } from '@/hooks/use-vendor-kind';
+import { PROVIDER_ACCOUNT_TABS } from '@/config/navigation';
 
 const VALID_TABS = [
   'profile',
@@ -39,6 +41,8 @@ const VALID_TABS = [
 
 /** The same tabs, as routes — what a sideways swipe walks. Order matters. */
 const TAB_RING = VALID_TABS.map((tab) => `/dashboard/account/${tab}`);
+/** A service provider keeps four: no store, addresses, payout or referrals. */
+const PROVIDER_TAB_RING = PROVIDER_ACCOUNT_TABS.map((tab) => `/dashboard/account/${tab}`);
 const DEFAULT_TAB = 'profile';
 
 type AccountTab = (typeof VALID_TABS)[number];
@@ -71,20 +75,29 @@ export function Account() {
   const { tab } = useParams();
   const isMobile = useIsMobile();
   const [signOutOpen, setSignOutOpen] = useState(false);
+  const isProvider = useIsProvider();
+  const allowedTabs: readonly string[] = isProvider ? PROVIDER_ACCOUNT_TABS : VALID_TABS;
 
   // Before the redirects below — a hook cannot sit behind an early return.
-  useRouteSwipe(TAB_RING);
+  useRouteSwipe(isProvider ? PROVIDER_TAB_RING : TAB_RING);
 
   // Branding merged into the Store tab — keep old links/bookmarks working.
   if (tab === 'branding') {
     return <Navigate to="/dashboard/account/store" replace />;
   }
 
-  if (!tab || !VALID_TABS.includes(tab as AccountTab)) {
+  if (!tab || !allowedTabs.includes(tab)) {
     return <Navigate to={`/dashboard/account/${DEFAULT_TAB}`} replace />;
   }
 
   const activeTab = tab as AccountTab;
+  // "Billing" for a provider is plans and credits only — say so.
+  const subtitleKey: TranslationKey =
+    isProvider && activeTab === 'billing'
+      ? 'account.tabSubtitles.billingProvider'
+      : TAB_SUBTITLE_KEYS[activeTab];
+  const labelKey: TranslationKey =
+    isProvider && activeTab === 'billing' ? 'nav.items.plansCredits' : TAB_LABEL_KEYS[activeTab];
 
   /**
    * Sign out lives here, on Profile, and only on Profile.
@@ -156,8 +169,8 @@ export function Account() {
             when the only way onto this screen is through the Account menu, and
             the room it costs is room the sign-out button needs. */}
         <MobilePageHeader
-          title={t(TAB_LABEL_KEYS[activeTab])}
-          description={t(TAB_SUBTITLE_KEYS[activeTab])}
+          title={t(labelKey)}
+          description={t(subtitleKey)}
           actions={actions}
         />
         {/* `px-6` restores exactly the gutter `main` gives every other screen —
@@ -175,8 +188,8 @@ export function Account() {
       {/* Header — "Account › <tab>", so the page names the surface you opened. */}
       <SubPageHeader
         parent={t('nav.items.account')}
-        current={t(TAB_LABEL_KEYS[activeTab])}
-        description={t(TAB_SUBTITLE_KEYS[activeTab])}
+        current={t(labelKey)}
+        description={t(subtitleKey)}
       />
       {panes}
     </div>

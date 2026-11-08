@@ -26,6 +26,7 @@ import {
 } from '@/components/tickets/ticket.constants';
 import { responsiveSheetProps } from '@/components/ui/responsive-sheet';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useIsProvider } from '@/hooks/use-vendor-kind';
 import { useOnboarding } from '@/onboarding/store/onboarding.store';
 import { createTicket } from '@/services/tickets.service';
 import { ApiError } from '@/types/api';
@@ -47,9 +48,15 @@ function buildTypeGroups(t: Translate): PickerGroup[] {
   }));
 }
 
-function buildEntityTypeGroups(t: Translate): PickerGroup[] {
+/**
+ * A service provider has no orders, products or bookings — those pickers would
+ * call routes that answer them 403 — so they only file about their account.
+ */
+const PROVIDER_ENTITY_TYPES: TicketEntityType[] = ['VENDOR', 'OTHER'];
+
+function buildEntityTypeGroups(t: Translate, types: TicketEntityType[]): PickerGroup[] {
   return [
-    { options: ENTITY_TYPES.map((et) => ({ value: et, label: t(ENTITY_TYPE_LABEL_KEYS[et]) })) },
+    { options: types.map((et) => ({ value: et, label: t(ENTITY_TYPE_LABEL_KEYS[et]) })) },
   ];
 }
 
@@ -76,7 +83,15 @@ export function CreateTicketSheet({ open, onOpenChange, onCreated }: CreateTicke
   const m = useMessage();
   const apiError = useApiError();
   const TYPE_GROUPS = useMemo(() => buildTypeGroups(t), [t]);
-  const ENTITY_TYPE_GROUPS = useMemo(() => buildEntityTypeGroups(t), [t]);
+  const isProvider = useIsProvider();
+  const ENTITY_TYPE_GROUPS = useMemo(
+    () => buildEntityTypeGroups(t, isProvider ? PROVIDER_ENTITY_TYPES : ENTITY_TYPES),
+    [t, isProvider],
+  );
+  const defaultValues = useMemo<CreateTicketFormValues>(
+    () => (isProvider ? { ...DEFAULT_VALUES, entityType: 'VENDOR' } : DEFAULT_VALUES),
+    [isProvider],
+  );
   const { session } = useOnboarding();
   // The vendor creates tickets against its own entities, so the relevant support
   // policy is the logged-in vendor's. `required_info` drives the extra requirements.
@@ -92,7 +107,7 @@ export function CreateTicketSheet({ open, onOpenChange, onCreated }: CreateTicke
     formState: { errors, isSubmitting },
   } = useForm<CreateTicketFormValues>({
     resolver,
-    defaultValues: DEFAULT_VALUES,
+    defaultValues,
   });
 
   // Selected files kept alongside the form value so we can render name/size.
@@ -107,10 +122,10 @@ export function CreateTicketSheet({ open, onOpenChange, onCreated }: CreateTicke
   // Reset the form whenever the sheet is re-opened.
   useEffect(() => {
     if (open) {
-      reset(DEFAULT_VALUES);
+      reset(defaultValues);
       setSelectedFiles([]);
     }
-  }, [open, reset]);
+  }, [open, reset, defaultValues]);
 
   const entityType = watch('entityType');
   const entityId = watch('entityId');

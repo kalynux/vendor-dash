@@ -6,6 +6,9 @@ import { PartialPaymentSettings } from '@/components/vendor-settings/PartialPaym
 import { DeliveryTermsSettings } from '@/components/vendor-settings/DeliveryTermsSettings';
 import { NotificationSettings } from '@/components/vendor-settings/NotificationSettings';
 import { PreferencesSettings } from '@/components/vendor-settings/PreferencesSettings';
+import { ListingSettings } from '@/components/listings/ListingSettings';
+import { useIsProvider } from '@/hooks/use-vendor-kind';
+import { PROVIDER_SETTINGS_TABS } from '@/config/navigation';
 import { SubPageHeader } from '@/components/layout/SubPageHeader';
 import { MobilePageHeader } from '@/components/layout/MobilePageHeader';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -13,36 +16,42 @@ import { useRouteSwipe } from '@/hooks/use-route-swipe';
 import { useTranslation, type TranslationKey } from '@/i18n';
 
 const VALID_TABS = ['policies', 'notifications', 'preferences'] as const;
+/** A service provider has no policies or order rules — only these two. */
+const PROVIDER_RING = PROVIDER_SETTINGS_TABS.map((tab) => `/dashboard/settings/${tab}`);
 
 /** The same three, as routes — what a sideways swipe walks. Order matters. */
 const TAB_RING = VALID_TABS.map((tab) => `/dashboard/settings/${tab}`);
 const DEFAULT_TAB = 'policies';
 
-type SettingsTab = (typeof VALID_TABS)[number];
+type SettingsTab = (typeof VALID_TABS)[number] | (typeof PROVIDER_SETTINGS_TABS)[number];
 
 /** Crumb label per tab — the sidebar's own labels, so the two always agree. */
 const TAB_LABEL_KEYS: Record<SettingsTab, TranslationKey> = {
   policies: 'nav.items.policies',
   notifications: 'nav.items.notifications',
   preferences: 'nav.items.preferences',
+  listings: 'nav.items.listingSettings',
 };
 
 const TAB_SUBTITLE_KEYS: Record<SettingsTab, TranslationKey> = {
   policies: 'settings.tabSubtitles.policies',
   notifications: 'settings.tabSubtitles.notifications',
   preferences: 'settings.tabSubtitles.preferences',
+  listings: 'settings.tabSubtitles.listings',
 };
 
 export function Settings() {
   const { t } = useTranslation();
   const { tab } = useParams();
   const isMobile = useIsMobile();
+  const isProvider = useIsProvider();
+  const allowedTabs: readonly string[] = isProvider ? PROVIDER_SETTINGS_TABS : VALID_TABS;
 
   // Before the redirect below — a hook cannot sit behind an early return.
-  useRouteSwipe(TAB_RING);
+  useRouteSwipe(isProvider ? PROVIDER_RING : TAB_RING);
 
-  if (!tab || !VALID_TABS.includes(tab as SettingsTab)) {
-    return <Navigate to={`/dashboard/settings/${DEFAULT_TAB}`} replace />;
+  if (!tab || !allowedTabs.includes(tab)) {
+    return <Navigate to={`/dashboard/settings/${isProvider ? 'listings' : DEFAULT_TAB}`} replace />;
   }
 
   const activeTab = tab as SettingsTab;
@@ -63,6 +72,10 @@ export function Settings() {
 
       <TabsContent value="preferences" className="space-y-6">
         <PreferencesSettings />
+      </TabsContent>
+
+      <TabsContent value="listings" className="space-y-6">
+        <ListingSettings />
       </TabsContent>
     </Tabs>
   );

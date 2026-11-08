@@ -34,6 +34,7 @@ export const billing = {
         commission: 'Commission',
         creditAllowance: 'Credit allowance',
         activeProducts: 'Active products',
+        activeListings: 'Live listings',
         pendingQueued: '{{name}} queued',
         pendingStarts: 'Starts when your current plan ends.',
         pendingStartsOn: 'Starts when your current plan ends on {{date}}.',
@@ -48,6 +49,8 @@ export const billing = {
         free: 'Free',
         creditsOnActivation: '{{credits}} credits on activation',
         activeProductsFeature: '{{cap}} active products',
+        activeListingsFeature: '{{cap}} live listings at once',
+        unlimitedListings: 'Unlimited',
         commissionFeature: '{{percent}}% commission per sale',
         yourPlan: 'Your plan',
         defaultTier: 'Default tier',
@@ -65,6 +68,9 @@ export const billing = {
             'never expire, and your plan tops them up each term. A refunded or disputed top-up ' +
             'claws its credits back, which can push the balance below zero.',
         currentBalance: 'Current balance',
+        negativeWarningProvider:
+            'Your balance is below zero. Top up to keep new customers reaching you.',
+        chargingTitle: 'How unlocks are charged',
         unit: 'credits',
         negativeWarning:
             'Your balance is negative after a refunded or disputed top-up. Credit-based features ' +

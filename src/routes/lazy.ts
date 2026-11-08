@@ -144,6 +144,17 @@ export const ServiceEdit = lazy(() =>
     import('@/pages/ServiceEdit').then((m) => ({ default: m.ServiceEdit })),
 );
 
+// ─── Service providers ────────────────────────────────────────────────────────
+// Only a provider's route table mounts these, so a seller never downloads them.
+
+export const Listings = lazy(() =>
+    import('@/pages/Listings').then((m) => ({ default: m.Listings })),
+);
+export const ListingEditor = lazy(() =>
+    import('@/pages/ListingEditor').then((m) => ({ default: m.ListingEditor })),
+);
+export const Leads = lazy(() => import('@/pages/Leads').then((m) => ({ default: m.Leads })));
+
 // ─── Warm-up ──────────────────────────────────────────────────────────────────
 
 /**

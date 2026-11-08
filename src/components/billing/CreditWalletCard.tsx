@@ -4,14 +4,17 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useTranslation, useFormatters } from '@/i18n';
 import type { CreditPack } from '@/types/billing.types';
+import { ListingChargingRule } from '@/components/listings/ListingChargingRule';
 
 interface CreditWalletCardProps {
   balance: number;
   packs: CreditPack[];
   onBuyPack: (pack: CreditPack) => void;
+  /** A provider is charged per contact a customer unlocks — explained here. */
+  isProvider?: boolean;
 }
 
-export function CreditWalletCard({ balance, packs, onBuyPack }: CreditWalletCardProps) {
+export function CreditWalletCard({ balance, packs, onBuyPack, isProvider = false }: CreditWalletCardProps) {
   const { t } = useTranslation();
   const fmt = useFormatters();
   // A chargeback/refund claw-back can drive the wallet below zero. Surface it and
@@ -33,10 +36,19 @@ export function CreditWalletCard({ balance, packs, onBuyPack }: CreditWalletCard
           {negative && (
             <div className="mt-3 flex items-start gap-2 text-xs text-red-700">
               <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
-              <p>{t('billing.credits.negativeWarning')}</p>
+              <p>
+                {t(isProvider ? 'billing.credits.negativeWarningProvider' : 'billing.credits.negativeWarning')}
+              </p>
             </div>
           )}
         </div>
+
+        {isProvider && (
+          <div className="space-y-1">
+            <p className="text-sm font-medium">{t('billing.credits.chargingTitle')}</p>
+            <ListingChargingRule className="text-sm text-muted-foreground" />
+          </div>
+        )}
 
         <div>
           <p className="mb-2 text-sm font-medium">{t('billing.credits.topUp')}</p>

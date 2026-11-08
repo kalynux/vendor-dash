@@ -1,4 +1,4 @@
-import { CalendarClock, Package, Percent, Sparkles } from 'lucide-react';
+import { CalendarClock, Megaphone, Package, Percent, Sparkles } from 'lucide-react';
 import { SettingsSection } from '@/components/vendor-settings/SettingsSection';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
@@ -12,15 +12,17 @@ import {
 
 interface CurrentPlanCardProps {
   data: CurrentPlanData;
-  /** Active product count (for slot usage); null while loading/unknown. */
+  /** Active product count — for a provider, listings taking a place. Null while unknown. */
   productCount: number | null;
+  /** A provider's plan counts live listings and takes no commission. */
+  isProvider?: boolean;
 }
 
-export function CurrentPlanCard({ data, productCount }: CurrentPlanCardProps) {
+export function CurrentPlanCard({ data, productCount, isProvider = false }: CurrentPlanCardProps) {
   const { t } = useTranslation();
   const fmt = useFormatters();
   const { plan, subscriberPlan } = data.active;
-  const cap = plan.max_active_products;
+  const cap = isProvider ? plan.maxActiveListings ?? null : plan.max_active_products;
   const used = productCount ?? 0;
   const pct = cap && cap > 0 ? Math.min(100, Math.round((used / cap) * 100)) : 0;
   const isFree = plan.price === 0;
@@ -56,11 +58,13 @@ export function CurrentPlanCard({ data, productCount }: CurrentPlanCardProps) {
                 : t('billing.plan.neverExpires')
             }
           />
-          <Stat
-            icon={<Percent className="h-4 w-4" />}
-            label={t('billing.plan.commission')}
-            value={`${plan.commission_percent}%`}
-          />
+          {!isProvider && (
+            <Stat
+              icon={<Percent className="h-4 w-4" />}
+              label={t('billing.plan.commission')}
+              value={`${plan.commission_percent}%`}
+            />
+          )}
           <Stat
             icon={<Sparkles className="h-4 w-4" />}
             label={t('billing.plan.creditAllowance')}
@@ -72,7 +76,15 @@ export function CurrentPlanCard({ data, productCount }: CurrentPlanCardProps) {
         <div className="space-y-1.5">
           <div className="flex items-center justify-between text-sm">
             <span className="flex items-center gap-1.5 text-muted-foreground">
-              <Package className="h-4 w-4" /> {t('billing.plan.activeProducts')}
+              {isProvider ? (
+                <>
+                  <Megaphone className="h-4 w-4" /> {t('billing.plan.activeListings')}
+                </>
+              ) : (
+                <>
+                  <Package className="h-4 w-4" /> {t('billing.plan.activeProducts')}
+                </>
+              )}
             </span>
             <span className="font-medium">
               {productCount === null ? t('common.labels.emptyValue') : fmt.number(used)}

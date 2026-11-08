@@ -28,6 +28,7 @@ export const notifications = {
     },
 
     actionLabels: {
+        listing: 'Voir l’annonce',
         default: 'Voir les détails',
         order: 'Voir la commande',
         booking: 'Voir la réservation',

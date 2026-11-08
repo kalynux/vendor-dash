@@ -32,10 +32,14 @@ import {
   Receipt,
   SlidersHorizontal,
   UserCog,
+  Megaphone,
+  Inbox,
+  Coins,
   type LucideIcon,
 } from 'lucide-react';
 
 import type { TranslationKey } from '@/i18n';
+import type { VendorKind } from '@/lib/vendorKind';
 
 /**
  * Single source of truth for the dashboard navigation.
@@ -178,3 +182,86 @@ export const FOOTER_NAV: NavItem[] = [
 ];
 
 export const ALL_NAV: NavItem[] = [...PRIMARY_NAV, ...FOOTER_NAV];
+
+// ─── Service providers ────────────────────────────────────────────────────────
+//
+// A provider has no shop: no products, orders, stock, bookings, delivery,
+// earnings or payouts — every one of those routes answers 403 to them. What they
+// keep is the profile, plans and credits, files, the credit history, identity
+// verification, tickets and notifications, plus their three own sections.
+// Referrals are left out on purpose (owner's call, 2026-11-08).
+
+export const PROVIDER_PRIMARY_NAV: NavItem[] = [
+  { id: 'listings', labelKey: 'nav.items.listings', path: '/dashboard/listings', icon: Megaphone },
+  { id: 'leads', labelKey: 'nav.items.leads', path: '/dashboard/leads', icon: Inbox },
+  { id: 'credits', labelKey: 'nav.items.plansCredits', path: '/dashboard/account/billing', icon: Coins },
+  { id: 'transactions', labelKey: 'nav.items.creditHistory', path: '/dashboard/transactions', icon: Receipt },
+  { id: 'media', labelKey: 'nav.items.photos', path: '/dashboard/media', icon: ImageIcon },
+  { id: 'notifications', labelKey: 'nav.items.notifications', path: '/dashboard/notifications', icon: Bell, badge: 'notifications' },
+  { id: 'tickets', labelKey: 'nav.items.tickets', path: '/dashboard/tickets', icon: Ticket },
+];
+
+export const PROVIDER_FOOTER_NAV: NavItem[] = [
+  {
+    id: 'account',
+    labelKey: 'nav.items.account',
+    path: '/dashboard/account',
+    icon: UserCog,
+    badge: 'verification',
+    children: [
+      { id: 'account-profile', labelKey: 'nav.items.profile', path: '/dashboard/account/profile', icon: User },
+      { id: 'account-verification', labelKey: 'nav.items.verification', path: '/dashboard/account/verification', icon: ShieldCheck, badge: 'verification' },
+      { id: 'account-security', labelKey: 'nav.items.security', path: '/dashboard/account/security', icon: Shield },
+    ],
+  },
+  {
+    id: 'settings',
+    labelKey: 'nav.items.settings',
+    path: '/dashboard/settings',
+    icon: Settings,
+    children: [
+      { id: 'settings-listings', labelKey: 'nav.items.listingSettings', path: '/dashboard/settings/listings', icon: SlidersHorizontal },
+      { id: 'settings-notifications', labelKey: 'nav.items.notifications', path: '/dashboard/settings/notifications', icon: Bell },
+    ],
+  },
+];
+
+/** The two menus for a vendor kind. Sellers get exactly what they had before. */
+export function navFor(kind: VendorKind): { primary: NavItem[]; footer: NavItem[] } {
+  return kind === 'provider'
+    ? { primary: PROVIDER_PRIMARY_NAV, footer: PROVIDER_FOOTER_NAV }
+    : { primary: PRIMARY_NAV, footer: FOOTER_NAV };
+}
+
+/**
+ * Where a provider lands on `/dashboard`, and which top-level dashboard paths
+ * they may open. Anything else redirects home — a provider never sees a seller screen
+ * (they would only answer 403), and a seller never sees the listing sections.
+ */
+export const PROVIDER_HOME = '/dashboard/listings';
+
+/**
+ * A provider's bottom tab bar: Listings, Leads, the "+" button, Credits, More.
+ * In bar order, which is also the order a sideways swipe walks them.
+ */
+export const PROVIDER_TAB_PATHS = [
+  '/dashboard/listings',
+  '/dashboard/leads',
+  '/dashboard/account/billing',
+] as const;
+
+export const PROVIDER_SECTIONS = new Set([
+  'listings',
+  'leads',
+  'notifications',
+  'account',
+  'settings',
+  'transactions',
+  'media',
+  'tickets',
+]);
+
+/** Account and Settings tabs a provider keeps. */
+export const PROVIDER_ACCOUNT_TABS = ['profile', 'verification', 'security', 'billing'] as const;
+export const PROVIDER_SETTINGS_TABS = ['listings', 'notifications'] as const;
+

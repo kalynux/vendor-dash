@@ -37,6 +37,14 @@ export const auth = {
     },
 
     register: {
+        kindQuestion: 'Que ferez-vous sur Wi-Mall ?',
+        kindSeller: 'Vendre des produits et services',
+        kindSellerHint: 'Les clients commandent et paient sur Wi-Mall. Vous payez une commission sur chaque commande.',
+        kindProvider: 'Annoncer une activité de service',
+        kindProviderHint: 'Les clients vous trouvent et débloquent vos contacts. Vous payez par contact, en crédits. Pas de commandes, pas de commission.',
+        kindPermanent: 'Ce choix ne pourra plus être modifié ensuite.',
+        subtitleProvider: 'Quelques informations, puis vous créez votre première annonce.',
+        businessHintProvider: 'Le nom que les clients voient sur vos annonces.',
         title: 'Créez votre compte vendeur',
         subtitle: 'Quelques informations, puis nous configurons votre boutique.',
         nameLabel: 'Votre nom',

@@ -5,18 +5,13 @@ import {
   UserPlus,
   Image as ImageIcon,
   CalendarClock,
+  Megaphone,
+  Coins,
   type LucideIcon,
 } from 'lucide-react';
 
 import type { TranslationKey } from '@/i18n';
-
-export type QuickActionRoute =
-  | 'product-upload'
-  | 'orders'
-  | 'tickets'
-  | 'customers'
-  | 'media'
-  | 'services';
+import type { VendorKind } from '@/lib/vendorKind';
 
 export interface QuickAction {
   id: string;
@@ -24,8 +19,8 @@ export interface QuickAction {
   labelKey: TranslationKey;
   descriptionKey: TranslationKey;
   icon: LucideIcon;
-  /** Legacy route name to navigate to. */
-  route: QuickActionRoute;
+  /** Path under `/dashboard/` to navigate to. */
+  route: string;
   /**
    * Optional creation intent passed as router state so the destination page can
    * open its existing "create" sheet (e.g. Tickets → CreateTicketSheet).
@@ -83,3 +78,40 @@ export const QUICK_ACTIONS: QuickAction[] = [
     route: 'media',
   },
 ];
+
+/** A service provider's "+" menu: nothing in it opens a seller screen. */
+export const PROVIDER_QUICK_ACTIONS: QuickAction[] = [
+  {
+    id: 'new-listing',
+    labelKey: 'nav.quickActions.newListing',
+    descriptionKey: 'nav.quickActions.newListingDescription',
+    icon: Megaphone,
+    route: 'listings/new',
+  },
+  {
+    id: 'buy-credits',
+    labelKey: 'nav.quickActions.buyCredits',
+    descriptionKey: 'nav.quickActions.buyCreditsDescription',
+    icon: Coins,
+    route: 'account/billing',
+  },
+  {
+    id: 'new-ticket',
+    labelKey: 'nav.quickActions.newTicket',
+    descriptionKey: 'nav.quickActions.newTicketDescription',
+    icon: Ticket,
+    route: 'tickets',
+    intent: 'create',
+  },
+  {
+    id: 'upload-photos',
+    labelKey: 'nav.quickActions.uploadPhotos',
+    descriptionKey: 'nav.quickActions.uploadPhotosDescription',
+    icon: ImageIcon,
+    route: 'media',
+  },
+];
+
+export function quickActionsFor(kind: VendorKind): QuickAction[] {
+  return kind === 'provider' ? PROVIDER_QUICK_ACTIONS : QUICK_ACTIONS;
+}
