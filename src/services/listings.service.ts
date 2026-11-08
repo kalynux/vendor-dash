@@ -60,10 +60,13 @@ function query(params: Record<string, string | number | undefined>): string {
 
 export async function fetchListings(params: {
     status?: ListingStatus;
+    /** Title or business name, 1–200 characters. Omitted when empty — `q=""` is a 400. */
+    q?: string;
     page: number;
     limit: number;
 }): Promise<ListingPage<VendorListingSummary>> {
-    const res = await api.get<PageEnvelope<VendorListingSummary>>(`${LISTINGS}${query(params)}`);
+    const q = params.q?.trim().slice(0, 200) || undefined;
+    const res = await api.get<PageEnvelope<VendorListingSummary>>(`${LISTINGS}${query({ ...params, q })}`);
     return toPage(res);
 }
 

@@ -263,6 +263,8 @@ function LeadRow({
             {outOfMessages
               ? t('listings.leads.noMessagesLeft')
               : t('listings.leads.messagesLeft', { count: lead.messagesLeft })}
+            {/* A listing may carry two numbers; the call-me always sends the first. */}
+            {lead.callMeAvailable && !outOfMessages && <> · {t('listings.leads.callMeHint')}</>}
           </p>
         </div>
       ) : (

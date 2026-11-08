@@ -190,7 +190,14 @@ export interface ListingVideo {
 /** The HIDDEN contacts — the provider's own, only ever in their own editor. */
 export interface ListingContacts {
     whatsapp: string | null;
+    /** The first phone — the one "Ask them to call me" sends. */
     phone: string | null;
+    /**
+     * An optional second line (an MTN and an Orange number, say). Unlocking
+     * "Phone" shows both for ONE charge. The server keeps the pair clean: a
+     * duplicate is dropped, a lone second number moves up. `null` when unset.
+     */
+    phone2?: string | null;
     email: string | null;
     website: string | null;
     socials: ListingSocialLink[];
@@ -237,6 +244,8 @@ export interface ListingContentInput {
 export interface ListingContactsInput {
     whatsapp?: string | null;
     phone?: string | null;
+    /** `null` clears it. Never a third number, never `phones`. */
+    phone2?: string | null;
     email?: string | null;
     website?: string | null;
     socials?: ListingSocialLink[];

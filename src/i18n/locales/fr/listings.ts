@@ -80,7 +80,7 @@ export default {
         companyName: 'Nom de l’entreprise',
         description: 'Description',
         descriptionHint:
-            'Au moins {{min}} caractères. Gardez numéros, e-mails et liens pour les contacts cachés ci-dessous.',
+            'Au moins {{min}} caractères. Gardez numéros, e-mails et liens pour les coordonnées ci-dessous.',
         categories: 'Catégories',
         whereTitle: 'Où vous travaillez',
         country: 'Pays',
@@ -102,6 +102,10 @@ export default {
         contactsNeedOne: 'Ajoutez au moins un contact.',
         whatsapp: 'Numéro WhatsApp',
         phone: 'Numéro de téléphone',
+        phone2: 'Deuxième numéro de téléphone',
+        phone2Hint: 'Les clients voient les deux numéros en débloquant votre téléphone, pour un seul paiement.',
+        liveNow: 'Les clients voient pour l’instant : {{value}}',
+        liveNowNone: 'Les clients voient pour l’instant : rien',
         email: 'E-mail',
         website: 'Site web',
         websitePlaceholder: 'https://',
@@ -193,6 +197,7 @@ export default {
         noMessagesLeft: 'Plus de message disponible pour l’instant',
         needsOptIn: 'Le client doit d’abord accepter vos messages',
         callMe: 'Lui demander de m’appeler',
+        callMeHint: 'Envoie votre premier numéro de téléphone.',
         callMeAlreadySent: 'Déjà demandé',
         message: 'Envoyer un message',
         report: 'Signaler',
@@ -209,7 +214,7 @@ export default {
 
         callMeTitle: 'Lui demander de vous appeler ?',
         callMeBody:
-            'Nous enverrons à {{name}} le nom de votre entreprise et votre numéro, en lui demandant de vous appeler.',
+            'Nous enverrons à {{name}} le nom de votre entreprise et votre premier numéro de téléphone, en lui demandant de vous appeler.',
         callMeCost: plural({
             one: 'Cela coûte {{count}} crédit, rendu si le message n’a pas pu être remis.',
             other: 'Cela coûte {{count}} crédits, rendus si le message n’a pas pu être remis.',

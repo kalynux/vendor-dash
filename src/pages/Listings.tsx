@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ChevronRight, Plus } from 'lucide-react';
 
@@ -28,17 +28,10 @@ import { cn } from '@/lib/utils';
  * balance may be negative and is shown as such. How unlocks are priced is
  * explained once, in Listing settings (owner's call, 2026-11-08) — not here.
  *
- * Search: the server has no text search on this list yet, so while something
- * is typed the screen reads the provider's listings in one go (a plan allows
- * few) and matches title and business name here. Swap for the server's `q`
- * once it exists.
+ * Search is the server's (`q`: title and business name, any accents), so it
+ * finds every listing, not just the rows already loaded.
  */
-const SEARCH_LIMIT = 100;
-
-function matches(l: VendorListingSummary, q: string): boolean {
-  const needle = q.toLocaleLowerCase();
-  return [l.title, l.companyName].some((v) => v?.toLocaleLowerCase().includes(needle));
-}
+const SEARCH_DEBOUNCE_MS = 300;
 
 export function Listings() {
   const { t } = useTranslation();
@@ -47,8 +40,13 @@ export function Listings() {
   const [status, setStatus] = useState<ListingStatus | undefined>(undefined);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [search, setSearch] = useState('');
-  const query = search.trim();
-  const [searchPool, setSearchPool] = useState<VendorListingSummary[] | null>(null);
+  // What the list actually asks for, ~300 ms after the typing stops.
+  const [query, setQuery] = useState('');
+  useEffect(() => {
+    const next = search.trim().slice(0, 200);
+    const timer = window.setTimeout(() => setQuery(next), SEARCH_DEBOUNCE_MS);
+    return () => window.clearTimeout(timer);
+  }, [search]);
   const [balance, setBalance] = useState<number | null>(null);
   const [balanceToken, setBalanceToken] = useState(0);
 
@@ -63,40 +61,20 @@ export function Listings() {
   }, [balanceToken]);
 
   const { items, loading, loadingMore, error, sentinelRef, reload, refresh: refreshList } = useInfiniteList<VendorListingSummary>({
-    fetchPage: (page, limit) => fetchListings({ status, page, limit }),
+    fetchPage: (page, limit) => fetchListings({ status, q: query || undefined, page, limit }),
     rowHeight: 84,
-    deps: [status],
-    cacheKey: `listings:${status ?? 'all'}`,
+    deps: [status, query],
+    // Only the plain list is kept for the way back; a search result is not.
+    cacheKey: query ? undefined : `listings:${status ?? 'all'}`,
     // Rows are edited on another route; returning must show the new status.
     revalidateOnRestore: true,
   });
 
-  // Everything, once, while a search is typed (see the note above).
   const searching = query.length > 0;
-  const [poolToken, setPoolToken] = useState(0);
-  useEffect(() => {
-    if (!searching) return;
-    let active = true;
-    const timer = window.setTimeout(() => {
-      fetchListings({ status, page: 1, limit: SEARCH_LIMIT })
-        .then((res) => active && setSearchPool(res.items))
-        .catch(() => active && setSearchPool([]));
-    }, 250);
-    return () => {
-      active = false;
-      window.clearTimeout(timer);
-    };
-  }, [searching, status, poolToken]);
-
-  const found = useMemo(
-    () => (searching && searchPool ? searchPool.filter((l) => matches(l, query)) : null),
-    [searching, searchPool, query],
-  );
-  const rows = found ?? items;
+  const rows = items;
 
   const refresh = useCallback(async () => {
     setBalanceToken((n) => n + 1);
-    setPoolToken((n) => n + 1);
     await refreshList();
   }, [refreshList]);
 
@@ -167,7 +145,7 @@ export function Listings() {
         </FilterSection>
       </FilterSheet>
 
-      {loading || (searching && !found) ? (
+      {loading ? (
         <ProviderList>
           {[0, 1, 2].map((i) => (
             <div key={i} className="space-y-2 px-4 py-4">
@@ -206,8 +184,8 @@ export function Listings() {
           {rows.map((l) => (
             <ListingRow key={l.id} listing={l} onOpen={() => navigate(`/dashboard/listings/${l.id}`)} />
           ))}
-          {!searching && <div ref={sentinelRef} />}
-          {!searching && loadingMore && (
+          <div ref={sentinelRef} />
+          {loadingMore && (
             <div className="px-4 py-4">
               <Skeleton className="h-4 w-1/2" />
             </div>

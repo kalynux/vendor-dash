@@ -90,7 +90,7 @@ export default {
         titlePlaceholder: 'e.g. Plumbing repairs, day and night',
         companyName: 'Business name',
         description: 'Description',
-        descriptionHint: 'At least {{min}} characters. Keep phone numbers, emails and links for the hidden contacts below.',
+        descriptionHint: 'At least {{min}} characters. Keep phone numbers, emails and links for Contact info below.',
         categories: 'Categories',
         whereTitle: 'Where you work',
         country: 'Country',
@@ -112,6 +112,10 @@ export default {
         contactsNeedOne: 'Add at least one contact.',
         whatsapp: 'WhatsApp number',
         phone: 'Phone number',
+        phone2: 'Second phone number',
+        phone2Hint: 'Customers see both numbers when they unlock your phone, for one charge.',
+        liveNow: 'Customers see now: {{value}}',
+        liveNowNone: 'Customers see now: nothing',
         email: 'Email',
         website: 'Website',
         websitePlaceholder: 'https://',
@@ -208,6 +212,7 @@ export default {
         noMessagesLeft: 'No messages left for now',
         needsOptIn: 'Needs the customer’s opt-in',
         callMe: 'Ask them to call me',
+        callMeHint: 'Sends your first phone number.',
         callMeAlreadySent: 'Already asked',
         message: 'Send a message',
         report: 'Report',
@@ -224,7 +229,7 @@ export default {
 
         callMeTitle: 'Ask them to call you?',
         /** name = the customer's masked name. */
-        callMeBody: 'We’ll send {{name}} your business name and your phone number, and ask them to call you.',
+        callMeBody: 'We’ll send {{name}} your business name and your first phone number, and ask them to call you.',
         callMeCost: plural({
             one: 'This costs {{count}} credit. You get it back if it can’t be delivered.',
             other: 'This costs {{count}} credits. You get them back if it can’t be delivered.',

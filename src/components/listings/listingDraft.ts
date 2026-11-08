@@ -35,6 +35,7 @@ export interface ListingDraft {
   // Hidden contacts — `''` = none.
   whatsapp: string;
   phone: string;
+  phone2: string;
   email: string;
   website: string;
   socials: ListingSocialLink[];
@@ -55,6 +56,7 @@ export function emptyDraft(country: string, companyName: string): ListingDraft {
     openingHours: null,
     whatsapp: '',
     phone: '',
+    phone2: '',
     email: '',
     website: '',
     socials: [],
@@ -81,6 +83,7 @@ export function draftFromDetail(d: VendorListingDetail): { draft: ListingDraft; 
       openingHours: c?.openingHours ?? null,
       whatsapp: k?.whatsapp ?? '',
       phone: k?.phone ?? '',
+      phone2: k?.phone2 ?? '',
       email: k?.email ?? '',
       website: k?.website ?? '',
       socials: k?.socials ?? [],
@@ -157,7 +160,7 @@ export function buildListingWrite(
   if (changed('photoIds') && (initial || draft.photoIds.length)) content.photoFileIds = draft.photoIds;
   if (changed('openingHours') && (initial || draft.openingHours)) content.openingHours = draft.openingHours;
 
-  for (const key of ['whatsapp', 'phone', 'email', 'website'] as const) {
+  for (const key of ['whatsapp', 'phone', 'phone2', 'email', 'website'] as const) {
     if (changed(key) && (initial || draft[key].trim())) contacts[key] = orNull(draft[key]);
   }
   const socials = cleanSocials(draft.socials);

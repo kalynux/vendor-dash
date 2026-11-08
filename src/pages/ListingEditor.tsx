@@ -51,13 +51,14 @@ import {
   withdrawListing,
 } from '@/services/listings.service';
 import { useOnboarding } from '@/onboarding/store/onboarding.store';
-import { FALLBACK_PHONE_COUNTRY, PLATFORM_COUNTRIES } from '@/lib/phone';
+import { FALLBACK_PHONE_COUNTRY, PLATFORM_COUNTRIES, formatPhoneInternational } from '@/lib/phone';
 import { toPlainText } from '@/lib/richtext';
 import { ApiError } from '@/types/api';
 import type { FileRef } from '@/types/file.types';
 import {
   LISTING_LIMITS,
   LISTING_SOCIAL_NETWORKS,
+  type ListingContacts,
   type ListingMissingField,
   type ListingSocialNetwork,
   type OpeningDay,
@@ -424,6 +425,8 @@ export function ListingEditor() {
   }
 
   const disabled = locked || busy !== null;
+  // The approved contacts, shown beside the edited ones while a revision waits.
+  const live = detail?.published && detail.pending ? detail.contacts.published : null;
   const submitLabel = costs
     ? t('listings.editor.submitWithCost', { count: costs.vectorisation })
     : t('listings.editor.submit');
@@ -627,6 +630,7 @@ export function ListingEditor() {
                   disabled={disabled}
                   error={fieldErrors.whatsapp}
                 />
+                <LiveNow live={live} field="whatsapp" draft={draft} />
               </div>
 
               <div className="space-y-2">
@@ -639,6 +643,27 @@ export function ListingEditor() {
                   disabled={disabled}
                   error={fieldErrors.phone}
                 />
+              </div>
+
+              {/* One contact field for customers: unlocking "Phone" shows both
+                  numbers for one charge. "Ask them to call me" sends the first. */}
+              <div className="space-y-2">
+                <div className="flex items-center gap-1.5">
+                  <Label htmlFor="listing-phone2">{t('listings.editor.phone2')}</Label>
+                  <span className="text-xs text-muted-foreground">{t('listings.editor.optional')}</span>
+                </div>
+                <PhoneInput
+                  id="listing-phone2"
+                  value={draft.phone2}
+                  onChange={(v) => set('phone2', v)}
+                  defaultCountry={draft.country || undefined}
+                  disabled={disabled}
+                  error={fieldErrors.phone2}
+                />
+                {!fieldErrors.phone2 && (
+                  <p className="text-xs text-muted-foreground">{t('listings.editor.phone2Hint')}</p>
+                )}
+                <LiveNow live={live} field="phones" draft={draft} />
               </div>
 
               <div className="space-y-2">
@@ -656,6 +681,7 @@ export function ListingEditor() {
                   onChange={(e) => set('email', e.target.value)}
                 />
                 <FieldError message={fieldErrors.email} />
+                <LiveNow live={live} field="email" draft={draft} />
               </div>
 
               <div className="space-y-2">
@@ -674,6 +700,7 @@ export function ListingEditor() {
                   onChange={(e) => set('website', e.target.value)}
                 />
                 <FieldError message={fieldErrors.website} />
+                <LiveNow live={live} field="website" draft={draft} />
               </div>
 
               <SocialsField
@@ -795,6 +822,45 @@ export function ListingEditor() {
       </AlertDialog>
       {categoryConflictDialog}
     </EditorPageShell>
+  );
+}
+
+// ─── "Customers see now" ──────────────────────────────────────────────────────
+
+/**
+ * Under a contact being changed on a LIVE listing: what customers still unlock
+ * until the change is approved. The approved and the edited contacts side by
+ * side, one line, only where the two differ.
+ */
+function LiveNow({
+  live,
+  field,
+  draft,
+}: {
+  /** The approved contacts, only while a revision exists; otherwise `null`. */
+  live: ListingContacts | null;
+  field: 'whatsapp' | 'phones' | 'email' | 'website';
+  draft: ListingDraft;
+}) {
+  const { t } = useTranslation();
+  if (!live) return null;
+
+  const show = (v: string | null | undefined) =>
+    v ? (v.startsWith('+') ? formatPhoneInternational(v) : v) : '';
+  const liveValue =
+    field === 'phones'
+      ? [live.phone, live.phone2].filter(Boolean).map(show).join(', ')
+      : show(live[field]);
+  const editedValue =
+    field === 'phones'
+      ? [draft.phone, draft.phone2].filter(Boolean).map(show).join(', ')
+      : show(draft[field]);
+  if (liveValue === editedValue) return null;
+
+  return (
+    <p className="text-xs text-muted-foreground">
+      {liveValue ? t('listings.editor.liveNow', { value: liveValue }) : t('listings.editor.liveNowNone')}
+    </p>
   );
 }
 
