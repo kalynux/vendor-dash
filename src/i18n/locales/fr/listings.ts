@@ -58,6 +58,8 @@ export default {
             'Une annonce montre aux clients ce que vous faites et où. Vos contacts restent cachés jusqu’à ce qu’ils appuient.',
         emptyAction: 'Créer votre première annonce',
         emptyFiltered: 'Aucune annonce avec ce statut.',
+        searchPlaceholder: 'Rechercher dans vos annonces',
+        noMatch: 'Aucune annonce ne correspond à « {{query}} ».',
         loadFailed: 'Vos annonces n’ont pas pu être chargées.',
         filterStatus: 'Statut',
         allStatuses: 'Toutes',
@@ -95,9 +97,8 @@ export default {
         hoursFrom: 'Ouvre à',
         hoursTo: 'Ferme à',
 
-        contactsTitle: 'Contacts cachés',
-        contactsNote:
-            'Les clients ne voient un contact qu’après avoir appuyé pour le débloquer. Chaque déblocage vous coûte des crédits.',
+        contactsTitle: 'Coordonnées',
+        contactsNote: 'Les clients ne voient un contact qu’après avoir appuyé pour le débloquer.',
         contactsNeedOne: 'Ajoutez au moins un contact.',
         whatsapp: 'Numéro WhatsApp',
         phone: 'Numéro de téléphone',
@@ -114,7 +115,7 @@ export default {
         locationHint: 'Cherchez votre adresse. L’adresse et son repère sont débloqués ensemble.',
         video: 'Lien vidéo',
         videoPlaceholder: 'Collez un lien YouTube ou Google Drive',
-        videoHint: 'Wi-Mall ne stocke pas de vidéos — collez un lien.',
+        videoHint: 'Une vidéo qui montre votre emplacement.',
         videoHowTitle: 'Comment obtenir un lien vidéo',
         videoHowYoutube:
             'YouTube : mettez votre vidéo en ligne, réglez sa visibilité sur « Non répertoriée », puis copiez le lien depuis « Partager ».',
@@ -182,7 +183,6 @@ export default {
         allListings: 'Toutes les annonces',
         aCustomer: 'Un client',
         window: '{{start}} – {{end}}',
-        windowHint: 'Pendant 30 jours après son premier déblocage, les mêmes contacts sont de nouveau gratuits.',
         unlocked: 'Débloqué',
         refunded: 'Remboursé',
         cost: plural({ one: '{{count}} crédit', other: '{{count}} crédits' }),

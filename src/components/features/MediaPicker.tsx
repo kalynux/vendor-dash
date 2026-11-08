@@ -62,6 +62,7 @@ import { UploadSourceSheet } from '@/components/common/UploadSourceSheet';
 import { nativeMediaAvailable } from '@/platform/media';
 import {
   listFiles,
+  acceptForKinds,
   uploadMediaWithProgress,
   validateMediaSelection,
   resolveFileUrl,
@@ -472,6 +473,8 @@ export function MediaPicker({
         ref={fileInputRef}
         type="file"
         multiple
+        // Points the phone at its gallery when only images are taken.
+        accept={acceptForKinds(acceptedTypes)}
         className="hidden"
         onChange={(e) => e.target.files && handleUpload(e.target.files)}
       />

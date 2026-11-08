@@ -143,6 +143,27 @@ export function fileDisplayState(
 }
 
 /** Coarse UI category from a MIME type. */
+/**
+ * The `accept` list for a hidden `<input type="file">`, from the kinds a
+ * picker takes.
+ *
+ * ⚠ Without one, a phone's browser opens its generic chooser — sound recorder,
+ * camcorder, "files" — instead of the photo gallery (owner report 2026-11-08,
+ * listing photos). `image/*` is what makes Android and iOS offer the gallery
+ * and the camera. The server still checks every file; this only points the
+ * phone at the right place.
+ */
+const ACCEPT_BY_KIND: Record<FileKind, string[]> = {
+  image: ['image/*'],
+  video: ['video/mp4', 'video/quicktime', 'video/webm', '.mp4', '.mov', '.webm'],
+  audio: ['audio/mpeg', 'audio/wav', '.mp3', '.wav'],
+  document: ['application/pdf', 'application/zip', '.pdf', '.zip'],
+};
+
+export function acceptForKinds(kinds: readonly FileKind[]): string {
+  return kinds.flatMap((k) => ACCEPT_BY_KIND[k] ?? []).join(',');
+}
+
 export function kindFromMime(mimeType: string): FileKind {
   if (mimeType.startsWith('image/')) return 'image';
   if (mimeType.startsWith('video/')) return 'video';

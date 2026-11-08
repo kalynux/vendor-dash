@@ -109,7 +109,9 @@ import {
   fileDisplayState,
   kindFromMime,
   categoryFromKind,
+  acceptForKinds,
 } from '@/services/files.service';
+import { useIsProvider } from '@/hooks/use-vendor-kind';
 import { UploadSourceSheet } from '@/components/common/UploadSourceSheet';
 import { nativeMediaAvailable } from '@/platform/media';
 import { downloadFile } from '@/platform/filesystem';
@@ -467,6 +469,7 @@ interface MediaDesktopCache {
 
 export function MediaGallery() {
   const { t } = useTranslation();
+  const isProvider = useIsProvider();
   const fmt = useFormatters();
   const apiError = useApiError();
   const navigate = useNavigate();
@@ -995,6 +998,9 @@ export function MediaGallery() {
           ref={fileInputRef}
           type="file"
           multiple
+          // Every kind the server stores. A provider's files are listing
+          // photos (and the odd PDF), so their phone opens on images and documents.
+          accept={acceptForKinds(isProvider ? ['image', 'document'] : ['image', 'video', 'audio', 'document'])}
           className="hidden"
           onChange={onInputChange}
         />

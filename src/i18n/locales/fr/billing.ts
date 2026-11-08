@@ -68,7 +68,6 @@ export const billing = {
         currentBalance: 'Solde actuel',
         negativeWarningProvider:
             'Votre solde est en dessous de zéro. Rechargez pour que les nouveaux clients puissent vous joindre.',
-        chargingTitle: 'Comment les déblocages sont facturés',
         unit: 'crédits',
         negativeWarning:
             'Votre solde est négatif après un rechargement remboursé ou contesté. Les fonctions ' +

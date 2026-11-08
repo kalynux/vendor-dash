@@ -16,6 +16,7 @@ import { useUI } from '@/app-context';
 import { DeepLinkFallback } from '@/routes/DeepLinkFallback';
 import { useVendorKind } from '@/hooks/use-vendor-kind';
 import { PROVIDER_HOME, PROVIDER_TAB_PATHS } from '@/config/navigation';
+import { ProviderCountryBootstrap } from '@/components/listings/ProviderCountryBootstrap';
 import {
     Account,
     AccountClosure,
@@ -90,6 +91,8 @@ export function DashboardShell() {
     return (
         <div className="min-h-screen bg-background">
             <NotificationsBootstrap />
+            {/* A provider skips onboarding, where a seller picks a country. */}
+            {isProvider && <ProviderCountryBootstrap />}
             {!isMobile && <Sidebar />}
             <div
                 className={cn(

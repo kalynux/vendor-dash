@@ -4,13 +4,12 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useTranslation, useFormatters } from '@/i18n';
 import type { CreditPack } from '@/types/billing.types';
-import { ListingChargingRule } from '@/components/listings/ListingChargingRule';
 
 interface CreditWalletCardProps {
   balance: number;
   packs: CreditPack[];
   onBuyPack: (pack: CreditPack) => void;
-  /** A provider is charged per contact a customer unlocks — explained here. */
+  /** A provider's negative balance gets its own wording. */
   isProvider?: boolean;
 }
 
@@ -42,13 +41,6 @@ export function CreditWalletCard({ balance, packs, onBuyPack, isProvider = false
             </div>
           )}
         </div>
-
-        {isProvider && (
-          <div className="space-y-1">
-            <p className="text-sm font-medium">{t('billing.credits.chargingTitle')}</p>
-            <ListingChargingRule className="text-sm text-muted-foreground" />
-          </div>
-        )}
 
         <div>
           <p className="mb-2 text-sm font-medium">{t('billing.credits.topUp')}</p>

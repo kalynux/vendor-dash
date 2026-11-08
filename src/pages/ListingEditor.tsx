@@ -51,7 +51,7 @@ import {
   withdrawListing,
 } from '@/services/listings.service';
 import { useOnboarding } from '@/onboarding/store/onboarding.store';
-import { PLATFORM_COUNTRIES } from '@/lib/phone';
+import { FALLBACK_PHONE_COUNTRY, PLATFORM_COUNTRIES } from '@/lib/phone';
 import { toPlainText } from '@/lib/richtext';
 import { ApiError } from '@/types/api';
 import type { FileRef } from '@/types/file.types';
@@ -140,7 +140,8 @@ export function ListingEditor() {
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const startDraft = useMemo(
-    () => emptyDraft(roleEntity?.country ?? '', roleEntity?.display_name ?? ''),
+    // The profile's country; Cameroon until the provider has one.
+    () => emptyDraft(roleEntity?.country || FALLBACK_PHONE_COUNTRY, roleEntity?.display_name ?? ''),
     // Only the first render's profile matters: it seeds a NEW listing.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ChevronRight, Plus } from 'lucide-react';
 
@@ -9,10 +9,9 @@ import {
   FilterChips,
   FilterSection,
   FilterSheet,
-  FilterTriggerButton,
+  SearchFilterBar,
 } from '@/components/filters';
 import { ProviderEmpty, ProviderList, ProviderPage } from '@/components/listings/ProviderPage';
-import { ListingChargingRule } from '@/components/listings/ListingChargingRule';
 import { listingStatusLine, STATUS_KEYS, TONE_DOT } from '@/components/listings/listingStatus';
 import { useInfiniteList } from '@/hooks/use-infinite-list';
 import { fetchListings } from '@/services/listings.service';
@@ -24,17 +23,32 @@ import { cn } from '@/lib/utils';
 /**
  * Service listings — a provider's home screen.
  *
- * The credit balance and the charging rule sit on top because they decide
- * whether customers can reach the provider at all: a listing pauses itself when
- * the balance drops below the price of a first unlock. The balance may be
- * negative (customers already in touch keep being served), and is shown as such.
+ * The credit balance sits on top because it decides whether customers can
+ * reach the provider at all: a listing pauses itself when credits run out. The
+ * balance may be negative and is shown as such. How unlocks are priced is
+ * explained once, in Listing settings (owner's call, 2026-11-08) — not here.
+ *
+ * Search: the server has no text search on this list yet, so while something
+ * is typed the screen reads the provider's listings in one go (a plan allows
+ * few) and matches title and business name here. Swap for the server's `q`
+ * once it exists.
  */
+const SEARCH_LIMIT = 100;
+
+function matches(l: VendorListingSummary, q: string): boolean {
+  const needle = q.toLocaleLowerCase();
+  return [l.title, l.companyName].some((v) => v?.toLocaleLowerCase().includes(needle));
+}
+
 export function Listings() {
   const { t } = useTranslation();
   const navigate = useNavigate();
 
   const [status, setStatus] = useState<ListingStatus | undefined>(undefined);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const query = search.trim();
+  const [searchPool, setSearchPool] = useState<VendorListingSummary[] | null>(null);
   const [balance, setBalance] = useState<number | null>(null);
   const [balanceToken, setBalanceToken] = useState(0);
 
@@ -57,8 +71,32 @@ export function Listings() {
     revalidateOnRestore: true,
   });
 
+  // Everything, once, while a search is typed (see the note above).
+  const searching = query.length > 0;
+  const [poolToken, setPoolToken] = useState(0);
+  useEffect(() => {
+    if (!searching) return;
+    let active = true;
+    const timer = window.setTimeout(() => {
+      fetchListings({ status, page: 1, limit: SEARCH_LIMIT })
+        .then((res) => active && setSearchPool(res.items))
+        .catch(() => active && setSearchPool([]));
+    }, 250);
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [searching, status, poolToken]);
+
+  const found = useMemo(
+    () => (searching && searchPool ? searchPool.filter((l) => matches(l, query)) : null),
+    [searching, searchPool, query],
+  );
+  const rows = found ?? items;
+
   const refresh = useCallback(async () => {
     setBalanceToken((n) => n + 1);
+    setPoolToken((n) => n + 1);
     await refreshList();
   }, [refreshList]);
 
@@ -73,7 +111,6 @@ export function Listings() {
       onRefresh={refresh}
       actions={[{ id: 'create', icon: Plus, label: t('listings.list.create'), onClick: create }]}
     >
-      {/* Balance + the rule, one block. */}
       <div className="space-y-1.5">
         <div className="flex items-baseline justify-between gap-3">
           <span className="text-sm text-muted-foreground">{t('listings.charging.balance')}</span>
@@ -93,11 +130,17 @@ export function Listings() {
         {balance !== null && balance < 0 && (
           <p className="text-sm text-red-600">{t('listings.charging.negative')}</p>
         )}
-        <ListingChargingRule className="text-sm text-muted-foreground" />
       </div>
 
-      <div className="flex items-center gap-2">
-        <FilterTriggerButton onClick={() => setFiltersOpen(true)} activeCount={status ? 1 : 0} />
+      <div className="space-y-2">
+        <SearchFilterBar
+          value={search}
+          onChange={setSearch}
+          placeholder={t('listings.list.searchPlaceholder')}
+          activeFilterCount={status ? 1 : 0}
+          onOpenFilters={() => setFiltersOpen(true)}
+          filterLabel={t('listings.list.filterStatus')}
+        />
         <ActiveFilterChips
           chips={
             status
@@ -124,7 +167,7 @@ export function Listings() {
         </FilterSection>
       </FilterSheet>
 
-      {loading ? (
+      {loading || (searching && !found) ? (
         <ProviderList>
           {[0, 1, 2].map((i) => (
             <div key={i} className="space-y-2 px-4 py-4">
@@ -142,8 +185,10 @@ export function Listings() {
             </Button>
           }
         />
-      ) : items.length === 0 ? (
-        status ? (
+      ) : rows.length === 0 ? (
+        searching ? (
+          <ProviderEmpty title={t('listings.list.noMatch', { query })} />
+        ) : status ? (
           <ProviderEmpty title={t('listings.list.emptyFiltered')} />
         ) : (
           <ProviderEmpty
@@ -158,11 +203,11 @@ export function Listings() {
         )
       ) : (
         <ProviderList>
-          {items.map((l) => (
+          {rows.map((l) => (
             <ListingRow key={l.id} listing={l} onOpen={() => navigate(`/dashboard/listings/${l.id}`)} />
           ))}
-          <div ref={sentinelRef} />
-          {loadingMore && (
+          {!searching && <div ref={sentinelRef} />}
+          {!searching && loadingMore && (
             <div className="px-4 py-4">
               <Skeleton className="h-4 w-1/2" />
             </div>

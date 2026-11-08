@@ -68,6 +68,8 @@ export default {
         emptyBody: 'A listing shows customers what you do and where. Your contacts stay hidden until they tap.',
         emptyAction: 'Create your first listing',
         emptyFiltered: 'No listings with this status.',
+        searchPlaceholder: 'Search your listings',
+        noMatch: 'No listing matches “{{query}}”.',
         loadFailed: 'Your listings could not be loaded.',
         filterStatus: 'Status',
         allStatuses: 'All',
@@ -105,9 +107,8 @@ export default {
         hoursFrom: 'Opens',
         hoursTo: 'Closes',
 
-        contactsTitle: 'Hidden contacts',
-        contactsNote:
-            'Customers only see a contact after they tap to unlock it. Each unlock costs you credits.',
+        contactsTitle: 'Contact info',
+        contactsNote: 'Customers see a contact only after they tap to unlock it.',
         contactsNeedOne: 'Add at least one contact.',
         whatsapp: 'WhatsApp number',
         phone: 'Phone number',
@@ -124,7 +125,7 @@ export default {
         locationHint: 'Search your address. The address and its pin are unlocked together.',
         video: 'Video link',
         videoPlaceholder: 'Paste a YouTube or Google Drive link',
-        videoHint: 'Wi-Mall doesn’t store videos — paste a link.',
+        videoHint: 'A video showing your location.',
         videoHowTitle: 'How to get a video link',
         videoHowYoutube:
             'YouTube: upload your video, set its visibility to “Unlisted”, then copy the link from “Share”.',
@@ -197,7 +198,6 @@ export default {
         aCustomer: 'A customer',
         /** start / end = dates. */
         window: '{{start}} – {{end}}',
-        windowHint: 'For 30 days from their first unlock, the same contacts are free again.',
         unlocked: 'Unlocked',
         refunded: 'Refunded',
         cost: plural({ one: '{{count}} credit', other: '{{count}} credits' }),

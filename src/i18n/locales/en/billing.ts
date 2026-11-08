@@ -70,7 +70,6 @@ export const billing = {
         currentBalance: 'Current balance',
         negativeWarningProvider:
             'Your balance is below zero. Top up to keep new customers reaching you.',
-        chargingTitle: 'How unlocks are charged',
         unit: 'credits',
         negativeWarning:
             'Your balance is negative after a refunded or disputed top-up. Credit-based features ' +

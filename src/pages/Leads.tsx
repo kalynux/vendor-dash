@@ -117,8 +117,6 @@ export function Leads() {
         </FilterSection>
       </FilterSheet>
 
-      <p className="text-sm text-muted-foreground">{t('listings.leads.windowHint')}</p>
-
       {loading ? (
         <ProviderList>
           {[0, 1].map((i) => (
